@@ -1,4 +1,4 @@
-# Project Specification
+# Product Specification
 
 ## Goal
 

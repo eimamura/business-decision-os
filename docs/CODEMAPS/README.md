@@ -2,8 +2,8 @@
 
 Architecture navigation guide. Each section lists the module's purpose, key files, and the public interface it exposes or depends on.
 
-> Source of truth for interfaces: `DESIGN.md §Public Interfaces`
-> Source of truth for phase ownership: `TASKS.md`
+> Source of truth for interfaces: `docs/DESIGN.md §Public Interfaces`
+> Source of truth for phase ownership: `docs/TASKS.md`
 
 ---
 
@@ -86,7 +86,7 @@ packages/agent/
     celery.py            CeleryJobRunner (Phase 5+)
 ```
 
-**Public interfaces:** `LLMClient`, `Orchestrator`, `Specialist` — see `DESIGN.md §Public Interfaces`  
+**Public interfaces:** `LLMClient`, `Orchestrator`, `Specialist` — see `docs/DESIGN.md §Public Interfaces`  
 **Depends on:** `packages/tools`, `packages/state`, `packages/schemas`
 
 ---
@@ -250,7 +250,7 @@ infra/
 ```
 
 **Key rules:** build contexts = monorepo root; postgres image = `pgvector/pgvector:pg16`  
-**See:** `agents/infra-devops/SPEC.md`, `docs/DEVELOPMENT.md`
+**See:** `agents/infra/SPEC.md`, `docs/DEVELOPMENT.md`
 
 ---
 

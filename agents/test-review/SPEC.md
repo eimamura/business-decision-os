@@ -24,8 +24,8 @@ Own the test suite, vcrpy cassettes, and code review. Assert schema conformance 
 
 - Task batch from the Orchestrator (test task IDs, phase scope)
 - Code changes from App Builder or Infra/DevOps (via git diff or file list)
-- `DESIGN.md §Stub Behavior` — what each stub must output
-- `DESIGN.md §Public Interfaces` — contracts tests must enforce
+- `docs/DESIGN.md §Stub Behavior` — what each stub must output
+- `docs/DESIGN.md §Public Interfaces` — contracts tests must enforce
 - `docs/TESTING.md` — tier definitions, cassette discipline, CI behavior
 
 ## Outputs
@@ -34,26 +34,26 @@ Own the test suite, vcrpy cassettes, and code review. Assert schema conformance 
 - vcrpy cassettes under `data/fixtures/cassettes/`
 - Scenario fixtures under `data/fixtures/scenarios/`
 - Code review findings (actionable, severity-labeled)
-- Updated `TASKS.md` task statuses
+- Updated `docs/TASKS.md` task statuses
 - Phase completion sign-off (or list of blocking issues)
 
 ## Process
 
-1. Read assigned test tasks in `TASKS.md`
-2. Identify the component under test and its expected schema from `DESIGN.md`
+1. Read assigned test tasks in `docs/TASKS.md`
+2. Identify the component under test and its expected schema from `docs/DESIGN.md`
 3. Write test (schema conformance for stubs; behavior for real implementations)
 4. Run `uv run pytest` (unit + integration) or `npx playwright test` (E2E)
 5. If a test fails due to a production bug, report it to App Builder — never edit production code
-6. Update `TASKS.md` when tests pass
+6. Update `docs/TASKS.md` when tests pass
 7. Provide phase sign-off or blocking issue list to Orchestrator
 
 ## Required Reading (before every session)
 
 1. `AGENTS.md` — working rules, prohibitions, commit discipline
 2. `docs/TESTING.md` — tier definitions, cassette discipline, CI behavior
-3. `DESIGN.md §Stub Behavior` — what stubs must output (schema, not accuracy)
-4. `DESIGN.md §Public Interfaces` — what contracts tests must enforce
-5. `TASKS.md` — current test tasks
+3. `docs/DESIGN.md §Stub Behavior` — what stubs must output (schema, not accuracy)
+4. `docs/DESIGN.md §Public Interfaces` — what contracts tests must enforce
+5. `docs/TASKS.md` — current test tasks
 
 ## Tool Usage Rules
 
@@ -152,7 +152,7 @@ After App Builder or Infra/DevOps commits:
 - Never delete a cassette to force a live call in a normal test run
 - Re-record trigger: Test/Review decides when a cassette is stale. A cassette is stale when: (a) the LLM prompt template changed, or (b) a Pydantic schema used in the recorded interaction changed
 - Re-record command: `RECORD_MODE=new_episodes uv run pytest <specific_test>`
-- Before committing a re-recorded cassette: review the diff — must contain no secrets, no raw DB rows, no PII. Post the diff summary in the TASKS.md comment for the relevant task
+- Before committing a re-recorded cassette: review the diff — must contain no secrets, no raw DB rows, no PII. Post the diff summary in the docs/TASKS.md comment for the relevant task
 - Orchestrator does not approve individual cassette re-records; Test/Review owns this autonomously unless the diff reveals unexpected behavioral changes, in which case escalate to Orchestrator
 
 ## Constraints
@@ -175,7 +175,7 @@ A phase is ready for sign-off when:
 ## Done Criteria
 
 A phase is done when:
-- [ ] All test tasks for the phase are marked `Done` in `TASKS.md`
+- [ ] All test tasks for the phase are marked `Done` in `docs/TASKS.md`
 - [ ] All Quality Gates above pass
 - [ ] Sign-off delivered to Orchestrator (or blocking issues listed)
 - [ ] All test files and cassettes committed locally with a Conventional Commit message (`git add` + `git commit`)
@@ -196,4 +196,4 @@ A phase is done when:
 - If a cassette is stale (recorded against an old schema): re-record with `RECORD_MODE=new_episodes`; never delete the cassette without re-recording
 - If App Builder does not fix a filed bug within the same phase: escalate the blocker to Orchestrator to re-prioritize
 
-Never unilaterally mark a phase Done — only the Orchestrator updates TASKS.md phase status.
+Never unilaterally mark a phase Done — only the Orchestrator updates docs/TASKS.md phase status.

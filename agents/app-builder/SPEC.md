@@ -8,7 +8,7 @@ Implement application code: FastAPI backend, Next.js frontend, and all Python pa
 
 - Implement `apps/api/`, `apps/web/`, and all `packages/` (except generated `schemas-ts/`)
 - Work stub-first: schema-conformant trivial implementation first, real logic per phase schedule
-- Maintain all public interface contracts exactly as defined in `DESIGN.md`
+- Maintain all public interface contracts exactly as defined in `docs/DESIGN.md`
 - Record `llm_usage` inside `LLMClient` middleware; write `tool_calls` + `audit_log` per tool call in the same transaction
 - Generate `packages/schemas-ts/` via codegen after any Pydantic schema change
 
@@ -38,26 +38,26 @@ Implement application code: FastAPI backend, Next.js frontend, and all Python pa
 ## Inputs
 
 - Task batch from the Orchestrator (task IDs, phase scope, relevant SPEC sections)
-- `DESIGN.md §Public Interfaces` — normative signatures to implement against
-- `DESIGN.md §Stub Behavior` — Day-1 stub contracts
+- `docs/DESIGN.md §Public Interfaces` — normative signatures to implement against
+- `docs/DESIGN.md §Stub Behavior` — Day-1 stub contracts
 
 ## Outputs
 
 - Source code in `apps/` and `packages/`
-- Updated `TASKS.md` task statuses (`In Progress` → `Done`)
+- Updated `docs/TASKS.md` task statuses (`In Progress` → `Done`)
 - `packages/schemas-ts/` regenerated after any Pydantic schema change
 
 ## Process
 
-1. Read task batch from `TASKS.md`
-2. Read `DESIGN.md §Public Interfaces` for any interface being implemented
+1. Read task batch from `docs/TASKS.md`
+2. Read `docs/DESIGN.md §Public Interfaces` for any interface being implemented
 3. Implement stub first — schema-conformant, trivially simple
 4. Write unit tests for the stub (schema conformance assertions)
 5. Confirm stub tests pass before adding real logic
 6. Replace stub with real implementation per phase schedule
 7. Write unit tests for the real logic (behavior assertions)
 8. Run `uv run pytest tests/unit` after each logical unit of work
-9. Update `TASKS.md` task to `In Progress`, then `Done` when tests pass
+9. Update `docs/TASKS.md` task to `In Progress`, then `Done` when tests pass
 10. Hand off to **Test/Review** for integration + E2E verification
 
 **Test responsibility split**: App Builder owns unit tests (`tests/unit/`). Test/Review owns integration tests (`tests/integration/`) and E2E tests (`tests/e2e/`). App Builder must not hand off with failing unit tests.
@@ -65,10 +65,10 @@ Implement application code: FastAPI backend, Next.js frontend, and all Python pa
 ## Required Reading (before every session)
 
 1. `AGENTS.md` — working rules and prohibitions
-2. `DESIGN.md §Public Interfaces` — normative signatures; never change without ADR
-3. `DESIGN.md §Stub Behavior` — Day-1 stub contracts
-4. `DESIGN.md §Monorepo Layout` — what goes where
-5. `TASKS.md` — current phase tasks
+2. `docs/DESIGN.md §Public Interfaces` — normative signatures; never change without ADR
+3. `docs/DESIGN.md §Stub Behavior` — Day-1 stub contracts
+4. `docs/DESIGN.md §Monorepo Layout` — what goes where
+5. `docs/TASKS.md` — current phase tasks
 
 ## Tool Usage Rules
 
@@ -127,7 +127,7 @@ Before marking any task Done:
 ## Done Criteria
 
 A phase is done when:
-- [ ] All tasks for the phase are marked `Done` in `TASKS.md`
+- [ ] All tasks for the phase are marked `Done` in `docs/TASKS.md`
 - [ ] All Quality Gates above pass
 - [ ] Test/Review agent has verified and signed off
 - [ ] All changes committed locally with a Conventional Commit message (`git add` + `git commit`)
@@ -136,7 +136,7 @@ A phase is done when:
 ## Handoff Rules
 
 ### Accepting work from Orchestrator
-- Expect: task IDs from `TASKS.md`, phase scope, relevant SPEC sections, any ADR dependencies
+- Expect: task IDs from `docs/TASKS.md`, phase scope, relevant SPEC sections, any ADR dependencies
 - Reject and escalate to Orchestrator if: task IDs are missing, phase dependencies are unmet, or required ADRs are not yet authored
 
 ### Handing off to Test/Review
@@ -146,6 +146,6 @@ A phase is done when:
 ### Failure handling
 - If a test fails and the cause is unclear: stop, document the failure, and request Orchestrator to re-examine the task scope
 - If a public interface change is required: stop, author an ADR, and wait for Orchestrator approval before proceeding
-- If a task is blocked by a missing infra resource (missing DB, missing env var): file a blocking note in `TASKS.md` and notify Orchestrator
+- If a task is blocked by a missing infra resource (missing DB, missing env var): file a blocking note in `docs/TASKS.md` and notify Orchestrator
 
 Never self-certify phase completion — Test/Review must verify.

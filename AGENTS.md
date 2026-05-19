@@ -4,7 +4,7 @@ Canonical instruction file for AI coding agents working on this repository.
 
 ## Project Purpose
 
-Build the **Business Decision OS** — an agent with a simulatable learning model. The LLM acts as control tower, not calculation engine. Domain: supply chain end-to-end optimization. See `SPEC.md` for the full goal and `DESIGN.md` for architecture.
+Build the **Business Decision OS** — an agent with a simulatable learning model. The LLM acts as control tower, not calculation engine. Domain: supply chain end-to-end optimization. See `docs/PRODUCT_SPEC.md` for the full goal and `docs/DESIGN.md` for architecture.
 
 ## Agent Architecture
 
@@ -28,10 +28,10 @@ Invocation:
 
 ## Required Reading (in order)
 
-1. `SPEC.md` — what to build and why
-2. `DESIGN.md` — architecture, components, data flow, public interfaces
-3. `TASKS.md` — implementation tasks with priorities and phases
-4. `DECISIONS.md` — why key decisions were made
+1. `docs/PRODUCT_SPEC.md` — what to build and why
+2. `docs/DESIGN.md` — architecture, components, data flow, public interfaces
+3. `docs/TASKS.md` — implementation tasks with priorities and phases
+4. `docs/DECISIONS.md` — why key decisions were made
 
 Read these before any task. Do not start implementation without them in context.
 
@@ -42,7 +42,7 @@ Read these before any task. Do not start implementation without them in context.
 - All 10 architectural components and their interfaces exist Day 1.
 - Phases fill in implementations behind stable interfaces — they **never add new modules**.
 - Authentication is the only documented exception to this rule (bolt-on permitted later).
-- Public interface signatures listed in `DESIGN.md` §Public Interfaces are normative. **Any change requires an ADR** under `docs/adr/YYYY-MM-DD-title.md`.
+- Public interface signatures listed in `docs/DESIGN.md` §Public Interfaces are normative. **Any change requires an ADR** under `docs/adr/YYYY-MM-DD-title.md`.
 
 ### Stubs
 
@@ -84,7 +84,7 @@ Read these before any task. Do not start implementation without them in context.
 
 ### Language Policy
 
-- **English** for code, comments, identifiers, log messages, commit messages, PR titles & bodies, and all official documentation (`SPEC.md`, `DESIGN.md`, `TASKS.md`, `DECISIONS.md`, `AGENTS.md`, `docs/adr/*.md`).
+- **English** for code, comments, identifiers, log messages, commit messages, PR titles & bodies, and all official documentation (`docs/PRODUCT_SPEC.md`, `docs/DESIGN.md`, `docs/TASKS.md`, `docs/DECISIONS.md`, `AGENTS.md`, `docs/adr/*.md`).
 - **English** for all user-visible strings: UI chrome (navigation, titles, buttons, placeholders, `aria-label`s, empty states, Reasoning Panel labels), chat message bodies, agent-generated narrative shown in the UI (e.g. orchestrator `rationale`), and terminal dialogue output presented to the user.
 
 ### Currency
@@ -95,7 +95,7 @@ Read these before any task. Do not start implementation without them in context.
 
 The following are explicitly forbidden:
 
-- Adding new top-level modules outside the layout in `DESIGN.md` §Monorepo Layout.
+- Adding new top-level modules outside the layout in `docs/DESIGN.md` §Monorepo Layout.
 - Changing public interface signatures (`LLMClient`, `Tool`, `JobRunner`, `MemoryStore`, `Orchestrator`, `Specialist`) without an ADR.
 - Reading or referencing `data/sample/ground_truth/`.
 - Hardcoded secrets in source code or committed `.env` files.
@@ -125,11 +125,11 @@ Each ADR must include: background, candidates considered, decision, rationale, t
 
 Before committing:
 
-- [ ] `SPEC.md` and `DESIGN.md` consulted; change aligns with both.
+- [ ] `docs/PRODUCT_SPEC.md` and `docs/DESIGN.md` consulted; change aligns with both.
 - [ ] No new top-level module added.
 - [ ] Public interfaces unchanged, or an ADR drafted.
-- [ ] `TASKS.md` updated: task marked `In Progress` → `Done`.
-- [ ] `DECISIONS.md` updated for any new accepted decision.
+- [ ] `docs/TASKS.md` updated: task marked `In Progress` → `Done`.
+- [ ] `docs/DECISIONS.md` updated for any new accepted decision.
 - [ ] Tests added or updated; schema conformance asserted for stubs.
 - [ ] No raw rows in any new LLM prompt path.
 - [ ] No ground-truth path referenced.
@@ -160,6 +160,6 @@ See [`docs/TESTING.md`](docs/TESTING.md) for tiers, tooling, cassette discipline
 
 ## When in Doubt
 
-- Read `DESIGN.md` §Public Interfaces and §Phase Progression first.
-- If a decision conflicts with current code, the code is the runtime truth, but `DECISIONS.md` and ADRs are the design truth. File an ADR before changing either.
+- Read `docs/DESIGN.md` §Public Interfaces and §Phase Progression first.
+- If a decision conflicts with current code, the code is the runtime truth, but `docs/DECISIONS.md` and ADRs are the design truth. File an ADR before changing either.
 - Ask the user before any irreversible action: destructive git operations, schema migrations that drop data, API contract changes, public repo settings.

@@ -23,32 +23,32 @@ Own infrastructure, Docker, CI/CD, Makefile, and seed scripts. Keep the local st
 ## Inputs
 
 - Task batch from the Orchestrator (infra task IDs, phase scope)
-- `DESIGN.md §Deployment Design` — Terraform pipeline and Azure layout
-- `DESIGN.md §Compute Platform for Heavy Workloads` — which workload runs where per phase
+- `docs/DESIGN.md §Deployment Design` — Terraform pipeline and Azure layout
+- `docs/DESIGN.md §Compute Platform for Heavy Workloads` — which workload runs where per phase
 - `docs/DEVELOPMENT.md` — local stack conventions and DATABASE_URL rules
 
 ## Outputs
 
 - Updated infrastructure files in `infra/`, `.github/workflows/`, `Makefile`, `apps/*/Dockerfile`, `scripts/`
-- Updated `TASKS.md` task statuses
+- Updated `docs/TASKS.md` task statuses
 - Smoke check results confirming local stack is operational
 
 ## Process
 
-1. Read assigned tasks in `TASKS.md`
+1. Read assigned tasks in `docs/TASKS.md`
 2. Check `docs/DEVELOPMENT.md` for conventions before changing Makefile or compose
 3. Make infrastructure change
 4. Run smoke checks (see below) before marking task Done
-5. Update `TASKS.md` status
+5. Update `docs/TASKS.md` status
 6. Hand off to **Test/Review** for final phase sign-off
 
 ## Required Reading (before every session)
 
 1. `AGENTS.md` — working rules and prohibitions
-2. `DESIGN.md §Deployment Design` — Terraform pipeline split, Azure layout
-3. `DESIGN.md §Compute Platform for Heavy Workloads` — which workload runs where per phase
+2. `docs/DESIGN.md §Deployment Design` — Terraform pipeline split, Azure layout
+3. `docs/DESIGN.md §Compute Platform for Heavy Workloads` — which workload runs where per phase
 4. `docs/DEVELOPMENT.md` — local stack conventions, Makefile targets, DATABASE_URL rules
-5. `TASKS.md` — current infra tasks
+5. `docs/TASKS.md` — current infra tasks
 
 ## Tool Usage Rules
 
@@ -149,7 +149,7 @@ Additional checks:
 ## Done Criteria
 
 A phase is done when:
-- [ ] All infra tasks for the phase are marked `Done` in `TASKS.md`
+- [ ] All infra tasks for the phase are marked `Done` in `docs/TASKS.md`
 - [ ] All Quality Gates above pass
 - [ ] Test/Review agent has provided final sign-off
 - [ ] All changes committed locally with a Conventional Commit message (`git add` + `git commit`)
@@ -158,7 +158,7 @@ A phase is done when:
 ## Handoff Rules
 
 ### Accepting work from Orchestrator
-- Expect: infra task IDs from `TASKS.md`, phase scope, relevant DESIGN.md sections
+- Expect: infra task IDs from `docs/TASKS.md`, phase scope, relevant docs/DESIGN.md sections
 - Reject and escalate to Orchestrator if: task IDs are missing, phase dependencies are unmet, or the task would require editing application logic
 
 ### Handing off to Test/Review

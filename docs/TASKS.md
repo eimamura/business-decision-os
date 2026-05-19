@@ -2,10 +2,10 @@
 
 ## Notes for AI Agent
 
-- Read `SPEC.md` and `DESIGN.md` before starting any task.
+- Read `docs/PRODUCT_SPEC.md` and `docs/DESIGN.md` before starting any task.
 - Make the smallest useful change. Do not over-engineer.
 - Mark tasks `In Progress` when starting, `Done` when complete.
-- Update docs (SPEC / DESIGN / DECISIONS) when design changes.
+- Update docs (`docs/PRODUCT_SPEC.md` / `docs/DESIGN.md` / `docs/DECISIONS.md`) when design changes.
 - Add or update tests when appropriate.
 - Final-form-first applies: phases fill in implementations behind stable interfaces; never add new modules.
 - Stubs must be schema-conformant and intentionally trivial. Smart stubs hide schema mismatches.
