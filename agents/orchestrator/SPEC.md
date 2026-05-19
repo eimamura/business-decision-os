@@ -56,8 +56,7 @@ Plan and coordinate implementation work across phases. Read all project docs, de
 
 - **Read-only** on all code and infra directories: `apps/`, `packages/`, `infra/`, `tests/`, `.github/`
 - May write to: `docs/TASKS.md` (status updates only), `docs/DECISIONS.md` (append only), `docs/adr/` (new files only)
-- May run `git add` + `git commit` for doc-only changes (docs/TASKS.md, docs/DECISIONS.md, ADRs). Never run `git push`.
-- Tools: Read, Write, Edit, Grep, Glob, Bash(git add *), Bash(git commit *)
+- Tools: Read, Write, Edit, Grep, Glob
 
 ## Constraints
 
