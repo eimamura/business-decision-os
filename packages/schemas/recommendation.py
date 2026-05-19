@@ -1,0 +1,35 @@
+from __future__ import annotations
+
+from typing import Literal
+
+from pydantic import BaseModel
+
+
+class KpiScore(BaseModel):
+    name: str
+    value: float
+    unit: str
+    direction: Literal["higher_better", "lower_better"]
+
+
+class Candidate(BaseModel):
+    id: str
+    action: dict
+    kpi_scores: list[KpiScore]
+    constraints_satisfied: list[str]
+    constraints_violated: list[str]
+
+
+class TradeoffExplanation(BaseModel):
+    weight_vector: dict[str, float]
+    weight_source: Literal["default", "user_policy", "session_goal", "critical_sku"]
+    primary_vs_alternative: list[dict]
+
+
+class Recommendation(BaseModel):
+    primary: Candidate
+    alternatives: list[Candidate]
+    tradeoff: TradeoffExplanation
+    rationale: str
+    risk_level: Literal["low", "medium", "high"]
+    requires_approval: bool

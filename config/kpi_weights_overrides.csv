@@ -1,0 +1,9 @@
+sku_type,kpi_name,weight
+critical,service_level,0.50
+critical,inventory_turnover,0.10
+critical,days_on_hand,0.10
+critical,fill_rate,0.15
+critical,total_supply_chain_cost,0.10
+critical,reorder_point,0.03
+critical,safety_stock,0.01
+critical,gross_margin_roi,0.01

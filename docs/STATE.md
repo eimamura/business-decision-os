@@ -11,15 +11,17 @@ Phase 0 — Repository Foundation
 
 ## Active Lease
 
-B01 — Repo Scaffold
+B02 — Backend Scaffold
 
 ## Last Completed Batch
 
-None
+B01 — Repo Scaffold
 
 ## Last Validation
 
-None
+command: bdos-test-review B01 checks (9 items)
+exit code: 0 (all PASS)
+timestamp: 2026-05-19
 
 ## Blockers
 

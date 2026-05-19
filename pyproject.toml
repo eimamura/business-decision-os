@@ -6,6 +6,16 @@ build-backend = "hatchling.build"
 name = "business-decision-os"
 version = "0.1.0"
 requires-python = ">=3.11"
+dependencies = [
+  "fastapi>=0.136.1",
+  "pydantic>=2.7.0",
+  "pytest>=8.0.0",
+  "pytest-asyncio>=0.23.0",
+  "uvicorn>=0.47.0",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["packages", "apps"]
 
 [tool.uv.workspace]
 members = [
@@ -30,3 +40,7 @@ select = ["E", "F", "I"]
 [tool.mypy]
 python_version = "3.11"
 strict = true
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]

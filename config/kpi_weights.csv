@@ -1,0 +1,9 @@
+kpi_name,weight
+service_level,0.30
+inventory_turnover,0.15
+days_on_hand,0.15
+fill_rate,0.15
+total_supply_chain_cost,0.15
+reorder_point,0.05
+safety_stock,0.02
+gross_margin_roi,0.03

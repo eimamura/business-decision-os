@@ -1,0 +1,16 @@
+thresholds:
+  high:
+    service_level_min: 0.0
+    service_level_max: 0.85
+    stockout_days_max: 30
+    days_on_hand_max: 180
+  medium:
+    service_level_min: 0.85
+    service_level_max: 0.95
+    stockout_days_max: 10
+    days_on_hand_max: 90
+  low:
+    service_level_min: 0.95
+    service_level_max: 1.0
+    stockout_days_max: 3
+    days_on_hand_max: 60

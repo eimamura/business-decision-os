@@ -35,13 +35,13 @@ Dependencies: none
 
 | ID | Task | Priority | Status |
 |---|---|---|---|
-| T-0001 | Initialize Git repo; push to GitHub; configure branch protection on `main`; Conventional Commits config | High | Pending-Review |
-| T-0002 | Author `.gitignore` covering Python / Node / Terraform / Docker / IDE / secrets / logs / coverage | High | Pending-Review |
-| T-0003 | Scaffold `apps/{web,api}` + `packages/*` + `infra/{terraform,compose}` + `data/` + `config/` + `scripts/` + `tests/` + `docs/` | High | Pending-Review |
-| T-0004 | Configure `uv` workspace (`tool.uv.workspace.members = ["apps/api", "packages/*"]`) | High | Pending-Review |
-| T-0005 | Configure `npm workspaces` (`apps/web`, `packages/schemas-ts`) | High | Pending-Review |
-| T-0006 | Set up commitlint / `cz-conventional-changelog` with 16-scope allowlist | Medium | Pending-Review |
-| T-0043 | `.env.example` with all required keys (no real values) | High | Pending-Review |
+| T-0001 | Initialize Git repo; push to GitHub; configure branch protection on `main`; Conventional Commits config | High | Done |
+| T-0002 | Author `.gitignore` covering Python / Node / Terraform / Docker / IDE / secrets / logs / coverage | High | Done |
+| T-0003 | Scaffold `apps/{web,api}` + `packages/*` + `infra/{terraform,compose}` + `data/` + `config/` + `scripts/` + `tests/` + `docs/` | High | Done |
+| T-0004 | Configure `uv` workspace (`tool.uv.workspace.members = ["apps/api", "packages/*"]`) | High | Done |
+| T-0005 | Configure `npm workspaces` (`apps/web`, `packages/schemas-ts`) | High | Done |
+| T-0006 | Set up commitlint / `cz-conventional-changelog` with 16-scope allowlist | Medium | Done |
+| T-0043 | `.env.example` with all required keys (no real values) | High | Done |
 
 <!-- ## Infra Handoff — Phase 0 / B01
 Changed files:
