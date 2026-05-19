@@ -1,0 +1,248 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import Link from "next/link";
+
+const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+
+interface Approval {
+  id: string;
+  recommendation_id: string;
+  status: "pending" | "approved" | "rejected" | "needs_revision" | "expired";
+  risk_level: "low" | "medium" | "high";
+  summary?: string;
+  expires_at?: string;
+  created_at: string;
+}
+
+const RISK_STYLES = {
+  low: "bg-green-100 text-green-700",
+  medium: "bg-yellow-100 text-yellow-700",
+  high: "bg-red-100 text-red-700",
+};
+
+const STATUS_STYLES: Record<string, string> = {
+  pending: "bg-blue-100 text-blue-700",
+  approved: "bg-green-100 text-green-700",
+  rejected: "bg-red-100 text-red-700",
+  needs_revision: "bg-orange-100 text-orange-700",
+  expired: "bg-gray-100 text-gray-600",
+};
+
+export default function ApprovalsPage() {
+  const [approvals, setApprovals] = useState<Approval[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [actionId, setActionId] = useState<string | null>(null);
+  const [revisionId, setRevisionId] = useState<string | null>(null);
+  const [revisionReason, setRevisionReason] = useState("");
+  const [weights, setWeights] = useState<Record<string, string>>({});
+  const [statusFilter, setStatusFilter] = useState("pending");
+
+  function loadApprovals(status: string) {
+    setLoading(true);
+    fetch(`${API_BASE}/api/v1/approvals?status=${status}`, {
+      headers: { "X-Dev-User": "dev-user" },
+    })
+      .then((r) => r.json())
+      .then((data) => setApprovals(Array.isArray(data) ? data : data.items ?? []))
+      .catch(() => setApprovals([]))
+      .finally(() => setLoading(false));
+  }
+
+  useEffect(() => {
+    loadApprovals(statusFilter);
+  }, [statusFilter]);
+
+  async function decide(id: string, decision: "approved" | "rejected") {
+    setActionId(id);
+    try {
+      await fetch(`${API_BASE}/api/v1/approvals/${id}/decision`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Dev-User": "dev-user",
+        },
+        body: JSON.stringify({ decision }),
+      });
+      loadApprovals(statusFilter);
+    } finally {
+      setActionId(null);
+    }
+  }
+
+  async function requestRevision(id: string) {
+    if (!revisionReason.trim()) return;
+    setActionId(id);
+    const weightOverride: Record<string, number> = {};
+    for (const [k, v] of Object.entries(weights)) {
+      const n = parseFloat(v);
+      if (!isNaN(n)) weightOverride[k] = n;
+    }
+    try {
+      await fetch(`${API_BASE}/api/v1/approvals/${id}/decision`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Dev-User": "dev-user",
+        },
+        body: JSON.stringify({
+          decision: "needs_revision",
+          reason: revisionReason,
+          weight_override: Object.keys(weightOverride).length > 0 ? weightOverride : undefined,
+        }),
+      });
+      setRevisionId(null);
+      setRevisionReason("");
+      setWeights({});
+      loadApprovals(statusFilter);
+    } finally {
+      setActionId(null);
+    }
+  }
+
+  return (
+    <div className="min-h-screen bg-gray-50">
+      <header className="bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
+        <div className="flex items-center gap-4">
+          <Link href="/chat" className="text-sm text-blue-600 hover:underline">← Chat</Link>
+          <h1 className="text-lg font-semibold text-gray-900">Approval Queue</h1>
+        </div>
+        <select
+          value={statusFilter}
+          onChange={(e) => setStatusFilter(e.target.value)}
+          className="text-sm border border-gray-300 rounded-lg px-3 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+        >
+          <option value="pending">Pending</option>
+          <option value="approved">Approved</option>
+          <option value="rejected">Rejected</option>
+          <option value="needs_revision">Needs Revision</option>
+          <option value="expired">Expired</option>
+        </select>
+      </header>
+
+      <main className="max-w-4xl mx-auto px-6 py-8">
+        {loading ? (
+          <div className="space-y-4">
+            {[1, 2, 3].map((i) => (
+              <div key={i} className="h-28 bg-gray-200 rounded-xl animate-pulse" />
+            ))}
+          </div>
+        ) : approvals.length === 0 ? (
+          <div className="text-center py-16 text-gray-500">
+            <p>No {statusFilter} approvals.</p>
+          </div>
+        ) : (
+          <ul className="space-y-4">
+            {approvals.map((a) => (
+              <li key={a.id} className="bg-white rounded-xl border border-gray-200 p-5">
+                <div className="flex items-start justify-between gap-4">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex flex-wrap items-center gap-2 mb-2">
+                      <span
+                        className={`text-xs px-2.5 py-0.5 rounded-full font-medium ${RISK_STYLES[a.risk_level]}`}
+                      >
+                        {a.risk_level} risk
+                      </span>
+                      <span
+                        className={`text-xs px-2.5 py-0.5 rounded-full font-medium ${STATUS_STYLES[a.status]}`}
+                      >
+                        {a.status}
+                      </span>
+                      <Link
+                        href={`/recommendations/${a.recommendation_id}`}
+                        className="text-xs text-blue-600 hover:underline"
+                      >
+                        View Recommendation
+                      </Link>
+                    </div>
+                    {a.summary && (
+                      <p className="text-sm text-gray-700 mb-2">{a.summary}</p>
+                    )}
+                    <p className="text-xs text-gray-400">
+                      Created {new Date(a.created_at).toLocaleString()}
+                      {a.expires_at && ` · Expires ${new Date(a.expires_at).toLocaleString()}`}
+                    </p>
+                  </div>
+
+                  {a.status === "pending" && (
+                    <div className="flex gap-2 shrink-0">
+                      <button
+                        onClick={() => decide(a.id, "approved")}
+                        disabled={actionId === a.id}
+                        className="bg-green-600 text-white px-4 py-1.5 rounded-lg text-sm font-medium hover:bg-green-700 disabled:opacity-50"
+                      >
+                        Approve
+                      </button>
+                      <button
+                        onClick={() => decide(a.id, "rejected")}
+                        disabled={actionId === a.id}
+                        className="bg-red-600 text-white px-4 py-1.5 rounded-lg text-sm font-medium hover:bg-red-700 disabled:opacity-50"
+                      >
+                        Reject
+                      </button>
+                      <button
+                        onClick={() => setRevisionId(a.id)}
+                        disabled={actionId === a.id}
+                        className="bg-orange-100 text-orange-700 px-4 py-1.5 rounded-lg text-sm font-medium hover:bg-orange-200 disabled:opacity-50"
+                      >
+                        Revise
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                {revisionId === a.id && (
+                  <div className="mt-4 border-t border-gray-100 pt-4 space-y-3">
+                    <h4 className="text-sm font-medium text-gray-800">Request Revision</h4>
+                    <textarea
+                      value={revisionReason}
+                      onChange={(e) => setRevisionReason(e.target.value)}
+                      placeholder="Reason for revision..."
+                      rows={2}
+                      className="w-full resize-none text-sm border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                    <div className="space-y-2">
+                      <p className="text-xs font-medium text-gray-600">Weight Override (optional)</p>
+                      {["service_level", "inventory_cost", "stockout_risk", "working_capital"].map((kpi) => (
+                        <div key={kpi} className="flex items-center gap-3">
+                          <label className="text-xs text-gray-600 w-36 capitalize">
+                            {kpi.replace(/_/g, " ")}
+                          </label>
+                          <input
+                            type="number"
+                            min="0"
+                            max="1"
+                            step="0.01"
+                            value={weights[kpi] ?? ""}
+                            onChange={(e) => setWeights((p) => ({ ...p, [kpi]: e.target.value }))}
+                            placeholder="0.0 – 1.0"
+                            className="w-24 text-xs border border-gray-300 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                          />
+                        </div>
+                      ))}
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => requestRevision(a.id)}
+                        disabled={!revisionReason.trim() || actionId === a.id}
+                        className="bg-orange-600 text-white px-4 py-1.5 rounded-lg text-sm font-medium hover:bg-orange-700 disabled:opacity-50"
+                      >
+                        Submit Revision
+                      </button>
+                      <button
+                        onClick={() => { setRevisionId(null); setRevisionReason(""); setWeights({}); }}
+                        className="text-sm text-gray-600 hover:text-gray-900 px-3 py-1.5"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </li>
+            ))}
+          </ul>
+        )}
+      </main>
+    </div>
+  );
+}
