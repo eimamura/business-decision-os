@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Literal, Protocol
+from typing import Any, Literal, Protocol
 from uuid import UUID, uuid4
 
 from pydantic import BaseModel
@@ -12,7 +12,7 @@ class Memory(BaseModel):
     type: Literal["decision", "forecast_error", "user_policy", "failure_case"]
     content: str
     embedding: list[float] | None = None
-    metadata: dict
+    metadata: dict[str, Any]
     created_at: str
 
 

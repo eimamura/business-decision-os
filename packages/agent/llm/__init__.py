@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from decimal import Decimal
-from typing import AsyncIterator, Literal, Protocol, TypedDict
+from typing import Any, AsyncIterator, Literal, Protocol, TypedDict
 from uuid import UUID
 
 from pydantic import BaseModel
@@ -17,7 +17,7 @@ class LLMMessage(BaseModel):
 class LLMToolSpec(BaseModel):
     name: str
     description: str
-    input_schema: dict
+    input_schema: dict[str, Any]
 
 
 class LLMUsage(BaseModel):
@@ -30,7 +30,7 @@ class LLMUsage(BaseModel):
 
 class LLMResponse(BaseModel):
     text: str
-    tool_calls: list[dict]
+    tool_calls: list[dict[str, Any]]
     finish_reason: Literal["stop", "tool_use", "length", "error"]
     usage: LLMUsage
     model: str
@@ -51,7 +51,7 @@ class LLMStreamEvent(TypedDict, total=False):
     tool_call_id: str
     tool_name: str
     input_delta: str
-    usage: dict
+    usage: dict[str, Any]
     error: str
 
 

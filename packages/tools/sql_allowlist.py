@@ -16,5 +16,4 @@ def check_allowed(table_name: str) -> bool:
 
 def validate_query(sql: str) -> None:
     """Raises ValueError if the query touches non-allowlisted tables or performs writes."""
-    import sqlparse  # noqa: PLC0415
     raise NotImplementedError("Phase 1 — SQL validation")

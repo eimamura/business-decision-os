@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Annotated, Literal, Union
+from typing import Annotated, Any, Literal, Union
 from uuid import UUID
 
 from pydantic import BaseModel, Field
@@ -27,7 +27,7 @@ class ToolCalledEvent(BaseModel):
     tool_call_id: UUID
     step_id: UUID
     tool_name: str
-    input: dict
+    input: dict[str, Any]
     specialist_role: str
 
 
@@ -38,7 +38,7 @@ class ToolCompletedEvent(BaseModel):
     tool_call_id: UUID
     tool_name: str
     duration_ms: int
-    output: dict
+    output: dict[str, Any]
     executed_query: str | None = None
     status: Literal["success", "error"]
     error: str | None = None

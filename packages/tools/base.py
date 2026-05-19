@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Protocol
+from typing import Any, Protocol
 from uuid import UUID
 
 from pydantic import BaseModel
@@ -17,18 +17,18 @@ class ToolContext(BaseModel):
 
 
 class ToolResult(BaseModel):
-    output: dict
-    audit_payload: dict
+    output: dict[str, Any]
+    audit_payload: dict[str, Any]
 
 
 class Tool(Protocol):
     name: str
     description: str
-    input_schema: dict
-    output_schema: dict
+    input_schema: dict[str, Any]
+    output_schema: dict[str, Any]
     requires_approval: bool
 
-    async def handle(self, input: dict, ctx: ToolContext) -> ToolResult: ...
+    async def handle(self, input: dict[str, Any], ctx: ToolContext) -> ToolResult: ...
 
 
 class ToolRegistry:

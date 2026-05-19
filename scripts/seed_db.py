@@ -7,9 +7,6 @@ Usage:
 Reads data/sample/*.csv and inserts into the database.
 """
 import asyncio
-import csv
-from pathlib import Path
-from uuid import uuid4
 
 
 async def seed_db() -> None:

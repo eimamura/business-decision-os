@@ -2,10 +2,11 @@ from __future__ import annotations
 
 import hashlib
 import json
+from typing import Any
 from uuid import UUID
 
 
-def compute_hash(payload: dict, prev_hash: str | None) -> str:
+def compute_hash(payload: dict[str, Any], prev_hash: str | None) -> str:
     raw = json.dumps(
         {"payload": payload, "prev_hash": prev_hash or ""},
         sort_keys=True,
@@ -32,9 +33,9 @@ class AuditLogRepository:
         agent_step_id: UUID | None,
         tool_call_id: UUID | None,
         event_type: str,
-        payload: dict,
+        payload: dict[str, Any],
         actor: str | None,
     ) -> object:
         prev_hash: str | None = None
-        audit_hash = compute_hash(payload, prev_hash)
+        compute_hash(payload, prev_hash)
         raise NotImplementedError("Phase 1 — DB required")

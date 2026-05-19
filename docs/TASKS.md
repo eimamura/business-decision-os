@@ -191,6 +191,8 @@ New env vars: ANTHROPIC_API_KEY (from host), OTEL_EXPORTER_OTLP_ENDPOINT (option
 | ID | Task | Priority | Status | Root Cause |
 |---|---|---|---|---|
 | D-0001 | `make build` / `uv sync` failed — hatchling wheel discovery error | High | Done | `apps/api/pyproject.toml` lacked `[tool.hatch.build.targets.wheel] packages = ["."]`; hatchling searched for a subdirectory named `api` but source lives at the project root. Fixed by adding the explicit wheel target. |
+| D-0002 | `make lint` fails — `ruff` not installed | High | Done | Added `ruff>=0.4.0` to `[tool.uv] dev-dependencies` in root `pyproject.toml`; changed Makefile `lint` target to `uv run ruff check`; fixed 18 lint errors (7 auto-fixed, 11 manual: E501 via `per-file-ignores` for alembic migrations, E402 noqa for post-observability imports, F841 unused var, code reformats). |
+| D-0003 | `make typecheck` fails — target missing, `mypy` not installed | High | Done | Added `mypy>=1.10.0` to `[tool.uv] dev-dependencies`; added `typecheck` target to Makefile using `uv run --with mypy mypy packages/ apps/api/`; added `explicit_package_bases=true` and `ignore_missing_imports=true` to `[tool.mypy]` config; fixed 24 type errors (`dict→dict[str,Any]` in 10 files, `no-any-return` in middleware.py, `dict[str,str]` in health.py). |
 
 ## Phase 1 — Decision Copilot (Vertical-Slice MVP)
 

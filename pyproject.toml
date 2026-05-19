@@ -14,6 +14,12 @@ dependencies = [
   "uvicorn>=0.47.0",
 ]
 
+[tool.uv]
+dev-dependencies = [
+  "ruff>=0.4.0",
+  "mypy>=1.10.0",
+]
+
 [tool.hatch.build.targets.wheel]
 packages = ["packages", "apps"]
 
@@ -37,9 +43,14 @@ line-length = 100
 [tool.ruff.lint]
 select = ["E", "F", "I"]
 
+[tool.ruff.lint.per-file-ignores]
+"apps/api/alembic/**" = ["E501"]
+
 [tool.mypy]
 python_version = "3.11"
 strict = true
+explicit_package_bases = true
+ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

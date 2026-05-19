@@ -8,7 +8,6 @@ Outputs written to data/sample/ (NOT ground_truth/).
 """
 import argparse
 import csv
-import json
 import math
 import random
 from datetime import date, timedelta
@@ -79,7 +78,8 @@ def generate_customers(customers: list[dict], out_dir: Path) -> None:
 
 
 def generate_demand_history(skus: list[dict], rng: random.Random, out_dir: Path) -> None:
-    gap_days = set(range(CONTIGUOUS_GAP_START_DAY, CONTIGUOUS_GAP_START_DAY + CONTIGUOUS_GAP_LENGTH))
+    gap_end = CONTIGUOUS_GAP_START_DAY + CONTIGUOUS_GAP_LENGTH
+    gap_days = set(range(CONTIGUOUS_GAP_START_DAY, gap_end))
 
     fields = ["sku_id", "date", "quantity", "is_missing"]
     with open(out_dir / "demand_history.csv", "w", newline="") as f:
@@ -197,7 +197,10 @@ def generate_supply(skus: list[dict], rng: random.Random, out_dir: Path) -> None
 def generate_cost(skus: list[dict], rng: random.Random, out_dir: Path) -> None:
     period_start = date(2025, 1, 1).isoformat()
     period_end = date(2025, 12, 31).isoformat()
-    fields = ["sku_id", "period_start", "period_end", "cogs", "holding_cost", "ordering_cost", "stockout_cost"]
+    fields = [
+        "sku_id", "period_start", "period_end",
+        "cogs", "holding_cost", "ordering_cost", "stockout_cost",
+    ]
 
     with open(out_dir / "cost.csv", "w", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=fields)
@@ -212,7 +215,9 @@ def generate_cost(skus: list[dict], rng: random.Random, out_dir: Path) -> None:
 
             cogs = round(annual_demand * unit_cost * rng.uniform(0.9, 1.1), 2)
             avg_inventory = daily_demand * float(sku["lead_time_days_mean"])
-            holding_cost = round(avg_inventory * unit_cost * holding_pct * rng.uniform(0.85, 1.15), 2)
+            holding_cost = round(
+                avg_inventory * unit_cost * holding_pct * rng.uniform(0.85, 1.15), 2
+            )
             ordering_cost = round(rng.uniform(50, 500) * rng.randint(12, 52), 2)
             stockout_cost = round(annual_demand * unit_cost * rng.uniform(0.01, 0.05), 2)
 

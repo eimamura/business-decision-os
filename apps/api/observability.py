@@ -1,7 +1,6 @@
 """Observability setup: structlog JSON output + OpenTelemetry + Langfuse."""
 from __future__ import annotations
 
-import logging
 import os
 
 import structlog

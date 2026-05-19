@@ -8,10 +8,10 @@ from apps.api.observability import configure_logging, configure_otel
 
 configure_logging()
 configure_otel()
-from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.cors import CORSMiddleware  # noqa: E402
 
-from apps.api.middleware import DevUserMiddleware
-from apps.api.routers import (
+from apps.api.middleware import DevUserMiddleware  # noqa: E402
+from apps.api.routers import (  # noqa: E402
     approvals,
     audit,
     health,

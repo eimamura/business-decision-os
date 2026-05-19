@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import Literal, Protocol
+from typing import Any, Literal, Protocol
 from uuid import UUID, uuid4
 
 from pydantic import BaseModel
@@ -11,7 +11,7 @@ from packages.tools.base import ToolContext
 
 class JobSpec(BaseModel):
     kind: Literal["simulation", "optimization", "forecast_batch", "report"]
-    payload: dict
+    payload: dict[str, Any]
     idempotency_key: str
     timeout_seconds: int = 300
 
@@ -25,7 +25,7 @@ class JobHandle(BaseModel):
 class JobResult(BaseModel):
     job_id: UUID
     status: Literal["succeeded", "failed", "cancelled"]
-    output: dict | None
+    output: dict[str, Any] | None
     error: str | None
     duration_ms: int
 

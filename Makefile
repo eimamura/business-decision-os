@@ -1,4 +1,4 @@
-.PHONY: seed generate-data build test lint
+.PHONY: seed generate-data build test lint typecheck
 
 generate-data:
 	uv run python scripts/generate_sample_data.py
@@ -16,3 +16,6 @@ test:
 
 lint:
 	uv run ruff check packages/ apps/api/ scripts/
+
+typecheck:
+	uv run --with mypy mypy packages/ apps/api/
