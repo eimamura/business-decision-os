@@ -24,45 +24,92 @@ Plan and coordinate implementation work across phases. Read all project docs, de
 
 ## Inputs
 
-- User request specifying phase or task scope
-- Current state of `docs/TASKS.md`, `docs/DECISIONS.md`, `docs/DESIGN.md`, `docs/PRODUCT_SPEC.md`
+- `docs/TASKS.md` — batch definitions and statuses for the target phase
+- `docs/STATE.md` — current execution state (active lease, last completed batch, blockers)
+- `docs/DESIGN.md` §Public Interfaces — scoped context to pass to specialists
+- `docs/DECISIONS.md` — prior decisions relevant to the batch
 
 ## Outputs
 
-- Structured implementation plan (see Planning Output Format below)
-- Updated `docs/TASKS.md` status entries
+- Updated `docs/TASKS.md` batch status (Orchestrator is the **sole writer**)
+- Updated `docs/STATE.md` (Orchestrator is the **sole writer**)
 - New ADR files under `docs/adr/YYYY-MM-DD-*.md` when needed
 - New entries appended to `docs/DECISIONS.md`
+- Turn output with **proof items for `/goal` evaluator** (see Proof Output below)
 
-## Process
+## Process (Loop Model — 1 turn = 1 atomic batch)
 
-1. Read all required docs (see Required Reading below)
-2. Identify the target phase and its tasks in `docs/TASKS.md`
-3. Check `docs/DECISIONS.md` for relevant prior decisions
-4. Group tasks into dependency-ordered batches
-5. Assign each batch to App Builder, Infra/DevOps, or Test/Review
-6. Note any ADRs needed before coding can begin
-7. Output the plan in the format specified below
+Each Orchestrator turn follows this sequence:
+
+1. **Read state**: Read `docs/TASKS.md` and `docs/STATE.md`
+2. **Check for completion**: If all target-phase batches are `Done` → emit proof output and stop
+3. **Check for escalation**: If any batch has been `Blocked` twice → escalate to human and stop
+4. **Acquire lease**: Set `docs/STATE.md` Active Lease = next batch ID before spawning
+5. **Select next batch**: Pick the first `Not Started` batch whose dependencies are all `Done`
+6. **Scoped handoff**: Send to one specialist — batch task IDs + relevant `docs/DESIGN.md` interface section only (not full docs)
+7. **Await specialist result**: Receive completion report or structured blocker
+8. **Run Test/Review**: Spawn `bdos-test-review` to run relevant checks (unit test / build / lint) — every turn, not only at phase end
+9. **Update state**:
+   - If checks pass: mark batch `Done` in `docs/TASKS.md`; update `docs/STATE.md` Last Completed Batch + Last Validation; clear Active Lease
+   - If blocked: mark batch `Blocked` in `docs/TASKS.md`; record blocker in `docs/STATE.md`; clear Active Lease
+10. **Emit proof output**: Print evidence items (see Proof Output below)
+
+**Batch granularity rule:**
+- 1 batch = 1 deliverable (scaffold, migration, CI pipeline, etc.)
+- Too small: individual files or folder creation → merge into batch
+- Too large: entire phase → split into batches with clear dependencies
+
+**Specialists never write to `docs/TASKS.md` or `docs/STATE.md`.** They report results to Orchestrator only.
+
+## Proof Output (for `/goal` evaluator)
+
+The `/goal` evaluator reads only what appears in the conversation transcript. Every turn must end with this block so the evaluator has evidence to judge:
+
+```
+## Turn Summary
+
+**Batch completed:** <batch ID and name>
+**Validation:**
+  - command: <e.g. make test>
+  - exit code: <0 or non-zero>
+  - output: <relevant lines>
+
+**Phase progress:**
+<paste grep output: grep "B0[0-9]" docs/TASKS.md | grep -v "Not Started">
+
+**STATE.md snapshot:**
+  - Active Lease: None
+  - Last Completed: <batch>
+  - Blockers: <None or list>
+```
+
+When all batches are Done, also emit:
+```
+**Phase complete evidence:**
+  - All batches Done: <grep proof>
+  - make build: exit 0
+  - git diff --stat: <output>
+  - No Blocked or In Progress remaining: <grep proof>
+```
 
 ## Required Reading (before every session)
 
 1. `AGENTS.md` — working rules and prohibitions
-2. `docs/PRODUCT_SPEC.md` — what to build and why
-3. `docs/DESIGN.md` — architecture, public interfaces, phase progression
-4. `docs/TASKS.md` — current task statuses
-5. `docs/DECISIONS.md` — rationale for key decisions
+2. `docs/TASKS.md` — current batch statuses for the target phase
+3. `docs/STATE.md` — current execution state
+4. `docs/DESIGN.md` §Public Interfaces — only the section relevant to the next batch
+5. `docs/DECISIONS.md` — rationale for key decisions (check for relevant prior decisions only)
 
-## TASKS.md Write Authority
+## TASKS.md and STATE.md Write Authority
 
-To prevent concurrent write conflicts, each status transition has a designated owner:
+Single writer rule: **Orchestrator is the sole writer** of both `docs/TASKS.md` and `docs/STATE.md`.
 
-| Status transition | Owner |
-|---|---|
-| → `In Progress` (phase start) | Orchestrator only |
-| → `Blocked` | Any agent (record blocker details inline) |
-| → `In Progress` (after unblock) | Orchestrator only |
-| → `Done` (individual task) | App Builder / Infra / Test-Review (own tasks only) |
-| → `Done` (phase-level) | Orchestrator only, after Test/Review sign-off |
+| File | Who writes | What they write |
+|---|---|---|
+| `docs/TASKS.md` | Orchestrator only | Batch status: Not Started → Done / Blocked |
+| `docs/STATE.md` | Orchestrator only | Active lease, last completed batch, validation results, blockers |
+
+Specialists report results in their output. They do not write to either file.
 
 ## ADR Triggers
 

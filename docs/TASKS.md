@@ -26,7 +26,12 @@
 
 ## Phase 0 — Repository Foundation
 
-### Repository scaffold
+Batch execution order: B01 → B02 → B03 → B04 → B05 (B05 can run in parallel with B03/B04).
+Each batch is one Orchestrator turn. Orchestrator records active lease in `docs/STATE.md` before spawning a specialist.
+
+### B01 — Repo Scaffold (Agent: Infra)
+
+Dependencies: none
 
 | ID | Task | Priority | Status |
 |---|---|---|---|
@@ -36,8 +41,13 @@
 | T-0004 | Configure `uv` workspace (`tool.uv.workspace.members = ["apps/api", "packages/*"]`) | High | Not Started |
 | T-0005 | Configure `npm workspaces` (`apps/web`, `packages/schemas-ts`) | High | Not Started |
 | T-0006 | Set up commitlint / `cz-conventional-changelog` with 16-scope allowlist | Medium | Not Started |
+| T-0043 | `.env.example` with all required keys (no real values) | High | Not Started |
 
-### Interfaces and schemas
+### B02 — Backend Scaffold (Agent: App Builder)
+
+Dependencies: B01
+
+> Code only the interfaces needed for Phase 1 vertical slice. Future boundaries stay in `docs/DESIGN.md` — do not pre-implement unused stubs.
 
 | ID | Task | Priority | Status |
 |---|---|---|---|
@@ -51,8 +61,18 @@
 | T-0017 | Define SSE event union in `packages/schemas` (Pydantic) + `packages/schemas-ts` (Zod); CI equivalence check | High | Not Started |
 | T-0018 | Define `evaluations.criteria_json` / `result_json` schemas in `packages/schemas` | High | Not Started |
 | T-0019 | Implement `packages/domain/kpi.py` with the 8 KPI formulas (horizon = 90 days) | High | Not Started |
+| T-0040 | `config/risk_thresholds.yaml` — three-tier thresholds (high / medium / low) | High | Not Started |
+| T-0041 | `config/kpi_weights.csv` — global default (single row, sums to 1.0) | High | Not Started |
+| T-0042 | `config/kpi_weights_overrides.csv` — Critical SKU overrides (service_level=0.50) | High | Not Started |
+| T-0050 | FastAPI app skeleton (`apps/api`) with `X-Dev-User` middleware; default `dev-user` when `APP_ENV=dev` | High | Not Started |
+| T-0051 | Implement REST endpoint skeletons per DESIGN §API Design (501 where logic is not ready; `/healthz` and `/readyz` real) | High | Not Started |
+| T-0052 | Configure FastAPI `CORSMiddleware` — dev (`localhost:3000`) and prod (env-injected); SSE exception for credential | High | Not Started |
+| T-0060 | Approval state-machine logic with `parent_approval_id` chain (revisions create new row) | High | Not Started |
+| T-0061 | Sweep job for `expired` (default `approval_ttl_seconds=86400`) | Medium | Not Started |
 
-### Database
+### B03 — Database Migration (Agent: App Builder)
+
+Dependencies: B02
 
 | ID | Task | Priority | Status |
 |---|---|---|---|
@@ -63,7 +83,9 @@
 | T-0024 | Seed `llm_pricing` with verified rates for `claude-sonnet-4-6`, `claude-opus-4-7`, `text-embedding-3-small`; ADR `docs/adr/2026-05-17-llm-pricing-seed.md` records source URLs | High | Not Started |
 | T-0025 | Enforce SQL Tool allowlist on `sku_master / inventory / demand_history / supply / cost / customers` | High | Not Started |
 
-### Sample data
+### B04 — Sample Data (Agent: App Builder)
+
+Dependencies: B03
 
 | ID | Task | Priority | Status |
 |---|---|---|---|
@@ -77,31 +99,9 @@
 | T-0037 | Author ADR `docs/adr/2026-05-17-sample-data-generation.md` — distribution choices, seed policy, missing-data pattern | Medium | Not Started |
 | T-0038 | Generator unit tests: deterministic output under seed 42; NULL injection rate; seasonal SKUs show > 0.3 amplitude in autocorrelation | Medium | Not Started |
 
-### Configuration
+### B05 — Infra & CI (Agent: Infra)
 
-| ID | Task | Priority | Status |
-|---|---|---|---|
-| T-0040 | `config/risk_thresholds.yaml` — three-tier thresholds (high / medium / low) | High | Not Started |
-| T-0041 | `config/kpi_weights.csv` — global default (single row, sums to 1.0) | High | Not Started |
-| T-0042 | `config/kpi_weights_overrides.csv` — Critical SKU overrides (service_level=0.50) | High | Not Started |
-| T-0043 | `.env.example` with all required keys (no real values) | High | Not Started |
-
-### API
-
-| ID | Task | Priority | Status |
-|---|---|---|---|
-| T-0050 | FastAPI app skeleton (`apps/api`) with `X-Dev-User` middleware; default `dev-user` when `APP_ENV=dev` | High | Not Started |
-| T-0051 | Implement REST endpoint skeletons per DESIGN §API Design (501 where logic is not ready; `/healthz` and `/readyz` real) | High | Not Started |
-| T-0052 | Configure FastAPI `CORSMiddleware` — dev (`localhost:3000`) and prod (env-injected); SSE exception for credential | High | Not Started |
-
-### Approvals
-
-| ID | Task | Priority | Status |
-|---|---|---|---|
-| T-0060 | Approval state-machine logic with `parent_approval_id` chain (revisions create new row) | High | Not Started |
-| T-0061 | Sweep job for `expired` (default `approval_ttl_seconds=86400`) | Medium | Not Started |
-
-### Infrastructure
+Dependencies: B01 (can run in parallel with B03/B04)
 
 | ID | Task | Priority | Status |
 |---|---|---|---|
@@ -111,26 +111,11 @@
 | T-0073 | Provision Azure Key Vault + Managed Identity in `shared/` | High | Not Started |
 | T-0074 | Scaffold `infra/compose/` with Docker Compose V2 (no `version:` field): postgres + api + web | High | Not Started |
 | T-0075 | Configure Azure OIDC federated credentials with subject claims for `main`, `pull_request`, `environment:prod`; least-privilege RBAC | High | Not Started |
-
-### CI/CD
-
-| ID | Task | Priority | Status |
-|---|---|---|---|
 | T-0080 | `.github/workflows/lint-test.yml` | High | Not Started |
 | T-0081 | `.github/workflows/terraform-plan.yml` (runs on PR) | High | Not Started |
 | T-0082 | `.github/workflows/deploy.yml` (runs on `main`): build → acr-push → tf apply shared → tf apply aca | High | Not Started |
-
-### Observability
-
-| ID | Task | Priority | Status |
-|---|---|---|---|
 | T-0090 | Configure `structlog` JSON output + OpenTelemetry SDK + Langfuse SDK | High | Not Started |
 | T-0091 | Provision Azure Monitor / Application Insights in Terraform `shared/`; wire as OTel sink | High | Not Started |
-
-### ADRs (Phase 0)
-
-| ID | Task | Priority | Status |
-|---|---|---|---|
 | T-0099 | Author initial ADRs for each tech choice: Claude provider, FastAPI, Next.js, Postgres+pgvector, Azure region, Terraform pipeline split, Azure OIDC, backup off | High | Not Started |
 
 ## Phase 1 — Decision Copilot (Vertical-Slice MVP)
