@@ -1,0 +1,18 @@
+scenarios:
+  - id: "basic_inventory_decision"
+    description: "Standard inventory replenishment decision for SKU-001"
+    goal:
+      text: "Optimize replenishment for SKU-001 to minimize stockout risk"
+    expected:
+      has_recommendation: true
+      min_alternatives: 2
+      risk_levels: ["low", "medium", "high"]
+
+  - id: "critical_sku_decision"
+    description: "Critical SKU with high service level requirement"
+    goal:
+      text: "Determine optimal order quantity for critical SKU-CRIT-01"
+    expected:
+      has_recommendation: true
+      min_alternatives: 2
+      weight_source: "critical_sku"
