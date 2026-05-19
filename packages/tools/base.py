@@ -7,6 +7,14 @@ from pydantic import BaseModel
 
 from packages.agent.specialists.base import SpecialistRole
 
+_ROLE_TOOL_ALLOWLIST: dict[str, list[str]] = {
+    "domain_expert": ["sql_query", "forecast"],
+    "data_engineer": ["sql_query", "forecast"],
+    "sim_opt": ["simulate_inventory", "optimize_replenishment"],
+    "evaluator": ["evaluate_candidates", "write_audit_log"],
+    "orchestrator": [],
+}
+
 
 class ToolContext(BaseModel):
     session_id: UUID
@@ -42,4 +50,9 @@ class ToolRegistry:
         return self._tools.get(name)
 
     def list_for_role(self, role: SpecialistRole) -> list[Tool]:
-        return list(self._tools.values())
+        allowed = _ROLE_TOOL_ALLOWLIST.get(role)
+        if allowed is None:
+            return list(self._tools.values())
+        if not allowed:
+            return list(self._tools.values())
+        return [t for name, t in self._tools.items() if name in allowed]
