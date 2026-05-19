@@ -18,4 +18,4 @@ lint:
 	uv run ruff check packages/ apps/api/ scripts/
 
 typecheck:
-	uv run --with mypy mypy packages/ apps/api/
+	uv run mypy packages/ apps/api/
