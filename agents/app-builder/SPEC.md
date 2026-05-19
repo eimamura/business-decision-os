@@ -52,11 +52,15 @@ Implement application code: FastAPI backend, Next.js frontend, and all Python pa
 1. Read task batch from `TASKS.md`
 2. Read `DESIGN.md §Public Interfaces` for any interface being implemented
 3. Implement stub first — schema-conformant, trivially simple
-4. Confirm stub tests pass before adding real logic
-5. Replace stub with real implementation per phase schedule
-6. Run `uv run pytest` after each logical unit of work
-7. Update `TASKS.md` task to `In Progress`, then `Done` when tests pass
-8. Hand off to **Test/Review** for phase verification
+4. Write unit tests for the stub (schema conformance assertions)
+5. Confirm stub tests pass before adding real logic
+6. Replace stub with real implementation per phase schedule
+7. Write unit tests for the real logic (behavior assertions)
+8. Run `uv run pytest tests/unit` after each logical unit of work
+9. Update `TASKS.md` task to `In Progress`, then `Done` when tests pass
+10. Hand off to **Test/Review** for integration + E2E verification
+
+**Test responsibility split**: App Builder owns unit tests (`tests/unit/`). Test/Review owns integration tests (`tests/integration/`) and E2E tests (`tests/e2e/`). App Builder must not hand off with failing unit tests.
 
 ## Required Reading (before every session)
 
@@ -126,6 +130,8 @@ A phase is done when:
 - [ ] All tasks for the phase are marked `Done` in `TASKS.md`
 - [ ] All Quality Gates above pass
 - [ ] Test/Review agent has verified and signed off
+- [ ] All changes committed locally with a Conventional Commit message (`git add` + `git commit`)
+- [ ] Push to remote and PR creation are left to the human — never run `git push` or `gh pr create`
 
 ## Handoff Rules
 

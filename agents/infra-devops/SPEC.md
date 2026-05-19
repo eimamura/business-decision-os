@@ -100,8 +100,9 @@ Makefile
 
 ## CI/CD Rules
 
-- PRs: run `lint-test` + `terraform-plan` (no deploy)
-- Merge to `main`: full chain — lint-test → image-build → acr-push → tf apply shared → tf apply aca
+- PRs: run `lint-test` + `terraform-plan` + `codegen-check` (no deploy)
+  - `codegen-check`: runs `make codegen` and fails if `packages/schemas-ts/` has a diff; ensures App Builder did not forget to regenerate
+- Merge to `main`: full chain — lint-test → codegen-check → image-build → acr-push → tf apply shared → tf apply aca
 - Never force-push to `main`
 
 ## Scripts Rules
@@ -151,6 +152,8 @@ A phase is done when:
 - [ ] All infra tasks for the phase are marked `Done` in `TASKS.md`
 - [ ] All Quality Gates above pass
 - [ ] Test/Review agent has provided final sign-off
+- [ ] All changes committed locally with a Conventional Commit message (`git add` + `git commit`)
+- [ ] Push to remote and PR creation are left to the human — never run `git push` or `gh pr create`
 
 ## Handoff Rules
 

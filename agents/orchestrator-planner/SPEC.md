@@ -56,7 +56,8 @@ Plan and coordinate implementation work across phases. Read all project docs, de
 
 - **Read-only** on all code and infra directories: `apps/`, `packages/`, `infra/`, `tests/`, `.github/`
 - May write to: `TASKS.md` (status updates only), `DECISIONS.md` (append only), `docs/adr/` (new files only)
-- Tools: Read, Grep, Glob only
+- May run `git add` + `git commit` for doc-only changes (TASKS.md, DECISIONS.md, ADRs). Never run `git push`.
+- Tools: Read, Write, Edit, Grep, Glob
 
 ## Constraints
 
@@ -98,6 +99,26 @@ Dependencies: none | Batch N
 ### ADRs needed
 - [any decisions requiring an ADR]
 ```
+
+## User Escalation Criteria
+
+Escalate to the user (do not attempt to resolve autonomously) when:
+
+- A blocker has been returned by the same specialist agent twice with no progress
+- A phase dependency conflict requires a product decision (not just a technical decision)
+- An ADR is needed but the Orchestrator lacks sufficient context to author it
+- Any action under "When in Doubt" in `AGENTS.md` applies (destructive git ops, schema migrations that drop data, API contract changes)
+
+Escalation message must include: the blocker description, what was already attempted, and a concrete question for the user.
+
+## Agent Conflict Protocol
+
+When two agents disagree or a handoff is rejected:
+
+1. **Specialist rejects Orchestrator task**: Specialist returns a rejection with reason; Orchestrator re-evaluates the task scope, resolves the conflict (or escalates to user), and re-issues.
+2. **App Builder ↔ Infra conflict** (e.g., missing env var, Dockerfile disagreement): the agent that discovered the gap files a blocking note in `TASKS.md` and notifies Orchestrator. Orchestrator assigns the fix to the correct owner.
+3. **Test/Review vs. App Builder disagreement** (bug vs. design intent): Test/Review files the issue with expected and actual behavior. App Builder must either fix or author an ADR explaining the intent. Orchestrator arbitrates if unresolved after one round.
+4. **ADR authorship**: the Orchestrator authors all ADRs. Specialists raise the need for an ADR and supply the relevant technical context; they do not author ADRs unilaterally.
 
 ## Handoff Rules
 

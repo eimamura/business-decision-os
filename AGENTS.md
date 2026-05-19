@@ -79,7 +79,7 @@ Read these before any task. Do not start implementation without them in context.
 ### Sample Data
 
 - `data/sample/ground_truth/` is **agent-forbidden**. Never read these files, never load them into the database, never reference them in tool calls.
-- SQL Tool allowlist: `sku_master`, `inventory`, `demand_history`, `supply`, `cost`, `customers`. No other tables are queryable.
+- SQL Tool allowlist: `sku_master`, `inventory`, `demand_history`, `supply`, `cost`, `customers`. No other tables are queryable. The allowlist is enforced inside `packages/tools/sql.py`; the Integration Test `tests/integration/test_sql_tool.py` must assert that queries to non-listed tables are rejected.
 - Ground-truth tables only exist as CSV under `ground_truth/` and are used by the evaluation harness outside the agent boundary.
 
 ### Language Policy
@@ -121,9 +121,9 @@ Author an ADR under `docs/adr/YYYY-MM-DD-title.md` whenever you:
 
 Each ADR must include: background, candidates considered, decision, rationale, tradeoffs, reversibility / re-evaluation triggers.
 
-## Pre-Change Checklist
+## Pre-Commit Checklist
 
-Before opening a PR:
+Before committing:
 
 - [ ] `SPEC.md` and `DESIGN.md` consulted; change aligns with both.
 - [ ] No new top-level module added.
@@ -134,6 +134,8 @@ Before opening a PR:
 - [ ] No raw rows in any new LLM prompt path.
 - [ ] No ground-truth path referenced.
 - [ ] Conventional Commit message with valid scope (see Commit Discipline).
+
+Push to remote and PR creation are performed by the human — never by an agent.
 
 ## Local Development
 
@@ -154,6 +156,7 @@ See [`docs/TESTING.md`](docs/TESTING.md) for tiers, tooling, cassette discipline
 - Allowed scopes: `agent`, `api`, `web`, `schemas`, `tools`, `domain`, `simulation`, `optimization`, `prediction`, `memory`, `state`, `infra`, `data`, `docs`, `ci`, `deps`.
 - One logical change per commit. Squash noisy WIP commits before review.
 - Never amend or force-push to `main`. Create a new commit for fixes.
+- **Agent commit boundary**: agents run `git add` + `git commit` locally only. Never run `git push` or `gh pr create` from an agent — push and PR creation are the human's responsibility.
 
 ## When in Doubt
 

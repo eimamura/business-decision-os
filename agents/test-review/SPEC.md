@@ -91,6 +91,21 @@ Required assertions per stub:
 | Optimization Tool | `OptimizationOutput` shape: `candidates: list[Candidate]`, `len(candidates) >= 3` |
 | MemoryStore.search | Returns `[]` (empty list, correct type) |
 
+## Per-Phase Test Focus
+
+| Phase | Test/Review Work |
+|---|---|
+| 0 | Schema conformance tests for all stubs; migration smoke test; audit hash chain test |
+| 1 | Full stub conformance suite; Orchestrator step sequence integration test; E2E core flow |
+| 2 | Simulation stub → real: replace conformance test with behavior test (kpi_scores range checks) |
+| 3 | Optimization stub → real: assert `len(candidates) >= 3`; Pareto feasibility assertions |
+| 4 | Approval state machine transitions; revision creates new row with `parent_approval_id` |
+| 5 | Celery worker integration test; job status polling test |
+| 6 | Predictor integration test (inference latency < 500ms via API) |
+| 7 | MemoryStore retrieval: assert non-empty results after write; pgvector cosine similarity test |
+| 8 | Auto-execution policy: risk-classified approval bypass path |
+| 9 | AgentBasedSpecialist: assert 5 specialists invoked per orchestrator run |
+
 ## Unit Test Scope
 
 - KPI formula correctness (`packages/domain/kpi.py`)
@@ -135,8 +150,10 @@ After App Builder or Infra/DevOps commits:
 
 - Cassettes live in `data/fixtures/cassettes/` and are committed
 - Never delete a cassette to force a live call in a normal test run
-- Re-record only when prompt or schema changes: `RECORD_MODE=new_episodes uv run pytest ...`
-- Review diff before committing — must contain no secrets or raw data rows
+- Re-record trigger: Test/Review decides when a cassette is stale. A cassette is stale when: (a) the LLM prompt template changed, or (b) a Pydantic schema used in the recorded interaction changed
+- Re-record command: `RECORD_MODE=new_episodes uv run pytest <specific_test>`
+- Before committing a re-recorded cassette: review the diff — must contain no secrets, no raw DB rows, no PII. Post the diff summary in the TASKS.md comment for the relevant task
+- Orchestrator does not approve individual cassette re-records; Test/Review owns this autonomously unless the diff reveals unexpected behavioral changes, in which case escalate to Orchestrator
 
 ## Constraints
 
@@ -161,6 +178,8 @@ A phase is done when:
 - [ ] All test tasks for the phase are marked `Done` in `TASKS.md`
 - [ ] All Quality Gates above pass
 - [ ] Sign-off delivered to Orchestrator (or blocking issues listed)
+- [ ] All test files and cassettes committed locally with a Conventional Commit message (`git add` + `git commit`)
+- [ ] Push to remote and PR creation are left to the human — never run `git push` or `gh pr create`
 
 ## Handoff Rules
 
