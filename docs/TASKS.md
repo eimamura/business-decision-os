@@ -200,52 +200,52 @@ New env vars: ANTHROPIC_API_KEY (from host), OTEL_EXPORTER_OTLP_ENDPOINT (option
 
 | ID | Task | Priority | Status |
 |---|---|---|---|
-| T-1001 | Implement `ClaudeClient` with prompt caching enabled; `temperature=0` default | High | Not Started |
-| T-1002 | Instrument `LLMClient` to write `llm_usage` rows inside the same DB transaction as the parent `agent_step` | High | Not Started |
-| T-1003 | Implement Orchestrator sequential single-LLM loop with role switching (Plan → Tool → Evaluate → Recommend) | High | Not Started |
-| T-1004 | Implement 4 `PromptBasedSpecialist` instances (Domain Expert, Data Engineer, Simulator/Optimizer, Evaluator) with role prompts + tool subsets | High | Not Started |
-| T-1005 | Implement Orchestrator error handling: 2 retries with backoff (1s, 4s); SSE `error` event; `decision_sessions.status = failed` on terminal failure | High | Not Started |
-| T-1006 | Implement Orchestrator trade-off resolution: config defaults + Critical SKU overrides; user policy and session goal hooks present but no-op in MVP | High | Not Started |
-| T-1007 | Implement primary + 2 alternatives selection in Recommendation generation | High | Not Started |
-| T-1008 | Wire `decision_sessions.status` state machine with optimistic-retry on conflict | High | Not Started |
+| T-1001 | Implement `ClaudeClient` with prompt caching enabled; `temperature=0` default | High | Done |
+| T-1002 | Instrument `LLMClient` to write `llm_usage` rows inside the same DB transaction as the parent `agent_step` | High | Done |
+| T-1003 | Implement Orchestrator sequential single-LLM loop with role switching (Plan → Tool → Evaluate → Recommend) | High | Done |
+| T-1004 | Implement 4 `PromptBasedSpecialist` instances (Domain Expert, Data Engineer, Simulator/Optimizer, Evaluator) with role prompts + tool subsets | High | Done |
+| T-1005 | Implement Orchestrator error handling: 2 retries with backoff (1s, 4s); SSE `error` event; `decision_sessions.status = failed` on terminal failure | High | Done |
+| T-1006 | Implement Orchestrator trade-off resolution: config defaults + Critical SKU overrides; user policy and session goal hooks present but no-op in MVP | High | Done |
+| T-1007 | Implement primary + 2 alternatives selection in Recommendation generation | High | Done |
+| T-1008 | Wire `decision_sessions.status` state machine with optimistic-retry on conflict | High | Done |
 
 ### Tools
 
 | ID | Task | Priority | Status |
 |---|---|---|---|
-| T-1010 | SQL Query Tool: read-only on operational tables; allowlisted | High | Not Started |
-| T-1011 | Approval Tool: full state machine integration | High | Not Started |
-| T-1012 | Audit Log Tool: hash-chained writes | High | Not Started |
-| T-1013 | Forecast Tool stub: 28-day moving average over `demand_history`, NULL-aware; `model_version="moving_avg_v1"` | High | Not Started |
-| T-1014 | Simulation Tool stub: deterministic projection (`on_hand[t+1] = max(0, on_hand[t] + arrivals[t] - demand[t])`); mean lead time only | High | Not Started |
-| T-1015 | Optimizer Tool stub: enumerate `order_qty ∈ {0, MOQ, 2MOQ, …, 5MOQ}`; run Simulator stub; return first 3 feasible by ascending `total_supply_chain_cost` | High | Not Started |
-| T-1016 | Evaluator (rule-based) producing `KpiScore[]` per candidate (no collapsed scoring); apply three-tier risk classification | High | Not Started |
-| T-1017 | LLM context sanitizer: raw rows never sent to Claude; only summaries / aggregates | High | Not Started |
+| T-1010 | SQL Query Tool: read-only on operational tables; allowlisted | High | Done |
+| T-1011 | Approval Tool: full state machine integration | High | Done |
+| T-1012 | Audit Log Tool: hash-chained writes | High | Done |
+| T-1013 | Forecast Tool stub: 28-day moving average over `demand_history`, NULL-aware; `model_version="moving_avg_v1"` | High | Done |
+| T-1014 | Simulation Tool stub: deterministic projection (`on_hand[t+1] = max(0, on_hand[t] + arrivals[t] - demand[t])`); mean lead time only | High | Done |
+| T-1015 | Optimizer Tool stub: enumerate `order_qty ∈ {0, MOQ, 2MOQ, …, 5MOQ}`; run Simulator stub; return first 3 feasible by ascending `total_supply_chain_cost` | High | Done |
+| T-1016 | Evaluator (rule-based) producing `KpiScore[]` per candidate (no collapsed scoring); apply three-tier risk classification | High | Done |
+| T-1017 | LLM context sanitizer: raw rows never sent to Claude; only summaries / aggregates | High | Done |
 
 ### Web UI
 
 | ID | Task | Priority | Status |
 |---|---|---|---|
-| T-1020 | Chat screen: English UI and English agent responses; GFM Markdown rendering (`react-markdown` + `remark-gfm` + `rehype-sanitize` + syntax highlighter + KaTeX + Mermaid lazy load) | High | Not Started |
-| T-1021 | Chat session list sidebar; URL `/chat/[sessionId]`; multi-session navigation | High | Not Started |
-| T-1022 | Reasoning Panel with SSE consumer; Active Specialist banner; Orchestrator routing log; Step timeline; live status pill; `Cmd/Ctrl + .` toggle | High | Not Started |
-| T-1023 | Tool Call Inspector: input / output JSON; executed-SQL syntax-highlighted display; table preview; copy / open-in-audit actions | High | Not Started |
-| T-1024 | Scenario Comparison screen: radar chart + parallel coordinates (Recharts) | High | Not Started |
-| T-1025 | Recommendation Detail: primary + alternatives + `TradeoffExplanation` + rationale + risk badge | High | Not Started |
-| T-1026 | Approval Queue: risk badges + trade-off summary + revision-request weight-vector editor | High | Not Started |
-| T-1027 | Audit Timeline: session_id filter + agent / tool / status filters + JSON diff + token / cost summary | High | Not Started |
-| T-1028 | KPI Dashboard skeleton with LLM Cost Trend panel | High | Not Started |
-| T-1029 | Wire Vercel AI SDK with Claude provider for chat streaming | High | Not Started |
-| T-1030 | SSE reconnect with `Last-Event-ID` replay from `audit_log` | High | Not Started |
+| T-1020 | Chat screen: English UI and English agent responses; GFM Markdown rendering (`react-markdown` + `remark-gfm` + `rehype-sanitize` + syntax highlighter + KaTeX + Mermaid lazy load) | High | Done |
+| T-1021 | Chat session list sidebar; URL `/chat/[sessionId]`; multi-session navigation | High | Done |
+| T-1022 | Reasoning Panel with SSE consumer; Active Specialist banner; Orchestrator routing log; Step timeline; live status pill; `Cmd/Ctrl + .` toggle | High | Done |
+| T-1023 | Tool Call Inspector: input / output JSON; executed-SQL syntax-highlighted display; table preview; copy / open-in-audit actions | High | Done |
+| T-1024 | Scenario Comparison screen: radar chart + parallel coordinates (Recharts) | High | Done |
+| T-1025 | Recommendation Detail: primary + alternatives + `TradeoffExplanation` + rationale + risk badge | High | Done |
+| T-1026 | Approval Queue: risk badges + trade-off summary + revision-request weight-vector editor | High | Done |
+| T-1027 | Audit Timeline: session_id filter + agent / tool / status filters + JSON diff + token / cost summary | High | Done |
+| T-1028 | KPI Dashboard skeleton with LLM Cost Trend panel | High | Done |
+| T-1029 | Wire Vercel AI SDK with Claude provider for chat streaming | High | Done |
+| T-1030 | SSE reconnect with `Last-Event-ID` replay from `audit_log` | High | Done |
 
 ### Memory and tests
 
 | ID | Task | Priority | Status |
 |---|---|---|---|
-| T-1040 | MemoryStore stub: `write` persists; `search` returns `[]` | High | Not Started |
-| T-1041 | Pytest fixtures: YAML scenarios + `vcrpy` cassettes for LLM calls | High | Not Started |
-| T-1042 | Playwright E2E suite covering chat → recommendation → approval → audit | High | Not Started |
-| T-1043 | Document English-only convention for code, docs, UI, and chat in `AGENTS.md` | Medium | Not Started |
+| T-1040 | MemoryStore stub: `write` persists; `search` returns `[]` | High | Done |
+| T-1041 | Pytest fixtures: YAML scenarios + `vcrpy` cassettes for LLM calls | High | Done |
+| T-1042 | Playwright E2E suite covering chat → recommendation → approval → audit | High | Done |
+| T-1043 | Document English-only convention for code, docs, UI, and chat in `AGENTS.md` | Medium | Done |
 
 ## Phase 2 — Real Simulator
 

@@ -7,7 +7,7 @@ TASKS.md holds task definitions. This file holds runtime execution state.
 
 ## Current Phase
 
-Phase 0 — Repository Foundation
+Phase 1 — Decision Copilot (Vertical-Slice MVP)
 
 ## Active Lease
 
@@ -15,11 +15,11 @@ None
 
 ## Last Completed Batch
 
-B05 — Infra & CI (and B04 — Sample Data, parallel)
+Phase 1 — Decision Copilot (Vertical-Slice MVP) — all batches complete
 
 ## Last Validation
 
-command: bdos-test-review B04+B05 checks (16 items); make test → 77 passed
+command: make build && make test && make lint && make typecheck; healthz/readyz HTTP 200; SSE smoke test 12 events
 exit code: 0 (all PASS)
 timestamp: 2026-05-19
 
