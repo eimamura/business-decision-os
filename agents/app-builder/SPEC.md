@@ -71,6 +71,19 @@ These signatures are locked. **Any change requires an ADR before coding:**
 - `Orchestrator.run / resume`
 - Approval state machine: `pending → approved | rejected | needs_revision | expired`
 
+## Phase Complete Criteria
+
+A phase is complete only when all of the following pass:
+
+- [ ] All tasks for the phase are marked `Done` in `TASKS.md`
+- [ ] `uv run pytest tests/unit` passes with zero failures
+- [ ] `uv run pytest tests/integration` passes with zero failures
+- [ ] Every public interface method for this phase returns a non-501 response (real or schema-conformant stub)
+- [ ] `make codegen` produces no diff in `packages/schemas-ts/`
+- [ ] No raw DB rows appear in any LLM prompt path (spot-checked via code review)
+
+Hand off to **Test / Review** agent to verify before updating `TASKS.md`.
+
 ## Constraints
 
 - Never touch `infra/`, `infra/compose/`, `.github/workflows/`, `Makefile`, `apps/*/Dockerfile`

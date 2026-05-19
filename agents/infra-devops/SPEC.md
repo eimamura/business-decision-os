@@ -84,6 +84,21 @@ Makefile
 | 6 | Provision Databricks workspace + MLflow via new Terraform stage |
 | 8 | Provision Databricks Lakehouse (ADLS Gen2 + Delta) |
 
+## Phase Complete Criteria
+
+A phase is complete only when all of the following pass:
+
+- [ ] All infra tasks for the phase are marked `Done` in `TASKS.md`
+- [ ] Smoke checks pass:
+  - `curl -s http://localhost:8000/healthz` → 200
+  - `curl -s http://localhost:3000/chat | grep -q Decision` → match
+- [ ] `make seed-all` completes without error
+- [ ] `terraform plan` produces no unexpected destroys for any changed module
+- [ ] No hardcoded credentials in any changed file (`grep -r "AKIA\|password\s*=" infra/ scripts/`)
+- [ ] GitHub Actions `lint-test` workflow passes on the PR
+
+Hand off to **Test / Review** agent for final sign-off before updating `TASKS.md`.
+
 ## Constraints
 
 - Never edit files in `apps/api/app/`, `apps/web/app/`, `packages/` (application logic)
