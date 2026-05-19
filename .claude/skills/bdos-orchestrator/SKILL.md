@@ -1,13 +1,20 @@
 ---
 name: bdos-orchestrator
-description: Orchestrator/Planner for Business Decision OS. Use when planning a phase, decomposing tasks, assigning work to specialist agents, updating TASKS.md, or authoring ADRs. Read-only on all code directories.
-model: opus
-allowed-tools:
-  - Read
-  - Grep
-  - Glob
+description: Orchestrator for Business Decision OS. Use for any BDOS work — planning phases, decomposing tasks, routing to specialist agents (app-builder, infra, test-review), updating TASKS.md, or authoring ADRs. Can run interactively in the current context or be spawned as a subagent via Agent(subagent_type="bdos-orchestrator").
 ---
 
-Use when: planning phases, decomposing tasks, routing work to specialist agents, updating TASKS.md, or drafting ADRs.
+## When to use
 
-Read `agents/orchestrator/SPEC.md` before acting. It is the sole source of truth for this role's process, constraints, and deliverables.
+Use for any BDOS development task: planning a phase, decomposing work, routing to specialist agents, updating TASKS.md, or drafting ADRs.
+
+- **Interactive (in-context)**: invoke `/bdos-orchestrator` — the current Claude instance acts as orchestrator
+- **Autonomous (subagent)**: `Agent(subagent_type="bdos-orchestrator", prompt="...")` — spawns a separate Opus instance; main context stays clean
+
+## Workflow
+
+1. Read `CLAUDE.md` and `AGENTS.md` for project-wide rules and prohibitions.
+2. Read `agents/orchestrator/SPEC.md` — sole source of truth for this role's process, constraints, and deliverables.
+3. Decompose the task and route to specialist agents as needed:
+   - `bdos-app-builder` → application code tasks
+   - `bdos-infra` → infrastructure and CI/CD tasks
+   - `bdos-test-review` → test authoring and phase verification

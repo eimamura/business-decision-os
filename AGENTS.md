@@ -23,8 +23,8 @@ This project uses a SPEC-centered Claude Code architecture. If you are running a
 | `bdos-test-review` | `agents/test-review/SPEC.md` | Tests, code review |
 
 Invocation:
-- Human slash command: `/bdos-orchestrator`, `/bdos-app-builder`, etc.
-- Programmatic subagent: `Agent(subagent_type="bdos-app-builder", prompt="...")`
+- Human slash command: `/bdos-orchestrator` (entry point for all BDOS work), `/bdos-app-builder`, `/bdos-infra`, `/bdos-test-review`
+- Programmatic subagent: `Agent(subagent_type="bdos-orchestrator", prompt="...")` or direct specialist: `Agent(subagent_type="bdos-app-builder", prompt="...")`
 
 ## Required Reading (in order)
 
