@@ -10,6 +10,11 @@ Build the **Business Decision OS** — an agent with a simulatable learning mode
 
 This project uses a SPEC-centered Claude Code architecture. If you are running as a subagent, your full execution contract is in your role's SPEC.md.
 
+- `agents/*/SPEC.md` is the **sole source of truth** for agent-specific behavior.
+- `.claude/skills/bdos-*/SKILL.md` defines workflow entrypoints.
+- `.claude/agents/bdos-*.md` defines subagent metadata and delegates to SPEC.md.
+- Do not duplicate detailed agent behavior in CLAUDE.md, SKILL.md, or subagent files.
+
 | Subagent | SPEC | Role |
 |---|---|---|
 | `bdos-orchestrator` | `agents/orchestrator-planner/SPEC.md` | Plan, decompose, route |
