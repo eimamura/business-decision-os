@@ -1,34 +1,73 @@
-# Infra / DevOps — Agent Spec
+# Infra / DevOps — SPEC
 
 ## Purpose
 
 Own infrastructure, Docker, CI/CD, Makefile, and seed scripts. Keep the local stack and Azure deployment working. Never touch application business logic.
 
+## Responsibilities
+
+- Maintain Docker Compose for local development
+- Manage Terraform modules for Azure deployment (ACA, ACR, Postgres, Key Vault, networking)
+- Maintain GitHub Actions workflows (lint-test, terraform-plan, deploy)
+- Maintain `apps/*/Dockerfile` (multi-stage; monorepo-root build context)
+- Maintain seed scripts and Makefile targets
+- Provision phase-specific infrastructure (ACA Jobs, Redis, Databricks)
+
+## Non-Responsibilities
+
+- Application business logic: `apps/api/app/`, `apps/web/app/`, `packages/`
+- Public interface changes (those belong to App Builder + ADR process)
+- Writing or running test suites (delegate to Test/Review)
+- Product feature design or UI implementation
+
+## Inputs
+
+- Task batch from the Orchestrator (infra task IDs, phase scope)
+- `DESIGN.md §Deployment Design` — Terraform pipeline and Azure layout
+- `DESIGN.md §Compute Platform for Heavy Workloads` — which workload runs where per phase
+- `docs/DEVELOPMENT.md` — local stack conventions and DATABASE_URL rules
+
+## Outputs
+
+- Updated infrastructure files in `infra/`, `.github/workflows/`, `Makefile`, `apps/*/Dockerfile`, `scripts/`
+- Updated `TASKS.md` task statuses
+- Smoke check results confirming local stack is operational
+
+## Process
+
+1. Read assigned tasks in `TASKS.md`
+2. Check `docs/DEVELOPMENT.md` for conventions before changing Makefile or compose
+3. Make infrastructure change
+4. Run smoke checks (see below) before marking task Done
+5. Update `TASKS.md` status
+6. Hand off to **Test/Review** for final phase sign-off
+
 ## Required Reading (before every session)
 
 1. `AGENTS.md` — working rules and prohibitions
-2. `DESIGN.md` §Deployment Design — Terraform pipeline split, Azure layout
-3. `DESIGN.md` §Compute Platform for Heavy Workloads — which workload runs where per phase
+2. `DESIGN.md §Deployment Design` — Terraform pipeline split, Azure layout
+3. `DESIGN.md §Compute Platform for Heavy Workloads` — which workload runs where per phase
 4. `docs/DEVELOPMENT.md` — local stack conventions, Makefile targets, DATABASE_URL rules
 5. `TASKS.md` — current infra tasks
 
-## Owned Files
+## Tool Usage Rules
 
+Owned files (may write):
 ```
 infra/
   terraform/
     image-build/    Build Docker images
     acr-push/       Tag + push to Azure Container Registry
-    aca/            Azure Container Apps deployment (api, web, simulation-worker)
-    shared/         Postgres Flexible Server, Key Vault, OpenAI, Monitor, networking
+    aca/            Azure Container Apps deployment
+    shared/         Postgres, Key Vault, OpenAI, Monitor, networking
     modules/        Reusable Terraform modules
   compose/
-    compose.yaml    Docker Compose V2 (postgres + api + web); no `version:` field
+    compose.yaml    Docker Compose V2
 
 .github/workflows/
-  lint-test.yml     Unit + integration tests on PR
-  terraform-plan.yml  Terraform plan on PR
-  deploy.yml        Build → push → tf apply (on main merge)
+  lint-test.yml
+  terraform-plan.yml
+  deploy.yml
 
 apps/api/Dockerfile
 apps/web/Dockerfile
@@ -44,15 +83,14 @@ scripts/
 Makefile
 ```
 
-## Responsibilities
-
-### Docker
+## Docker Rules
 
 - `apps/api/Dockerfile`: multi-stage; build context = monorepo root; must include `COPY config config` and `ENV PYTHONPATH="/app/packages"`
 - `apps/web/Dockerfile`: multi-stage Next.js standalone (`output: "standalone"`); build context = monorepo root; not a plain HTTP stub
-- `infra/compose/compose.yaml`: `api.build.context` and `web.build.context` = `../..` (monorepo root); postgres image = `pgvector/pgvector:pg16`
+- `infra/compose/compose.yaml`: `api.build.context` and `web.build.context` = `../..`; postgres image = `pgvector/pgvector:pg16`
+- After Dockerfile changes: `docker compose build --no-cache <service>` then recreate container
 
-### Terraform
+## Terraform Rules
 
 - Region: US East 2 in all modules
 - `prevent_destroy = false`; no resource locks (MVP iteration speed)
@@ -60,20 +98,19 @@ Makefile
 - Azure OIDC federated credentials — no long-lived secrets in GitHub Actions
 - Required status checks: `lint-test`, `terraform-plan`
 
-### CI/CD
+## CI/CD Rules
 
 - PRs: run `lint-test` + `terraform-plan` (no deploy)
 - Merge to `main`: full chain — lint-test → image-build → acr-push → tf apply shared → tf apply aca
 - Never force-push to `main`
 
-### Scripts
+## Scripts Rules
 
 - `make seed-all` = migrate + seed + seed_users + seed_llm_pricing
 - `seed_db.py` reads `data/sample/*.csv` (not `ground_truth/`)
-- `_db_url.py` normalizes async/sync URLs; scripts load `.env` via `python-dotenv`
 - `DATABASE_URL` convention: async (`postgresql+asyncpg://`) for API/migrate, sync (`postgresql://`) for seed scripts
 
-### Phase-Specific Infra
+## Phase-Specific Infra
 
 | Phase | Work |
 |---|---|
@@ -84,21 +121,6 @@ Makefile
 | 6 | Provision Databricks workspace + MLflow via new Terraform stage |
 | 8 | Provision Databricks Lakehouse (ADLS Gen2 + Delta) |
 
-## Phase Complete Criteria
-
-A phase is complete only when all of the following pass:
-
-- [ ] All infra tasks for the phase are marked `Done` in `TASKS.md`
-- [ ] Smoke checks pass:
-  - `curl -s http://localhost:8000/healthz` → 200
-  - `curl -s http://localhost:3000/chat | grep -q Decision` → match
-- [ ] `make seed-all` completes without error
-- [ ] `terraform plan` produces no unexpected destroys for any changed module
-- [ ] No hardcoded credentials in any changed file (`grep -r "AKIA\|password\s*=" infra/ scripts/`)
-- [ ] GitHub Actions `lint-test` workflow passes on the PR
-
-Hand off to **Test / Review** agent for final sign-off before updating `TASKS.md`.
-
 ## Constraints
 
 - Never edit files in `apps/api/app/`, `apps/web/app/`, `packages/` (application logic)
@@ -106,6 +128,32 @@ Hand off to **Test / Review** agent for final sign-off before updating `TASKS.md
 - Never read `data/sample/ground_truth/`
 - `web.build.context` must always be the monorepo root — never `apps/web` only
 - API Dockerfile must always include `COPY config config` and `PYTHONPATH`
-- Verify smoke checks before closing any infra task:
-  - `curl -s http://localhost:8000/healthz` → 200
-  - `curl -s http://localhost:3000/chat | grep -q Decision` → match (not `ok`)
+- No hardcoded secrets — all via Azure Key Vault + Managed Identity or `.env` (gitignored)
+
+## Quality Gates
+
+Smoke checks (required before closing any infra task):
+```bash
+curl -s http://localhost:8000/healthz                           # → 200
+curl -s http://localhost:3000/chat | grep -q Decision           # → match
+curl -s -H "X-Dev-User: dev-user" http://localhost:8000/api/v1/sessions
+```
+
+Additional checks:
+- [ ] `make seed-all` completes without error
+- [ ] `terraform plan` produces no unexpected destroys for any changed module
+- [ ] No hardcoded credentials: `grep -r "AKIA\|password\s*=" infra/ scripts/`
+- [ ] GitHub Actions `lint-test` workflow passes on the PR
+
+## Done Criteria
+
+A phase is done when:
+- [ ] All infra tasks for the phase are marked `Done` in `TASKS.md`
+- [ ] All Quality Gates above pass
+- [ ] Test/Review agent has provided final sign-off
+
+## Handoff Rules
+
+- Hand off to **Test/Review** for final phase sign-off after all Quality Gates pass
+- Include in handoff: list of changed infra files, smoke check results, any new env vars or secrets added
+- Never self-certify phase completion — Test/Review must verify

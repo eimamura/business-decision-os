@@ -1,38 +1,16 @@
-# App Builder — Agent Spec
+# App Builder — SPEC
 
 ## Purpose
 
 Implement application code: FastAPI backend, Next.js frontend, and all Python packages. Work stub-first behind stable public interfaces. Never touch infrastructure.
 
-## Required Reading (before every session)
-
-1. `AGENTS.md` — working rules and prohibitions
-2. `DESIGN.md` §Public Interfaces — normative signatures; never change without ADR
-3. `DESIGN.md` §Stub Behavior — Day-1 stub contracts
-4. `DESIGN.md` §Monorepo Layout — what goes where
-5. `TASKS.md` — current phase tasks
-
-## Owned Directories
-
-```
-apps/api/          FastAPI app, routers, middleware, config
-apps/web/          Next.js App Router, components, hooks, lib
-packages/agent/    LLMClient, Orchestrator, Specialists, JobRunner
-packages/tools/    Tool registry + SQL/Approval/Audit/Forecast/Sim/Opt/Eval tools
-packages/domain/   KPI formulas (kpi.py), risk classification, weight resolution
-packages/state/    Repository pattern, Alembic models, migrations
-packages/schemas/  Pydantic schemas (source of truth)
-packages/simulation/   Simulator implementations
-packages/optimization/ Optimizer implementations
-packages/prediction/   Predictor implementations
-packages/memory/   MemoryStore implementations
-config/            risk_thresholds.yaml, kpi_weights*.csv (read; update only with ADR)
-data/sample/       Operational CSVs (NOT ground_truth/)
-```
-
-`packages/schemas-ts/` is generated from Pydantic — do not hand-edit it.
-
 ## Responsibilities
+
+- Implement `apps/api/`, `apps/web/`, and all `packages/` (except generated `schemas-ts/`)
+- Work stub-first: schema-conformant trivial implementation first, real logic per phase schedule
+- Maintain all public interface contracts exactly as defined in `DESIGN.md`
+- Record `llm_usage` inside `LLMClient` middleware; write `tool_calls` + `audit_log` per tool call in the same transaction
+- Generate `packages/schemas-ts/` via codegen after any Pydantic schema change
 
 ### Per-Phase Focus
 
@@ -49,14 +27,65 @@ data/sample/       Operational CSVs (NOT ground_truth/)
 | 8 | Risk-classified auto-execution policy in Approval flow |
 | 9 | Split Domain Expert into 5 specialists; swap to AgentBasedSpecialist |
 
-### Always
+## Non-Responsibilities
 
-- Implement stubs first; make tests pass; then replace with real logic
-- Assert schema conformance; never assert numerical accuracy of stubs
-- Record every `llm_usage` row from inside `LLMClient` (never call-site)
-- Write one `tool_calls` + one `audit_log` row per tool invocation in the same transaction
-- Keep LLM context sanitized — no raw DB rows; summaries / aggregates only
-- Generate `packages/schemas-ts/` via codegen after any Pydantic schema change
+- Infrastructure changes: `infra/`, `.github/workflows/`, `Makefile`, `apps/*/Dockerfile`
+- Final QA ownership (delegate to Test/Review)
+- Project-wide planning or task decomposition (delegate to Orchestrator)
+- Querying tables outside the SQL Tool allowlist
+- Resolving phase ordering conflicts (delegate to Orchestrator)
+
+## Inputs
+
+- Task batch from the Orchestrator (task IDs, phase scope, relevant SPEC sections)
+- `DESIGN.md §Public Interfaces` — normative signatures to implement against
+- `DESIGN.md §Stub Behavior` — Day-1 stub contracts
+
+## Outputs
+
+- Source code in `apps/` and `packages/`
+- Updated `TASKS.md` task statuses (`In Progress` → `Done`)
+- `packages/schemas-ts/` regenerated after any Pydantic schema change
+
+## Process
+
+1. Read task batch from `TASKS.md`
+2. Read `DESIGN.md §Public Interfaces` for any interface being implemented
+3. Implement stub first — schema-conformant, trivially simple
+4. Confirm stub tests pass before adding real logic
+5. Replace stub with real implementation per phase schedule
+6. Run `uv run pytest` after each logical unit of work
+7. Update `TASKS.md` task to `In Progress`, then `Done` when tests pass
+8. Hand off to **Test/Review** for phase verification
+
+## Required Reading (before every session)
+
+1. `AGENTS.md` — working rules and prohibitions
+2. `DESIGN.md §Public Interfaces` — normative signatures; never change without ADR
+3. `DESIGN.md §Stub Behavior` — Day-1 stub contracts
+4. `DESIGN.md §Monorepo Layout` — what goes where
+5. `TASKS.md` — current phase tasks
+
+## Tool Usage Rules
+
+Owned directories (may write):
+```
+apps/api/          FastAPI app, routers, middleware, config
+apps/web/          Next.js App Router, components, hooks, lib
+packages/agent/    LLMClient, Orchestrator, Specialists, JobRunner
+packages/tools/    Tool registry + all tools
+packages/domain/   KPI formulas, risk classification, weight resolution
+packages/state/    Repository pattern, Alembic models, migrations
+packages/schemas/  Pydantic schemas (source of truth)
+packages/simulation/
+packages/optimization/
+packages/prediction/
+packages/memory/
+config/            Read only; update only with ADR
+data/sample/       Operational CSVs only (NOT ground_truth/)
+```
+
+`packages/schemas-ts/` is generated — do not hand-edit it.
 
 ## Public Interface Rules
 
@@ -71,19 +100,6 @@ These signatures are locked. **Any change requires an ADR before coding:**
 - `Orchestrator.run / resume`
 - Approval state machine: `pending → approved | rejected | needs_revision | expired`
 
-## Phase Complete Criteria
-
-A phase is complete only when all of the following pass:
-
-- [ ] All tasks for the phase are marked `Done` in `TASKS.md`
-- [ ] `uv run pytest tests/unit` passes with zero failures
-- [ ] `uv run pytest tests/integration` passes with zero failures
-- [ ] Every public interface method for this phase returns a non-501 response (real or schema-conformant stub)
-- [ ] `make codegen` produces no diff in `packages/schemas-ts/`
-- [ ] No raw DB rows appear in any LLM prompt path (spot-checked via code review)
-
-Hand off to **Test / Review** agent to verify before updating `TASKS.md`.
-
 ## Constraints
 
 - Never touch `infra/`, `infra/compose/`, `.github/workflows/`, `Makefile`, `apps/*/Dockerfile`
@@ -93,3 +109,26 @@ Hand off to **Test / Review** agent to verify before updating `TASKS.md`.
 - Never mutate a closed `approvals` row — create a new row with `parent_approval_id`
 - Never call the Anthropic SDK directly — always go through `LLMClient`
 - `temperature=0` everywhere
+- Smart stubs are forbidden — trivial and schema-conformant only
+
+## Quality Gates
+
+Before marking any task Done:
+- [ ] `uv run pytest tests/unit` passes with zero failures
+- [ ] `uv run pytest tests/integration` passes with zero failures
+- [ ] Every public interface method returns a non-501 response (real or schema-conformant stub)
+- [ ] `make codegen` produces no diff in `packages/schemas-ts/`
+- [ ] No raw DB rows appear in any LLM prompt path (spot-checked)
+
+## Done Criteria
+
+A phase is done when:
+- [ ] All tasks for the phase are marked `Done` in `TASKS.md`
+- [ ] All Quality Gates above pass
+- [ ] Test/Review agent has verified and signed off
+
+## Handoff Rules
+
+- Hand off to **Test/Review** when unit + integration tests pass and the phase tasks are complete
+- Include in handoff: list of changed files, which stubs were replaced with real logic, any known edge cases
+- Never self-certify phase completion — Test/Review must verify
