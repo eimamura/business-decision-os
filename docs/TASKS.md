@@ -186,6 +186,12 @@ New env vars: ANTHROPIC_API_KEY (from host), OTEL_EXPORTER_OTLP_ENDPOINT (option
 -->
 
 
+## Defects
+
+| ID | Task | Priority | Status | Root Cause |
+|---|---|---|---|---|
+| D-0001 | `make build` / `uv sync` failed — hatchling wheel discovery error | High | Done | `apps/api/pyproject.toml` lacked `[tool.hatch.build.targets.wheel] packages = ["."]`; hatchling searched for a subdirectory named `api` but source lives at the project root. Fixed by adding the explicit wheel target. |
+
 ## Phase 1 — Decision Copilot (Vertical-Slice MVP)
 
 ### Agent runtime
