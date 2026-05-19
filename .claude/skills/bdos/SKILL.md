@@ -11,14 +11,15 @@ Use when the user asks to plan, implement, modify, test, review, or operate the 
 
 ## Workflow
 
-1. Read `CLAUDE.md` for project-wide rules.
-2. Use the `bdos-orchestrator` subagent for task decomposition and routing.
-3. The orchestrator reads `agents/orchestrator-planner/SPEC.md` before acting.
-4. The orchestrator selects the appropriate specialized subagent:
-   - `bdos-app-builder` → `agents/app-builder/SPEC.md`
-   - `bdos-infra` → `agents/infra-devops/SPEC.md`
-   - `bdos-test-review` → `agents/test-review/SPEC.md`
-5. Each specialized subagent reads its own SPEC.md before taking any action.
+1. Read `CLAUDE.md` and `AGENTS.md` for project-wide rules.
+2. Invoke `bdos-orchestrator` to decompose and route the task:
+   - Human invocation: `/bdos-orchestrator`
+   - Programmatic: `Agent(subagent_type="bdos-orchestrator", prompt="<task description>")`
+3. The orchestrator reads `agents/orchestrator-planner/SPEC.md` and routes to:
+   - `bdos-app-builder` → application code tasks
+   - `bdos-infra` → infrastructure and CI/CD tasks
+   - `bdos-test-review` → test authoring and phase verification
+4. Each specialized agent reads its own `agents/<role>/SPEC.md` before acting.
 
 ## Source of truth
 

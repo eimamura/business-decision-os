@@ -154,6 +154,17 @@ A phase is done when:
 
 ## Handoff Rules
 
-- Hand off to **Test/Review** for final phase sign-off after all Quality Gates pass
-- Include in handoff: list of changed infra files, smoke check results, any new env vars or secrets added
-- Never self-certify phase completion — Test/Review must verify
+### Accepting work from Orchestrator
+- Expect: infra task IDs from `TASKS.md`, phase scope, relevant DESIGN.md sections
+- Reject and escalate to Orchestrator if: task IDs are missing, phase dependencies are unmet, or the task would require editing application logic
+
+### Handing off to Test/Review
+- Trigger: all Quality Gates pass (smoke checks, seed-all, terraform plan clean)
+- Include: list of changed infra files, smoke check results, any new env vars or secrets added
+
+### Failure handling
+- If a smoke check fails after changes: revert the last change, identify the regression, and fix before re-running
+- If `terraform plan` shows unexpected destroys: stop, document, and escalate to Orchestrator before applying
+- If a GitHub Actions failure is unrelated to infra changes: note it but do not block the infra task; create a separate task entry
+
+Never self-certify phase completion — Test/Review must verify.

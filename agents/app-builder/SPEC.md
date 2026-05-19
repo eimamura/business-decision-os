@@ -129,6 +129,17 @@ A phase is done when:
 
 ## Handoff Rules
 
-- Hand off to **Test/Review** when unit + integration tests pass and the phase tasks are complete
-- Include in handoff: list of changed files, which stubs were replaced with real logic, any known edge cases
-- Never self-certify phase completion — Test/Review must verify
+### Accepting work from Orchestrator
+- Expect: task IDs from `TASKS.md`, phase scope, relevant SPEC sections, any ADR dependencies
+- Reject and escalate to Orchestrator if: task IDs are missing, phase dependencies are unmet, or required ADRs are not yet authored
+
+### Handing off to Test/Review
+- Trigger: unit + integration tests pass and all phase tasks are complete
+- Include: list of changed files, which stubs were replaced with real logic, any known edge cases or risks
+
+### Failure handling
+- If a test fails and the cause is unclear: stop, document the failure, and request Orchestrator to re-examine the task scope
+- If a public interface change is required: stop, author an ADR, and wait for Orchestrator approval before proceeding
+- If a task is blocked by a missing infra resource (missing DB, missing env var): file a blocking note in `TASKS.md` and notify Orchestrator
+
+Never self-certify phase completion — Test/Review must verify.

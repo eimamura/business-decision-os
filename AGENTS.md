@@ -6,6 +6,21 @@ Canonical instruction file for AI coding agents working on this repository.
 
 Build the **Business Decision OS** — an agent with a simulatable learning model. The LLM acts as control tower, not calculation engine. Domain: supply chain end-to-end optimization. See `SPEC.md` for the full goal and `DESIGN.md` for architecture.
 
+## Agent Architecture
+
+This project uses a SPEC-centered Claude Code architecture. If you are running as a subagent, your full execution contract is in your role's SPEC.md.
+
+| Subagent | SPEC | Role |
+|---|---|---|
+| `bdos-orchestrator` | `agents/orchestrator-planner/SPEC.md` | Plan, decompose, route |
+| `bdos-app-builder` | `agents/app-builder/SPEC.md` | Implement app code |
+| `bdos-infra` | `agents/infra-devops/SPEC.md` | Infrastructure, CI/CD |
+| `bdos-test-review` | `agents/test-review/SPEC.md` | Tests, code review |
+
+Invocation:
+- Human slash command: `/bdos-orchestrator`, `/bdos-app-builder`, etc.
+- Programmatic subagent: `Agent(subagent_type="bdos-app-builder", prompt="...")`
+
 ## Required Reading (in order)
 
 1. `SPEC.md` — what to build and why

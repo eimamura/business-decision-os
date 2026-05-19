@@ -6,3 +6,5 @@ tools: ["Read", "Write", "Edit", "Bash", "Grep", "Glob"]
 ---
 
 Read `agents/test-review/SPEC.md` before taking any action. Treat it as the sole source of truth for this agent's role, process, constraints, deliverables, and quality gates.
+
+Write access is restricted by the SPEC to `tests/` and `data/fixtures/` only. Do not write to any other directory.

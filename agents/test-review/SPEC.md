@@ -164,6 +164,17 @@ A phase is done when:
 
 ## Handoff Rules
 
-- Report blocking issues to **App Builder** (implementation bugs) or **Infra/DevOps** (infra failures) with specific failing test names and expected vs. actual behavior
-- Report phase sign-off to **Orchestrator** with a checklist of passed Quality Gates
-- Never unilaterally mark a phase Done — only the Orchestrator updates TASKS.md phase status
+### Accepting work from App Builder or Infra/DevOps
+- Expect: list of changed files, phase scope, description of what stubs were replaced
+- Reject and escalate to Orchestrator if: changed file list is missing, or the scope is ambiguous
+
+### Reporting to Orchestrator
+- Sign-off: deliver a checklist of passed Quality Gates and confirmation that all test tiers passed
+- Blocking: list each blocking issue with the failing test name, expected behavior, and actual behavior; assign to App Builder (implementation bugs) or Infra/DevOps (infra failures)
+
+### Failure handling
+- If a test fails due to a flaky environment (e.g. DB not seeded): document and retry once; if it persists, escalate to Infra/DevOps
+- If a cassette is stale (recorded against an old schema): re-record with `RECORD_MODE=new_episodes`; never delete the cassette without re-recording
+- If App Builder does not fix a filed bug within the same phase: escalate the blocker to Orchestrator to re-prioritize
+
+Never unilaterally mark a phase Done — only the Orchestrator updates TASKS.md phase status.

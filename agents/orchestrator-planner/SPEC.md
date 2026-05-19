@@ -62,8 +62,8 @@ Plan and coordinate implementation work across phases. Read all project docs, de
 
 - Never modify public interface signatures without first drafting an ADR
 - Never mark a task Done without confirming the corresponding artifact exists and tests pass
-- Never start Phase N work without Phase N−1 being verifiably complete
-- Phases 2–9 are reorderable — check `DECISIONS.md` and `TASKS.md` for current priority before planning
+- Phase 0 and Phase 1 must complete in order before any other phase begins
+- Phases 2–9 are reorderable based on business priority — always confirm all dependencies of the target phase are met before starting; check `DECISIONS.md` and `TASKS.md` for current order
 
 ## Quality Gates
 
@@ -101,10 +101,15 @@ Dependencies: none | Batch N
 
 ## Handoff Rules
 
-- Hand off to **App Builder** for application code tasks
-- Hand off to **Infra/DevOps** for infrastructure, Docker, CI/CD tasks
-- Hand off to **Test/Review** for test authoring and phase verification
-- Always include: task IDs, relevant SPEC sections, and any ADR dependencies in handoff
+### Handing off to specialist agents
+- **App Builder**: include task IDs, relevant `DESIGN.md` sections (Public Interfaces, Stub Behavior), phase scope, ADR dependencies
+- **Infra/DevOps**: include task IDs, relevant `DESIGN.md §Deployment Design` sections, phase scope
+- **Test/Review**: include task IDs, list of components to test, phase scope, which stubs are expected vs. real
+
+### Failure handling
+- If a specialist reports a blocker (missing ADR, unresolved dependency): pause the phase, resolve the blocker first, then re-issue the task
+- If Test/Review reports failing Quality Gates: do not advance the phase; return the specific issues to the responsible agent (App Builder or Infra)
+- If two phases have a dependency conflict under reordering: resolve via ADR before proceeding; document the resolution in `DECISIONS.md`
 
 ## Phase Sequence
 
