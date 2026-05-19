@@ -17,9 +17,9 @@ This project uses a SPEC-centered Claude Code architecture. If you are running a
 
 | Subagent | SPEC | Role |
 |---|---|---|
-| `bdos-orchestrator` | `agents/orchestrator-planner/SPEC.md` | Plan, decompose, route |
+| `bdos-orchestrator` | `agents/orchestrator/SPEC.md` | Plan, decompose, route |
 | `bdos-app-builder` | `agents/app-builder/SPEC.md` | Implement app code |
-| `bdos-infra` | `agents/infra-devops/SPEC.md` | Infrastructure, CI/CD |
+| `bdos-infra` | `agents/infra/SPEC.md` | Infrastructure, CI/CD |
 | `bdos-test-review` | `agents/test-review/SPEC.md` | Tests, code review |
 
 Invocation:

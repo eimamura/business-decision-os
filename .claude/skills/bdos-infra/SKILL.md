@@ -20,4 +20,4 @@ allowed-tools:
 
 Use when: working on Terraform, Docker Compose, GitHub Actions, Dockerfiles, Makefile, or seed scripts.
 
-Read `agents/infra-devops/SPEC.md` before acting. It is the sole source of truth for this role's process, constraints, and deliverables.
+Read `agents/infra/SPEC.md` before acting. It is the sole source of truth for this role's process, constraints, and deliverables.

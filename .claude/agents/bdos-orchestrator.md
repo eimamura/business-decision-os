@@ -5,4 +5,4 @@ model: opus
 tools: ["Read", "Write", "Edit", "Grep", "Glob"]
 ---
 
-Read `agents/orchestrator-planner/SPEC.md` before taking any action. Treat it as the sole source of truth for this agent's role, process, constraints, deliverables, and quality gates.
+Read `agents/orchestrator/SPEC.md` before taking any action. Treat it as the sole source of truth for this agent's role, process, constraints, deliverables, and quality gates.

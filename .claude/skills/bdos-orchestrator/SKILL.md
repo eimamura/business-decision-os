@@ -10,4 +10,4 @@ allowed-tools:
 
 Use when: planning phases, decomposing tasks, routing work to specialist agents, updating TASKS.md, or drafting ADRs.
 
-Read `agents/orchestrator-planner/SPEC.md` before acting. It is the sole source of truth for this role's process, constraints, and deliverables.
+Read `agents/orchestrator/SPEC.md` before acting. It is the sole source of truth for this role's process, constraints, and deliverables.

@@ -15,7 +15,7 @@ Use when the user asks to plan, implement, modify, test, review, or operate the 
 2. Invoke `bdos-orchestrator` to decompose and route the task:
    - Human invocation: `/bdos-orchestrator`
    - Programmatic: `Agent(subagent_type="bdos-orchestrator", prompt="<task description>")`
-3. The orchestrator reads `agents/orchestrator-planner/SPEC.md` and routes to:
+3. The orchestrator reads `agents/orchestrator/SPEC.md` and routes to:
    - `bdos-app-builder` → application code tasks
    - `bdos-infra` → infrastructure and CI/CD tasks
    - `bdos-test-review` → test authoring and phase verification
