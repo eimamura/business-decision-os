@@ -18,3 +18,9 @@ variable "image_tag" {
   description = "Docker image tag (e.g. git SHA)"
   type        = string
 }
+
+variable "database_url" {
+  description = "PostgreSQL connection string for simulation worker"
+  type        = string
+  sensitive   = true
+}

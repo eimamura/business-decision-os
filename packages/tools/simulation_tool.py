@@ -28,21 +28,44 @@ class SimulationTool:
         },
     }
 
+    def __init__(self, job_runner: Any | None = None) -> None:
+        if job_runner is not None:
+            self._job_runner = job_runner
+        else:
+            from packages.agent.job_runner import InProcessJobRunner
+            self._job_runner = InProcessJobRunner()
+
     async def handle(self, input: dict[str, Any], ctx: ToolContext) -> ToolResult:
+        from packages.agent.job_runner import JobSpec
+
         sku_id: str = input.get("sku_id", "")
         order_qty: float = float(input.get("order_qty", 0.0))
         horizon_days: int = int(input.get("horizon_days", 90))
 
-        ending_on_hand = order_qty * 0.3
-        stockout_days = max(0, 5 - int(order_qty / 100))
-        mean_lead_time_days = 14
+        spec = JobSpec(
+            kind="simulation",
+            payload={
+                "sku_id": sku_id,
+                "order_qty": order_qty,
+                "horizon_days": horizon_days,
+            },
+            idempotency_key=str(ctx.agent_step_id),
+        )
+        handle = await self._job_runner.submit(spec, ctx)
+        job_result = await self._job_runner.result(handle.job_id, wait=True)
 
+        if job_result.status != "succeeded" or job_result.output is None:
+            raise RuntimeError(
+                f"Simulation job failed: {job_result.error}"
+            )
+
+        output = job_result.output
         return ToolResult(
             output={
-                "sku_id": sku_id,
-                "ending_on_hand": ending_on_hand,
-                "stockout_days": stockout_days,
-                "mean_lead_time_days": mean_lead_time_days,
+                "sku_id": output.get("sku_id", sku_id),
+                "ending_on_hand": output.get("ending_on_hand", 0.0),
+                "stockout_days": output.get("stockout_days", 0),
+                "mean_lead_time_days": output.get("mean_lead_time_days", 14),
             },
             audit_payload={
                 "sku_id": sku_id,

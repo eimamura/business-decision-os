@@ -40,6 +40,7 @@ class JobRunner(Protocol):
 class InProcessJobRunner:
     def __init__(self) -> None:
         self._handles: dict[UUID, JobHandle] = {}
+        self._specs: dict[UUID, JobSpec] = {}
 
     async def submit(self, spec: JobSpec, ctx: ToolContext) -> JobHandle:
         handle = JobHandle(
@@ -48,6 +49,7 @@ class InProcessJobRunner:
             submitted_at=datetime.now(tz=timezone.utc),
         )
         self._handles[handle.job_id] = handle
+        self._specs[handle.job_id] = spec
         return handle
 
     async def status(self, job_id: UUID) -> JobHandle:
@@ -57,7 +59,60 @@ class InProcessJobRunner:
         return handle
 
     async def result(self, job_id: UUID, wait: bool = False) -> JobResult:
-        raise NotImplementedError("Phase 2")
+        spec = self._specs.get(job_id)
+        if spec is None:
+            raise KeyError(f"Job {job_id} not found")
+
+        if spec.kind != "simulation":
+            raise NotImplementedError(f"InProcess does not support kind={spec.kind}")
+
+        return await self._run_simulation(job_id, spec)
+
+    async def _run_simulation(self, job_id: UUID, spec: JobSpec) -> JobResult:
+        from packages.simulation import InventorySimulator, SimulationContext, SimulationInput
+
+        start = datetime.now(tz=timezone.utc)
+        try:
+            sim_input = SimulationInput(
+                sku_id=spec.payload["sku_id"],
+                order_qty=float(spec.payload["order_qty"]),
+                horizon_days=int(spec.payload.get("horizon_days", 90)),
+            )
+            sim_ctx = SimulationContext(db_session=None)
+            output = await InventorySimulator().run(sim_input, sim_ctx)
+            duration_ms = int(
+                (datetime.now(tz=timezone.utc) - start).total_seconds() * 1000
+            )
+            return JobResult(
+                job_id=job_id,
+                status="succeeded",
+                output=output.model_dump(),
+                error=None,
+                duration_ms=duration_ms,
+            )
+        except Exception as exc:
+            duration_ms = int(
+                (datetime.now(tz=timezone.utc) - start).total_seconds() * 1000
+            )
+            return JobResult(
+                job_id=job_id,
+                status="failed",
+                output=None,
+                error=str(exc),
+                duration_ms=duration_ms,
+            )
 
     async def cancel(self, job_id: UUID) -> None:
-        raise NotImplementedError("Phase 2")
+        raise NotImplementedError("cancel is not supported for InProcessJobRunner")
+
+
+from packages.agent.job_runner.aca import AcaJobsRunner  # noqa: E402
+
+__all__ = [
+    "JobSpec",
+    "JobHandle",
+    "JobResult",
+    "JobRunner",
+    "InProcessJobRunner",
+    "AcaJobsRunner",
+]

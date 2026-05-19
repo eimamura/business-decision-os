@@ -7,7 +7,7 @@ TASKS.md holds task definitions. This file holds runtime execution state.
 
 ## Current Phase
 
-M0+1 Complete — Ready for Phase 2 (M2: Real Simulator on ACA Jobs)
+M2 Complete — Ready for Phase 3 (M3: Real Optimizer on ACA Jobs)
 
 ## Active Lease
 
@@ -15,14 +15,14 @@ None
 
 ## Last Completed Batch
 
-E2E Validation — M0+1 smoke tests + T-1042 Playwright suite — 2026-05-19
+B2-01 + B2-02 — Phase 2 Real Simulator on ACA Jobs — 2026-05-19
 
 ## Last Validation
 
-command: `uv run pytest tests/e2e/ -v` + `npx playwright test --reporter=list`
+command: `make build && make lint && make typecheck && uv run pytest tests/unit/ -v && uv run pytest tests/ -k "simulator" -v`
 exit code: 0 (all pass)
 timestamp: 2026-05-19
-note: 5 httpx E2E PASS; 6 Playwright PASS (chat session UUID navigation, send button state, sidebar undefined guard); Chat Runtime Smoke Gate clear (no undefined/405 in recent logs)
+note: make build OK; make lint OK (60 files); make typecheck OK (60 files, 0 errors); 120 unit tests PASS; 5 simulator tests PASS; azurerm_container_app_job present in infra/terraform/aca/main.tf; InventorySimulator confirmed non-stub (day-by-day loop)
 
 ## Blockers
 

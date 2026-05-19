@@ -45,7 +45,7 @@ async def test_status_returns_handle():
 
 
 @pytest.mark.asyncio
-async def test_result_raises_not_implemented():
+async def test_result_raises_key_error_for_unknown_job():
     runner = InProcessJobRunner()
-    with pytest.raises(NotImplementedError, match="Phase 2"):
+    with pytest.raises(KeyError):
         await runner.result(uuid4())

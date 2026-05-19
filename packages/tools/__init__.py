@@ -1,3 +1,7 @@
+from __future__ import annotations
+
+from typing import Any
+
 from packages.tools.approval_tool import ApprovalTool
 from packages.tools.audit_tool import AuditLogTool
 from packages.tools.base import Tool, ToolContext, ToolRegistry, ToolResult
@@ -23,13 +27,13 @@ __all__ = [
 ]
 
 
-def create_tool_registry() -> ToolRegistry:
+def create_tool_registry(job_runner: Any = None) -> ToolRegistry:
     registry = ToolRegistry()
     registry.register(SqlQueryTool())
     registry.register(ApprovalTool())
     registry.register(AuditLogTool())
     registry.register(ForecastTool())
-    registry.register(SimulationTool())
+    registry.register(SimulationTool(job_runner=job_runner))
     registry.register(OptimizerTool())
     registry.register(EvaluatorTool())
     return registry

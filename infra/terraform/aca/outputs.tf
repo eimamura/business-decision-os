@@ -7,3 +7,8 @@ output "web_fqdn" {
   description = "FQDN of the Web Container App"
   value       = azurerm_container_app.web.ingress[0].fqdn
 }
+
+output "simulation_job_resource_id" {
+  description = "Azure Resource ID of the simulation Container App Job"
+  value       = azurerm_container_app_job.simulation_worker.id
+}

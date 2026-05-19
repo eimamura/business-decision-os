@@ -28,6 +28,7 @@ packages = ["packages", "apps"]
 [tool.uv.workspace]
 members = [
   "apps/api",
+  "apps/simulation-worker",
   "packages/agent",
   "packages/tools",
   "packages/domain",
