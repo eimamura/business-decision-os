@@ -87,24 +87,24 @@ Dependencies: B01
 
 | ID | Task | Priority | Status |
 |---|---|---|---|
-| T-0010 | `packages/agent/llm/__init__.py` — `LLMClient` Protocol + `ClaudeClient` stub | High | Not Started |
-| T-0011 | `packages/tools/base.py` — `Tool` Protocol + `ToolRegistry` | High | Not Started |
-| T-0012 | `packages/agent/job_runner/__init__.py` — `JobRunner` Protocol + `InProcessJobRunner` | High | Not Started |
-| T-0013 | `packages/memory/__init__.py` — `MemoryStore` Protocol + write-only stub | High | Not Started |
-| T-0014 | `packages/agent/orchestrator/__init__.py` — `Orchestrator` Protocol | High | Not Started |
-| T-0015 | `packages/agent/specialists/base.py` — `Specialist` Protocol + `PromptBasedSpecialist` | High | Not Started |
-| T-0016 | Define `KpiScore`, `Candidate`, `TradeoffExplanation`, `Recommendation` in `packages/schemas` (Pydantic) | High | Not Started |
-| T-0017 | Define SSE event union in `packages/schemas` (Pydantic) + `packages/schemas-ts` (Zod); CI equivalence check | High | Not Started |
-| T-0018 | Define `evaluations.criteria_json` / `result_json` schemas in `packages/schemas` | High | Not Started |
-| T-0019 | Implement `packages/domain/kpi.py` with the 8 KPI formulas (horizon = 90 days) | High | Not Started |
-| T-0040 | `config/risk_thresholds.yaml` — three-tier thresholds (high / medium / low) | High | Not Started |
-| T-0041 | `config/kpi_weights.csv` — global default (single row, sums to 1.0) | High | Not Started |
-| T-0042 | `config/kpi_weights_overrides.csv` — Critical SKU overrides (service_level=0.50) | High | Not Started |
-| T-0050 | FastAPI app skeleton (`apps/api`) with `X-Dev-User` middleware; default `dev-user` when `APP_ENV=dev` | High | Not Started |
-| T-0051 | Implement REST endpoint skeletons per DESIGN §API Design (501 where logic is not ready; `/healthz` and `/readyz` real) | High | Not Started |
-| T-0052 | Configure FastAPI `CORSMiddleware` — dev (`localhost:3000`) and prod (env-injected); SSE exception for credential | High | Not Started |
-| T-0060 | Approval state-machine logic with `parent_approval_id` chain (revisions create new row) | High | Not Started |
-| T-0061 | Sweep job for `expired` (default `approval_ttl_seconds=86400`) | Medium | Not Started |
+| T-0010 | `packages/agent/llm/__init__.py` — `LLMClient` Protocol + `ClaudeClient` stub | High | Done |
+| T-0011 | `packages/tools/base.py` — `Tool` Protocol + `ToolRegistry` | High | Done |
+| T-0012 | `packages/agent/job_runner/__init__.py` — `JobRunner` Protocol + `InProcessJobRunner` | High | Done |
+| T-0013 | `packages/memory/__init__.py` — `MemoryStore` Protocol + write-only stub | High | Done |
+| T-0014 | `packages/agent/orchestrator/__init__.py` — `Orchestrator` Protocol | High | Done |
+| T-0015 | `packages/agent/specialists/base.py` — `Specialist` Protocol + `PromptBasedSpecialist` | High | Done |
+| T-0016 | Define `KpiScore`, `Candidate`, `TradeoffExplanation`, `Recommendation` in `packages/schemas` (Pydantic) | High | Done |
+| T-0017 | Define SSE event union in `packages/schemas` (Pydantic) + `packages/schemas-ts` (Zod); CI equivalence check | High | Done |
+| T-0018 | Define `evaluations.criteria_json` / `result_json` schemas in `packages/schemas` | High | Done |
+| T-0019 | Implement `packages/domain/kpi.py` with the 8 KPI formulas (horizon = 90 days) | High | Done |
+| T-0040 | `config/risk_thresholds.yaml` — three-tier thresholds (high / medium / low) | High | Done |
+| T-0041 | `config/kpi_weights.csv` — global default (single row, sums to 1.0) | High | Done |
+| T-0042 | `config/kpi_weights_overrides.csv` — Critical SKU overrides (service_level=0.50) | High | Done |
+| T-0050 | FastAPI app skeleton (`apps/api`) with `X-Dev-User` middleware; default `dev-user` when `APP_ENV=dev` | High | Done |
+| T-0051 | Implement REST endpoint skeletons per DESIGN §API Design (501 where logic is not ready; `/healthz` and `/readyz` real) | High | Done |
+| T-0052 | Configure FastAPI `CORSMiddleware` — dev (`localhost:3000`) and prod (env-injected); SSE exception for credential | High | Done |
+| T-0060 | Approval state-machine logic with `parent_approval_id` chain (revisions create new row) | High | Done |
+| T-0061 | Sweep job for `expired` (default `approval_ttl_seconds=86400`) | Medium | Done |
 
 ### B03 — Database Migration (Agent: App Builder)
 
@@ -112,12 +112,12 @@ Dependencies: B02
 
 | ID | Task | Priority | Status |
 |---|---|---|---|
-| T-0020 | Write Alembic migration `0001_initial.sql` with column-level DDL: 16 system tables + 6 operational domain tables; CHECK constraints; FK cascades; indexes; ivfflat on `memories.embedding` | High | Not Started |
-| T-0021 | Implement repository-pattern interfaces in `packages/state/` for all tables | High | Not Started |
-| T-0022 | Implement `audit_log` hash chain in repository writes (`audit_hash`, `prev_audit_hash`) | High | Not Started |
-| T-0023 | Seed `users` table with `dev-user` row | High | Not Started |
-| T-0024 | Seed `llm_pricing` with verified rates for `claude-sonnet-4-6`, `claude-opus-4-7`, `text-embedding-3-small`; ADR `docs/adr/2026-05-17-llm-pricing-seed.md` records source URLs | High | Not Started |
-| T-0025 | Enforce SQL Tool allowlist on `sku_master / inventory / demand_history / supply / cost / customers` | High | Not Started |
+| T-0020 | Write Alembic migration `0001_initial.sql` with column-level DDL: 16 system tables + 6 operational domain tables; CHECK constraints; FK cascades; indexes; ivfflat on `memories.embedding` | High | Done |
+| T-0021 | Implement repository-pattern interfaces in `packages/state/` for all tables | High | Done |
+| T-0022 | Implement `audit_log` hash chain in repository writes (`audit_hash`, `prev_audit_hash`) | High | Done |
+| T-0023 | Seed `users` table with `dev-user` row | High | Done |
+| T-0024 | Seed `llm_pricing` with verified rates for `claude-sonnet-4-6`, `claude-opus-4-7`, `text-embedding-3-small`; ADR `docs/adr/2026-05-17-llm-pricing-seed.md` records source URLs | High | Done |
+| T-0025 | Enforce SQL Tool allowlist on `sku_master / inventory / demand_history / supply / cost / customers` | High | Done |
 
 ### B04 — Sample Data (Agent: App Builder)
 

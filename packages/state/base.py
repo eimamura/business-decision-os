@@ -1,0 +1,13 @@
+from __future__ import annotations
+
+from typing import Generic, Protocol, TypeVar
+from uuid import UUID
+
+T = TypeVar("T")
+
+
+class BaseRepository(Protocol[T]):
+    async def get(self, id: UUID) -> T | None: ...
+    async def create(self, record: T) -> T: ...
+    async def update(self, id: UUID, **kwargs: object) -> T: ...
+    async def list(self, **filters: object) -> list[T]: ...
