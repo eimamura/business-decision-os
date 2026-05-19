@@ -52,6 +52,30 @@ Plan and coordinate implementation work across phases. Read all project docs, de
 4. `docs/TASKS.md` — current task statuses
 5. `docs/DECISIONS.md` — rationale for key decisions
 
+## TASKS.md Write Authority
+
+To prevent concurrent write conflicts, each status transition has a designated owner:
+
+| Status transition | Owner |
+|---|---|
+| → `In Progress` (phase start) | Orchestrator only |
+| → `Blocked` | Any agent (record blocker details inline) |
+| → `In Progress` (after unblock) | Orchestrator only |
+| → `Done` (individual task) | App Builder / Infra / Test-Review (own tasks only) |
+| → `Done` (phase-level) | Orchestrator only, after Test/Review sign-off |
+
+## ADR Triggers
+
+Author an ADR under `docs/adr/YYYY-MM-DD-<slug>.md` whenever:
+
+- A public interface signature changes (`LLMClient`, `Tool`, `JobRunner`, `MemoryStore`, `Orchestrator`, `Specialist`).
+- A technology choice is added or replaced (LLM provider, framework, DB, etc.).
+- Risk thresholds, KPI weight defaults, or schema CHECK constraints change.
+- `llm_pricing` seed values are updated.
+- The SQL Tool allowlist is modified.
+
+Each ADR must include: background, candidates considered, decision, rationale, tradeoffs, reversibility / re-evaluation triggers.
+
 ## Tool Usage Rules
 
 - **Read-only** on all code and infra directories: `apps/`, `packages/`, `infra/`, `tests/`, `.github/`
@@ -117,7 +141,7 @@ When two agents disagree or a handoff is rejected:
 1. **Specialist rejects Orchestrator task**: Specialist returns a rejection with reason; Orchestrator re-evaluates the task scope, resolves the conflict (or escalates to user), and re-issues.
 2. **App Builder ↔ Infra conflict** (e.g., missing env var, Dockerfile disagreement): the agent that discovered the gap files a blocking note in `docs/TASKS.md` and notifies Orchestrator. Orchestrator assigns the fix to the correct owner.
 3. **Test/Review vs. App Builder disagreement** (bug vs. design intent): Test/Review files the issue with expected and actual behavior. App Builder must either fix or author an ADR explaining the intent. Orchestrator arbitrates if unresolved after one round.
-4. **ADR authorship**: the Orchestrator authors all ADRs. Specialists raise the need for an ADR and supply the relevant technical context; they do not author ADRs unilaterally.
+4. **ADR authorship**: Domain experts (App Builder, Infra) may create a draft ADR at `docs/adr/DRAFT-YYYY-MM-DD-<slug>.md` when they need a design decision to unblock implementation. The Orchestrator reviews the draft, removes the `DRAFT-` prefix to confirm, and appends a summary to `docs/DECISIONS.md`. The Orchestrator authors ADRs directly when the decision spans multiple agents or requires product-level judgment.
 
 ## Handoff Rules
 

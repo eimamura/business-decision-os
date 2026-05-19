@@ -1,7 +1,7 @@
 ---
 name: bdos-orchestrator
 description: Use this agent to plan BDOS work, decompose tasks, and route work to specialized BDOS subagents.
-model: opus
+model: sonnet
 tools: ["Read", "Write", "Edit", "Grep", "Glob"]
 ---
 
