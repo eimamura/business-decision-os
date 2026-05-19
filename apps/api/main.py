@@ -14,6 +14,7 @@ from apps.api.middleware import DevUserMiddleware  # noqa: E402
 from apps.api.routers import (  # noqa: E402
     approvals,
     audit,
+    decisions,
     health,
     kpi,
     recommendations,
@@ -40,6 +41,7 @@ app.add_middleware(DevUserMiddleware)
 
 app.include_router(health.router)
 app.include_router(sessions.router)
+app.include_router(decisions.router)
 app.include_router(recommendations.router)
 app.include_router(approvals.router)
 app.include_router(scenarios.router)

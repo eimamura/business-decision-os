@@ -6,30 +6,26 @@ from datetime import datetime, timezone
 from typing import Any, AsyncGenerator
 from uuid import UUID, uuid4
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 from apps.api.state import get_orchestrator, sessions, sse_queues
 from packages.agent.orchestrator import SessionGoal
 
-router = APIRouter(prefix="/api/v1/sessions", tags=["sessions"])
+router = APIRouter(prefix="/api/v1/decisions", tags=["decisions"])
 
 
 def _iso_now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-class CreateSessionRequest(BaseModel):
-    goal: str | None = None
-
-
-class SendMessageRequest(BaseModel):
-    content: str
+class CreateDecisionRequest(BaseModel):
+    goal: str
 
 
 @router.post("")
-async def create_session(body: CreateSessionRequest) -> dict[str, Any]:
+async def create_decision(body: CreateDecisionRequest) -> StreamingResponse:
     session_id = str(uuid4())
     sessions[session_id] = {
         "session_id": session_id,
@@ -37,34 +33,11 @@ async def create_session(body: CreateSessionRequest) -> dict[str, Any]:
         "goal": body.goal,
         "created_at": _iso_now(),
     }
-    created_at = sessions[session_id]["created_at"]
-    return {"session_id": session_id, "status": "active", "created_at": created_at}
-
-
-@router.get("")
-async def list_sessions() -> list[dict[str, Any]]:
-    return list(sessions.values())
-
-
-@router.get("/{session_id}")
-async def get_session(session_id: str) -> dict[str, Any]:
-    session = sessions.get(session_id)
-    if not session:
-        raise HTTPException(status_code=404, detail="Session not found")
-    return session
-
-
-@router.post("/{session_id}/messages")
-async def post_message(session_id: str, body: SendMessageRequest) -> dict[str, Any]:
-    session = sessions.get(session_id)
-    if not session:
-        raise HTTPException(status_code=404, detail="Session not found")
 
     queue: asyncio.Queue[dict[str, Any]] = asyncio.Queue()
     sse_queues[session_id] = queue
 
-    goal_text = session.get("goal") or body.content
-    goal = SessionGoal(text=goal_text)
+    goal = SessionGoal(text=body.goal)
 
     await queue.put({
         "type": "session_started",
@@ -88,17 +61,7 @@ async def post_message(session_id: str, body: SendMessageRequest) -> dict[str, A
 
     asyncio.create_task(_run_and_signal())
 
-    message_id = str(uuid4())
-    return {"message_id": message_id, "session_id": session_id, "status": "processing"}
-
-
-@router.get("/{session_id}/stream")
-async def stream_session(session_id: str) -> StreamingResponse:
     async def event_generator() -> AsyncGenerator[str, None]:
-        queue = sse_queues.get(session_id)
-        if not queue:
-            yield 'data: {"type": "error", "code": "no_stream", "message": "Stream not found"}\n\n'
-            return
         while True:
             try:
                 event = await asyncio.wait_for(queue.get(), timeout=30.0)
