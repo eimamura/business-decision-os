@@ -71,3 +71,22 @@ Agent commit boundary: `git add` + `git commit` only. Never `git push` or `gh pr
 - Read `docs/DESIGN.md` §Public Interfaces and §Phase Progression first.
 - If a decision conflicts with current code, the code is the runtime truth; `docs/DECISIONS.md` and ADRs are the design truth. File an ADR before changing either.
 - Ask the user before any irreversible action: destructive git operations, schema migrations that drop data, API contract changes, public repo settings.
+
+## Language Convention
+
+All code, documentation, UI, and agent output uses English only.
+
+| Surface | Language |
+|---|---|
+| Source code, identifiers, comments | English |
+| Commit messages, PR titles and bodies | English |
+| `docs/` (all files including ADRs, DESIGN.md, TASKS.md, etc.) | English |
+| `SPEC.md`, `AGENTS.md`, `CLAUDE.md` | English |
+| All user-visible UI strings | English |
+| Chat messages and agent narrative responses | English |
+| Log messages, error messages, metric labels | English |
+| Test names and assertion messages | English |
+
+**Exception:** Existing Japanese reference documents (`docs/business_decision_os_spec.md`, `docs/domain.md`) are preserved as-is. English official docs supersede them on conflict.
+
+This convention is enforced at code review. PRs containing non-English identifiers, log messages, or UI strings will be returned for correction.
