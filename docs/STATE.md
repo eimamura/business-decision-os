@@ -7,7 +7,7 @@ TASKS.md holds task definitions. This file holds runtime execution state.
 
 ## Current Phase
 
-Phase 1 — Decision Copilot (Vertical-Slice MVP)
+M0+1 Complete — Ready for Phase 2 (M2: Real Simulator on ACA Jobs)
 
 ## Active Lease
 
@@ -15,14 +15,14 @@ None
 
 ## Last Completed Batch
 
-D-0005 — Chat Runtime API Contract Failure — fixed 2026-05-19
+E2E Validation — M0+1 smoke tests + T-1042 Playwright suite — 2026-05-19
 
 ## Last Validation
 
-command: Code inspection + static analysis of frontend/backend API contract; no automated test runner executed in this session
-exit code: N/A (manual inspection)
+command: `uv run pytest tests/e2e/ -v` + `npx playwright test --reporter=list`
+exit code: 0 (all pass)
 timestamp: 2026-05-19
-note: bdos-test-review verification of TypeScript compile and runtime smoke test recommended before closing
+note: 5 httpx E2E PASS; 6 Playwright PASS (chat session UUID navigation, send button state, sidebar undefined guard); Chat Runtime Smoke Gate clear (no undefined/405 in recent logs)
 
 ## Blockers
 
