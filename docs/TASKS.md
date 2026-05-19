@@ -279,8 +279,8 @@ New env vars: DATABASE_URL (simulation-worker container), JOB_RUN_ID (set per ex
 
 | ID | Task | Priority | Status |
 |---|---|---|---|
-| T-3001 | Implement OR-Tools / PuLP optimizer behind `Optimizer` interface | High | Not Started |
-| T-3002 | Move Optimizer invocation to ACA Jobs trigger | High | Pending-Review |
+| T-3001 | Implement OR-Tools / PuLP optimizer behind `Optimizer` interface | High | Done |
+| T-3002 | Move Optimizer invocation to ACA Jobs trigger | High | Done |
 
 <!--
 ## Infra Handoff — Phase 3 (T-3002 infra side)

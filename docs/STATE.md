@@ -7,7 +7,7 @@ TASKS.md holds task definitions. This file holds runtime execution state.
 
 ## Current Phase
 
-M2 Complete — Ready for Phase 3 (M3: Real Optimizer on ACA Jobs)
+M3 Complete — Ready for Phase 4 (M4: Approval Workflow Expansion + LLM budget enforcement)
 
 ## Active Lease
 
@@ -15,14 +15,14 @@ None
 
 ## Last Completed Batch
 
-B2-01 + B2-02 — Phase 2 Real Simulator on ACA Jobs — 2026-05-19
+B3-01 + B3-02 — Phase 3 Real Optimizer on ACA Jobs — 2026-05-19
 
 ## Last Validation
 
-command: `make build && make lint && make typecheck && uv run pytest tests/unit/ -v && uv run pytest tests/ -k "simulator" -v`
+command: `make build && make lint && make typecheck && uv run pytest tests/unit/ -v && uv run pytest tests/ -k "optimizer" -v`
 exit code: 0 (all pass)
 timestamp: 2026-05-19
-note: make build OK; make lint OK (60 files); make typecheck OK (60 files, 0 errors); 120 unit tests PASS; 5 simulator tests PASS; azurerm_container_app_job present in infra/terraform/aca/main.tf; InventorySimulator confirmed non-stub (day-by-day loop)
+note: make build OK; make lint OK (62 files, 0 errors); make typecheck OK (62 files, 0 errors); 128 unit tests PASS; 10 optimizer tests PASS; azurerm_container_app_job.optimization_worker present in infra/terraform/aca/main.tf; ReplenishmentOptimizer confirmed non-stub (PuLP CBC LP solver, MOQ multiples enumeration)
 
 ## Blockers
 
