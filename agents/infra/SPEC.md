@@ -44,11 +44,18 @@ Own infrastructure, Docker, CI/CD, Makefile, and seed scripts. Keep the local st
 
 ## Required Reading (before every session)
 
+Always read:
 1. `AGENTS.md` — working rules and prohibitions
-2. `docs/DESIGN.md §Deployment Design` — Terraform pipeline split, Azure layout
-3. `docs/DESIGN.md §Compute Platform for Heavy Workloads` — which workload runs where per phase
-4. `docs/DEVELOPMENT.md` — local stack conventions, Makefile targets, DATABASE_URL rules
-5. `docs/TASKS.md` — current infra tasks
+2. `docs/TASKS.md` — current infra tasks
+
+Read only when relevant:
+
+| Task type | Also read |
+|---|---|
+| Docker / Compose changes | `docs/DEVELOPMENT.md §Local Stack` |
+| Terraform / Azure changes | `docs/DESIGN.md §Deployment Design` |
+| Worker / heavy workloads | `docs/DESIGN.md §Compute Platform for Heavy Workloads` |
+| Makefile / seed scripts | `docs/DEVELOPMENT.md §Makefile targets, DATABASE_URL` |
 
 ## Tool Usage Rules
 
@@ -92,7 +99,7 @@ Makefile
 
 ## Terraform Rules
 
-- Region: US East 2 in all modules
+- Region: East US 2 (`eastus2`) in all modules
 - `prevent_destroy = false`; no resource locks (MVP iteration speed)
 - Secrets via Azure Key Vault + Managed Identity — no hardcoded credentials
 - Azure OIDC federated credentials — no long-lived secrets in GitHub Actions
@@ -117,9 +124,12 @@ Makefile
 |---|---|
 | 0 | Docker Compose, Terraform scaffold, Azure OIDC, GitHub Actions |
 | 1 | Finalize Docker images (real Next.js standalone + real API) |
-| 2–3 | Provision ACA Jobs for simulation-worker; set `JOB_RUNNER_BACKEND=aca` env |
+| 2 | Provision ACA Jobs for simulation-worker |
+| 3 | Set `JOB_RUNNER_BACKEND=aca` env; finalize job scheduling |
+| 4 | No new infra — App Builder phase; maintain existing stack |
 | 5 | Provision Azure Cache for Redis; deploy Celery worker on ACA |
 | 6 | Provision Databricks workspace + MLflow via new Terraform stage |
+| 7 | No new infra — App Builder phase; maintain existing stack |
 | 8 | Provision Databricks Lakehouse (ADLS Gen2 + Delta) |
 
 ## Constraints
@@ -128,12 +138,14 @@ Makefile
 - Never change public interface signatures
 - Never read `data/sample/ground_truth/`
 - `web.build.context` must always be the monorepo root — never `apps/web` only
-- API Dockerfile must always include `COPY config config` and `PYTHONPATH`
-- No hardcoded secrets — all via Azure Key Vault + Managed Identity or `.env` (gitignored)
+- API Dockerfile must always include `COPY config config` and `ENV PYTHONPATH="/app/packages"`
 
 ## Quality Gates
 
 Smoke checks (required before closing any infra task):
+
+> Before running curl checks, run `docker compose ps`. If no services are `Up`, note "stack not running — smoke checks skipped" in `docs/TASKS.md` and proceed to the remaining checklist items below. Skip conditions apply in CI contexts and pure-file-edit tasks.
+
 ```bash
 curl -s http://localhost:8000/healthz                           # → 200
 curl -s http://localhost:3000/chat | grep -q Decision           # → match
@@ -163,10 +175,17 @@ A phase is done when:
 
 ### Handing off to Test/Review
 - Trigger: all Quality Gates pass (smoke checks, seed-all, terraform plan clean)
-- Include: list of changed infra files, smoke check results, any new env vars or secrets added
+- Write a handoff summary as a block comment in `docs/TASKS.md` under the last completed task:
+  ```
+  ## Infra Handoff — Phase N
+  Changed files: <list>
+  Smoke checks: PASS / SKIPPED (reason)
+  New env vars: <list or "none">
+  ```
+- Set the task status to `Pending-Review` — not `Done`. Test/Review agent sets `Done`.
 
 ### Failure handling
-- If a smoke check fails after changes: revert the last change, identify the regression, and fix before re-running
+- If a smoke check fails after changes: run `git diff --stat` to identify changed files, then `git checkout -- <file>` to revert, identify the regression, and fix before re-running
 - If `terraform plan` shows unexpected destroys: stop, document, and escalate to Orchestrator before applying
 - If a GitHub Actions failure is unrelated to infra changes: note it but do not block the infra task; create a separate task entry
 
