@@ -10,7 +10,7 @@ import ReasoningPanel from "./components/ReasoningPanel";
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
 interface Session {
-  id: string;
+  session_id: string;
   status: string;
   goal?: string;
   created_at: string;
@@ -133,10 +133,10 @@ export default function ChatPage({ params }: ChatPageProps) {
         <div className="flex-1 overflow-y-auto py-2">
           {sessions.map((s) => (
             <Link
-              key={s.id}
-              href={`/chat/${s.id}`}
+              key={s.session_id}
+              href={`/chat/${s.session_id}`}
               className={`block px-4 py-2.5 text-xs hover:bg-gray-50 ${
-                s.id === sessionId ? "bg-blue-50 text-blue-700 font-medium" : "text-gray-700"
+                s.session_id === sessionId ? "bg-blue-50 text-blue-700 font-medium" : "text-gray-700"
               }`}
             >
               <span className="block truncate">{s.goal ?? "Session"}</span>

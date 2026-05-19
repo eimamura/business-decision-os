@@ -15,13 +15,14 @@ None
 
 ## Last Completed Batch
 
-Phase 1 — Decision Copilot (Vertical-Slice MVP) — all batches complete
+D-0005 — Chat Runtime API Contract Failure — fixed 2026-05-19
 
 ## Last Validation
 
-command: make build && make test && make lint && make typecheck; healthz/readyz HTTP 200; SSE smoke test 12 events
-exit code: 0 (all PASS)
+command: Code inspection + static analysis of frontend/backend API contract; no automated test runner executed in this session
+exit code: N/A (manual inspection)
 timestamp: 2026-05-19
+note: bdos-test-review verification of TypeScript compile and runtime smoke test recommended before closing
 
 ## Blockers
 

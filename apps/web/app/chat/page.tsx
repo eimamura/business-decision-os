@@ -7,7 +7,7 @@ import { useRouter } from "next/navigation";
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
 interface Session {
-  id: string;
+  session_id: string;
   status: string;
   goal?: string;
   created_at: string;
@@ -41,7 +41,7 @@ export default function ChatListPage() {
         body: JSON.stringify({ goal: "New decision session" }),
       });
       const data = await res.json();
-      router.push(`/chat/${data.id}`);
+      router.push(`/chat/${data.session_id}`);
     } catch {
       setCreating(false);
     }
@@ -82,9 +82,9 @@ export default function ChatListPage() {
         ) : (
           <ul className="space-y-3">
             {sessions.map((s) => (
-              <li key={s.id}>
+              <li key={s.session_id}>
                 <Link
-                  href={`/chat/${s.id}`}
+                  href={`/chat/${s.session_id}`}
                   className="block bg-white border border-gray-200 rounded-lg px-5 py-4 hover:border-blue-400 hover:shadow-sm transition-all"
                 >
                   <div className="flex items-center justify-between">

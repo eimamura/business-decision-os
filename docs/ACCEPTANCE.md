@@ -24,6 +24,23 @@ Port conflicts can be resolved by setting `API_PORT` or `WEB_PORT` environment v
 API_PORT=8001 make dev-up
 ```
 
+## Chat Runtime Smoke Gate
+
+After any change to chat page components or session API routes, the following runtime smoke test must pass:
+
+1. Create a new session via `POST /api/v1/sessions` — verify `session_id` is present in the response
+2. Visit `/chat/{session_id}` in the browser — verify the URL contains a valid UUID (not the string `"undefined"`)
+3. Send a message from the chat input — verify the request is `POST /api/v1/sessions/{session_id}/messages` with a valid UUID, not `undefined`
+4. Verify the backend returns HTTP 200 (not 405 Method Not Allowed)
+5. Verify the session sidebar highlights the active session correctly
+
+Acceptance criteria violated if:
+- Backend logs contain `GET /api/v1/sessions/undefined/messages`
+- Backend logs contain `405 Method Not Allowed` on any session messages route
+- Session ID `"undefined"` appears in any API request URL
+
+Suspected area: `apps/web/app/chat/page.tsx` and `apps/web/app/chat/[sessionId]/page.tsx` — `Session` interface field alignment with backend (`session_id` not `id`).
+
 ## Build Gate Rule
 
 A phase cannot be marked Done unless the following commands pass from the repository root:
