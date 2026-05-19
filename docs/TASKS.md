@@ -280,7 +280,21 @@ New env vars: DATABASE_URL (simulation-worker container), JOB_RUN_ID (set per ex
 | ID | Task | Priority | Status |
 |---|---|---|---|
 | T-3001 | Implement OR-Tools / PuLP optimizer behind `Optimizer` interface | High | Not Started |
-| T-3002 | Move Optimizer invocation to ACA Jobs trigger | High | Not Started |
+| T-3002 | Move Optimizer invocation to ACA Jobs trigger | High | Pending-Review |
+
+<!--
+## Infra Handoff — Phase 3 (T-3002 infra side)
+Changed files:
+  - apps/optimization-worker/pyproject.toml   — NEW uv workspace member (pulp>=2.7.0 dep)
+  - apps/optimization-worker/run_job.py       — NEW ACA Job entry point (ReplenishmentOptimizer)
+  - apps/optimization-worker/Dockerfile       — NEW multi-stage Python 3.12 image
+  - pyproject.toml                            — added apps/optimization-worker to workspace members
+  - infra/terraform/aca/main.tf               — added azurerm_container_app_job.optimization_worker
+Smoke checks: SKIPPED (curl permission not available in agent context; docker compose ps shows stack Up)
+terraform validate: SKIPPED (terraform init permission not available in agent context)
+No hardcoded credentials in new files (database_url is sensitive var; env vars used at runtime)
+New env vars: none (DATABASE_URL, JOB_RUN_ID, JOB_PAYLOAD already defined by Phase 2 simulation worker pattern)
+-->
 
 ## Phase 4 — Approval Workflow Expansion + Budget Enforcement
 

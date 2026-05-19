@@ -29,6 +29,7 @@ packages = ["packages", "apps"]
 members = [
   "apps/api",
   "apps/simulation-worker",
+  "apps/optimization-worker",
   "packages/agent",
   "packages/tools",
   "packages/domain",

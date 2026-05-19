@@ -131,3 +131,47 @@ resource "azurerm_container_app_job" "simulation_worker" {
     prevent_destroy = false
   }
 }
+
+# -------------------------------------------------------------------
+# Container App Job: optimization-worker
+# -------------------------------------------------------------------
+resource "azurerm_container_app_job" "optimization_worker" {
+  name                         = "bdos-optimization-worker"
+  location                     = var.location
+  resource_group_name          = var.resource_group_name
+  container_app_environment_id = azurerm_container_app_environment.main.id
+
+  replica_timeout_in_seconds = 600
+  replica_retry_limit        = 0
+
+  manual_trigger_config {
+    parallelism              = 1
+    replica_completion_count = 1
+  }
+
+  template {
+    container {
+      name   = "optimization-worker"
+      image  = "${var.container_registry_url}/bdos-optimization-worker:${var.image_tag}"
+      cpu    = 2.0
+      memory = "4Gi"
+
+      env {
+        name  = "DATABASE_URL"
+        value = var.database_url
+      }
+      env {
+        name  = "APP_ENV"
+        value = "prod"
+      }
+      env {
+        name  = "LOG_LEVEL"
+        value = "INFO"
+      }
+    }
+  }
+
+  lifecycle {
+    prevent_destroy = false
+  }
+}
