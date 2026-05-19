@@ -11,15 +11,15 @@ Phase 0 — Repository Foundation
 
 ## Active Lease
 
-B02 — Backend Scaffold
+None
 
 ## Last Completed Batch
 
-B01 — Repo Scaffold
+B05 — Infra & CI (and B04 — Sample Data, parallel)
 
 ## Last Validation
 
-command: bdos-test-review B01 checks (9 items)
+command: bdos-test-review B04+B05 checks (16 items); make test → 77 passed
 exit code: 0 (all PASS)
 timestamp: 2026-05-19
 

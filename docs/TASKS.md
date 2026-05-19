@@ -125,15 +125,15 @@ Dependencies: B03
 
 | ID | Task | Priority | Status |
 |---|---|---|---|
-| T-0030 | Hand-author `data/sample/ground_truth/sku_parameters.csv` (30 rows, bucket composition per DESIGN) | High | Not Started |
-| T-0031 | Hand-author `data/sample/ground_truth/customer_parameters.csv` (large / small / spot mix, `sku_affinity_json`) | High | Not Started |
-| T-0032 | Author `data/sample/ground_truth/README.md` explaining no-access rule; cross-link from `AGENTS.md` | High | Not Started |
-| T-0033 | Implement `scripts/generate_sample_data.py` — demand formula (NegBin noise), lognormal lead time, initial inventory rules, seed=42 default, `--seed N` override | High | Not Started |
-| T-0034 | Implement missing-data injection: 3 SKUs (deterministic), 2% NULL rate, one 7-day contiguous gap | High | Not Started |
-| T-0035 | Implement `scripts/seed_db.py` — reads `data/sample/*.csv` (not `ground_truth/`) via SQLAlchemy | High | Not Started |
-| T-0036 | Add `uv run seed` / `make seed` one-command regeneration target | Medium | Not Started |
-| T-0037 | Author ADR `docs/adr/2026-05-17-sample-data-generation.md` — distribution choices, seed policy, missing-data pattern | Medium | Not Started |
-| T-0038 | Generator unit tests: deterministic output under seed 42; NULL injection rate; seasonal SKUs show > 0.3 amplitude in autocorrelation | Medium | Not Started |
+| T-0030 | Hand-author `data/sample/ground_truth/sku_parameters.csv` (30 rows, bucket composition per DESIGN) | High | Done |
+| T-0031 | Hand-author `data/sample/ground_truth/customer_parameters.csv` (large / small / spot mix, `sku_affinity_json`) | High | Done |
+| T-0032 | Author `data/sample/ground_truth/README.md` explaining no-access rule; cross-link from `AGENTS.md` | High | Done |
+| T-0033 | Implement `scripts/generate_sample_data.py` — demand formula (NegBin noise), lognormal lead time, initial inventory rules, seed=42 default, `--seed N` override | High | Done |
+| T-0034 | Implement missing-data injection: 3 SKUs (deterministic), 2% NULL rate, one 7-day contiguous gap | High | Done |
+| T-0035 | Implement `scripts/seed_db.py` — reads `data/sample/*.csv` (not `ground_truth/`) via SQLAlchemy | High | Done |
+| T-0036 | Add `uv run seed` / `make seed` one-command regeneration target | Medium | Done |
+| T-0037 | Author ADR `docs/adr/2026-05-17-sample-data-generation.md` — distribution choices, seed policy, missing-data pattern | Medium | Done |
+| T-0038 | Generator unit tests: deterministic output under seed 42; NULL injection rate; seasonal SKUs show > 0.3 amplitude in autocorrelation | Medium | Done |
 
 ### B05 — Infra & CI (Agent: Infra)
 
@@ -141,18 +141,18 @@ Dependencies: B01 (can run in parallel with B03/B04)
 
 | ID | Task | Priority | Status |
 |---|---|---|---|
-| T-0070 | Scaffold `infra/terraform/{image-build,acr-push,aca,shared,modules}/` with independent state | High | Pending-Review |
-| T-0071 | Set Azure region = US East 2 in all Terraform modules | High | Pending-Review |
-| T-0072 | Set `prevent_destroy = false`; no resource locks | High | Pending-Review |
-| T-0073 | Provision Azure Key Vault + Managed Identity in `shared/` | High | Pending-Review |
-| T-0074 | Scaffold `infra/compose/` with Docker Compose V2 (no `version:` field): postgres + api + web | High | Pending-Review |
-| T-0075 | Configure Azure OIDC federated credentials with subject claims for `main`, `pull_request`, `environment:prod`; least-privilege RBAC | High | Pending-Review |
-| T-0080 | `.github/workflows/lint-test.yml` | High | Pending-Review |
-| T-0081 | `.github/workflows/terraform-plan.yml` (runs on PR) | High | Pending-Review |
-| T-0082 | `.github/workflows/deploy.yml` (runs on `main`): build → acr-push → tf apply shared → tf apply aca | High | Pending-Review |
-| T-0090 | Configure `structlog` JSON output + OpenTelemetry SDK + Langfuse SDK | High | Pending-Review |
-| T-0091 | Provision Azure Monitor / Application Insights in Terraform `shared/`; wire as OTel sink | High | Pending-Review |
-| T-0099 | Author initial ADRs for each tech choice: Claude provider, FastAPI, Next.js, Postgres+pgvector, Azure region, Terraform pipeline split, Azure OIDC, backup off | High | Pending-Review |
+| T-0070 | Scaffold `infra/terraform/{image-build,acr-push,aca,shared,modules}/` with independent state | High | Done |
+| T-0071 | Set Azure region = US East 2 in all Terraform modules | High | Done |
+| T-0072 | Set `prevent_destroy = false`; no resource locks | High | Done |
+| T-0073 | Provision Azure Key Vault + Managed Identity in `shared/` | High | Done |
+| T-0074 | Scaffold `infra/compose/` with Docker Compose V2 (no `version:` field): postgres + api + web | High | Done |
+| T-0075 | Configure Azure OIDC federated credentials with subject claims for `main`, `pull_request`, `environment:prod`; least-privilege RBAC | High | Done |
+| T-0080 | `.github/workflows/lint-test.yml` | High | Done |
+| T-0081 | `.github/workflows/terraform-plan.yml` (runs on PR) | High | Done |
+| T-0082 | `.github/workflows/deploy.yml` (runs on `main`): build → acr-push → tf apply shared → tf apply aca | High | Done |
+| T-0090 | Configure `structlog` JSON output + OpenTelemetry SDK + Langfuse SDK | High | Done |
+| T-0091 | Provision Azure Monitor / Application Insights in Terraform `shared/`; wire as OTel sink | High | Done |
+| T-0099 | Author initial ADRs for each tech choice: Claude provider, FastAPI, Next.js, Postgres+pgvector, Azure region, Terraform pipeline split, Azure OIDC, backup off | High | Done |
 
 <!--
 ## Infra Handoff — Phase 0 (B05)
