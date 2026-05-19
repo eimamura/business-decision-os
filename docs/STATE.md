@@ -11,7 +11,7 @@ Phase 0 — Repository Foundation
 
 ## Active Lease
 
-None
+B01 — Repo Scaffold
 
 ## Last Completed Batch
 

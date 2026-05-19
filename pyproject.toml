@@ -1,0 +1,32 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "business-decision-os"
+version = "0.1.0"
+requires-python = ">=3.11"
+
+[tool.uv.workspace]
+members = [
+  "apps/api",
+  "packages/agent",
+  "packages/tools",
+  "packages/domain",
+  "packages/simulation",
+  "packages/optimization",
+  "packages/prediction",
+  "packages/memory",
+  "packages/state",
+  "packages/schemas",
+]
+
+[tool.ruff]
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I"]
+
+[tool.mypy]
+python_version = "3.11"
+strict = true

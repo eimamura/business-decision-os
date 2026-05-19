@@ -35,13 +35,49 @@ Dependencies: none
 
 | ID | Task | Priority | Status |
 |---|---|---|---|
-| T-0001 | Initialize Git repo; push to GitHub; configure branch protection on `main`; Conventional Commits config | High | Not Started |
-| T-0002 | Author `.gitignore` covering Python / Node / Terraform / Docker / IDE / secrets / logs / coverage | High | Not Started |
-| T-0003 | Scaffold `apps/{web,api}` + `packages/*` + `infra/{terraform,compose}` + `data/` + `config/` + `scripts/` + `tests/` + `docs/` | High | Not Started |
-| T-0004 | Configure `uv` workspace (`tool.uv.workspace.members = ["apps/api", "packages/*"]`) | High | Not Started |
-| T-0005 | Configure `npm workspaces` (`apps/web`, `packages/schemas-ts`) | High | Not Started |
-| T-0006 | Set up commitlint / `cz-conventional-changelog` with 16-scope allowlist | Medium | Not Started |
-| T-0043 | `.env.example` with all required keys (no real values) | High | Not Started |
+| T-0001 | Initialize Git repo; push to GitHub; configure branch protection on `main`; Conventional Commits config | High | Pending-Review |
+| T-0002 | Author `.gitignore` covering Python / Node / Terraform / Docker / IDE / secrets / logs / coverage | High | Pending-Review |
+| T-0003 | Scaffold `apps/{web,api}` + `packages/*` + `infra/{terraform,compose}` + `data/` + `config/` + `scripts/` + `tests/` + `docs/` | High | Pending-Review |
+| T-0004 | Configure `uv` workspace (`tool.uv.workspace.members = ["apps/api", "packages/*"]`) | High | Pending-Review |
+| T-0005 | Configure `npm workspaces` (`apps/web`, `packages/schemas-ts`) | High | Pending-Review |
+| T-0006 | Set up commitlint / `cz-conventional-changelog` with 16-scope allowlist | Medium | Pending-Review |
+| T-0043 | `.env.example` with all required keys (no real values) | High | Pending-Review |
+
+<!-- ## Infra Handoff — Phase 0 / B01
+Changed files:
+  .gitignore
+  .env.example
+  pyproject.toml (root uv workspace)
+  package.json (npm workspaces)
+  commitlint.config.js
+  .husky/commit-msg
+  apps/api/pyproject.toml, __init__.py, README.md
+  apps/web/package.json, README.md
+  packages/agent/pyproject.toml, __init__.py, README.md
+  packages/tools/pyproject.toml, __init__.py, README.md
+  packages/domain/pyproject.toml, __init__.py, README.md
+  packages/simulation/pyproject.toml, __init__.py, README.md
+  packages/optimization/pyproject.toml, __init__.py, README.md
+  packages/prediction/pyproject.toml, __init__.py, README.md
+  packages/memory/pyproject.toml, __init__.py, README.md
+  packages/state/pyproject.toml, __init__.py, README.md
+  packages/schemas/pyproject.toml, __init__.py, README.md
+  packages/schemas-ts/package.json, README.md
+  infra/terraform/image-build/main.tf, README.md
+  infra/terraform/acr-push/main.tf, README.md
+  infra/terraform/aca/main.tf, README.md
+  infra/terraform/shared/main.tf, README.md
+  infra/terraform/modules/main.tf, README.md
+  infra/compose/compose.yaml
+  config/.gitkeep, scripts/.gitkeep, tests/.gitkeep
+  data/sample/.gitkeep, data/fixtures/.gitkeep, data/sample/ground_truth/.gitkeep
+  docs/adr/ (directory)
+Smoke checks: SKIPPED (stack not running — pure file-edit scaffold task, no running services)
+New env vars: DATABASE_URL, ANTHROPIC_API_KEY, APP_ENV, AZURE_CLIENT_ID, AZURE_TENANT_ID,
+  AZURE_SUBSCRIPTION_ID, AZURE_KEY_VAULT_URL, LANGFUSE_PUBLIC_KEY, LANGFUSE_SECRET_KEY,
+  LANGFUSE_HOST, OTEL_EXPORTER_OTLP_ENDPOINT, APPLICATIONINSIGHTS_CONNECTION_STRING,
+  NEXT_PUBLIC_API_URL, CORS_ALLOWED_ORIGINS, APPROVAL_TTL_SECONDS, LOG_LEVEL
+-->
 
 ### B02 — Backend Scaffold (Agent: App Builder)
 
