@@ -11,19 +11,19 @@ dev:
 	@$(MAKE) dev-api & $(MAKE) dev-web
 
 dev-compose:
-	docker compose -f infra/compose/compose.yaml up --build
+	docker compose --env-file .env -f infra/compose/compose.yaml up --build
 
 dev-up:
-	docker compose -f infra/compose/compose.yaml up -d --build
+	docker compose --env-file .env -f infra/compose/compose.yaml up -d --build
 
 dev-down:
-	docker compose -f infra/compose/compose.yaml down
+	docker compose --env-file .env -f infra/compose/compose.yaml down
 
 dev-logs:
-	docker compose -f infra/compose/compose.yaml logs --tail=100
+	docker compose --env-file .env -f infra/compose/compose.yaml logs --tail=100
 
 dev-ps:
-	docker compose -f infra/compose/compose.yaml ps
+	docker compose --env-file .env -f infra/compose/compose.yaml ps
 
 dev-smoke:
 	curl -sf http://localhost:$${API_PORT:-8000}/healthz
