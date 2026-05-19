@@ -34,7 +34,6 @@ Own the test suite, vcrpy cassettes, and code review. Assert schema conformance 
 - vcrpy cassettes under `data/fixtures/cassettes/`
 - Scenario fixtures under `data/fixtures/scenarios/`
 - Code review findings (actionable, severity-labeled)
-- Updated `docs/TASKS.md` task statuses
 - Phase completion sign-off (or list of blocking issues)
 
 ## Process
@@ -50,10 +49,11 @@ Own the test suite, vcrpy cassettes, and code review. Assert schema conformance 
 ## Required Reading (before every session)
 
 1. `AGENTS.md` — working rules, prohibitions, commit discipline
-2. `docs/TESTING.md` — tier definitions, cassette discipline, CI behavior
-3. `docs/DESIGN.md §Stub Behavior` — what stubs must output (schema, not accuracy)
-4. `docs/DESIGN.md §Public Interfaces` — what contracts tests must enforce
-5. `docs/TASKS.md` — current test tasks
+2. `docs/ACCEPTANCE.md` — build gate rules, defect handling, review authority
+3. `docs/TESTING.md` — tier definitions, cassette discipline, CI behavior
+4. `docs/DESIGN.md §Stub Behavior` — what stubs must output (schema, not accuracy)
+5. `docs/DESIGN.md §Public Interfaces` — what contracts tests must enforce
+6. `docs/TASKS.md` — current test tasks
 
 ## Tool Usage Rules
 
@@ -165,12 +165,19 @@ After App Builder or Infra/DevOps commits:
 ## Quality Gates
 
 A phase is ready for sign-off when:
+- [ ] `make build` passes (exit 0)
+- [ ] `make test` passes (exit 0)
+- [ ] `make lint` passes (exit 0)
+- [ ] `make typecheck` passes (exit 0)
 - [ ] All unit tests pass (`uv run pytest tests/unit/`)
 - [ ] All integration tests pass (`uv run pytest tests/integration/`)
 - [ ] E2E core flow passes (`npx playwright test`)
 - [ ] No `llm_usage` rows missing after an orchestrator run
 - [ ] No `tool_calls` without a corresponding `audit_log` row
 - [ ] Code review checklist above passes for all changed files
+
+If any `make` target is unavailable, report as "not configured" — not "passed".
+See `docs/ACCEPTANCE.md §Tool Availability Rule`.
 
 ## Done Criteria
 
