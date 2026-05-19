@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from typing import TYPE_CHECKING, Any, Literal, Protocol
 
 SpecialistRole = Literal["orchestrator", "domain_expert", "data_engineer", "sim_opt", "evaluator"]
@@ -15,13 +16,6 @@ class Specialist(Protocol):
 
     async def run(self, task: SpecialistTask, ctx: ToolContext) -> SpecialistResult: ...
 
-
-_CANNED_OUTPUTS: dict[str, dict[str, Any]] = {
-    "domain_expert": {"considerations": ["Supply chain analysis complete"]},
-    "data_engineer": {"data_summary": {"sku_count": 0, "avg_demand": 0}},
-    "sim_opt": {"candidates": []},
-    "evaluator": {"scores": []},
-}
 
 _ROLE_PROMPTS: dict[str, str] = {
     "domain_expert": (
@@ -42,6 +36,8 @@ _ROLE_PROMPTS: dict[str, str] = {
     ),
 }
 
+_MAX_ITERATIONS = 10
+
 
 class PromptBasedSpecialist:
     def __init__(
@@ -57,7 +53,7 @@ class PromptBasedSpecialist:
         from packages.agent.orchestrator import SpecialistResult
 
         system_prompt = _ROLE_PROMPTS.get(self.role, "You are a specialist.")
-        messages = [
+        messages: list[LLMMessage] = [
             LLMMessage(role="system", content=system_prompt),
             LLMMessage(role="user", content=task.instruction),
         ]
@@ -68,31 +64,54 @@ class PromptBasedSpecialist:
             if t.name in allowed_tool_names
         ]
         llm_tools = [
-            LLMToolSpec(
-                name=t.name,
-                description=t.description,
-                input_schema=t.input_schema,
-            )
+            LLMToolSpec(name=t.name, description=t.description, input_schema=t.input_schema)
             for t in tool_objects
         ]
 
-        response = await self._llm_client.complete(
-            messages=messages,
-            tools=llm_tools if llm_tools else None,
-            temperature=0.0,
-            agent_step_id=task.task_id,
-            specialist_role=self.role,
-        )
+        tool_calls_made: list[Any] = []
+        tool_results: dict[str, Any] = {}
+        last_response: Any = None
 
-        tool_calls_made = []
-        if response.tool_calls:
+        for _ in range(_MAX_ITERATIONS):
+            response = await self._llm_client.complete(
+                messages=messages,
+                tools=llm_tools if llm_tools else None,
+                temperature=0.0,
+                agent_step_id=task.task_id,
+                specialist_role=self.role,
+            )
+            last_response = response
+
+            if not response.tool_calls or response.finish_reason == "stop":
+                break
+
+            content_blocks: list[dict[str, Any]] = []
+            if response.text:
+                content_blocks.append({"type": "text", "text": response.text})
+            for call in response.tool_calls:
+                content_blocks.append({
+                    "type": "tool_use",
+                    "id": call["id"],
+                    "name": call["name"],
+                    "input": call.get("input", {}),
+                })
+            messages.append(LLMMessage(
+                role="assistant", content=response.text, content_blocks=content_blocks
+            ))
+
             for call in response.tool_calls:
                 tool = self._tool_registry.get(call["name"])
                 if tool is not None:
-                    await tool.handle(call.get("input", {}), ctx)
+                    tool_result = await tool.handle(call.get("input", {}), ctx)
                     tool_calls_made.append(ctx.agent_step_id)
+                    tool_results[call["name"]] = tool_result.output
+                    messages.append(LLMMessage(
+                        role="tool",
+                        content=json.dumps(tool_result.output),
+                        tool_call_id=call["id"],
+                    ))
 
-        output = _CANNED_OUTPUTS.get(self.role, {})
+        output = self._build_output(tool_results, last_response)
 
         return SpecialistResult(
             task_id=task.task_id,
@@ -100,3 +119,11 @@ class PromptBasedSpecialist:
             tool_calls_made=tool_calls_made,
             status="completed",
         )
+
+    def _build_output(self, tool_results: dict[str, Any], response: Any) -> dict[str, Any]:
+        text = response.text if response else ""
+        if self.role == "sim_opt" and "optimize_replenishment" in tool_results:
+            return {"candidates": tool_results["optimize_replenishment"].get("candidates", [])}
+        if self.role == "data_engineer" and "sql_query" in tool_results:
+            return {"data_summary": tool_results["sql_query"], "text": text}
+        return {"text": text}

@@ -406,4 +406,4 @@ async def test_specialist_run_returns_result():
 
     result = await specialists["domain_expert"].run(task, ctx)
     assert result.status == "completed"
-    assert "considerations" in result.output
+    assert isinstance(result.output, dict)

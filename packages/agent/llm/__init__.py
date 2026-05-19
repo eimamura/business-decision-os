@@ -14,6 +14,7 @@ class LLMMessage(BaseModel):
     content: str
     name: str | None = None
     tool_call_id: str | None = None
+    content_blocks: list[dict[str, Any]] | None = None
 
 
 class LLMToolSpec(BaseModel):
@@ -190,7 +191,19 @@ class ClaudeClient:
         for msg in messages:
             if msg.role == "system":
                 continue
-            result.append({"role": msg.role, "content": msg.content})
+            if msg.role == "tool":
+                result.append({
+                    "role": "user",
+                    "content": [{
+                        "type": "tool_result",
+                        "tool_use_id": msg.tool_call_id or "",
+                        "content": msg.content,
+                    }],
+                })
+            elif msg.content_blocks:
+                result.append({"role": msg.role, "content": msg.content_blocks})
+            else:
+                result.append({"role": msg.role, "content": msg.content})
         return result
 
     def _extract_system(self, messages: list[LLMMessage], prompt_cache: bool) -> Any:
