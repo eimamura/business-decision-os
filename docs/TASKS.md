@@ -14,7 +14,7 @@
 
 | Milestone | Goal | Status |
 |---|---|---|
-| M0+1 | Phase 0 foundation + Phase 1 vertical-slice MVP shipped together | Not Started |
+| M0+1 | Phase 0 foundation + Phase 1 vertical-slice MVP shipped together | Done |
 | M2 | Real Simulator on ACA Jobs | Not Started |
 | M3 | Real Optimizer on ACA Jobs | Not Started |
 | M4 | Approval Workflow Expansion + LLM budget enforcement | Not Started |
