@@ -1,11 +1,27 @@
 terraform {
   required_providers {
-    azurerm = {
-      source  = "hashicorp/azurerm"
+    null = {
+      source  = "hashicorp/null"
       version = "~> 3.0"
     }
   }
 }
 
-# Tag and push images to Azure Container Registry
-# Phase 0 scaffold — implementation added in Phase 1
+# -------------------------------------------------------------------
+# Build and push image to ACR using az acr build
+# -------------------------------------------------------------------
+resource "null_resource" "acr_build" {
+  triggers = {
+    image_tag    = var.image_tag
+    context_path = var.context_path
+  }
+
+  provisioner "local-exec" {
+    command = <<-EOT
+      az acr build \
+        --registry ${var.acr_login_server} \
+        --image ${var.image_name}:${var.image_tag} \
+        ${var.context_path}
+    EOT
+  }
+}

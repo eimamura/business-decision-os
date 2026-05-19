@@ -141,18 +141,50 @@ Dependencies: B01 (can run in parallel with B03/B04)
 
 | ID | Task | Priority | Status |
 |---|---|---|---|
-| T-0070 | Scaffold `infra/terraform/{image-build,acr-push,aca,shared,modules}/` with independent state | High | Not Started |
-| T-0071 | Set Azure region = US East 2 in all Terraform modules | High | Not Started |
-| T-0072 | Set `prevent_destroy = false`; no resource locks | High | Not Started |
-| T-0073 | Provision Azure Key Vault + Managed Identity in `shared/` | High | Not Started |
-| T-0074 | Scaffold `infra/compose/` with Docker Compose V2 (no `version:` field): postgres + api + web | High | Not Started |
-| T-0075 | Configure Azure OIDC federated credentials with subject claims for `main`, `pull_request`, `environment:prod`; least-privilege RBAC | High | Not Started |
-| T-0080 | `.github/workflows/lint-test.yml` | High | Not Started |
-| T-0081 | `.github/workflows/terraform-plan.yml` (runs on PR) | High | Not Started |
-| T-0082 | `.github/workflows/deploy.yml` (runs on `main`): build → acr-push → tf apply shared → tf apply aca | High | Not Started |
-| T-0090 | Configure `structlog` JSON output + OpenTelemetry SDK + Langfuse SDK | High | Not Started |
-| T-0091 | Provision Azure Monitor / Application Insights in Terraform `shared/`; wire as OTel sink | High | Not Started |
-| T-0099 | Author initial ADRs for each tech choice: Claude provider, FastAPI, Next.js, Postgres+pgvector, Azure region, Terraform pipeline split, Azure OIDC, backup off | High | Not Started |
+| T-0070 | Scaffold `infra/terraform/{image-build,acr-push,aca,shared,modules}/` with independent state | High | Pending-Review |
+| T-0071 | Set Azure region = US East 2 in all Terraform modules | High | Pending-Review |
+| T-0072 | Set `prevent_destroy = false`; no resource locks | High | Pending-Review |
+| T-0073 | Provision Azure Key Vault + Managed Identity in `shared/` | High | Pending-Review |
+| T-0074 | Scaffold `infra/compose/` with Docker Compose V2 (no `version:` field): postgres + api + web | High | Pending-Review |
+| T-0075 | Configure Azure OIDC federated credentials with subject claims for `main`, `pull_request`, `environment:prod`; least-privilege RBAC | High | Pending-Review |
+| T-0080 | `.github/workflows/lint-test.yml` | High | Pending-Review |
+| T-0081 | `.github/workflows/terraform-plan.yml` (runs on PR) | High | Pending-Review |
+| T-0082 | `.github/workflows/deploy.yml` (runs on `main`): build → acr-push → tf apply shared → tf apply aca | High | Pending-Review |
+| T-0090 | Configure `structlog` JSON output + OpenTelemetry SDK + Langfuse SDK | High | Pending-Review |
+| T-0091 | Provision Azure Monitor / Application Insights in Terraform `shared/`; wire as OTel sink | High | Pending-Review |
+| T-0099 | Author initial ADRs for each tech choice: Claude provider, FastAPI, Next.js, Postgres+pgvector, Azure region, Terraform pipeline split, Azure OIDC, backup off | High | Pending-Review |
+
+<!--
+## Infra Handoff — Phase 0 (B05)
+Changed files:
+  infra/terraform/shared/main.tf — Resource Group, Key Vault, Managed Identity, OIDC federated creds, App Insights, Log Analytics workspace
+  infra/terraform/shared/variables.tf — NEW
+  infra/terraform/shared/outputs.tf — NEW
+  infra/terraform/aca/main.tf — Container Apps Environment + api + web Container Apps
+  infra/terraform/aca/variables.tf — NEW
+  infra/terraform/aca/outputs.tf — NEW
+  infra/terraform/image-build/main.tf — Azure Container Registry (Basic)
+  infra/terraform/image-build/variables.tf — NEW
+  infra/terraform/image-build/outputs.tf — NEW
+  infra/terraform/acr-push/main.tf — null_resource az acr build local-exec
+  infra/terraform/acr-push/variables.tf — NEW
+  infra/terraform/modules/main.tf — placeholder comment
+  infra/compose/compose.yaml — Docker Compose V2 (no version:), explicit env vars
+  apps/api/Dockerfile — NEW multi-stage, COPY config config, ENV PYTHONPATH
+  apps/api/observability.py — NEW structlog + OTel + Langfuse setup
+  apps/api/pyproject.toml — added structlog, opentelemetry-sdk, opentelemetry-exporter-otlp, langfuse
+  apps/api/main.py — calls configure_logging() + configure_otel() at startup
+  apps/web/Dockerfile — NEW multi-stage Next.js standalone
+  apps/web/package.json — added Next.js / React dependencies and scripts
+  apps/web/next.config.js — NEW output: standalone
+  apps/web/app/page.tsx — NEW placeholder page
+  .github/workflows/lint-test.yml — NEW
+  .github/workflows/terraform-plan.yml — NEW
+  .github/workflows/deploy.yml — NEW
+Smoke checks: SKIPPED — stack not running (pure file-edit task; no Azure credentials provisioned yet)
+New env vars: ANTHROPIC_API_KEY (from host), OTEL_EXPORTER_OTLP_ENDPOINT (optional), AZURE_CLIENT_ID, AZURE_TENANT_ID, AZURE_SUBSCRIPTION_ID, ACR_LOGIN_SERVER (GitHub secrets)
+-->
+
 
 ## Phase 1 — Decision Copilot (Vertical-Slice MVP)
 

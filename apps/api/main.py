@@ -3,6 +3,11 @@ from __future__ import annotations
 import os
 
 from fastapi import FastAPI
+
+from apps.api.observability import configure_logging, configure_otel
+
+configure_logging()
+configure_otel()
 from fastapi.middleware.cors import CORSMiddleware
 
 from apps.api.middleware import DevUserMiddleware

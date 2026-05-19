@@ -1,0 +1,62 @@
+name: Deploy
+on:
+  push:
+    branches: [main]
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  build-push:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      - name: Build and push API image
+        run: |
+          az acr build --registry ${{ secrets.ACR_LOGIN_SERVER }} \
+            --image bdos-api:${{ github.sha }} \
+            --file apps/api/Dockerfile .
+      - name: Build and push Web image
+        run: |
+          az acr build --registry ${{ secrets.ACR_LOGIN_SERVER }} \
+            --image bdos-web:${{ github.sha }} \
+            --file apps/web/Dockerfile .
+
+  deploy-shared:
+    needs: build-push
+    runs-on: ubuntu-latest
+    environment: prod
+    steps:
+      - uses: actions/checkout@v4
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      - uses: hashicorp/setup-terraform@v3
+      - run: terraform init && terraform apply -auto-approve
+        working-directory: infra/terraform/shared
+
+  deploy-aca:
+    needs: deploy-shared
+    runs-on: ubuntu-latest
+    environment: prod
+    steps:
+      - uses: actions/checkout@v4
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      - uses: hashicorp/setup-terraform@v3
+      - run: |
+          terraform init
+          terraform apply -auto-approve \
+            -var="image_tag=${{ github.sha }}"
+        working-directory: infra/terraform/aca
