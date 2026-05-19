@@ -21,7 +21,7 @@ services:
       APP_ENV: dev
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
     ports:
-      - "8000:8000"
+      - "${API_PORT:-8000}:8000"
 
   web:
     build:
@@ -32,7 +32,7 @@ services:
     environment:
       NEXT_PUBLIC_API_URL: http://localhost:8000
     ports:
-      - "3000:3000"
+      - "${WEB_PORT:-3000}:3000"
 
 volumes:
   postgres_data:

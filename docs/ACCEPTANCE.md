@@ -1,3 +1,29 @@
+## Runtime Gate Rule
+
+A phase cannot be considered runnable unless the local development environment can start successfully in detached mode.
+
+Required runtime gate commands (executed in order):
+
+```bash
+make dev-up
+make dev-smoke
+make dev-down
+```
+
+The Test/Review agent must verify that:
+
+- Docker Compose builds required services without error
+- All containers start (api, web, db)
+- API health endpoint returns HTTP 200
+- Containers stop cleanly
+
+If a port is already in use, the issue must be registered as a Dev Runtime Defect, not skipped.
+Port conflicts can be resolved by setting `API_PORT` or `WEB_PORT` environment variables before the target:
+
+```bash
+API_PORT=8001 make dev-up
+```
+
 ## Build Gate Rule
 
 A phase cannot be marked Done unless the following commands pass from the repository root:
