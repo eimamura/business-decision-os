@@ -1,0 +1,31 @@
+sku_id,name,category,sku_type,moq,lead_time_days_mean,lead_time_days_std,holding_cost_pct,unit_cost
+SKU-001,Industrial Bearing A,Mechanical,critical,50,14,3,0.25,250.00
+SKU-002,Hydraulic Pump B,Mechanical,critical,20,21,5,0.22,480.00
+SKU-003,Control Module C,Electronics,critical,10,30,7,0.20,320.00
+SKU-004,Sensor Array D,Electronics,critical,25,18,4,0.28,150.00
+SKU-005,Valve Assembly E,Mechanical,critical,30,14,3,0.24,200.00
+SKU-006,Power Supply F,Electronics,critical,15,21,5,0.23,380.00
+SKU-007,Actuator G,Mechanical,critical,40,16,4,0.26,120.00
+SKU-008,Compressor H,Mechanical,critical,10,25,6,0.21,450.00
+SKU-009,Heat Exchanger I,Mechanical,critical,8,28,7,0.20,500.00
+SKU-010,Gearbox J,Mechanical,critical,12,20,5,0.22,390.00
+SKU-011,Gasket Kit A,Consumable,standard,100,7,2,0.18,12.50
+SKU-012,O-Ring Set B,Consumable,standard,200,5,1,0.15,5.50
+SKU-013,Filter Element C,Consumable,standard,50,10,2,0.20,22.00
+SKU-014,Lubricant D,Consumable,standard,100,7,2,0.16,8.00
+SKU-015,Bolt Set E,Hardware,standard,500,5,1,0.12,2.50
+SKU-016,Nut Assortment F,Hardware,standard,500,5,1,0.12,1.80
+SKU-017,Bracket Assembly G,Structural,standard,50,12,3,0.19,35.00
+SKU-018,Cable Harness H,Electrical,standard,30,14,3,0.21,45.00
+SKU-019,Switch Module I,Electrical,standard,25,10,2,0.22,28.00
+SKU-020,Relay Unit J,Electrical,standard,40,12,3,0.20,32.00
+SKU-021,Spring Set K,Mechanical,standard,100,7,2,0.15,9.00
+SKU-022,Seal Kit L,Consumable,standard,75,8,2,0.17,15.00
+SKU-023,Belt Drive M,Mechanical,standard,30,14,3,0.23,42.00
+SKU-024,Bearing Set N,Mechanical,standard,60,10,2,0.24,18.00
+SKU-025,Coupling O,Mechanical,standard,40,12,3,0.22,38.00
+SKU-026,Specialty Catalyst A,Chemical,slow_moving,5,45,10,0.30,180.00
+SKU-027,Custom Fitting B,Specialty,slow_moving,3,60,15,0.35,220.00
+SKU-028,Rare Component C,Electronics,slow_moving,2,90,20,0.40,350.00
+SKU-029,Pilot Valve D,Mechanical,slow_moving,5,45,12,0.32,160.00
+SKU-030,Prototype Part E,Specialty,slow_moving,2,75,18,0.38,280.00
