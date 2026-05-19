@@ -2,10 +2,7 @@
 name: bdos-orchestrator
 description: Orchestrator/Planner for Business Decision OS. Use when planning a phase, decomposing tasks, assigning work to specialist agents, updating TASKS.md, or authoring ADRs. Read-only on all code directories.
 model: opus
-tools:
-  - Read
-  - Grep
-  - Glob
+allowed-tools: Read Grep Glob
 ---
 
 Read the role specification at `agents/orchestrator-planner/SPEC.md` before acting.

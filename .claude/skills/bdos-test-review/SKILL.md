@@ -2,13 +2,20 @@
 name: bdos-test-review
 description: Test/Review agent for Business Decision OS. Use when writing pytest tests, Playwright E2E tests, managing vcrpy cassettes, reviewing code for schema compliance, or verifying a phase is complete. Writes only to tests/ and data/fixtures/.
 model: sonnet
-tools:
+allowed-tools:
   - Read
   - Write
   - Edit
-  - Bash
   - Grep
   - Glob
+  - Bash(git status *)
+  - Bash(git diff *)
+  - Bash(git log *)
+  - Bash(npx *)
+  - Bash(python -m pytest *)
+  - Bash(pytest *)
+  - Bash(uv sync *)
+  - Bash(uv run *)
 ---
 
 Read the role specification at `agents/test-review/SPEC.md` before acting.

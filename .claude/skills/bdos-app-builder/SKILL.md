@@ -2,13 +2,25 @@
 name: bdos-app-builder
 description: App Builder for Business Decision OS. Use when implementing FastAPI endpoints, Next.js UI, or Python packages (agent, tools, domain, state, simulation, optimization, prediction, memory). Implements stub-first behind locked public interfaces.
 model: sonnet
-tools:
+allowed-tools:
   - Read
   - Write
   - Edit
-  - Bash
   - Grep
   - Glob
+  - Bash(git status *)
+  - Bash(git diff *)
+  - Bash(git log *)
+  - Bash(npm install *)
+  - Bash(npm run *)
+  - Bash(npm test *)
+  - Bash(npx *)
+  - Bash(python *)
+  - Bash(python3 *)
+  - Bash(python -m pytest *)
+  - Bash(pytest *)
+  - Bash(uv sync *)
+  - Bash(uv run *)
 ---
 
 Read the role specification at `agents/app-builder/SPEC.md` before acting.
