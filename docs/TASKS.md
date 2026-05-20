@@ -21,7 +21,7 @@
 | M5 | Celery + Redis job queue | Done |
 | M6 | Real Predictor on Databricks (training + batch inference) | Done |
 | M7 | Memory & Learning Loop (pgvector retrieval) | Done |
-| M8 | Semi-Autonomous Execution + Databricks Lakehouse | Not Started |
+| M8 | Semi-Autonomous Execution + Databricks Lakehouse | Done |
 | M9 | Domain Expert specialist split | Not Started |
 
 ## Phase 0 — Repository Foundation
@@ -350,10 +350,10 @@ New env vars: CELERY_BROKER_URL, CELERY_RESULT_BACKEND, JOB_RUNNER_BACKEND, REDI
 
 | ID | Task | Priority | Status |
 |---|---|---|---|
-| T-8001 | Risk-classified auto-execution policy in Approval flow | High | Not Started |
-| T-8002 | Provision Databricks Lakehouse (ADLS Gen2 + Delta + workspace) in US East 2 | High | Not Started |
-| T-8003 | Set up CDC ingestion from PostgreSQL to Bronze layer | High | Not Started |
-| T-8004 | Define Silver / Gold transformation pipelines | High | Not Started |
+| T-8001 | Risk-classified auto-execution policy in Approval flow | High | Done |
+| T-8002 | Provision Databricks Lakehouse (ADLS Gen2 + Delta + workspace) in US East 2 | High | Done |
+| T-8003 | Set up CDC ingestion from PostgreSQL to Bronze layer | High | Done |
+| T-8004 | Define Silver / Gold transformation pipelines | High | Done |
 
 ## Phase 9 — Business Decision OS Completion
 

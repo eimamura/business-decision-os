@@ -51,6 +51,14 @@ class RecommendationReadyEvent(BaseModel):
     recommendation_id: UUID
     risk_level: Literal["low", "medium", "high"]
     requires_approval: bool
+    auto_execute: bool = False
+
+
+class AutoExecutedEvent(BaseModel):
+    event: Literal["auto_executed"] = "auto_executed"
+    session_id: UUID
+    timestamp: str
+    recommendation_id: UUID
 
 
 class AwaitingApprovalEvent(BaseModel):
@@ -84,6 +92,7 @@ SseEvent = Annotated[
         ToolCalledEvent,
         ToolCompletedEvent,
         RecommendationReadyEvent,
+        AutoExecutedEvent,
         AwaitingApprovalEvent,
         ErrorEvent,
         DoneEvent,

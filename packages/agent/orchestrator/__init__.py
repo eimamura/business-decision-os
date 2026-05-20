@@ -524,15 +524,24 @@ class PhaseOrchestrator:
             "awaiting_approval" if requires_approval else "completed"
         )
 
+        auto_execute = not requires_approval
+
         await self._push({
             "type": "recommendation_ready",
             "recommendation_id": str(recommendation_id),
             "risk_level": risk_level,
             "requires_approval": requires_approval,
+            "auto_execute": auto_execute,
             "timestamp": _iso_now(),
         })
 
-        if requires_approval:
+        if auto_execute:
+            await self._push({
+                "type": "auto_executed",
+                "recommendation_id": str(recommendation_id),
+                "timestamp": _iso_now(),
+            })
+        else:
             from datetime import timedelta
 
             approval_id = str(uuid4())

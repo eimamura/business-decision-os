@@ -7,7 +7,7 @@ TASKS.md holds task definitions. This file holds runtime execution state.
 
 ## Current Phase
 
-M7 Complete — Ready for M8 (Semi-Autonomous Execution + Databricks Lakehouse)
+M8 Complete — Ready for M9 (Domain Expert specialist split)
 
 ## Active Lease
 
@@ -15,14 +15,14 @@ None
 
 ## Last Completed Batch
 
-Phase 7 — M7 Complete (T-7001, T-7002, T-7003) — 2026-05-20
+Phase 8 — M8 Complete (T-8001, T-8002, T-8003, T-8004) — 2026-05-20
 
 ## Last Validation
 
 command: `uv run pytest tests/unit/ -q && make lint && make typecheck && make build`
 exit code: 0 (all pass)
 timestamp: 2026-05-20
-note: 182 unit tests PASS. M7 complete: PgVectorMemoryStore in packages/memory/__init__.py (asyncpg, deterministic hash embeddings, cosine similarity search via pgvector), memory write hook in Orchestrator (_write_decision_memory writes user_policy after each recommendation), retrieval hook (_resolve_weights_with_memory queries pgvector before resolve_weights), API wires PgVectorMemoryStore when DATABASE_URL set. SSE emits memory_retrieved events. lint: 0 errors. typecheck: 0 errors. build: OK.
+note: 205 unit tests PASS. M8 complete: T-8001 — auto-execution policy: LOW-risk (service_level≥0.95) recommendations emit auto_execute=true + auto_executed SSE event instead of awaiting_approval; RecommendationReadyEvent gains auto_execute field; AutoExecutedEvent added. T-8002 — packages/lakehouse/ added (LakehouseClient, file-based local Delta simulation); infra/terraform/databricks/ extended with ADLS Gen2 storage account + Bronze/Silver/Gold containers + ETL cluster + Databricks Jobs. T-8003 — scripts/cdc_to_bronze.py with --dry-run mode. T-8004 — scripts/bronze_to_silver.py + scripts/silver_to_gold.py; packages/lakehouse/silver.py + gold.py; packages/lakehouse/cli.py with status/run-silver/run-gold commands. lint: 0 errors. typecheck: 0 errors. build: OK.
 
 ## Blockers
 
