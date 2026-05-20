@@ -76,7 +76,11 @@ class PromptBasedSpecialist:
         last_response: Any = None
 
         for _ in range(_MAX_ITERATIONS):
-            _log.info("Specialist %s calling LLM (model=%s)", self.role, getattr(self._llm_client, "_model", "?"))
+            _log.info(
+                "Specialist %s calling LLM (model=%s)",
+                self.role,
+                getattr(self._llm_client, "_model", "?"),
+            )
             response = await self._llm_client.complete(
                 messages=messages,
                 tools=llm_tools if llm_tools else None,

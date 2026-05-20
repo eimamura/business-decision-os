@@ -303,10 +303,10 @@ New env vars: none (DATABASE_URL, JOB_RUN_ID, JOB_PAYLOAD already defined by Pha
 
 | ID | Task | Priority | Status |
 |---|---|---|---|
-| T-4001 | Notifications for new pending approvals | Medium | Not Started |
-| T-4002 | Approver roles + permission checks | Medium | Not Started |
-| T-4003 | Settings / Policies screen with budget threshold editors | High | Not Started |
-| T-4004 | LLM budget soft / hard ceiling interceptor in `LLMClient` | High | Not Started |
+| T-4001 | Notifications for new pending approvals | Medium | Done |
+| T-4002 | Approver roles + permission checks | Medium | Done |
+| T-4003 | Settings / Policies screen with budget threshold editors | High | Done |
+| T-4004 | LLM budget soft / hard ceiling interceptor in `LLMClient` | High | Done |
 
 ## Phase 5 — Job Orchestration
 

@@ -2,11 +2,47 @@ from __future__ import annotations
 
 import os
 import time
+import warnings
 from decimal import Decimal
-from typing import Any, AsyncIterator, Callable, Coroutine, Literal, Protocol, TypedDict
+from typing import Any, AsyncIterator, Awaitable, Callable, Coroutine, Literal, Protocol, TypedDict
 from uuid import UUID, uuid4
 
 from pydantic import BaseModel
+
+
+class BudgetSoftLimitWarning(Warning):
+    pass
+
+
+class BudgetHardLimitError(RuntimeError):
+    pass
+
+
+class BudgetGuard:
+    def __init__(
+        self,
+        soft_limit_usd: Decimal | None,
+        hard_limit_usd: Decimal | None,
+    ) -> None:
+        self.soft_limit_usd = soft_limit_usd
+        self.hard_limit_usd = hard_limit_usd
+        self.accumulated_cost: Decimal = Decimal("0")
+
+    def check_and_accumulate(self, cost: Decimal) -> None:
+        self.accumulated_cost += cost
+        if self.hard_limit_usd is not None and self.accumulated_cost >= self.hard_limit_usd:
+            raise BudgetHardLimitError(
+                f"LLM budget hard limit ${self.hard_limit_usd} exceeded:"
+                f" accumulated ${self.accumulated_cost}"
+            )
+        if self.soft_limit_usd is not None and self.accumulated_cost >= self.soft_limit_usd:
+            warnings.warn(
+                BudgetSoftLimitWarning(
+                    f"LLM budget soft limit ${self.soft_limit_usd} exceeded:"
+                    f" accumulated ${self.accumulated_cost}"
+                ),
+                stacklevel=2,
+            )
 
 
 class LLMMessage(BaseModel):
@@ -181,6 +217,7 @@ class ClaudeClient:
 
     def _build_client(self, api_key: str) -> Any:
         import logging
+
         import anthropic
         client = anthropic.AsyncAnthropic(api_key=api_key)
         logging.getLogger(__name__).info(
@@ -375,3 +412,72 @@ def create_llm_client(usage_writer: UsageWriter | None = None) -> ClaudeClient:
     if not api_key:
         raise RuntimeError("ANTHROPIC_API_KEY is not set — add it to .env")
     return ClaudeClient(api_key=api_key, usage_writer=usage_writer)
+
+
+class BudgetedClaudeClient:
+    def __init__(self, inner: ClaudeClient, guard: BudgetGuard) -> None:
+        self._inner = inner
+        self._guard = guard
+
+    async def complete(
+        self,
+        messages: list[LLMMessage],
+        tools: list[LLMToolSpec] | None = None,
+        temperature: float = 0.0,
+        max_tokens: int = 4096,
+        prompt_cache: bool = True,
+        agent_step_id: UUID | None = None,
+        specialist_role: str | None = None,
+    ) -> LLMResponse:
+        response = await self._inner.complete(
+            messages=messages,
+            tools=tools,
+            temperature=temperature,
+            max_tokens=max_tokens,
+            prompt_cache=prompt_cache,
+            agent_step_id=agent_step_id,
+            specialist_role=specialist_role,
+        )
+        self._guard.check_and_accumulate(response.usage.total_cost_usd)
+        return response
+
+    async def stream(
+        self,
+        messages: list[LLMMessage],
+        tools: list[LLMToolSpec] | None = None,
+        temperature: float = 0.0,
+        max_tokens: int = 4096,
+        prompt_cache: bool = True,
+        agent_step_id: UUID | None = None,
+        specialist_role: str | None = None,
+    ) -> AsyncIterator[LLMStreamEvent]:
+        return await self._inner.stream(
+            messages=messages,
+            tools=tools,
+            temperature=temperature,
+            max_tokens=max_tokens,
+            prompt_cache=prompt_cache,
+            agent_step_id=agent_step_id,
+            specialist_role=specialist_role,
+        )
+
+    async def embed(
+        self,
+        texts: list[str],
+        model: str = "text-embedding-3-small",
+        agent_step_id: UUID | None = None,
+    ) -> list[list[float]]:
+        return await self._inner.embed(texts=texts, model=model, agent_step_id=agent_step_id)
+
+
+PolicyLoader = Callable[[], Awaitable[tuple[Decimal, Decimal]]]
+
+
+async def create_budgeted_llm_client(
+    policy_loader: PolicyLoader,
+    usage_writer: UsageWriter | None = None,
+) -> BudgetedClaudeClient:
+    soft_limit, hard_limit = await policy_loader()
+    guard = BudgetGuard(soft_limit_usd=soft_limit, hard_limit_usd=hard_limit)
+    inner = create_llm_client(usage_writer=usage_writer)
+    return BudgetedClaudeClient(inner=inner, guard=guard)

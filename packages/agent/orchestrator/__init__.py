@@ -34,7 +34,8 @@ Specialists:
 Rules:
 1. Simple data lookup (e.g. current inventory, demand history) -> ["data_engineer"]
 2. Domain analysis without optimisation -> ["domain_expert", "data_engineer"]
-3. Replenishment / optimisation decision -> ["domain_expert", "data_engineer", "sim_opt", "evaluator"]
+3. Replenishment / optimisation decision -> ["domain_expert", "data_engineer", "sim_opt",
+   "evaluator"]
 4. "evaluator" requires "sim_opt" -- never include one without the other.
 5. Greetings, chit-chat, or off-topic input -> ["none"]
 

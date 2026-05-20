@@ -27,6 +27,7 @@ def upgrade() -> None:
             id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
             email       TEXT NOT NULL UNIQUE,
             name        TEXT NOT NULL,
+            role        TEXT NOT NULL DEFAULT 'analyst' CHECK (role IN ('analyst','approver','admin')),
             created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
         );
     """)
@@ -319,6 +320,32 @@ def upgrade() -> None:
         CREATE INDEX ON approvals (status, created_at);
     """)
 
+    op.execute("""
+        CREATE TABLE notifications (
+            id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            user_id     UUID NOT NULL REFERENCES users(id),
+            approval_id UUID REFERENCES approvals(id),
+            type        TEXT NOT NULL DEFAULT 'approval_pending',
+            read        BOOLEAN NOT NULL DEFAULT false,
+            created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+        );
+    """)
+
+    op.execute("""
+        CREATE TABLE policies (
+            id                    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            budget_soft_limit_usd NUMERIC(10,4) NOT NULL DEFAULT 10.0,
+            budget_hard_limit_usd NUMERIC(10,4) NOT NULL DEFAULT 50.0,
+            budget_period         TEXT NOT NULL DEFAULT 'session' CHECK (budget_period IN ('session','day','month')),
+            updated_by            TEXT,
+            updated_at            TIMESTAMPTZ NOT NULL DEFAULT now()
+        );
+    """)
+
+    op.execute("""
+        CREATE INDEX ON notifications (user_id, read, created_at);
+    """)
+
 
 def downgrade() -> None:
     op.execute("DROP TABLE IF EXISTS customers CASCADE;")
@@ -342,5 +369,7 @@ def downgrade() -> None:
     op.execute("DROP TABLE IF EXISTS tool_calls CASCADE;")
     op.execute("DROP TABLE IF EXISTS agent_steps CASCADE;")
     op.execute("DROP TABLE IF EXISTS decision_sessions CASCADE;")
+    op.execute("DROP TABLE IF EXISTS policies CASCADE;")
+    op.execute("DROP TABLE IF EXISTS notifications CASCADE;")
     op.execute("DROP TABLE IF EXISTS users CASCADE;")
     op.execute("DROP EXTENSION IF EXISTS vector;")

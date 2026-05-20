@@ -7,7 +7,7 @@ from fastapi import FastAPI
 
 load_dotenv()
 
-from apps.api.observability import configure_logging, configure_otel
+from apps.api.observability import configure_logging, configure_otel  # noqa: E402
 
 configure_logging()
 configure_otel()
@@ -20,6 +20,8 @@ from apps.api.routers import (  # noqa: E402
     decisions,
     health,
     kpi,
+    notifications,
+    policies,
     recommendations,
     scenarios,
     sessions,
@@ -43,7 +45,7 @@ app.add_middleware(
 app.add_middleware(DevUserMiddleware)
 
 @app.get("/api/v1/debug")
-async def debug_info() -> dict:
+async def debug_info() -> dict[str, object]:
     import os as _os
     api_key = _os.environ.get("ANTHROPIC_API_KEY", "")
     try:
@@ -70,3 +72,5 @@ app.include_router(scenarios.router)
 app.include_router(audit.router)
 app.include_router(kpi.router)
 app.include_router(settings.router)
+app.include_router(notifications.router)
+app.include_router(policies.router)

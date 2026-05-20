@@ -55,6 +55,7 @@ export default function ChatListPage() {
           <Link href="/approvals" className="hover:text-gray-900">Approvals</Link>
           <Link href="/audit" className="hover:text-gray-900">Audit</Link>
           <Link href="/kpi" className="hover:text-gray-900">KPI</Link>
+          <Link href="/settings" className="hover:text-gray-900">Settings</Link>
         </nav>
       </header>
       <main className="max-w-3xl mx-auto px-6 py-10">

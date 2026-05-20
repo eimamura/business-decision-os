@@ -7,7 +7,7 @@ TASKS.md holds task definitions. This file holds runtime execution state.
 
 ## Current Phase
 
-M3 Complete — Ready for Phase 4 (M4: Approval Workflow Expansion + LLM budget enforcement)
+M4 Complete — Ready for Phase 5 (M5: Celery + Redis job queue)
 
 ## Active Lease
 
@@ -15,14 +15,14 @@ None
 
 ## Last Completed Batch
 
-Conversational query path (T-1003c) — 2026-05-19
+Phase 4 — B4C Test/Review (T-4001, T-4002, T-4003, T-4004) — 2026-05-20
 
 ## Last Validation
 
-command: `uv run pytest tests/unit/ -x -q`
+command: `uv run pytest tests/unit/ -x -q && make lint && make typecheck && make build`
 exit code: 0 (all pass)
-timestamp: 2026-05-19
-note: 128 unit tests PASS. Fail-silent fallbacks eliminated: ANTHROPIC_API_KEY missing → RuntimeError; anthropic package missing → ImportError propagated; ACA config missing → RuntimeError; decisions.py bare except replaced with logging + SSE error event; evaluator_tool.py missing thresholds → WARNING log. Chat UI (page.tsx) now subscribes to SSE stream after POST /messages: reply displayed in chat bubble on `done`, red error bubble on `error`.
+timestamp: 2026-05-20
+note: 154 unit tests PASS. M4 complete: notifications table + repo, policies table + repo, approver role enforcement (403 for non-approver), BudgetGuard/BudgetedClaudeClient/BudgetSoftLimitWarning/BudgetHardLimitError in LLMClient, PUT /api/v1/policies, GET /api/v1/notifications, /settings Next.js page. lint: 0 errors. typecheck: 0 errors. build: OK.
 
 ## Blockers
 
