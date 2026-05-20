@@ -7,7 +7,7 @@ TASKS.md holds task definitions. This file holds runtime execution state.
 
 ## Current Phase
 
-M4 + M5 Complete — Ready for M6 (Real Predictor on Databricks)
+M6 Complete — Ready for M7 (Memory & Learning Loop / pgvector)
 
 ## Active Lease
 
@@ -15,14 +15,14 @@ None
 
 ## Last Completed Batch
 
-Phase 5 — M5 Complete (T-5001, T-5002, T-5003) — 2026-05-20
+Phase 6 — M6 Complete (T-6001, T-6002, T-6003, T-6004) — 2026-05-20
 
 ## Last Validation
 
 command: `uv run pytest tests/unit/ -q && make lint && make typecheck && make build`
 exit code: 0 (all pass)
 timestamp: 2026-05-20
-note: 165 unit tests PASS. M5 complete: CeleryJobRunner in packages/agent/job_runner/celery_runner.py, Celery app + tasks in celery_app.py, JOB_RUNNER_BACKEND=celery support in state.py, decisions endpoint returns job_id JSON when backend=celery + GET /{job_id}/status, Redis + celery-worker services in compose.yaml, azurerm_redis_cache in Terraform shared/, azurerm_container_app celery_worker in Terraform aca/. lint: 0 errors. typecheck: 0 errors. build: OK.
+note: 172 unit tests PASS. M6 complete: LinearRegressionPredictor + DatabasePredictor in packages/prediction/__init__.py (scikit-learn, reads prediction_features table), ForecastTool upgraded to use real predictor (model_version=linear_regression_v1, adds prediction+source fields to output), Databricks Terraform in infra/terraform/databricks/ (workspace+MLflow+storage), training job in infra/databricks/jobs/train_predictor.py, batch inference job in infra/databricks/jobs/batch_inference.py. lint: 0 errors. typecheck: 0 errors. build: OK.
 
 ## Blockers
 

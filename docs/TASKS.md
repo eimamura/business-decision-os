@@ -19,7 +19,7 @@
 | M3 | Real Optimizer on ACA Jobs | Done |
 | M4 | Approval Workflow Expansion + LLM budget enforcement | Done |
 | M5 | Celery + Redis job queue | Done |
-| M6 | Real Predictor on Databricks (training + batch inference) | Not Started |
+| M6 | Real Predictor on Databricks (training + batch inference) | Done |
 | M7 | Memory & Learning Loop (pgvector retrieval) | Not Started |
 | M8 | Semi-Autonomous Execution + Databricks Lakehouse | Not Started |
 | M9 | Domain Expert specialist split | Not Started |
@@ -332,10 +332,10 @@ New env vars: CELERY_BROKER_URL, CELERY_RESULT_BACKEND, JOB_RUNNER_BACKEND, REDI
 
 | ID | Task | Priority | Status |
 |---|---|---|---|
-| T-6001 | Provision Databricks workspace + MLflow via new Terraform stage | High | Not Started |
-| T-6002 | Databricks Job for predictor training | High | Not Started |
-| T-6003 | Databricks Job for batch inference writing features back to PostgreSQL | High | Not Started |
-| T-6004 | Implement lightweight realtime inference in FastAPI in-process | Medium | Not Started |
+| T-6001 | Provision Databricks workspace + MLflow via new Terraform stage | High | Done |
+| T-6002 | Databricks Job for predictor training | High | Done |
+| T-6003 | Databricks Job for batch inference writing features back to PostgreSQL | High | Done |
+| T-6004 | Implement lightweight realtime inference in FastAPI in-process | Medium | Done |
 
 ## Phase 7 — Memory & Learning Loop
 
