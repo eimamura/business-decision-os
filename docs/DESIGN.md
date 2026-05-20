@@ -63,7 +63,7 @@ The Orchestrator coordinates 4 Specialists. The interface is fixed Day 1; implem
 | Phase 1 (MVP) | `PromptBasedSpecialist` — role-prompt + tool subset on shared `LLMClient` | Sequential; LLM routing selects which specialists to invoke per goal |
 | Phase 9 (Final) | `AgentBasedSpecialist` — independent context, independent tool registry, possibly different model | True multi-agent with parallel execution |
 
-Future phases split Domain Expert into Forecast / Inventory / Procurement / Production / Cost specialists behind the same Orchestrator interface.
+Phase 9 splits Domain Expert into Forecast / Inventory / Procurement / Production / Cost specialists, each an `AgentBasedSpecialist` instance dispatched in parallel via `asyncio.gather`. The Orchestrator is now a pure coordinator.
 
 ### Orchestrator Routing
 
@@ -94,7 +94,7 @@ Before invoking any specialist, `PhaseOrchestrator` calls `_route_specialists(go
 |---|---|---|
 | LLMClient (Claude impl) | Implemented | `packages/agent/llm` |
 | Orchestrator | Implemented | `packages/agent/orchestrator` |
-| Specialists (4 × PromptBasedSpecialist) | Implemented | `packages/agent/specialists` |
+| Specialists (5 × AgentBasedSpecialist — Forecast/Inventory/Procurement/Production/Cost + data_engineer/sim_opt/evaluator) | Implemented | `packages/agent/specialists` |
 | Tool Layer (registry) | Implemented | `packages/tools` |
 | SQL Query Tool | Implemented | `packages/tools/sql` |
 | Approval Tool | Implemented | `packages/tools/approval` |
