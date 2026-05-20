@@ -375,7 +375,8 @@ class PhaseOrchestrator:
                             "The user sent a conversational message — not a decision request. "
                             "Reply naturally and briefly. You may mention that you can help with "
                             "supply chain decisions such as inventory optimisation, replenishment "
-                            "planning, and demand forecasting."
+                            "planning, and demand forecasting. "
+                            "Always respond in the same language the user writes in."
                         ),
                     ),
                     _LLMMsg(role="user", content=goal.text),

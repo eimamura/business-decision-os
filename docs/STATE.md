@@ -7,7 +7,7 @@ TASKS.md holds task definitions. This file holds runtime execution state.
 
 ## Current Phase
 
-M9 Complete — Phase 9 Domain Expert Specialist Split
+M10 Complete — Phase 10 Chat Quality Features (Reference Port)
 
 ## Active Lease
 
@@ -15,14 +15,14 @@ None
 
 ## Last Completed Batch
 
-Phase 9 — M9 Complete (T-9001, T-9002, T-9003) — 2026-05-20
+Phase 10 — M10 Complete (T-10001 through T-10009) — 2026-05-20
 
 ## Last Validation
 
-command: `uv run pytest tests/unit/ -q && make lint && make typecheck && make build`
+command: `uv run pytest tests/unit/ -q && make lint && make typecheck && cd apps/web && npx tsc --noEmit`
 exit code: 0 (all pass)
 timestamp: 2026-05-20
-note: 205 unit tests PASS. M9 complete: T-9001 — domain_expert split into 5 AgentBasedSpecialist instances (Forecast, Inventory, Procurement, Production, Cost) in packages/agent/specialists/; T-9002 — AgentBasedSpecialist class created with independent context per invocation, independent tool registry, emits specialist_started SSE events; T-9003 — PhaseOrchestrator._run_domain_specialists_parallel() dispatches all 5 domain specialists via asyncio.gather, Orchestrator is pure coordinator; SSE smoke test confirmed 3+ specialist_started events (Forecast, Inventory, Procurement) from parallel dispatch. lint: 0 errors. typecheck: 0 errors. build: OK.
+note: 206 unit tests PASS. M10 complete: T-10001 — Alembic migration 0002 (session_messages + rate_limit_counters tables); T-10002 — DecisionSessionRepository + LlmUsageRepository implemented (no stubs), packages/state/db.py pool factory, real usage_writer wired in state.py; T-10003 — packages/agent/history.py compress_history() with SUMMARY_THRESHOLD=30, integrated into sessions.py post_message; T-10004 — packages/agent/rate_limiter.py per-user+global rate limiting, integrated into sessions.py; T-10005 — PATCH /api/v1/sessions/{sid}/messages/{mid}/feedback endpoint, GET messages returns feedback field; T-10006 — apps/web/types/chat.ts + apps/web/lib/api.ts typed API client with streamSession generator; T-10007 — apps/web/hooks/useChat.ts SSE streaming hook, page.tsx refactored (EventSource removed); T-10008 — apps/web/components/MessageBubble.tsx with react-syntax-highlighter (ssr:false), 👍👎 feedback UI; T-10009 — ReasoningPanel updated with SessionUsage props, Input/Output/cost token display. lint: 0 errors. typecheck: 0 errors. tsc: 0 errors.
 
 ## Blockers
 

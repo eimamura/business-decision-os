@@ -23,6 +23,7 @@
 | M7 | Memory & Learning Loop (pgvector retrieval) | Done |
 | M8 | Semi-Autonomous Execution + Databricks Lakehouse | Done |
 | M9 | Domain Expert specialist split | Done |
+| M10 | Chat Quality Features — history summarization, rate limiting, feedback, LLM tracking, rich UI | Done |
 
 ## Phase 0 — Repository Foundation
 
@@ -362,3 +363,47 @@ New env vars: CELERY_BROKER_URL, CELERY_RESULT_BACKEND, JOB_RUNNER_BACKEND, REDI
 | T-9001 | Split Domain Expert into Forecast / Inventory / Procurement / Production / Cost specialists | High | Done |
 | T-9002 | Swap `PromptBasedSpecialist` for `AgentBasedSpecialist` (independent context, independent tool registry, parallel execution) | High | Done |
 | T-9003 | Orchestrator becomes pure coordinator dispatching to parallel Specialist agents | High | Done |
+
+## Phase 10 — Chat Quality Features (Reference Port)
+
+Port conversation history summarization, rate limiting, message feedback, LLM usage tracking,
+rich MessageBubble rendering, typed API client, and useChat hook from the reference ecommerce-admin-chatbot.
+
+Batch execution order: B1 → (B2 ∥ B3) → B4
+
+### B1 — DB Foundation (Agent: bdos-infra → bdos-app-builder)
+
+Dependencies: none
+
+| ID | Task | Priority | Status |
+|---|---|---|---|
+| T-10001 | Alembic migration 0002: add `session_messages` and `rate_limit_counters` tables | High | Done |
+| T-10002 | Implement `DecisionSessionRepository` and `LlmUsageRepository`; create `packages/state/db.py` pool factory; wire real `usage_writer` in `apps/api/state.py` | High | Done |
+
+### B2 — Backend Features (Agent: bdos-app-builder) — parallel with B3
+
+Dependencies: B1
+
+| ID | Task | Priority | Status |
+|---|---|---|---|
+| T-10003 | Conversation history summarization: `packages/agent/history.py`; integrate into `sessions.py` `post_message` | High | Done |
+| T-10004 | Per-user + global rate limiting: `packages/agent/rate_limiter.py`; integrate into `sessions.py`; add 429 handler in `main.py` | Medium | Done |
+| T-10005 | Message feedback endpoint: `PATCH /api/v1/sessions/{sid}/messages/{mid}/feedback`; update `GET messages` to return `feedback` field | Medium | Done |
+
+### B3 — Frontend API Client (Agent: bdos-app-builder) — parallel with B2
+
+Dependencies: none (can start immediately)
+
+| ID | Task | Priority | Status |
+|---|---|---|---|
+| T-10006 | Typed API client `apps/web/lib/api.ts` + type definitions `apps/web/types/chat.ts` | High | Done |
+
+### B4 — Frontend UI Features (Agent: bdos-app-builder)
+
+Dependencies: B3
+
+| ID | Task | Priority | Status |
+|---|---|---|---|
+| T-10007 | `useChat` hook (`apps/web/hooks/useChat.ts`); refactor `chat/[sessionId]/page.tsx` to use hook | High | Done |
+| T-10008 | `MessageBubble` component (`apps/web/components/MessageBubble.tsx`) with syntax highlighting + 👍👎 feedback UI | Medium | Done |
+| T-10009 | Token usage display in `ReasoningPanel`: input/output/cost rows from `useChat` usage state | Low | Done |

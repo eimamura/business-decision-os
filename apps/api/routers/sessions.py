@@ -2,17 +2,23 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 from datetime import datetime, timezone
 from typing import Any, AsyncGenerator
 from uuid import UUID, uuid4
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 from apps.api.state import get_orchestrator, sessions, sse_queues
+from packages.agent.history import compress_history
 from packages.agent.orchestrator import SessionGoal
+from packages.agent.rate_limiter import RateLimitExceeded, check_rate_limit
 from packages.schemas.recommendation import Recommendation
+from packages.state.sessions_repo import DecisionSessionRepository
+
+_log = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1/sessions", tags=["sessions"])
 
@@ -50,6 +56,10 @@ class SendMessageRequest(BaseModel):
     content: str
 
 
+class FeedbackRequest(BaseModel):
+    feedback: int
+
+
 @router.post("")
 async def create_session(body: CreateSessionRequest) -> dict[str, Any]:
     session_id = str(uuid4())
@@ -79,14 +89,81 @@ async def get_session(session_id: str) -> dict[str, Any]:
 
 @router.get("/{session_id}/messages")
 async def get_messages(session_id: str) -> list[dict[str, Any]]:
+    try:
+        repo = DecisionSessionRepository()
+        db_messages = await repo.get_messages(session_id)
+        return [
+            {
+                "id": str(msg["id"]),
+                "role": msg["role"],
+                "content": msg["content"],
+                "created_at": (
+                    msg["created_at"].isoformat()
+                    if hasattr(msg["created_at"], "isoformat")
+                    else msg["created_at"]
+                ),
+                "feedback": msg.get("feedback"),
+            }
+            for msg in db_messages
+        ]
+    except RuntimeError as e:
+        if "DATABASE_URL" not in str(e):
+            raise HTTPException(status_code=500, detail="Internal error")
+
     session = sessions.get(session_id)
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
-    return list(session.get("messages", []))
+    return [
+        {
+            "id": str(uuid4()),
+            "role": msg["role"],
+            "content": msg["content"],
+            "created_at": msg.get("created_at"),
+            "feedback": None,
+        }
+        for msg in session.get("messages", [])
+    ]
+
+
+@router.patch("/{session_id}/messages/{message_id}/feedback", status_code=204)
+async def set_message_feedback(
+    session_id: str,
+    message_id: str,
+    body: FeedbackRequest,
+) -> None:
+    if body.feedback not in (1, -1):
+        raise HTTPException(status_code=422, detail="feedback must be 1 or -1")
+
+    try:
+        repo = DecisionSessionRepository()
+        updated = await repo.set_message_feedback(
+            message_id=message_id,
+            feedback=body.feedback,
+            session_id=session_id,
+        )
+        if not updated:
+            raise HTTPException(status_code=404, detail="Message not found")
+    except HTTPException:
+        raise
+    except RuntimeError as e:
+        if "DATABASE_URL" in str(e):
+            return
+        raise HTTPException(status_code=500, detail="Internal error")
 
 
 @router.post("/{session_id}/messages")
-async def post_message(session_id: str, body: SendMessageRequest) -> dict[str, Any]:
+async def post_message(
+    session_id: str, body: SendMessageRequest, request: Request
+) -> dict[str, Any]:
+    user_id = getattr(request.state, "user_id", "anonymous")
+    try:
+        await check_rate_limit(user_id)
+    except RateLimitExceeded:
+        raise HTTPException(
+            status_code=429,
+            detail="Rate limit exceeded. Please wait before sending another message.",
+        )
+
     session = sessions.get(session_id)
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
@@ -97,10 +174,24 @@ async def post_message(session_id: str, body: SendMessageRequest) -> dict[str, A
         "created_at": _iso_now(),
     })
 
+    repo = DecisionSessionRepository()
+    try:
+        await repo.add_message(session_id, role="user", content=body.content)
+    except Exception:
+        _log.warning("DB unavailable; skipping user message persist for %s", session_id)
+
     queue: asyncio.Queue[dict[str, Any]] = asyncio.Queue()
     sse_queues[session_id] = queue
 
-    goal_text = session.get("goal") or body.content
+    goal_text = body.content
+    try:
+        msgs = await repo.get_messages(session_id, limit=60)
+        msgs_to_use, summary = await compress_history(msgs)
+        if summary is not None:
+            goal_text = f"[Conversation context: {summary}]\n\n{goal_text}"
+    except Exception:
+        _log.warning("Could not load/compress history for %s; using raw goal", session_id)
+
     goal = SessionGoal(text=goal_text)
 
     await queue.put({
@@ -112,8 +203,6 @@ async def post_message(session_id: str, body: SendMessageRequest) -> dict[str, A
     orchestrator = get_orchestrator(queue)
 
     async def _run_and_signal() -> None:
-        import logging
-        _log = logging.getLogger(__name__)
         recommendation: Recommendation | None = None
         try:
             recommendation = await orchestrator.run(UUID(session_id), goal)
@@ -134,6 +223,12 @@ async def post_message(session_id: str, body: SendMessageRequest) -> dict[str, A
                 "content": reply,
                 "created_at": _iso_now(),
             })
+            try:
+                await repo.add_message(session_id, role="assistant", content=reply)
+            except Exception:
+                _log.warning(
+                    "DB unavailable; skipping assistant message persist for %s", session_id
+                )
             await queue.put({
                 "type": "done",
                 "session_id": session_id,

@@ -2,27 +2,11 @@
 
 import { useEffect, useRef, useState, useCallback } from "react";
 import Link from "next/link";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
-import rehypeSanitize from "rehype-sanitize";
 import ReasoningPanel from "./components/ReasoningPanel";
-
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
-
-interface Session {
-  session_id: string;
-  status: string;
-  goal?: string;
-  created_at: string;
-}
-
-interface Message {
-  id: string;
-  role: "user" | "assistant";
-  content: string;
-  created_at: string;
-  isError?: boolean;
-}
+import MessageBubble from "@/components/MessageBubble";
+import { useChat } from "@/hooks/useChat";
+import { fetchSessions } from "@/lib/api";
+import type { Session } from "@/types/chat";
 
 interface ChatPageProps {
   params: { sessionId: string };
@@ -31,40 +15,23 @@ interface ChatPageProps {
 export default function ChatPage({ params }: ChatPageProps) {
   const { sessionId } = params;
   const [sessions, setSessions] = useState<Session[]>([]);
-  const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
-  const [sending, setSending] = useState(false);
   const [showReasoning, setShowReasoning] = useState(false);
-  const [totalTokens, setTotalTokens] = useState(0);
-  const [totalCost, setTotalCost] = useState(0);
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const streamRef = useRef<EventSource | null>(null);
+
+  const { messages, isSending, usage, loadMessages, sendMessage, submitFeedback } = useChat(sessionId);
 
   useEffect(() => {
-    fetch(`${API_BASE}/api/v1/sessions`, {
-      headers: { "X-Dev-User": "dev-user" },
-    })
-      .then((r) => r.json())
-      .then((data) => setSessions(Array.isArray(data) ? data : data.items ?? []))
+    fetchSessions()
+      .then(setSessions)
       .catch(() => setSessions([]));
 
-    fetch(`${API_BASE}/api/v1/sessions/${sessionId}`, {
-      headers: { "X-Dev-User": "dev-user" },
-    })
-      .then((r) => r.json())
-      .then((data) => {
-        if (data.messages) setMessages(data.messages);
-      })
-      .catch(() => {});
+    loadMessages();
   }, [sessionId]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
-
-  useEffect(() => {
-    return () => { streamRef.current?.close(); };
-  }, []);
 
   useEffect(() => {
     function handleKey(e: KeyboardEvent) {
@@ -77,86 +44,12 @@ export default function ChatPage({ params }: ChatPageProps) {
     return () => window.removeEventListener("keydown", handleKey);
   }, []);
 
-  const sendMessage = useCallback(async () => {
+  const handleSend = useCallback(async () => {
     const text = input.trim();
-    if (!text || sending) return;
-
-    const userMsg: Message = {
-      id: crypto.randomUUID(),
-      role: "user",
-      content: text,
-      created_at: new Date().toISOString(),
-    };
-    setMessages((prev) => [...prev, userMsg]);
+    if (!text || isSending) return;
     setInput("");
-    setSending(true);
-
-    const addError = (content: string) => {
-      setMessages((prev) => [...prev, {
-        id: crypto.randomUUID(),
-        role: "assistant",
-        content,
-        created_at: new Date().toISOString(),
-        isError: true,
-      }]);
-      setSending(false);
-    };
-
-    try {
-      const res = await fetch(
-        `${API_BASE}/api/v1/sessions/${sessionId}/messages`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "X-Dev-User": "dev-user",
-          },
-          body: JSON.stringify({ content: text }),
-        }
-      );
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        addError(`Request failed (${res.status}): ${data.detail ?? res.statusText}`);
-        return;
-      }
-
-      streamRef.current?.close();
-      const es = new EventSource(`${API_BASE}/api/v1/sessions/${sessionId}/stream`);
-      streamRef.current = es;
-
-      es.onmessage = (e: MessageEvent) => {
-        try {
-          const event = JSON.parse(e.data as string) as { type: string; reply?: string; message?: string; code?: string; tokens?: number; cost_usd?: number };
-          if (event.type === "done") {
-            if (event.reply) {
-              setMessages((prev) => [...prev, {
-                id: crypto.randomUUID(),
-                role: "assistant",
-                content: event.reply!,
-                created_at: new Date().toISOString(),
-              }]);
-            }
-            setSending(false);
-            es.close();
-          } else if (event.type === "error") {
-            addError(event.message ?? "An error occurred during processing.");
-            es.close();
-          }
-          if (event.tokens) setTotalTokens((p) => p + event.tokens!);
-          if (event.cost_usd) setTotalCost((p) => p + event.cost_usd!);
-        } catch {
-          // ignore parse errors
-        }
-      };
-
-      es.onerror = () => {
-        addError("Lost connection to the server. Please try again.");
-        es.close();
-      };
-    } catch {
-      addError("Error contacting the API. Please check the backend is running.");
-    }
-  }, [input, sending, sessionId]);
+    await sendMessage(text);
+  }, [input, isSending, sendMessage]);
 
   return (
     <div className="flex h-screen bg-gray-50 overflow-hidden">
@@ -216,9 +109,9 @@ export default function ChatPage({ params }: ChatPageProps) {
                 </div>
               )}
               {messages.map((msg) => (
-                <MessageBubble key={msg.id} message={msg} />
+                <MessageBubble key={msg.id} message={msg} onFeedback={submitFeedback} />
               ))}
-              {sending && (
+              {isSending && (
                 <div className="flex justify-start">
                   <div className="bg-white border border-gray-200 rounded-2xl px-4 py-3">
                     <div className="flex gap-1">
@@ -240,7 +133,7 @@ export default function ChatPage({ params }: ChatPageProps) {
                   onKeyDown={(e) => {
                     if (e.key === "Enter" && !e.shiftKey) {
                       e.preventDefault();
-                      sendMessage();
+                      handleSend();
                     }
                   }}
                   placeholder="Ask a supply chain question... (Enter to send, Shift+Enter for newline)"
@@ -248,8 +141,8 @@ export default function ChatPage({ params }: ChatPageProps) {
                   className="flex-1 resize-none rounded-xl border border-gray-300 px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 />
                 <button
-                  onClick={sendMessage}
-                  disabled={sending || !input.trim()}
+                  onClick={handleSend}
+                  disabled={isSending || !input.trim()}
                   className="self-end bg-blue-600 text-white px-5 py-2.5 rounded-xl text-sm font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                 >
                   Send
@@ -262,58 +155,11 @@ export default function ChatPage({ params }: ChatPageProps) {
             <div className="w-80 shrink-0 border-l border-gray-800 overflow-hidden">
               <ReasoningPanel
                 sessionId={sessionId}
-                totalTokens={totalTokens}
-                totalCost={totalCost}
+                usage={usage}
               />
             </div>
           )}
         </main>
-      </div>
-    </div>
-  );
-}
-
-function MessageBubble({ message }: { message: Message }) {
-  const isUser = message.role === "user";
-
-  if (message.isError) {
-    return (
-      <div className="flex justify-start">
-        <div className="max-w-2xl rounded-2xl px-4 py-3 text-sm bg-red-50 border border-red-200 text-red-800">
-          <p className="font-medium mb-1">⚠ Error</p>
-          <p className="whitespace-pre-wrap">{message.content}</p>
-          <p className="text-xs mt-1.5 text-red-400">
-            {new Date(message.created_at).toLocaleTimeString()}
-          </p>
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div className={`flex ${isUser ? "justify-end" : "justify-start"}`}>
-      <div
-        className={`max-w-2xl rounded-2xl px-4 py-3 text-sm ${
-          isUser
-            ? "bg-blue-600 text-white"
-            : "bg-white border border-gray-200 text-gray-900"
-        }`}
-      >
-        {isUser ? (
-          <p className="whitespace-pre-wrap">{message.content}</p>
-        ) : (
-          <div className="prose prose-sm max-w-none prose-headings:text-gray-900 prose-p:text-gray-700 prose-code:text-blue-700 prose-code:bg-blue-50 prose-code:px-1 prose-code:rounded">
-            <ReactMarkdown
-              remarkPlugins={[remarkGfm]}
-              rehypePlugins={[rehypeSanitize]}
-            >
-              {message.content}
-            </ReactMarkdown>
-          </div>
-        )}
-        <p className={`text-xs mt-1.5 ${isUser ? "text-blue-200" : "text-gray-400"}`}>
-          {new Date(message.created_at).toLocaleTimeString()}
-        </p>
       </div>
     </div>
   );

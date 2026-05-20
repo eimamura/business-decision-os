@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import type { SessionUsage } from "@/types/chat";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
@@ -28,8 +29,7 @@ interface StepEvent {
 
 interface Props {
   sessionId: string;
-  totalTokens: number;
-  totalCost: number;
+  usage: SessionUsage;
 }
 
 const ROLE_LABELS: Record<string, string> = {
@@ -39,7 +39,7 @@ const ROLE_LABELS: Record<string, string> = {
   evaluator: "Evaluator",
 };
 
-export default function ReasoningPanel({ sessionId, totalTokens, totalCost }: Props) {
+export default function ReasoningPanel({ sessionId, usage }: Props) {
   const [events, setEvents] = useState<StepEvent[]>([]);
   const [activeRole, setActiveRole] = useState<string | null>(null);
   const [connected, setConnected] = useState(false);
@@ -88,12 +88,6 @@ export default function ReasoningPanel({ sessionId, totalTokens, totalCost }: Pr
     };
   }, [sessionId]);
 
-  const cost = new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-    minimumFractionDigits: 4,
-  }).format(totalCost);
-
   return (
     <div className="flex flex-col h-full bg-gray-900 text-gray-100">
       <div className="px-4 py-3 border-b border-gray-700 flex items-center justify-between">
@@ -105,9 +99,6 @@ export default function ReasoningPanel({ sessionId, totalTokens, totalCost }: Pr
             Reasoning Panel
           </span>
         </div>
-        <span className="text-xs text-gray-400">
-          {totalTokens.toLocaleString()} tok · {cost}
-        </span>
       </div>
 
       {activeRole && (
@@ -127,6 +118,26 @@ export default function ReasoningPanel({ sessionId, totalTokens, totalCost }: Pr
         {events.map((ev, i) => (
           <EventRow key={i} event={ev} />
         ))}
+      </div>
+
+      <div className="border-t border-gray-700 px-4 py-3">
+        <p className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-2">
+          Token Usage
+        </p>
+        <div className="space-y-1 text-xs">
+          <div className="flex justify-between text-gray-300">
+            <span>Input</span>
+            <span>{usage.inputTokens.toLocaleString()}</span>
+          </div>
+          <div className="flex justify-between text-gray-300">
+            <span>Output</span>
+            <span>{usage.outputTokens.toLocaleString()}</span>
+          </div>
+          <div className="flex justify-between text-gray-500">
+            <span>Est. cost</span>
+            <span>${usage.costUsd.toFixed(4)}</span>
+          </div>
+        </div>
       </div>
     </div>
   );

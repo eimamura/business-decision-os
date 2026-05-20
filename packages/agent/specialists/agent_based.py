@@ -84,6 +84,7 @@ class AgentBasedSpecialist:
         })
 
         system_prompt = _SPECIALIST_PROMPTS.get(self.role, f"You are a {self.role} specialist.")
+        system_prompt += "\n\nAlways respond in the same language the user writes in."
         # Independent context per invocation — never shared across parallel agents
         messages: list[LLMMessage] = [
             LLMMessage(role="system", content=system_prompt),

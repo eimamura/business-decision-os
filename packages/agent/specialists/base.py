@@ -67,6 +67,7 @@ class PromptBasedSpecialist:
         from packages.agent.orchestrator import SpecialistResult
 
         system_prompt = _ROLE_PROMPTS.get(self.role, "You are a specialist.")
+        system_prompt += "\n\nAlways respond in the same language the user writes in."
         messages: list[LLMMessage] = [
             LLMMessage(role="system", content=system_prompt),
             LLMMessage(role="user", content=task.instruction),

@@ -63,8 +63,8 @@ def test_compute_hash_changes_with_payload():
 @pytest.mark.asyncio
 async def test_sessions_repo_raises():
     repo = DecisionSessionRepository()
-    with pytest.raises(NotImplementedError):
-        await repo.get(__import__("uuid").uuid4())
+    with pytest.raises(RuntimeError, match="DATABASE_URL not set"):
+        await repo.get(str(__import__("uuid").uuid4()))
 
 
 @pytest.mark.asyncio
@@ -105,8 +105,8 @@ async def test_recommendations_repo_raises():
 @pytest.mark.asyncio
 async def test_llm_usage_repo_raises():
     repo = LlmUsageRepository()
-    with pytest.raises(NotImplementedError):
-        await repo.get(__import__("uuid").uuid4())
+    with pytest.raises(RuntimeError, match="DATABASE_URL not set"):
+        await repo.get_session_totals(str(__import__("uuid").uuid4()))
 
 
 @pytest.mark.asyncio
