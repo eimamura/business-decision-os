@@ -15,7 +15,7 @@ None
 
 ## Last Completed Batch
 
-Fail-loud + SSE Chat wiring — 2026-05-19
+LLM-based specialist routing (T-1003b) — 2026-05-19
 
 ## Last Validation
 

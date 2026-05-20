@@ -17,6 +17,28 @@ from packages.schemas.recommendation import (
 
 logger = logging.getLogger(__name__)
 
+_VALID_ROLES = {"domain_expert", "data_engineer", "sim_opt", "evaluator"}
+_ALL_ROLES = ["domain_expert", "data_engineer", "sim_opt", "evaluator"]
+
+_ROUTING_SYSTEM = """\
+You are a routing agent for a supply chain decision system.
+Return ONLY a JSON array of specialist role names needed to fulfil the goal.
+
+Specialists:
+- "domain_expert": surfaces domain knowledge and trade-off considerations
+- "data_engineer": queries operational DB tables via SQL to gather facts
+- "sim_opt": runs inventory simulation and replenishment optimisation
+- "evaluator": scores each optimiser candidate against all KPIs independently
+
+Rules:
+1. Simple data lookup (e.g. current inventory, demand history) -> ["data_engineer"]
+2. Domain analysis without optimisation -> ["domain_expert", "data_engineer"]
+3. Replenishment / optimisation decision -> ["domain_expert", "data_engineer", "sim_opt", "evaluator"]
+4. "evaluator" requires "sim_opt" -- never include one without the other.
+
+Return ONLY a valid JSON array. No explanation, no markdown, no wrapping text.\
+"""
+
 
 class SessionGoal(BaseModel):
     text: str
@@ -159,6 +181,43 @@ class PhaseOrchestrator:
             error=str(last_exc),
         )
 
+    async def _route_specialists(self, goal: SessionGoal) -> list[str]:
+        import json
+        import re
+
+        from packages.agent.llm import LLMMessage
+
+        messages = [
+            LLMMessage(role="system", content=_ROUTING_SYSTEM),
+            LLMMessage(role="user", content=f"Goal: {goal.text}"),
+        ]
+        try:
+            response = await self._llm_client.complete(
+                messages=messages,
+                tools=None,
+                temperature=0.0,
+                max_tokens=256,
+                prompt_cache=False,
+                specialist_role="orchestrator",
+            )
+            match = re.search(r"\[.*?\]", response.text, re.DOTALL)
+            if not match:
+                raise ValueError("no JSON array in routing response")
+            roles: list[str] = json.loads(match.group())
+            roles = [r for r in roles if r in _VALID_ROLES]
+            if not roles:
+                raise ValueError("no valid roles extracted from routing response")
+        except Exception as exc:
+            logger.warning("Routing failed (%s), falling back to full sequence", exc)
+            return list(_ALL_ROLES)
+
+        if "sim_opt" in roles and "evaluator" not in roles:
+            roles.append("evaluator")
+        if "evaluator" in roles and "sim_opt" not in roles:
+            roles.append("sim_opt")
+
+        return [r for r in _ALL_ROLES if r in roles]
+
     async def run(self, session_id: UUID, goal: SessionGoal) -> Recommendation:
         from packages.agent.orchestrator.weights import resolve_weights
         from packages.agent.specialists import create_specialists
@@ -177,7 +236,26 @@ class PhaseOrchestrator:
 
         specialists = create_specialists(self._llm_client, self._tool_registry)
 
-        role_sequence = ["domain_expert", "data_engineer", "sim_opt", "evaluator"]
+        route_step_id = str(uuid4())
+        await self._push({
+            "type": "step_started",
+            "step_id": route_step_id,
+            "specialist_role": "orchestrator",
+            "step_type": "routing",
+            "started_at": _iso_now(),
+        })
+
+        role_sequence = await self._route_specialists(goal)
+
+        await self._push({
+            "type": "step_completed",
+            "step_id": route_step_id,
+            "specialist_role": "orchestrator",
+            "step_type": "routing",
+            "selected_roles": role_sequence,
+            "duration_ms": 0,
+        })
+
         role_tools: dict[str, list[str]] = {
             "domain_expert": ["sql_query", "forecast"],
             "data_engineer": ["sql_query", "forecast"],

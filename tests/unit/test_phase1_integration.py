@@ -154,3 +154,112 @@ async def test_memory_store_search_returns_empty():
     store = StubMemoryStore()
     results = await store.search(MemoryQuery(query_text="test"))
     assert results == []
+
+
+# ---------------------------------------------------------------------------
+# Routing tests
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_routing_emits_sse_events_with_selected_roles(stub_orchestrator):
+    """Routing step emits step_started and step_completed with selected_roles."""
+    orchestrator, queue = stub_orchestrator
+
+    async def _stub_route(goal):
+        return ["data_engineer"]
+
+    orchestrator._route_specialists = _stub_route
+
+    await orchestrator.run(uuid4(), SessionGoal(text="What is current inventory?"))
+
+    events = []
+    while not queue.empty():
+        events.append(await queue.get())
+
+    routing_events = [e for e in events if e.get("step_type") == "routing"]
+    assert len(routing_events) == 2
+    completed = next(e for e in routing_events if e["type"] == "step_completed")
+    assert completed["selected_roles"] == ["data_engineer"]
+
+
+@pytest.mark.asyncio
+async def test_routing_fallback_on_bad_llm_response(stub_orchestrator):
+    """Unparseable routing response falls back to full sequence without raising."""
+    from decimal import Decimal
+
+    from packages.agent.llm import LLMResponse, LLMUsage
+
+    orchestrator, _ = stub_orchestrator
+
+    async def _bad_complete(messages, **kwargs):
+        return LLMResponse(
+            text="sorry, I cannot help",
+            tool_calls=[],
+            finish_reason="stop",
+            usage=LLMUsage(input_tokens=5, output_tokens=5, total_cost_usd=Decimal("0")),
+            model="stub",
+            request_id="r1",
+            latency_ms=1,
+        )
+
+    orchestrator._llm_client.complete = _bad_complete
+
+    rec = await orchestrator.run(uuid4(), SessionGoal(text="test fallback"))
+    assert rec is not None
+
+
+@pytest.mark.asyncio
+async def test_routing_enforces_sim_opt_evaluator_pair(stub_orchestrator):
+    """Routing always pairs sim_opt with evaluator in both directions."""
+    from decimal import Decimal
+
+    from packages.agent.llm import LLMResponse, LLMUsage
+
+    orchestrator, _ = stub_orchestrator
+
+    for missing_pair, llm_text in [
+        (["sim_opt"], '["sim_opt"]'),
+        (["evaluator"], '["evaluator"]'),
+    ]:
+        async def _complete(messages, **kwargs):
+            return LLMResponse(
+                text=llm_text,
+                tool_calls=[],
+                finish_reason="stop",
+                usage=LLMUsage(input_tokens=5, output_tokens=5, total_cost_usd=Decimal("0")),
+                model="stub",
+                request_id="r1",
+                latency_ms=1,
+            )
+
+        orchestrator._llm_client.complete = _complete
+        roles = await orchestrator._route_specialists(SessionGoal(text="x"))
+        assert "sim_opt" in roles
+        assert "evaluator" in roles
+
+
+@pytest.mark.asyncio
+async def test_routing_preserves_canonical_order(stub_orchestrator):
+    """Routing result always follows canonical role order."""
+    from decimal import Decimal
+
+    from packages.agent.llm import LLMResponse, LLMUsage
+
+    orchestrator, _ = stub_orchestrator
+
+    async def _complete(messages, **kwargs):
+        return LLMResponse(
+            text='["evaluator", "data_engineer", "sim_opt"]',
+            tool_calls=[],
+            finish_reason="stop",
+            usage=LLMUsage(input_tokens=5, output_tokens=5, total_cost_usd=Decimal("0")),
+            model="stub",
+            request_id="r1",
+            latency_ms=1,
+        )
+
+    orchestrator._llm_client.complete = _complete
+    roles = await orchestrator._route_specialists(SessionGoal(text="optimise"))
+    canonical = ["domain_expert", "data_engineer", "sim_opt", "evaluator"]
+    assert roles == [r for r in canonical if r in roles]

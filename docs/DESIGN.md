@@ -60,10 +60,29 @@ The Orchestrator coordinates 4 Specialists. The interface is fixed Day 1; implem
 
 | Stage | Specialist implementation | Behavior |
 |---|---|---|
-| Phase 1 (MVP) | `PromptBasedSpecialist` — role-prompt + tool subset on shared `LLMClient` | Sequential single-LLM session; cheap and easy to debug |
+| Phase 1 (MVP) | `PromptBasedSpecialist` — role-prompt + tool subset on shared `LLMClient` | Sequential; LLM routing selects which specialists to invoke per goal |
 | Phase 9 (Final) | `AgentBasedSpecialist` — independent context, independent tool registry, possibly different model | True multi-agent with parallel execution |
 
 Future phases split Domain Expert into Forecast / Inventory / Procurement / Production / Cost specialists behind the same Orchestrator interface.
+
+### Orchestrator Routing
+
+Before invoking any specialist, `PhaseOrchestrator` calls `_route_specialists(goal)` — a single LLM call that returns a JSON array of role names needed for the goal. This avoids running the full 4-specialist pipeline for queries that do not require optimization (e.g., data lookups).
+
+**Routing rules (encoded in `_ROUTING_SYSTEM` prompt):**
+
+| Goal type | Roles selected |
+|---|---|
+| Simple data lookup | `["data_engineer"]` |
+| Domain analysis | `["domain_expert", "data_engineer"]` |
+| Replenishment / optimisation | `["domain_expert", "data_engineer", "sim_opt", "evaluator"]` |
+
+**Invariants enforced in code:**
+- `sim_opt` and `evaluator` are always selected together — one without the other is invalid.
+- Canonical execution order is always preserved: `domain_expert → data_engineer → sim_opt → evaluator`.
+- Any routing failure (parse error, empty result, LLM error) falls back to the full sequence and logs a warning.
+
+**SSE events:** The routing step emits `step_started` / `step_completed` events with `step_type: "routing"`. The `step_completed` event includes a `selected_roles` field visible in the Reasoning Panel.
 
 ## Components
 
