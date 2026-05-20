@@ -20,7 +20,7 @@
 | M4 | Approval Workflow Expansion + LLM budget enforcement | Done |
 | M5 | Celery + Redis job queue | Done |
 | M6 | Real Predictor on Databricks (training + batch inference) | Done |
-| M7 | Memory & Learning Loop (pgvector retrieval) | Not Started |
+| M7 | Memory & Learning Loop (pgvector retrieval) | Done |
 | M8 | Semi-Autonomous Execution + Databricks Lakehouse | Not Started |
 | M9 | Domain Expert specialist split | Not Started |
 
@@ -341,9 +341,9 @@ New env vars: CELERY_BROKER_URL, CELERY_RESULT_BACKEND, JOB_RUNNER_BACKEND, REDI
 
 | ID | Task | Priority | Status |
 |---|---|---|---|
-| T-7001 | Swap MemoryStore stub for pgvector retrieval | High | Not Started |
-| T-7002 | Memory-write hooks in Orchestrator (record weight vector on approval / rejection / revision) | High | Not Started |
-| T-7003 | Wire `user_policy` memory back into Orchestrator's default weight selection | High | Not Started |
+| T-7001 | Swap MemoryStore stub for pgvector retrieval | High | Done |
+| T-7002 | Memory-write hooks in Orchestrator (record weight vector on approval / rejection / revision) | High | Done |
+| T-7003 | Wire `user_policy` memory back into Orchestrator's default weight selection | High | Done |
 
 ## Phase 8 — Semi-Autonomous Execution + Databricks Lakehouse
 

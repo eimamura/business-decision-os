@@ -223,8 +223,60 @@ class PhaseOrchestrator:
 
         return [r for r in _ALL_ROLES if r in roles]
 
-    async def run(self, session_id: UUID, goal: SessionGoal) -> Recommendation:
+    async def _resolve_weights_with_memory(
+        self, goal: SessionGoal
+    ) -> tuple[dict[str, float], str]:
+        import json
+
         from packages.agent.orchestrator.weights import resolve_weights
+        from packages.memory import MemoryQuery
+
+        try:
+            results = await self._memory_store.search(
+                MemoryQuery(type="user_policy", k=1, min_similarity=0.5)
+            )
+            if results:
+                mem, _score = results[0]
+                data = json.loads(mem.content)
+                if "weights" in data and isinstance(data["weights"], dict):
+                    await self._push({
+                        "type": "memory_retrieved",
+                        "count": len(results),
+                        "source": "user_policy",
+                        "timestamp": _iso_now(),
+                    })
+                    return data["weights"], "user_policy"
+        except Exception:
+            pass
+
+        return resolve_weights(goal)
+
+    async def _write_decision_memory(
+        self,
+        session_id: UUID,
+        goal: SessionGoal,
+        weights: dict[str, float],
+        weight_source: str,
+        recommendation: "Recommendation",
+    ) -> None:
+        import json
+
+        from packages.memory import Memory
+
+        mem = Memory(
+            id=uuid4(),
+            scope="global",
+            type="user_policy",
+            content=json.dumps({
+                "goal": goal.text, "weights": weights, "weight_source": weight_source
+            }),
+            metadata={"session_id": str(session_id), "risk_level": recommendation.risk_level},
+            created_at=datetime.now(timezone.utc).isoformat(),
+        )
+        await self._memory_store.write(mem)
+        await self._push({"type": "memory_retrieved", "count": 0, "timestamp": _iso_now()})
+
+    async def run(self, session_id: UUID, goal: SessionGoal) -> Recommendation:
         from packages.agent.specialists import create_specialists
         from packages.tools.base import ToolContext
 
@@ -397,7 +449,7 @@ class PhaseOrchestrator:
                 for c in raw_candidates
             ]
 
-        weights, weight_source = resolve_weights(goal)
+        weights, weight_source = await self._resolve_weights_with_memory(goal)
 
         utilities = [(c, _weighted_utility(c.kpi_scores, weights)) for c in candidates]
         utilities.sort(key=lambda x: x[1], reverse=True)
@@ -464,6 +516,8 @@ class PhaseOrchestrator:
             risk_level=risk_level,
             requires_approval=requires_approval,
         )
+
+        await self._write_decision_memory(session_id, goal, weights, weight_source, recommendation)
 
         recommendation_id = uuid4()
         self._sessions[session_id]["status"] = (
