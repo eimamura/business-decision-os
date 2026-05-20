@@ -169,7 +169,7 @@ async def test_forecast_tool_stub_returns_schema():
     result = await tool.handle({"sku_id": "SKU001", "horizon_days": 7}, _ctx())
     assert result.output["sku_id"] == "SKU001"
     assert len(result.output["forecast_units"]) == 7
-    assert result.output["model_version"] == "moving_avg_v1"
+    assert result.output["model_version"] == "moving_avg_v1_stub"
     assert result.output["nulls_skipped"] == 0
 
 

@@ -4,7 +4,7 @@ from typing import Any
 
 from packages.tools.base import ToolContext, ToolResult
 
-_MODEL_VERSION = "moving_avg_v1"
+_STUB_MODEL_VERSION = "moving_avg_v1_stub"
 
 
 class ForecastTool:
@@ -26,62 +26,74 @@ class ForecastTool:
             "forecast_units": {"type": "array", "items": {"type": "number"}},
             "model_version": {"type": "string"},
             "nulls_skipped": {"type": "integer"},
+            "prediction": {"type": ["number", "null"]},
+            "source": {"type": "string"},
         },
     }
 
-    def __init__(self, db_session: Any | None = None) -> None:
+    def __init__(self, db_session: Any | None = None, predictor: Any | None = None) -> None:
         self._db_session = db_session
+        self._predictor = predictor
 
     async def handle(self, input: dict[str, Any], ctx: ToolContext) -> ToolResult:
         sku_id: str = input.get("sku_id", "")
         horizon_days: int = int(input.get("horizon_days", 28))
 
+        if self._predictor is not None:
+            result = await self._predictor.predict(sku_id, horizon_days)
+            return ToolResult(
+                output={
+                    "sku_id": sku_id,
+                    "forecast_units": result.predicted_units,
+                    "model_version": result.model_version,
+                    "nulls_skipped": 0,
+                    "prediction": result.predicted_units[0] if result.predicted_units else None,
+                    "source": result.source,
+                },
+                audit_payload={
+                    "sku_id": sku_id,
+                    "horizon_days": horizon_days,
+                    "model_version": result.model_version,
+                    "source": result.source,
+                },
+            )
+
         if self._db_session is not None:
-            return await self._handle_with_db(sku_id, horizon_days)
+            from packages.prediction import LinearRegressionPredictor
 
+            predictor = LinearRegressionPredictor(self._db_session)
+            result = await predictor.predict(sku_id, horizon_days)
+            return ToolResult(
+                output={
+                    "sku_id": sku_id,
+                    "forecast_units": result.predicted_units,
+                    "model_version": result.model_version,
+                    "nulls_skipped": 0,
+                    "prediction": result.predicted_units[0] if result.predicted_units else None,
+                    "source": result.source,
+                },
+                audit_payload={
+                    "sku_id": sku_id,
+                    "horizon_days": horizon_days,
+                    "model_version": result.model_version,
+                    "source": result.source,
+                },
+            )
+
+        stub_units = [10.0] * horizon_days
         return ToolResult(
             output={
                 "sku_id": sku_id,
-                "forecast_units": [10.0] * horizon_days,
-                "model_version": _MODEL_VERSION,
+                "forecast_units": stub_units,
+                "model_version": _STUB_MODEL_VERSION,
                 "nulls_skipped": 0,
+                "prediction": stub_units[0] if stub_units else None,
+                "source": "stub",
             },
             audit_payload={
                 "sku_id": sku_id,
                 "horizon_days": horizon_days,
-                "model_version": _MODEL_VERSION,
-            },
-        )
-
-    async def _handle_with_db(self, sku_id: str, horizon_days: int) -> ToolResult:
-        from sqlalchemy import text
-
-        assert self._db_session is not None
-        sql = text(
-            "SELECT units FROM demand_history "
-            "WHERE sku = :sku AND units IS NOT NULL "
-            "ORDER BY date DESC LIMIT 28"
-        )
-        result = await self._db_session.execute(sql, {"sku": sku_id})
-        rows = result.fetchall()
-        nulls_skipped = 28 - len(rows)
-
-        if rows:
-            values = [float(row[0]) for row in rows]
-            avg = sum(values) / len(values)
-        else:
-            avg = 10.0
-
-        return ToolResult(
-            output={
-                "sku_id": sku_id,
-                "forecast_units": [round(avg, 2)] * horizon_days,
-                "model_version": _MODEL_VERSION,
-                "nulls_skipped": max(0, nulls_skipped),
-            },
-            audit_payload={
-                "sku_id": sku_id,
-                "horizon_days": horizon_days,
-                "model_version": _MODEL_VERSION,
+                "model_version": _STUB_MODEL_VERSION,
+                "source": "stub",
             },
         )
