@@ -1,3 +1,6 @@
+# Reference projects
+reference/
+
 # Python
 __pycache__/
 *.py[cod]
