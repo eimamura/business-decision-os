@@ -21,3 +21,4 @@ Use `docs/adr/TEMPLATE.md` as the template for new ADRs.
 | [2026-05-17](adr/2026-05-17-simulator-interface.md) | Simulator Interface Design |
 | [2026-05-17](adr/2026-05-17-terraform-pipeline-split.md) | Terraform Pipeline Split |
 | [2026-05-19](adr/2026-05-19-llm-routing.md) | LLM-Based Specialist Routing in PhaseOrchestrator |
+| [2026-05-19](adr/2026-05-19-conversational-path.md) | Conversational Query Path in PhaseOrchestrator |

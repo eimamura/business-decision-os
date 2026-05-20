@@ -240,6 +240,65 @@ async def test_routing_enforces_sim_opt_evaluator_pair(stub_orchestrator):
 
 
 @pytest.mark.asyncio
+async def test_route_specialists_returns_empty_for_none(stub_orchestrator):
+    """_route_specialists returns [] when LLM returns ["none"]."""
+    from decimal import Decimal
+
+    from packages.agent.llm import LLMResponse, LLMUsage
+
+    orchestrator, _ = stub_orchestrator
+
+    async def _none_complete(messages, **kwargs):
+        return LLMResponse(
+            text='["none"]',
+            tool_calls=[],
+            finish_reason="stop",
+            usage=LLMUsage(input_tokens=5, output_tokens=5, total_cost_usd=Decimal("0")),
+            model="stub",
+            request_id="r1",
+            latency_ms=1,
+        )
+
+    orchestrator._llm_client.complete = _none_complete
+    roles = await orchestrator._route_specialists(SessionGoal(text="おはよう"))
+    assert roles == []
+
+
+@pytest.mark.asyncio
+async def test_conversational_query_returns_direct_reply(stub_orchestrator):
+    """Greeting bypasses all specialists and returns direct_reply."""
+    from decimal import Decimal
+
+    from packages.agent.llm import LLMResponse, LLMUsage
+
+    orchestrator, _ = stub_orchestrator
+    call_count = 0
+
+    async def _smart_complete(messages, **kwargs):
+        nonlocal call_count
+        call_count += 1
+        text = '["none"]' if call_count == 1 else "Good morning! How can I help?"
+        return LLMResponse(
+            text=text,
+            tool_calls=[],
+            finish_reason="stop",
+            usage=LLMUsage(input_tokens=5, output_tokens=10, total_cost_usd=Decimal("0")),
+            model="stub",
+            request_id=f"r{call_count}",
+            latency_ms=1,
+        )
+
+    orchestrator._llm_client.complete = _smart_complete
+
+    rec = await orchestrator.run(uuid4(), SessionGoal(text="Good morning!"))
+
+    assert rec.direct_reply == "Good morning! How can I help?"
+    assert rec.primary is None
+    assert rec.requires_approval is False
+    assert call_count == 2  # routing call + conversational reply call
+
+
+@pytest.mark.asyncio
 async def test_routing_preserves_canonical_order(stub_orchestrator):
     """Routing result always follows canonical role order."""
     from decimal import Decimal

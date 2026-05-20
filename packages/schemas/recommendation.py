@@ -27,9 +27,10 @@ class TradeoffExplanation(BaseModel):
 
 
 class Recommendation(BaseModel):
-    primary: Candidate
-    alternatives: list[Candidate]
-    tradeoff: TradeoffExplanation
+    primary: Candidate | None = None
+    alternatives: list[Candidate] = []
+    tradeoff: TradeoffExplanation | None = None
     rationale: str
-    risk_level: Literal["low", "medium", "high"]
-    requires_approval: bool
+    risk_level: Literal["low", "medium", "high"] = "low"
+    requires_approval: bool = False
+    direct_reply: str | None = None

@@ -22,7 +22,9 @@ def _iso_now() -> str:
 
 
 def _format_recommendation(rec: Recommendation) -> str:
-    order_qty = rec.primary.action.get("order_qty", "N/A")
+    if rec.direct_reply:
+        return rec.direct_reply
+    order_qty = rec.primary.action.get("order_qty", "N/A") if rec.primary else "N/A"
     lines = [
         "## Recommendation",
         "",

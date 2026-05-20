@@ -29,12 +29,14 @@ Specialists:
 - "data_engineer": queries operational DB tables via SQL to gather facts
 - "sim_opt": runs inventory simulation and replenishment optimisation
 - "evaluator": scores each optimiser candidate against all KPIs independently
+- "none": conversational input, greetings, or completely off-topic -- no specialists needed
 
 Rules:
 1. Simple data lookup (e.g. current inventory, demand history) -> ["data_engineer"]
 2. Domain analysis without optimisation -> ["domain_expert", "data_engineer"]
 3. Replenishment / optimisation decision -> ["domain_expert", "data_engineer", "sim_opt", "evaluator"]
 4. "evaluator" requires "sim_opt" -- never include one without the other.
+5. Greetings, chit-chat, or off-topic input -> ["none"]
 
 Return ONLY a valid JSON array. No explanation, no markdown, no wrapping text.\
 """
@@ -203,8 +205,10 @@ class PhaseOrchestrator:
             match = re.search(r"\[.*?\]", response.text, re.DOTALL)
             if not match:
                 raise ValueError("no JSON array in routing response")
-            roles: list[str] = json.loads(match.group())
-            roles = [r for r in roles if r in _VALID_ROLES]
+            raw_roles: list[str] = json.loads(match.group())
+            if raw_roles == ["none"] or raw_roles == []:
+                return []
+            roles: list[str] = [r for r in raw_roles if r in _VALID_ROLES]
             if not roles:
                 raise ValueError("no valid roles extracted from routing response")
         except Exception as exc:
@@ -255,6 +259,37 @@ class PhaseOrchestrator:
             "selected_roles": role_sequence,
             "duration_ms": 0,
         })
+
+        if not role_sequence:
+            from packages.agent.llm import LLMMessage as _LLMMsg
+            conv_response = await self._llm_client.complete(
+                messages=[
+                    _LLMMsg(
+                        role="system",
+                        content=(
+                            "You are a helpful supply chain decision assistant. "
+                            "The user sent a conversational message — not a decision request. "
+                            "Reply naturally and briefly. You may mention that you can help with "
+                            "supply chain decisions such as inventory optimisation, replenishment "
+                            "planning, and demand forecasting."
+                        ),
+                    ),
+                    _LLMMsg(role="user", content=goal.text),
+                ],
+                tools=None,
+                temperature=0.0,
+                max_tokens=512,
+                specialist_role="orchestrator",
+            )
+            return Recommendation(
+                primary=None,
+                alternatives=[],
+                tradeoff=None,
+                rationale=conv_response.text,
+                risk_level="low",
+                requires_approval=False,
+                direct_reply=conv_response.text,
+            )
 
         role_tools: dict[str, list[str]] = {
             "domain_expert": ["sql_query", "forecast"],

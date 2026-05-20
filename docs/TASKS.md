@@ -207,6 +207,7 @@ New env vars: ANTHROPIC_API_KEY (from host), OTEL_EXPORTER_OTLP_ENDPOINT (option
 | T-1002 | Instrument `LLMClient` to write `llm_usage` rows inside the same DB transaction as the parent `agent_step` | High | Done |
 | T-1003 | Implement Orchestrator sequential single-LLM loop with role switching (Plan → Tool → Evaluate → Recommend) | High | Done |
 | T-1003b | Add LLM-based specialist routing to `PhaseOrchestrator`: single routing call selects which specialists to invoke per goal; falls back to full sequence on error; enforces `sim_opt`↔`evaluator` pairing; emits `step_type: "routing"` SSE events | High | Done |
+| T-1003c | Add conversational path: `["none"]` routing option bypasses all specialists; Orchestrator calls LLM directly; `Recommendation.direct_reply` carries reply text; `sessions.py` short-circuits `_format_recommendation()` on `direct_reply` | High | Done |
 | T-1004 | Implement 4 `PromptBasedSpecialist` instances (Domain Expert, Data Engineer, Simulator/Optimizer, Evaluator) with role prompts + tool subsets | High | Done |
 | T-1005 | Implement Orchestrator error handling: 2 retries with backoff (1s, 4s); SSE `error` event; `decision_sessions.status = failed` on terminal failure | High | Done |
 | T-1005b | Wire SSE `error`/`done` events to Chat UI: reply displayed in chat bubble; errors displayed as red error bubble; Fail-silent fallbacks eliminated across codebase | High | Done |

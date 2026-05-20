@@ -76,11 +76,15 @@ Before invoking any specialist, `PhaseOrchestrator` calls `_route_specialists(go
 | Simple data lookup | `["data_engineer"]` |
 | Domain analysis | `["domain_expert", "data_engineer"]` |
 | Replenishment / optimisation | `["domain_expert", "data_engineer", "sim_opt", "evaluator"]` |
+| Greeting / chit-chat / off-topic | `["none"]` → conversational path |
+
+**Conversational path** (`["none"]` or `[]` returned by routing): the Orchestrator skips all specialists and calls the LLM directly with a brief system prompt. Returns a `Recommendation` with `direct_reply` set and `primary = None`. `sessions.py` short-circuits on `direct_reply` and returns the text directly without attempting to format a recommendation.
 
 **Invariants enforced in code:**
 - `sim_opt` and `evaluator` are always selected together — one without the other is invalid.
 - Canonical execution order is always preserved: `domain_expert → data_engineer → sim_opt → evaluator`.
-- Any routing failure (parse error, empty result, LLM error) falls back to the full sequence and logs a warning.
+- `["none"]` / `[]` routing is intentional — it does **not** trigger the full-sequence fallback.
+- Any other routing failure (parse error, invalid roles, LLM error) falls back to the full sequence and logs a warning.
 
 **SSE events:** The routing step emits `step_started` / `step_completed` events with `step_type: "routing"`. The `step_completed` event includes a `selected_roles` field visible in the Reasoning Panel.
 

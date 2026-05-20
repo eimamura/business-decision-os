@@ -15,7 +15,7 @@ None
 
 ## Last Completed Batch
 
-LLM-based specialist routing (T-1003b) — 2026-05-19
+Conversational query path (T-1003c) — 2026-05-19
 
 ## Last Validation
 
