@@ -102,4 +102,7 @@ Thumbs.db
 *.temp
 .tmp/
 
+# Lakehouse runtime data
+data/lakehouse/
+
 .serena
