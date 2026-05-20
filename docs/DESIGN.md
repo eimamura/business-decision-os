@@ -278,7 +278,7 @@ Tool registry: `ToolRegistry.register(tool) / get(name) / list_for_role(role)`. 
 
 ```python
 class JobSpec(BaseModel):
-    kind: Literal["simulation", "optimization", "forecast_batch", "report"]
+    kind: Literal["simulation", "optimization", "forecast_batch", "report", "train_forecast"]
     payload: dict
     idempotency_key: str
     timeout_seconds: int = 300

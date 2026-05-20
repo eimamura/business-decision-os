@@ -49,3 +49,17 @@ async def test_result_raises_key_error_for_unknown_job():
     runner = InProcessJobRunner()
     with pytest.raises(KeyError):
         await runner.result(uuid4())
+
+
+def test_job_spec_train_forecast_kind_is_valid():
+    spec = JobSpec(kind="train_forecast", payload={"sku_id": "SKU-1"}, idempotency_key="k")
+    assert spec.kind == "train_forecast"
+
+
+@pytest.mark.asyncio
+async def test_inprocess_run_train_forecast_no_db_raises():
+    runner = InProcessJobRunner()
+    spec = JobSpec(kind="train_forecast", payload={"sku_id": "SKU-1"}, idempotency_key="k2")
+    handle = await runner.submit(spec, _make_ctx())
+    with pytest.raises(NotImplementedError):
+        await runner.result(handle.job_id, wait=False)

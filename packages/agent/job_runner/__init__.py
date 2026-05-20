@@ -10,7 +10,7 @@ from packages.tools.base import ToolContext
 
 
 class JobSpec(BaseModel):
-    kind: Literal["simulation", "optimization", "forecast_batch", "report"]
+    kind: Literal["simulation", "optimization", "forecast_batch", "report", "train_forecast"]
     payload: dict[str, Any]
     idempotency_key: str
     timeout_seconds: int = 300
@@ -38,9 +38,10 @@ class JobRunner(Protocol):
 
 
 class InProcessJobRunner:
-    def __init__(self) -> None:
+    def __init__(self, db_session: Any | None = None) -> None:
         self._handles: dict[UUID, JobHandle] = {}
         self._specs: dict[UUID, JobSpec] = {}
+        self._db_session = db_session
 
     async def submit(self, spec: JobSpec, ctx: ToolContext) -> JobHandle:
         handle = JobHandle(
@@ -67,6 +68,8 @@ class InProcessJobRunner:
             return await self._run_simulation(job_id, spec)
         if spec.kind == "optimization":
             return await self._run_optimization(job_id, spec)
+        if spec.kind == "train_forecast":
+            return await self._run_train_forecast(job_id, spec)
 
         raise NotImplementedError(f"InProcess does not support kind={spec.kind}")
 
@@ -131,6 +134,76 @@ class InProcessJobRunner:
                 error=None,
                 duration_ms=duration_ms,
             )
+        except Exception as exc:
+            duration_ms = int(
+                (datetime.now(tz=timezone.utc) - start).total_seconds() * 1000
+            )
+            return JobResult(
+                job_id=job_id,
+                status="failed",
+                output=None,
+                error=str(exc),
+                duration_ms=duration_ms,
+            )
+
+    async def _run_train_forecast(self, job_id: UUID, spec: JobSpec) -> JobResult:
+        if self._db_session is None:
+            raise NotImplementedError("train_forecast requires a db_session")
+
+        import numpy as np
+        from sklearn.linear_model import LinearRegression
+        from sqlalchemy import text
+
+        start = datetime.now(tz=timezone.utc)
+        try:
+            sku_id: str = spec.payload["sku_id"]
+
+            history_sql = text(
+                "SELECT units FROM demand_history "
+                "WHERE sku = :sku AND units IS NOT NULL "
+                "ORDER BY date DESC LIMIT 90"
+            )
+            result = await self._db_session.execute(history_sql, {"sku": sku_id})
+            rows = result.fetchall()
+            history = [float(row[0]) for row in rows]
+
+            horizon = 90
+            if len(history) >= 3:
+                n = len(history)
+                x = np.arange(n).reshape(-1, 1)
+                y = np.array(history)
+                model = LinearRegression()
+                model.fit(x, y)
+                future_x = np.arange(n, n + horizon).reshape(-1, 1)
+                predicted_units = [float(v) for v in model.predict(future_x)]
+            else:
+                mean_val = sum(history) / len(history) if history else 0.0
+                predicted_units = [mean_val] * horizon
+
+            model_version = "linear_regression_v1_trained"
+            upsert_sql = text(
+                "INSERT INTO prediction_features (sku_id, predicted_units, model_version) "
+                "VALUES (:sku_id, :units, :version) "
+                "ON CONFLICT (sku_id) DO UPDATE SET "
+                "predicted_units=EXCLUDED.predicted_units, model_version=EXCLUDED.model_version"
+            )
+            await self._db_session.execute(
+                upsert_sql,
+                {"sku_id": sku_id, "units": predicted_units, "version": model_version},
+            )
+
+            duration_ms = int(
+                (datetime.now(tz=timezone.utc) - start).total_seconds() * 1000
+            )
+            return JobResult(
+                job_id=job_id,
+                status="succeeded",
+                output={"sku_id": sku_id, "model_version": model_version, "horizon_days": horizon},
+                error=None,
+                duration_ms=duration_ms,
+            )
+        except NotImplementedError:
+            raise
         except Exception as exc:
             duration_ms = int(
                 (datetime.now(tz=timezone.utc) - start).total_seconds() * 1000

@@ -336,7 +336,7 @@ New env vars: CELERY_BROKER_URL, CELERY_RESULT_BACKEND, JOB_RUNNER_BACKEND, REDI
 | T-6002 | Databricks Job for predictor training | High | Done |
 | T-6003 | Databricks Job for batch inference writing features back to PostgreSQL | High | Done |
 | T-6004 | Implement lightweight realtime inference in FastAPI in-process | Medium | Done |
-| T-6005 | Separate offline training from realtime inference: add JobSpec.kind="train_forecast", implement TrainedModelPredictor | Medium | Not Started |
+| T-6005 | Separate offline training from realtime inference: add JobSpec.kind="train_forecast", implement TrainedModelPredictor | Medium | Done |
 
 ## Phase 7 — Memory & Learning Loop
 
