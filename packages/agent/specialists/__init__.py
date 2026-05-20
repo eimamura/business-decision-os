@@ -2,7 +2,33 @@ from __future__ import annotations
 
 from typing import Any
 
+from packages.agent.specialists.agent_based import AgentBasedSpecialist
 from packages.agent.specialists.base import PromptBasedSpecialist, SpecialistRole
+
+_DOMAIN_SPECIALIST_NAMES: list[str] = [
+    "forecast",
+    "inventory",
+    "procurement",
+    "production",
+    "cost",
+]
+
+
+def create_domain_specialists(
+    llm_client: Any,
+    tool_registry: Any,
+    sse_queue: Any = None,
+) -> list[AgentBasedSpecialist]:
+    return [
+        AgentBasedSpecialist(
+            name=name,
+            role=name,
+            llm_client=llm_client,
+            tool_registry=tool_registry,
+            sse_queue=sse_queue,
+        )
+        for name in _DOMAIN_SPECIALIST_NAMES
+    ]
 
 
 def create_specialists(
@@ -26,4 +52,9 @@ def create_specialists(
     }
 
 
-__all__ = ["create_specialists", "PromptBasedSpecialist"]
+__all__ = [
+    "AgentBasedSpecialist",
+    "create_domain_specialists",
+    "create_specialists",
+    "PromptBasedSpecialist",
+]

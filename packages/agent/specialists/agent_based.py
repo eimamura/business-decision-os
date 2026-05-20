@@ -2,77 +2,95 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import TYPE_CHECKING, Any, Literal, Protocol
-
-_log = logging.getLogger(__name__)
-
-SpecialistRole = Literal[
-    "orchestrator",
-    "domain_expert",
-    "forecast",
-    "inventory",
-    "procurement",
-    "production",
-    "cost",
-    "data_engineer",
-    "sim_opt",
-    "evaluator",
-]
+from datetime import datetime, timezone
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from packages.agent.orchestrator import SpecialistResult, SpecialistTask
     from packages.tools.base import ToolContext
 
+_log = logging.getLogger(__name__)
 
-class Specialist(Protocol):
-    name: str
-    role: SpecialistRole
+_SPECIALIST_PROMPTS: dict[str, str] = {
+    "forecast": (
+        "You are a demand forecasting specialist. "
+        "Analyze historical demand patterns, seasonality, and trends to provide "
+        "accurate demand forecasts for supply chain decisions."
+    ),
+    "inventory": (
+        "You are an inventory management specialist. "
+        "Evaluate current inventory levels, safety stock requirements, reorder points, "
+        "and optimal inventory policies."
+    ),
+    "procurement": (
+        "You are a procurement specialist. "
+        "Assess supplier options, lead times, order quantities, costs, and "
+        "procurement strategies to optimize sourcing decisions."
+    ),
+    "production": (
+        "You are a production planning specialist. "
+        "Analyze production capacity, scheduling constraints, batch sizes, and "
+        "manufacturing efficiency to optimize production decisions."
+    ),
+    "cost": (
+        "You are a supply chain cost specialist. "
+        "Evaluate total cost of ownership, working capital, carrying costs, ordering costs, "
+        "and cost trade-offs across supply chain decisions."
+    ),
+}
 
-    async def run(self, task: SpecialistTask, ctx: ToolContext) -> SpecialistResult: ...
-
-
-_ROLE_PROMPTS: dict[str, str] = {
-    "domain_expert": (
-        "You are a supply chain domain expert. "
-        "Analyze the decision goal and surface key domain considerations."
-    ),
-    "data_engineer": (
-        "You are a data engineer. "
-        "Query operational data tables using SQL to gather facts for the decision."
-    ),
-    "sim_opt": (
-        "You are a simulation/optimization specialist. "
-        "Run simulation and optimization tools to generate candidate plans."
-    ),
-    "evaluator": (
-        "You are an evaluator. "
-        "Score each candidate plan against all KPIs independently."
-    ),
+_SPECIALIST_TOOLS: dict[str, list[str]] = {
+    "forecast": ["forecast", "sql_query"],
+    "inventory": ["sql_query"],
+    "procurement": ["sql_query"],
+    "production": ["sql_query"],
+    "cost": ["sql_query"],
 }
 
 _MAX_ITERATIONS = 10
 
 
-class PromptBasedSpecialist:
+class AgentBasedSpecialist:
+    """Specialist with independent context and tool registry — safe for parallel execution."""
+
     def __init__(
-        self, name: str, role: SpecialistRole, llm_client: Any, tool_registry: Any
+        self,
+        name: str,
+        role: str,
+        llm_client: Any,
+        tool_registry: Any,
+        sse_queue: Any = None,
     ) -> None:
         self.name = name
         self.role = role
         self._llm_client = llm_client
         self._tool_registry = tool_registry
+        self._sse_queue = sse_queue
+
+    async def _push(self, event: dict[str, Any]) -> None:
+        if self._sse_queue is not None:
+            await self._sse_queue.put(event)
 
     async def run(self, task: SpecialistTask, ctx: ToolContext) -> SpecialistResult:
         from packages.agent.llm import LLMMessage, LLMToolSpec
         from packages.agent.orchestrator import SpecialistResult
 
-        system_prompt = _ROLE_PROMPTS.get(self.role, "You are a specialist.")
+        await self._push({
+            "type": "specialist_started",
+            "specialist_name": self.name.replace("_", " ").title(),
+            "specialist_role": self.role,
+            "task_id": str(task.task_id),
+            "started_at": datetime.now(timezone.utc).isoformat(),
+        })
+
+        system_prompt = _SPECIALIST_PROMPTS.get(self.role, f"You are a {self.role} specialist.")
+        # Independent context per invocation — never shared across parallel agents
         messages: list[LLMMessage] = [
             LLMMessage(role="system", content=system_prompt),
             LLMMessage(role="user", content=task.instruction),
         ]
 
-        allowed_tool_names = set(task.allowed_tools)
+        allowed_tool_names = set(task.allowed_tools or _SPECIALIST_TOOLS.get(self.role, []))
         tool_objects = [
             t for t in self._tool_registry.list_for_role(self.role)
             if t.name in allowed_tool_names
@@ -87,11 +105,7 @@ class PromptBasedSpecialist:
         last_response: Any = None
 
         for _ in range(_MAX_ITERATIONS):
-            _log.info(
-                "Specialist %s calling LLM (model=%s)",
-                self.role,
-                getattr(self._llm_client, "_model", "?"),
-            )
+            _log.info("AgentBasedSpecialist %s calling LLM", self.name)
             response = await self._llm_client.complete(
                 messages=messages,
                 tools=llm_tools if llm_tools else None,
@@ -100,10 +114,6 @@ class PromptBasedSpecialist:
                 specialist_role=self.role,
             )
             last_response = response
-            _log.info(
-                "Specialist %s LLM response: finish_reason=%s tool_calls=%d model=%s",
-                self.role, response.finish_reason, len(response.tool_calls), response.model,
-            )
 
             if not response.tool_calls or response.finish_reason == "stop":
                 break
@@ -134,7 +144,10 @@ class PromptBasedSpecialist:
                         tool_call_id=call["id"],
                     ))
 
-        output = self._build_output(tool_results, last_response)
+        text = last_response.text if last_response else ""
+        output: dict[str, Any] = {"text": text, "specialist": self.name}
+        if tool_results:
+            output["tool_results"] = tool_results
 
         return SpecialistResult(
             task_id=task.task_id,
@@ -142,11 +155,3 @@ class PromptBasedSpecialist:
             tool_calls_made=tool_calls_made,
             status="completed",
         )
-
-    def _build_output(self, tool_results: dict[str, Any], response: Any) -> dict[str, Any]:
-        text = response.text if response else ""
-        if self.role == "sim_opt" and "optimize_replenishment" in tool_results:
-            return {"candidates": tool_results["optimize_replenishment"].get("candidates", [])}
-        if self.role == "data_engineer" and "sql_query" in tool_results:
-            return {"data_summary": tool_results["sql_query"], "text": text}
-        return {"text": text}

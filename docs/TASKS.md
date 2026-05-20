@@ -22,7 +22,7 @@
 | M6 | Real Predictor on Databricks (training + batch inference) | Done |
 | M7 | Memory & Learning Loop (pgvector retrieval) | Done |
 | M8 | Semi-Autonomous Execution + Databricks Lakehouse | Done |
-| M9 | Domain Expert specialist split | Not Started |
+| M9 | Domain Expert specialist split | Done |
 
 ## Phase 0 — Repository Foundation
 
@@ -359,6 +359,6 @@ New env vars: CELERY_BROKER_URL, CELERY_RESULT_BACKEND, JOB_RUNNER_BACKEND, REDI
 
 | ID | Task | Priority | Status |
 |---|---|---|---|
-| T-9001 | Split Domain Expert into Forecast / Inventory / Procurement / Production / Cost specialists | High | Not Started |
-| T-9002 | Swap `PromptBasedSpecialist` for `AgentBasedSpecialist` (independent context, independent tool registry, parallel execution) | High | Not Started |
-| T-9003 | Orchestrator becomes pure coordinator dispatching to parallel Specialist agents | High | Not Started |
+| T-9001 | Split Domain Expert into Forecast / Inventory / Procurement / Production / Cost specialists | High | Done |
+| T-9002 | Swap `PromptBasedSpecialist` for `AgentBasedSpecialist` (independent context, independent tool registry, parallel execution) | High | Done |
+| T-9003 | Orchestrator becomes pure coordinator dispatching to parallel Specialist agents | High | Done |

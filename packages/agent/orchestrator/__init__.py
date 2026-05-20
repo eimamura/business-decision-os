@@ -20,12 +20,15 @@ logger = logging.getLogger(__name__)
 _VALID_ROLES = {"domain_expert", "data_engineer", "sim_opt", "evaluator"}
 _ALL_ROLES = ["domain_expert", "data_engineer", "sim_opt", "evaluator"]
 
+# Domain specialist roles dispatched in parallel by the Orchestrator
+_DOMAIN_SPECIALIST_ROLES = ["forecast", "inventory", "procurement", "production", "cost"]
+
 _ROUTING_SYSTEM = """\
 You are a routing agent for a supply chain decision system.
-Return ONLY a JSON array of specialist role names needed to fulfil the goal.
+Return ONLY a JSON array of pipeline stages needed to fulfil the goal.
 
-Specialists:
-- "domain_expert": surfaces domain knowledge and trade-off considerations
+Stages:
+- "domain_expert": parallel domain analysis (forecast, inventory, procurement, production, cost)
 - "data_engineer": queries operational DB tables via SQL to gather facts
 - "sim_opt": runs inventory simulation and replenishment optimisation
 - "evaluator": scores each optimiser candidate against all KPIs independently
@@ -276,6 +279,56 @@ class PhaseOrchestrator:
         await self._memory_store.write(mem)
         await self._push({"type": "memory_retrieved", "count": 0, "timestamp": _iso_now()})
 
+    async def _run_domain_specialists_parallel(
+        self,
+        session_id: UUID,
+        goal: SessionGoal,
+    ) -> dict[str, SpecialistResult]:
+        from packages.agent.specialists import create_domain_specialists
+        from packages.tools.base import ToolContext
+
+        domain_agents = create_domain_specialists(
+            self._llm_client, self._tool_registry, sse_queue=self._sse_queue
+        )
+
+        async def _run_one(agent: Any) -> tuple[str, SpecialistResult]:
+            task_id = uuid4()
+            ctx = ToolContext(
+                session_id=session_id,
+                agent_step_id=task_id,
+                specialist_role=agent.role,
+                actor="orchestrator",
+                correlation_id=uuid4(),
+            )
+            task = SpecialistTask(
+                task_id=task_id,
+                instruction=f"Process decision goal: {goal.text}",
+                context_payload={"goal": goal.text, "session_id": str(session_id)},
+                allowed_tools=[],
+            )
+            result = await self._run_specialist_with_retry(agent, task, ctx)
+            if result.status == "failed":
+                self._sessions[session_id]["status"] = "failed"
+                await self._push({
+                    "type": "error",
+                    "code": "specialist_failed",
+                    "message": f"Specialist {agent.name} failed: {result.error}",
+                    "recoverable": False,
+                    "timestamp": _iso_now(),
+                })
+            await self._push({
+                "type": "specialist_completed",
+                "specialist_name": agent.name.replace("_", " ").title(),
+                "specialist_role": agent.role,
+                "task_id": str(task_id),
+                "duration_ms": 0,
+                "timestamp": _iso_now(),
+            })
+            return agent.role, result
+
+        pairs = await asyncio.gather(*[_run_one(a) for a in domain_agents])
+        return dict(pairs)
+
     async def run(self, session_id: UUID, goal: SessionGoal) -> Recommendation:
         from packages.agent.specialists import create_specialists
         from packages.tools.base import ToolContext
@@ -290,8 +343,6 @@ class PhaseOrchestrator:
             "step_type": "plan",
             "started_at": _iso_now(),
         })
-
-        specialists = create_specialists(self._llm_client, self._tool_registry)
 
         route_step_id = str(uuid4())
         await self._push({
@@ -344,8 +395,9 @@ class PhaseOrchestrator:
                 direct_reply=conv_response.text,
             )
 
-        role_tools: dict[str, list[str]] = {
-            "domain_expert": ["sql_query", "forecast"],
+        # Sequential pipeline specialists (PromptBasedSpecialist — data, sim, eval)
+        pipeline_specialists = create_specialists(self._llm_client, self._tool_registry)
+        pipeline_tools: dict[str, list[str]] = {
             "data_engineer": ["sql_query", "forecast"],
             "sim_opt": ["simulate_inventory", "optimize_replenishment"],
             "evaluator": ["evaluate_candidates", "write_audit_log"],
@@ -353,8 +405,14 @@ class PhaseOrchestrator:
 
         results: dict[str, SpecialistResult] = {}
 
-        for role in role_sequence:
-            specialist = specialists[role]
+        # Phase 1 — parallel domain specialist dispatch via AgentBasedSpecialist
+        if "domain_expert" in role_sequence:
+            domain_results = await self._run_domain_specialists_parallel(session_id, goal)
+            results.update(domain_results)
+
+        # Phase 2 — sequential pipeline: data_engineer → sim_opt → evaluator
+        for role in [r for r in role_sequence if r != "domain_expert"]:
+            specialist = pipeline_specialists[role]
             step_id = str(uuid4())
             task_id = uuid4()
 
@@ -378,7 +436,7 @@ class PhaseOrchestrator:
                 task_id=task_id,
                 instruction=f"Process decision goal: {goal.text}",
                 context_payload={"goal": goal.text, "session_id": str(session_id)},
-                allowed_tools=role_tools.get(role, []),
+                allowed_tools=pipeline_tools.get(role, []),
             )
 
             result = await self._run_specialist_with_retry(specialist, task, ctx)
