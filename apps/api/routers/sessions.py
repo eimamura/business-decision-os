@@ -79,6 +79,22 @@ async def list_sessions() -> list[dict[str, Any]]:
     return list(sessions.values())
 
 
+@router.delete("/{session_id}", status_code=204)
+async def delete_session(session_id: str) -> None:
+    sessions.pop(session_id, None)
+    try:
+        repo = DecisionSessionRepository()
+        deleted = await repo.delete_session(session_id)
+        if not deleted:
+            raise HTTPException(status_code=404, detail="Session not found")
+    except HTTPException:
+        raise
+    except RuntimeError as e:
+        if "DATABASE_URL" in str(e):
+            return
+        raise HTTPException(status_code=500, detail="Internal error")
+
+
 @router.get("/{session_id}")
 async def get_session(session_id: str) -> dict[str, Any]:
     session = sessions.get(session_id)

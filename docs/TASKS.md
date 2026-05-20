@@ -24,6 +24,7 @@
 | M8 | Semi-Autonomous Execution + Databricks Lakehouse | Done |
 | M9 | Domain Expert specialist split | Done |
 | M10 | Chat Quality Features — history summarization, rate limiting, feedback, LLM tracking, rich UI | Done |
+| M11 | Single-Page Chat Shell — unified sidebar + chat layout, no two-page navigation | Done |
 
 ## Phase 0 — Repository Foundation
 
@@ -407,3 +408,22 @@ Dependencies: B3
 | T-10007 | `useChat` hook (`apps/web/hooks/useChat.ts`); refactor `chat/[sessionId]/page.tsx` to use hook | High | Done |
 | T-10008 | `MessageBubble` component (`apps/web/components/MessageBubble.tsx`) with syntax highlighting + 👍👎 feedback UI | Medium | Done |
 | T-10009 | Token usage display in `ReasoningPanel`: input/output/cost rows from `useChat` usage state | Low | Done |
+
+## Phase 11 — Single-Page Chat Shell
+
+Goal: Merge the two-page chat flow (`/chat` list + `/chat/[sessionId]` chat) into a single-page shell with a persistent sidebar.
+The sidebar contains: logo/brand, "New Session" button, scrollable session history list (active session highlighted), and bottom nav links.
+The main content area shows: empty state when no session is selected, full chat UI when a session is active.
+No backend changes required. No public interface changes.
+
+Batch execution order: B1
+
+### B1 — Chat Shell Refactor (Agent: bdos-app-builder)
+
+Dependencies: none
+
+| ID | Task | Priority | Status |
+|---|---|---|---|
+| T-11001 | Extract `ChatSidebar` component (`apps/web/components/ChatSidebar.tsx`): brand link, "New Session" button (calls `createSession`, navigates to new sessionId), scrollable session list with active highlight, bottom nav links | High | Done |
+| T-11002 | Rewrite `apps/web/app/chat/page.tsx` as single-page shell: renders `ChatSidebar` + empty-state main panel ("Select or create a session") — no redirect, no two-page navigation | High | Done |
+| T-11003 | Refactor `apps/web/app/chat/[sessionId]/page.tsx` to use `ChatSidebar` (replacing its inline sidebar) while keeping all existing chat functionality intact | High | Done |

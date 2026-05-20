@@ -1,11 +1,12 @@
 "use client";
 
 import { useEffect, useRef, useState, useCallback } from "react";
-import Link from "next/link";
+import { useRouter } from "next/navigation";
 import ReasoningPanel from "./components/ReasoningPanel";
 import MessageBubble from "@/components/MessageBubble";
 import { useChat } from "@/hooks/useChat";
-import { fetchSessions } from "@/lib/api";
+import ChatSidebar from "@/components/ChatSidebar";
+import { fetchSessions, createSession, deleteSession } from "@/lib/api";
 import type { Session } from "@/types/chat";
 
 interface ChatPageProps {
@@ -14,7 +15,9 @@ interface ChatPageProps {
 
 export default function ChatPage({ params }: ChatPageProps) {
   const { sessionId } = params;
+  const router = useRouter();
   const [sessions, setSessions] = useState<Session[]>([]);
+  const [creating, setCreating] = useState(false);
   const [input, setInput] = useState("");
   const [showReasoning, setShowReasoning] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -44,6 +47,28 @@ export default function ChatPage({ params }: ChatPageProps) {
     return () => window.removeEventListener("keydown", handleKey);
   }, []);
 
+  async function handleDelete(deletedId: string) {
+    setSessions((prev) => prev.filter((s) => s.session_id !== deletedId));
+    const ok = await deleteSession(deletedId);
+    if (!ok) {
+      fetchSessions().then(setSessions).catch(() => undefined);
+      return;
+    }
+    if (deletedId === sessionId) {
+      router.push("/chat");
+    }
+  }
+
+  async function handleNewSession() {
+    setCreating(true);
+    try {
+      const data = await createSession("New decision session");
+      router.push(`/chat/${data.session_id}`);
+    } catch {
+      setCreating(false);
+    }
+  }
+
   const handleSend = useCallback(async () => {
     const text = input.trim();
     if (!text || isSending) return;
@@ -53,34 +78,13 @@ export default function ChatPage({ params }: ChatPageProps) {
 
   return (
     <div className="flex h-screen bg-gray-50 overflow-hidden">
-      <aside className="w-56 shrink-0 bg-white border-r border-gray-200 flex flex-col">
-        <div className="px-4 py-3 border-b border-gray-200">
-          <Link href="/chat" className="text-sm font-semibold text-gray-900 hover:text-blue-600">
-            Business Decision OS
-          </Link>
-        </div>
-        <div className="flex-1 overflow-y-auto py-2">
-          {sessions.map((s) => (
-            <Link
-              key={s.session_id}
-              href={`/chat/${s.session_id}`}
-              className={`block px-4 py-2.5 text-xs hover:bg-gray-50 ${
-                s.session_id === sessionId ? "bg-blue-50 text-blue-700 font-medium" : "text-gray-700"
-              }`}
-            >
-              <span className="block truncate">{s.goal ?? "Session"}</span>
-              <span className="text-gray-400 mt-0.5 block">
-                {new Date(s.created_at).toLocaleDateString()}
-              </span>
-            </Link>
-          ))}
-        </div>
-        <div className="px-4 py-3 border-t border-gray-200 space-y-1">
-          <Link href="/approvals" className="block text-xs text-gray-600 hover:text-gray-900 py-1">Approvals</Link>
-          <Link href="/audit" className="block text-xs text-gray-600 hover:text-gray-900 py-1">Audit</Link>
-          <Link href="/kpi" className="block text-xs text-gray-600 hover:text-gray-900 py-1">KPI Dashboard</Link>
-        </div>
-      </aside>
+      <ChatSidebar
+        sessions={sessions}
+        activeSessionId={sessionId}
+        onNewSession={handleNewSession}
+        creating={creating}
+        onDelete={handleDelete}
+      />
 
       <div className="flex-1 flex flex-col min-w-0">
         <header className="bg-white border-b border-gray-200 px-5 py-3 flex items-center justify-between shrink-0">

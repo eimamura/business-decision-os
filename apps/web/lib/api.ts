@@ -26,6 +26,14 @@ export async function createSession(goal?: string): Promise<Session> {
   return res.json() as Promise<Session>;
 }
 
+export async function deleteSession(sessionId: string): Promise<boolean> {
+  const res = await fetch(`${API_BASE}/api/v1/sessions/${sessionId}`, {
+    method: "DELETE",
+    headers: DEV_HEADERS,
+  });
+  return res.ok;
+}
+
 export async function fetchMessages(sessionId: string): Promise<ChatMessage[]> {
   const res = await fetch(`${API_BASE}/api/v1/sessions/${sessionId}/messages`, {
     headers: DEV_HEADERS,

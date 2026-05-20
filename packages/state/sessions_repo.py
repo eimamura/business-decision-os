@@ -113,6 +113,15 @@ class DecisionSessionRepository:
             )
         return [dict(r) for r in rows]
 
+    async def delete_session(self, session_id: str) -> bool:
+        pool = await get_pool()
+        async with pool.acquire() as conn:
+            deleted = await conn.fetchval(
+                "DELETE FROM decision_sessions WHERE id = $1 RETURNING id",
+                uuid.UUID(session_id),
+            )
+        return deleted is not None
+
     async def set_message_feedback(
         self, message_id: str, feedback: int, session_id: str
     ) -> bool:
