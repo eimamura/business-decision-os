@@ -55,7 +55,7 @@ const markdownComponents: Components = {
       href={href}
       target="_blank"
       rel="noreferrer"
-      className="text-blue-600 underline underline-offset-2 hover:text-blue-800"
+      className="text-indigo-400 underline underline-offset-2 hover:text-indigo-300"
     >
       {children}
     </a>
@@ -68,7 +68,7 @@ const markdownComponents: Components = {
   ),
   li: ({ children }) => <li className="pl-1">{children}</li>,
   blockquote: ({ children }) => (
-    <blockquote className="mb-3 border-l-2 border-gray-300 pl-3 text-gray-600 last:mb-0">
+    <blockquote className="mb-3 border-l-2 border-white/20 pl-3 text-white/50 last:mb-0">
       {children}
     </blockquote>
   ),
@@ -87,7 +87,7 @@ const markdownComponents: Components = {
     }
 
     return (
-      <code className="font-mono bg-gray-100 px-1 rounded text-sm text-blue-700">
+      <code className="font-mono bg-white/8 px-1.5 py-0.5 rounded text-xs text-indigo-300">
         {children}
       </code>
     );
@@ -101,12 +101,12 @@ const markdownComponents: Components = {
     </div>
   ),
   th: ({ children }) => (
-    <th className="border border-gray-300 bg-gray-100 px-2 py-1 font-semibold text-gray-800">
+    <th className="border border-white/10 bg-white/5 px-2 py-1 font-semibold text-white/70">
       {children}
     </th>
   ),
   td: ({ children }) => (
-    <td className="border border-gray-300 px-2 py-1 align-top text-gray-700">
+    <td className="border border-white/10 px-2 py-1 align-top text-white/55">
       {children}
     </td>
   ),
@@ -137,8 +137,8 @@ export default function MessageBubble({ message, onFeedback }: MessageBubbleProp
   return (
     <div className={`flex ${isUser ? "justify-end" : "justify-start"}`}>
       {!isUser && (
-        <div className="w-7 h-7 rounded-full bg-blue-50 border border-blue-200 flex items-center justify-center mr-3 mt-1 shrink-0">
-          <span className="text-xs text-blue-600 font-bold">AI</span>
+        <div className="w-7 h-7 rounded-full bg-[#0c0c14] flex items-center justify-center mr-3 mt-1 shrink-0">
+          <span className="text-[10px] text-white font-bold tracking-tight">AI</span>
         </div>
       )}
 
@@ -146,9 +146,9 @@ export default function MessageBubble({ message, onFeedback }: MessageBubbleProp
         <div
           className={`rounded-2xl px-4 py-2.5 text-sm ${
             isUser
-              ? "bg-blue-600 text-white rounded-tr-sm"
-              : `bg-white border border-gray-200 rounded-tl-sm ${
-                  message.isError ? "text-red-600" : "text-gray-800"
+              ? "bg-indigo-600 text-white rounded-tr-sm"
+              : `bg-[#1a1a2a] rounded-tl-sm ${
+                  message.isError ? "text-red-400" : "text-white/80"
                 }`
           }`}
         >
@@ -161,20 +161,20 @@ export default function MessageBubble({ message, onFeedback }: MessageBubbleProp
               </div>
             )
           ) : message.isStreaming ? (
-            <span className="inline-block w-2 h-4 bg-blue-400 animate-pulse" />
+            <span className="inline-block w-2 h-4 bg-indigo-400 animate-pulse" />
           ) : null}
         </div>
 
         {message.created_at && (
-          <p className={`text-xs mt-1 ${isUser ? "text-blue-200" : "text-gray-400"}`}>
+          <p className={`text-xs mt-1 ${isUser ? "text-indigo-300" : "text-white/25"}`}>
             {new Date(message.created_at).toLocaleTimeString()}
           </p>
         )}
       </div>
 
       {isUser && (
-        <div className="w-7 h-7 rounded-full bg-gray-100 border border-gray-200 flex items-center justify-center ml-3 mt-1 shrink-0">
-          <span className="text-xs text-gray-600">U</span>
+        <div className="w-7 h-7 rounded-full bg-indigo-100 flex items-center justify-center ml-3 mt-1 shrink-0">
+          <span className="text-xs text-indigo-600 font-medium">U</span>
         </div>
       )}
 

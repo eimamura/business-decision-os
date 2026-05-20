@@ -1,5 +1,8 @@
 import "./globals.css";
+import { Inter } from "next/font/google";
 import { ReactNode } from "react";
+
+const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
 
 export const metadata = {
   title: "Business Decision OS",
@@ -9,7 +12,9 @@ export const metadata = {
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en">
-      <body className="min-h-screen bg-gray-50 text-gray-900">{children}</body>
+      <body className={`${inter.variable} font-sans min-h-screen bg-[#0c0c14] text-white antialiased`}>
+        {children}
+      </body>
     </html>
   );
 }
