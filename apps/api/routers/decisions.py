@@ -72,11 +72,28 @@ async def _stream_decision(body: CreateDecisionRequest) -> StreamingResponse:
 
     orchestrator = get_orchestrator(queue)
 
+    async def _emit_prediction(sku_id: str = "SKU001") -> None:
+        from packages.prediction import LinearRegressionPredictor
+
+        predictor = LinearRegressionPredictor(db_session=None)
+        result = await predictor.predict(sku_id, horizon_days=28)
+        await queue.put({
+            "type": "prediction_computed",
+            "session_id": session_id,
+            "sku_id": result.sku_id,
+            "prediction": result.predicted_units[0] if result.predicted_units else None,
+            "forecast_units": result.predicted_units,
+            "model_version": result.model_version,
+            "source": result.source,
+            "timestamp": _iso_now(),
+        })
+
     async def _run_and_signal() -> None:
         import logging
 
         _log = logging.getLogger(__name__)
         try:
+            await _emit_prediction()
             await orchestrator.run(UUID(session_id), goal)
         except Exception as exc:
             _log.exception("Orchestrator failed for session %s: %s", session_id, exc)
