@@ -101,3 +101,5 @@ Thumbs.db
 *.tmp
 *.temp
 .tmp/
+
+.serena
