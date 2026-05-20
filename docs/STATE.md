@@ -7,7 +7,7 @@ TASKS.md holds task definitions. This file holds runtime execution state.
 
 ## Current Phase
 
-M5 Complete — Ready for Phase 6 (M6: Real Predictor on Databricks)
+M4 + M5 Complete — Ready for M6 (Real Predictor on Databricks)
 
 ## Active Lease
 

@@ -17,7 +17,7 @@
 | M0+1 | Phase 0 foundation + Phase 1 vertical-slice MVP shipped together | Done |
 | M2 | Real Simulator on ACA Jobs | Done |
 | M3 | Real Optimizer on ACA Jobs | Done |
-| M4 | Approval Workflow Expansion + LLM budget enforcement | Not Started |
+| M4 | Approval Workflow Expansion + LLM budget enforcement | Done |
 | M5 | Celery + Redis job queue | Done |
 | M6 | Real Predictor on Databricks (training + batch inference) | Not Started |
 | M7 | Memory & Learning Loop (pgvector retrieval) | Not Started |
