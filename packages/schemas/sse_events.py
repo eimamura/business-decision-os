@@ -1,101 +1,112 @@
 from __future__ import annotations
 
-from typing import Annotated, Any, Literal, Union
+from typing import Annotated, Literal, Union
 from uuid import UUID
 
 from pydantic import BaseModel, Field
 
 
-class SessionStartedEvent(BaseModel):
-    event: Literal["session_started"] = "session_started"
-    session_id: UUID
-    timestamp: str
-
-
-class SpecialistActivatedEvent(BaseModel):
-    event: Literal["specialist_activated"] = "specialist_activated"
-    session_id: UUID
-    timestamp: str
+class StepStartedEvent(BaseModel):
+    type: Literal["step_started"] = "step_started"
+    step_id: str
     specialist_role: str
-    step_id: UUID
+    step_type: str
+    started_at: str
 
 
-class ToolCalledEvent(BaseModel):
-    event: Literal["tool_called"] = "tool_called"
-    session_id: UUID
-    timestamp: str
-    tool_call_id: UUID
-    step_id: UUID
-    tool_name: str
-    input: dict[str, Any]
+class StepCompletedEvent(BaseModel):
+    type: Literal["step_completed"] = "step_completed"
+    step_id: str
     specialist_role: str
+    step_type: str | None = None
+    duration_ms: int = 0
+    output_preview: str | None = None
+    tokens: int | None = None
+    cost_usd: float | None = None
+    selected_roles: list[str] | None = None
 
 
-class ToolCompletedEvent(BaseModel):
-    event: Literal["tool_completed"] = "tool_completed"
-    session_id: UUID
+class SpecialistStartedEvent(BaseModel):
+    type: Literal["specialist_started"] = "specialist_started"
+    specialist_name: str
+    specialist_role: str
+    task_id: str
+    started_at: str
+
+
+class SpecialistCompletedEvent(BaseModel):
+    type: Literal["specialist_completed"] = "specialist_completed"
+    specialist_name: str
+    specialist_role: str
+    task_id: str
+    duration_ms: int = 0
     timestamp: str
-    tool_call_id: UUID
-    tool_name: str
-    duration_ms: int
-    output: dict[str, Any]
-    executed_query: str | None = None
-    status: Literal["success", "error"]
-    error: str | None = None
+
+
+class MemoryRetrievedEvent(BaseModel):
+    type: Literal["memory_retrieved"] = "memory_retrieved"
+    count: int
+    source: str | None = None
+    timestamp: str
+
+
+class MemoryWrittenEvent(BaseModel):
+    type: Literal["memory_written"] = "memory_written"
+    timestamp: str
 
 
 class RecommendationReadyEvent(BaseModel):
-    event: Literal["recommendation_ready"] = "recommendation_ready"
-    session_id: UUID
-    timestamp: str
-    recommendation_id: UUID
+    type: Literal["recommendation_ready"] = "recommendation_ready"
+    recommendation_id: str
     risk_level: Literal["low", "medium", "high"]
     requires_approval: bool
     auto_execute: bool = False
+    timestamp: str
 
 
 class AutoExecutedEvent(BaseModel):
-    event: Literal["auto_executed"] = "auto_executed"
-    session_id: UUID
+    type: Literal["auto_executed"] = "auto_executed"
+    recommendation_id: str
     timestamp: str
-    recommendation_id: UUID
 
 
 class AwaitingApprovalEvent(BaseModel):
-    event: Literal["awaiting_approval"] = "awaiting_approval"
-    session_id: UUID
-    timestamp: str
-    approval_id: UUID
-    recommendation_id: UUID
+    type: Literal["awaiting_approval"] = "awaiting_approval"
+    approval_id: str
+    recommendation_id: str
     expires_at: str
+    timestamp: str
 
 
 class ErrorEvent(BaseModel):
-    event: Literal["error"] = "error"
-    session_id: UUID
-    timestamp: str
+    type: Literal["error"] = "error"
+    step_id: str | None = None
     code: str
     message: str
     recoverable: bool
+    timestamp: str
 
 
 class DoneEvent(BaseModel):
-    event: Literal["done"] = "done"
+    type: Literal["done"] = "done"
     session_id: UUID
+    reply: str | None = None
     timestamp: str
 
 
 SseEvent = Annotated[
     Union[
-        SessionStartedEvent,
-        SpecialistActivatedEvent,
-        ToolCalledEvent,
-        ToolCompletedEvent,
+        StepStartedEvent,
+        StepCompletedEvent,
+        SpecialistStartedEvent,
+        SpecialistCompletedEvent,
+        MemoryRetrievedEvent,
+        MemoryWrittenEvent,
         RecommendationReadyEvent,
         AutoExecutedEvent,
         AwaitingApprovalEvent,
         ErrorEvent,
         DoneEvent,
     ],
-    Field(discriminator="event"),
+    Field(discriminator="type"),
 ]

@@ -16,8 +16,9 @@
                            │
                            ▼
 ┌────────────────────────────────────────────────────────────────┐
-│ Orchestrator  ──dispatches──►  Specialists (4)                  │
-│   ◇ Domain Expert  ◇ Data Engineer  ◇ Sim/Opt  ◇ Evaluator      │
+│ Orchestrator  ──dispatches──►  Specialists (8)                  │
+│   ◇ Forecast ◇ Inventory ◇ Procurement ◇ Production ◇ Cost      │
+│   (parallel AgentBased) + Data Engineer · Sim/Opt · Evaluator   │
 │                           │                                     │
 │                           ▼                                     │
 │ Tool Layer (schema-driven)                                      │
@@ -107,7 +108,7 @@ Before invoking any specialist, `PhaseOrchestrator` calls `_route_specialists(go
 | Forecast Tool | Stub (28-day MA, NULL-aware) | `packages/tools/forecast` |
 | Simulation Tool | `JobRunner` + `InventorySimulator` | `packages/tools/simulation` → `packages/simulation` |
 | Optimization Tool | `JobRunner` + `ReplenishmentOptimizer` (OR-Tools) | `packages/tools/optimization` → `packages/optimization` |
-| MemoryStore | Stub (write-only) | `packages/memory` |
+| MemoryStore | PgVectorMemoryStore (pgvector retrieval, M7) | `packages/memory` |
 | JobRunner | InProcess (sync) + AcaJobsRunner (prod) | `packages/agent/job_runner` |
 | KPI domain | Implemented | `packages/domain/kpi.py` |
 
@@ -408,7 +409,7 @@ class SpecialistResult(BaseModel):
 
 class Specialist(Protocol):
     name: str
-    role: SpecialistRole  # orchestrator | domain_expert | data_engineer | sim_opt | evaluator
+    role: SpecialistRole  # orchestrator | domain_expert | forecast | inventory | procurement | production | cost | data_engineer | sim_opt | evaluator
     async def run(self, task: SpecialistTask, ctx: ToolContext) -> SpecialistResult: ...
 
 class Orchestrator(Protocol):
@@ -450,7 +451,7 @@ class TradeoffExplanation:
     primary_vs_alternative: list[dict]
 
 class Recommendation:
-    primary: Candidate
+    primary: Candidate | None          # None for conversational-path direct replies
     alternatives: list[Candidate]      # ≥ 2 at different trade-off positions
     tradeoff: TradeoffExplanation
     rationale: str
@@ -466,7 +467,7 @@ A single session's lifecycle:
 1. User opens /chat/[sessionId] → POST /api/v1/sessions returns session_id.
 2. User submits prompt → POST /api/v1/sessions/{id}/messages.
 3. FastAPI invokes Orchestrator.run(session_id, goal). One transaction per agent_step.
-4. Orchestrator dispatches Specialists sequentially (PromptBasedSpecialist) — role prompt + tool subset.
+4. Orchestrator dispatches domain specialists in parallel via asyncio.gather (AgentBasedSpecialist — Forecast, Inventory, Procurement, Production, Cost), then dispatches pipeline specialists sequentially (PromptBasedSpecialist — Data Engineer, Sim/Opt, Evaluator).
 5. Each tool invocation writes tool_calls + audit_log rows (hash chained) and emits SSE tool_called / tool_completed events.
 6. LLMClient writes llm_usage rows inside its middleware, never at the call site.
 7. Orchestrator collects candidates (≥ 3) → Evaluator scores per-KPI → Orchestrator selects primary + 2 alternatives → emits SSE recommendation_ready.

@@ -277,7 +277,7 @@ class PhaseOrchestrator:
             created_at=datetime.now(timezone.utc).isoformat(),
         )
         await self._memory_store.write(mem)
-        await self._push({"type": "memory_retrieved", "count": 0, "timestamp": _iso_now()})
+        await self._push({"type": "memory_written", "timestamp": _iso_now()})
 
     async def _run_domain_specialists_parallel(
         self,

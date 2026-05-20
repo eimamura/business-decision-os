@@ -289,10 +289,10 @@ def test_list_for_role_sim_opt():
     assert "sql_query" not in names
 
 
-def test_list_for_role_orchestrator_returns_all():
+def test_list_for_role_orchestrator_returns_empty():
     registry = create_tool_registry()
-    all_tools = registry.list_for_role("orchestrator")
-    assert len(all_tools) == 7
+    tools = registry.list_for_role("orchestrator")
+    assert tools == []
 
 
 # ===== T-1003/T-1040: Orchestrator + MemoryStore =====

@@ -59,5 +59,5 @@ class ToolRegistry:
         if allowed is None:
             return list(self._tools.values())
         if not allowed:
-            return list(self._tools.values())
+            return []
         return [t for name, t in self._tools.items() if name in allowed]

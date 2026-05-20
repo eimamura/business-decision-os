@@ -30,12 +30,12 @@ def test_get_missing_returns_none():
     assert registry.get("nonexistent") is None
 
 
-def test_list_for_role_orchestrator_returns_all():
+def test_list_for_role_orchestrator_returns_empty():
     registry = ToolRegistry()
     tool = _FakeTool()
     registry.register(tool)
     tools = registry.list_for_role("orchestrator")
-    assert tool in tools
+    assert tools == []
 
 
 def test_list_for_role_data_engineer_filters_to_allowlist():

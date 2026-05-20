@@ -14,9 +14,8 @@ from packages.schemas.sse_events import AutoExecutedEvent, RecommendationReadyEv
 class TestRecommendationReadyEventSchema:
     def test_has_auto_execute_field(self) -> None:
         event = RecommendationReadyEvent(
-            session_id=uuid4(),
             timestamp="2026-05-20T00:00:00Z",
-            recommendation_id=uuid4(),
+            recommendation_id=str(uuid4()),
             risk_level="low",
             requires_approval=False,
             auto_execute=True,
@@ -25,9 +24,8 @@ class TestRecommendationReadyEventSchema:
 
     def test_auto_execute_defaults_false(self) -> None:
         event = RecommendationReadyEvent(
-            session_id=uuid4(),
             timestamp="2026-05-20T00:00:00Z",
-            recommendation_id=uuid4(),
+            recommendation_id=str(uuid4()),
             risk_level="high",
             requires_approval=True,
         )
@@ -35,9 +33,8 @@ class TestRecommendationReadyEventSchema:
 
     def test_low_risk_auto_execute_true(self) -> None:
         event = RecommendationReadyEvent(
-            session_id=uuid4(),
             timestamp="2026-05-20T00:00:00Z",
-            recommendation_id=uuid4(),
+            recommendation_id=str(uuid4()),
             risk_level="low",
             requires_approval=False,
             auto_execute=True,
@@ -48,9 +45,8 @@ class TestRecommendationReadyEventSchema:
 
     def test_high_risk_auto_execute_false(self) -> None:
         event = RecommendationReadyEvent(
-            session_id=uuid4(),
             timestamp="2026-05-20T00:00:00Z",
-            recommendation_id=uuid4(),
+            recommendation_id=str(uuid4()),
             risk_level="high",
             requires_approval=True,
             auto_execute=False,
@@ -63,22 +59,19 @@ class TestRecommendationReadyEventSchema:
 class TestAutoExecutedEvent:
     def test_event_type(self) -> None:
         event = AutoExecutedEvent(
-            session_id=uuid4(),
             timestamp="2026-05-20T00:00:00Z",
-            recommendation_id=uuid4(),
+            recommendation_id=str(uuid4()),
         )
-        assert event.event == "auto_executed"
+        assert event.type == "auto_executed"
 
     def test_serialization(self) -> None:
-        rec_id = uuid4()
-        session_id = uuid4()
+        rec_id = str(uuid4())
         event = AutoExecutedEvent(
-            session_id=session_id,
             timestamp="2026-05-20T00:00:00Z",
             recommendation_id=rec_id,
         )
         data = event.model_dump()
-        assert data["event"] == "auto_executed"
+        assert data["type"] == "auto_executed"
         assert data["recommendation_id"] == rec_id
 
 

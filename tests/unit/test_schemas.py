@@ -7,11 +7,10 @@ import pytest
 from packages.schemas.recommendation import Candidate, KpiScore, Recommendation, TradeoffExplanation
 from packages.schemas.evaluations import EvaluationCriteria, EvaluationResult
 from packages.schemas.sse_events import (
-    SessionStartedEvent,
-    ToolCalledEvent,
-    RecommendationReadyEvent,
+    StepStartedEvent,
     ErrorEvent,
     DoneEvent,
+    RecommendationReadyEvent,
     SseEvent,
 )
 
@@ -73,22 +72,32 @@ def test_evaluation_result_schema():
     assert result.risk_level == "medium"
 
 
-def test_sse_session_started():
-    event = SessionStartedEvent(session_id=uuid4(), timestamp="2026-01-01T00:00:00Z")
-    assert event.event == "session_started"
+def test_sse_step_started():
+    event = StepStartedEvent(
+        step_id=str(uuid4()),
+        specialist_role="orchestrator",
+        step_type="routing",
+        started_at="2026-01-01T00:00:00Z",
+    )
+    assert event.type == "step_started"
 
 
 def test_sse_done():
     event = DoneEvent(session_id=uuid4(), timestamp="2026-01-01T00:00:00Z")
-    assert event.event == "done"
+    assert event.type == "done"
+    assert event.reply is None
+
+
+def test_sse_done_with_reply():
+    event = DoneEvent(session_id=uuid4(), timestamp="2026-01-01T00:00:00Z", reply="Hello")
+    assert event.reply == "Hello"
 
 
 def test_sse_error():
     event = ErrorEvent(
-        session_id=uuid4(),
         timestamp="2026-01-01T00:00:00Z",
         code="TOOL_FAILURE",
         message="Tool failed",
         recoverable=False,
     )
-    assert event.event == "error"
+    assert event.type == "error"
