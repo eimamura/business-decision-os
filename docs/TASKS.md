@@ -18,7 +18,7 @@
 | M2 | Real Simulator on ACA Jobs | Done |
 | M3 | Real Optimizer on ACA Jobs | Done |
 | M4 | Approval Workflow Expansion + LLM budget enforcement | Not Started |
-| M5 | Celery + Redis job queue | Not Started |
+| M5 | Celery + Redis job queue | Done |
 | M6 | Real Predictor on Databricks (training + batch inference) | Not Started |
 | M7 | Memory & Learning Loop (pgvector retrieval) | Not Started |
 | M8 | Semi-Autonomous Execution + Databricks Lakehouse | Not Started |
@@ -312,9 +312,21 @@ New env vars: none (DATABASE_URL, JOB_RUN_ID, JOB_PAYLOAD already defined by Pha
 
 | ID | Task | Priority | Status |
 |---|---|---|---|
-| T-5001 | Provision Azure Cache for Redis via Terraform `shared/` | High | Not Started |
-| T-5002 | Deploy Celery worker on ACA via Terraform `aca/` extension | High | Not Started |
-| T-5003 | Swap `JobRunner` sync implementation for Celery implementation; callers unchanged | High | Not Started |
+| T-5001 | Provision Azure Cache for Redis via Terraform `shared/` | High | Done |
+| T-5002 | Deploy Celery worker on ACA via Terraform `aca/` extension | High | Done |
+| T-5003 | Swap `JobRunner` sync implementation for Celery implementation; callers unchanged | High | Done |
+
+<!--
+## Infra Handoff — Phase 5 (T-5001, T-5002)
+Changed files:
+  infra/terraform/shared/main.tf        — added azurerm_redis_cache.main (Basic C1, TLS 1.2, SSL only)
+  infra/terraform/shared/outputs.tf     — added redis_hostname and redis_primary_connection_string outputs
+  infra/terraform/aca/main.tf           — added azurerm_container_app.celery_worker (min 1, max 3 replicas)
+  infra/terraform/aca/variables.tf      — added acr_login_server and redis_connection_string variables
+  infra/compose/compose.yaml            — added redis service (redis:7-alpine); added celery-worker service; added Redis env vars + JOB_RUNNER_BACKEND to api; added redis to api depends_on
+Smoke checks: SKIPPED (stack not running — docker compose ps returned empty)
+New env vars: CELERY_BROKER_URL, CELERY_RESULT_BACKEND, JOB_RUNNER_BACKEND, REDIS_PORT
+-->
 
 ## Phase 6 — Real Predictor
 

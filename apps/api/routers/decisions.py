@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 from datetime import datetime, timezone
 from typing import Any, AsyncGenerator
 from uuid import UUID, uuid4
@@ -15,6 +16,8 @@ from packages.agent.orchestrator import SessionGoal
 
 router = APIRouter(prefix="/api/v1/decisions", tags=["decisions"])
 
+_celery_jobs: dict[str, str] = {}
+
 
 def _iso_now() -> str:
     return datetime.now(timezone.utc).isoformat()
@@ -24,8 +27,30 @@ class CreateDecisionRequest(BaseModel):
     goal: str
 
 
-@router.post("")
-async def create_decision(body: CreateDecisionRequest) -> StreamingResponse:
+async def _submit_celery_decision(body: CreateDecisionRequest) -> dict[str, str]:
+    from packages.agent.job_runner import CeleryJobRunner, JobSpec
+    from packages.tools.base import ToolContext
+
+    runner = CeleryJobRunner()
+    spec = JobSpec(
+        kind="simulation",
+        payload={"sku_id": "SKU001", "goal": body.goal},
+        idempotency_key=f"decision:{body.goal[:64]}",
+    )
+    ctx = ToolContext(
+        session_id=uuid4(),
+        agent_step_id=uuid4(),
+        specialist_role="orchestrator",
+        actor="api",
+        correlation_id=uuid4(),
+    )
+    handle = await runner.submit(spec, ctx)
+    job_id = str(handle.job_id)
+    _celery_jobs[job_id] = "queued"
+    return {"job_id": job_id, "status": "queued"}
+
+
+async def _stream_decision(body: CreateDecisionRequest) -> StreamingResponse:
     session_id = str(uuid4())
     sessions[session_id] = {
         "session_id": session_id,
@@ -49,6 +74,7 @@ async def create_decision(body: CreateDecisionRequest) -> StreamingResponse:
 
     async def _run_and_signal() -> None:
         import logging
+
         _log = logging.getLogger(__name__)
         try:
             await orchestrator.run(UUID(session_id), goal)
@@ -84,3 +110,25 @@ async def create_decision(body: CreateDecisionRequest) -> StreamingResponse:
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
+
+
+@router.post("", response_model=None)
+async def create_decision(body: CreateDecisionRequest) -> StreamingResponse | dict[str, str]:
+    if os.environ.get("JOB_RUNNER_BACKEND") == "celery":
+        return await _submit_celery_decision(body)
+    return await _stream_decision(body)
+
+
+@router.get("/{job_id}/status")
+async def get_decision_job_status(job_id: str) -> dict[str, str]:
+    from packages.agent.job_runner import CeleryJobRunner
+
+    try:
+        runner = CeleryJobRunner()
+        handle = await runner.status(UUID(job_id))
+        return {"status": handle.status}
+    except Exception:
+        stored = _celery_jobs.get(job_id)
+        if stored:
+            return {"status": stored}
+        return {"status": "pending"}

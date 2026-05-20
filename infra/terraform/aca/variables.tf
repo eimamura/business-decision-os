@@ -24,3 +24,14 @@ variable "database_url" {
   type        = string
   sensitive   = true
 }
+
+variable "acr_login_server" {
+  description = "Azure Container Registry login server (e.g. bdosacr.azurecr.io)"
+  type        = string
+}
+
+variable "redis_connection_string" {
+  description = "Redis primary connection string for Celery broker and result backend"
+  type        = string
+  sensitive   = true
+}

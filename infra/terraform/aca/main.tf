@@ -133,6 +133,52 @@ resource "azurerm_container_app_job" "simulation_worker" {
 }
 
 # -------------------------------------------------------------------
+# Celery worker Container App — T-5002 (M5 background job execution)
+# -------------------------------------------------------------------
+resource "azurerm_container_app" "celery_worker" {
+  name                         = "bdos-celery-worker-${var.environment}"
+  container_app_environment_id = azurerm_container_app_environment.main.id
+  resource_group_name          = var.resource_group_name
+  revision_mode                = "Single"
+
+  template {
+    min_replicas = 1
+    max_replicas = 3
+
+    container {
+      name   = "celery-worker"
+      image  = "${var.acr_login_server}/bdos-api:latest"
+      cpu    = 0.5
+      memory = "1Gi"
+
+      command = ["celery", "-A", "packages.agent.job_runner.celery_app", "worker", "--loglevel=info", "--concurrency=4"]
+
+      env {
+        name  = "CELERY_BROKER_URL"
+        value = var.redis_connection_string
+      }
+      env {
+        name  = "CELERY_RESULT_BACKEND"
+        value = var.redis_connection_string
+      }
+      env {
+        name        = "DATABASE_URL"
+        secret_name = "database-url"
+      }
+    }
+  }
+
+  secret {
+    name  = "database-url"
+    value = var.database_url
+  }
+
+  lifecycle {
+    prevent_destroy = false
+  }
+}
+
+# -------------------------------------------------------------------
 # Container App Job: optimization-worker
 # -------------------------------------------------------------------
 resource "azurerm_container_app_job" "optimization_worker" {

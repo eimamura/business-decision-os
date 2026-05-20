@@ -7,7 +7,7 @@ TASKS.md holds task definitions. This file holds runtime execution state.
 
 ## Current Phase
 
-M4 Complete — Ready for Phase 5 (M5: Celery + Redis job queue)
+M5 Complete — Ready for Phase 6 (M6: Real Predictor on Databricks)
 
 ## Active Lease
 
@@ -15,14 +15,14 @@ None
 
 ## Last Completed Batch
 
-Phase 4 — B4C Test/Review (T-4001, T-4002, T-4003, T-4004) — 2026-05-20
+Phase 5 — M5 Complete (T-5001, T-5002, T-5003) — 2026-05-20
 
 ## Last Validation
 
-command: `uv run pytest tests/unit/ -x -q && make lint && make typecheck && make build`
+command: `uv run pytest tests/unit/ -q && make lint && make typecheck && make build`
 exit code: 0 (all pass)
 timestamp: 2026-05-20
-note: 154 unit tests PASS. M4 complete: notifications table + repo, policies table + repo, approver role enforcement (403 for non-approver), BudgetGuard/BudgetedClaudeClient/BudgetSoftLimitWarning/BudgetHardLimitError in LLMClient, PUT /api/v1/policies, GET /api/v1/notifications, /settings Next.js page. lint: 0 errors. typecheck: 0 errors. build: OK.
+note: 165 unit tests PASS. M5 complete: CeleryJobRunner in packages/agent/job_runner/celery_runner.py, Celery app + tasks in celery_app.py, JOB_RUNNER_BACKEND=celery support in state.py, decisions endpoint returns job_id JSON when backend=celery + GET /{job_id}/status, Redis + celery-worker services in compose.yaml, azurerm_redis_cache in Terraform shared/, azurerm_container_app celery_worker in Terraform aca/. lint: 0 errors. typecheck: 0 errors. build: OK.
 
 ## Blockers
 

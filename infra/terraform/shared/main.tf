@@ -137,3 +137,21 @@ resource "azurerm_application_insights" "main" {
 #     prevent_destroy = false
 #   }
 # }
+
+# -------------------------------------------------------------------
+# Azure Cache for Redis — T-5001 (M5 Celery broker + result backend)
+# -------------------------------------------------------------------
+resource "azurerm_redis_cache" "main" {
+  name                = "bdos-redis-${var.environment}"
+  location            = azurerm_resource_group.main.location
+  resource_group_name = azurerm_resource_group.main.name
+  capacity            = 1
+  family              = "C"
+  sku_name            = "Basic"
+  enable_non_ssl_port = false
+  minimum_tls_version = "1.2"
+
+  lifecycle {
+    prevent_destroy = false
+  }
+}

@@ -10,18 +10,42 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
 
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+
   api:
     build:
       context: ../..
       dockerfile: apps/api/Dockerfile
     depends_on:
       - db
+      - redis
     environment:
       DATABASE_URL: postgresql+asyncpg://bdos:bdos_dev@db:5432/bdos
       APP_ENV: dev
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/0
+      JOB_RUNNER_BACKEND: celery
     ports:
       - "${API_PORT:-8000}:8000"
+
+  celery-worker:
+    build:
+      context: ../..
+      dockerfile: apps/api/Dockerfile
+    depends_on:
+      - db
+      - redis
+    environment:
+      DATABASE_URL: postgresql+asyncpg://bdos:bdos_dev@db:5432/bdos
+      APP_ENV: dev
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/0
+    command: ["/app/.venv/bin/celery", "-A", "packages.agent.job_runner.celery_app", "worker", "--loglevel=info", "--concurrency=2"]
 
   web:
     build:

@@ -18,3 +18,13 @@ output "app_insights_connection_string" {
   value       = azurerm_application_insights.main.connection_string
   sensitive   = true
 }
+
+output "redis_hostname" {
+  value     = azurerm_redis_cache.main.hostname
+  sensitive = false
+}
+
+output "redis_primary_connection_string" {
+  value     = azurerm_redis_cache.main.primary_connection_string
+  sensitive = true
+}

@@ -4,7 +4,7 @@ import os
 from asyncio import Queue
 from typing import Any
 
-from packages.agent.job_runner import AcaJobsRunner, InProcessJobRunner
+from packages.agent.job_runner import AcaJobsRunner, CeleryJobRunner, InProcessJobRunner
 from packages.agent.llm import ClaudeClient
 from packages.agent.orchestrator import PhaseOrchestrator
 from packages.memory import StubMemoryStore
@@ -14,10 +14,12 @@ sessions: dict[str, dict[str, Any]] = {}
 sse_queues: dict[str, Queue[dict[str, Any]]] = {}
 
 
-def _build_job_runner() -> AcaJobsRunner | InProcessJobRunner:
+def _build_job_runner() -> AcaJobsRunner | InProcessJobRunner | CeleryJobRunner:
     backend = os.environ.get("JOB_RUNNER_BACKEND", "in_process").strip()
     if backend == "aca":
         return AcaJobsRunner()
+    if backend == "celery":
+        return CeleryJobRunner()
     return InProcessJobRunner()
 
 
