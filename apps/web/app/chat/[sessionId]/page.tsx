@@ -21,6 +21,7 @@ interface Message {
   role: "user" | "assistant";
   content: string;
   created_at: string;
+  isError?: boolean;
 }
 
 interface ChatPageProps {
@@ -37,6 +38,7 @@ export default function ChatPage({ params }: ChatPageProps) {
   const [totalTokens, setTotalTokens] = useState(0);
   const [totalCost, setTotalCost] = useState(0);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const streamRef = useRef<EventSource | null>(null);
 
   useEffect(() => {
     fetch(`${API_BASE}/api/v1/sessions`, {
@@ -59,6 +61,10 @@ export default function ChatPage({ params }: ChatPageProps) {
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
+
+  useEffect(() => {
+    return () => { streamRef.current?.close(); };
+  }, []);
 
   useEffect(() => {
     function handleKey(e: KeyboardEvent) {
@@ -85,6 +91,17 @@ export default function ChatPage({ params }: ChatPageProps) {
     setInput("");
     setSending(true);
 
+    const addError = (content: string) => {
+      setMessages((prev) => [...prev, {
+        id: crypto.randomUUID(),
+        role: "assistant",
+        content,
+        created_at: new Date().toISOString(),
+        isError: true,
+      }]);
+      setSending(false);
+    };
+
     try {
       const res = await fetch(
         `${API_BASE}/api/v1/sessions/${sessionId}/messages`,
@@ -97,28 +114,47 @@ export default function ChatPage({ params }: ChatPageProps) {
           body: JSON.stringify({ content: text }),
         }
       );
-      const data = await res.json();
-      if (data.content || data.text) {
-        const assistantMsg: Message = {
-          id: data.id ?? crypto.randomUUID(),
-          role: "assistant",
-          content: data.content ?? data.text ?? "",
-          created_at: data.created_at ?? new Date().toISOString(),
-        };
-        setMessages((prev) => [...prev, assistantMsg]);
-        if (data.tokens) setTotalTokens((p) => p + data.tokens);
-        if (data.cost_usd) setTotalCost((p) => p + data.cost_usd);
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        addError(`Request failed (${res.status}): ${data.detail ?? res.statusText}`);
+        return;
       }
-    } catch {
-      const errMsg: Message = {
-        id: crypto.randomUUID(),
-        role: "assistant",
-        content: "Error contacting the API. Please check the backend is running.",
-        created_at: new Date().toISOString(),
+
+      streamRef.current?.close();
+      const es = new EventSource(`${API_BASE}/api/v1/sessions/${sessionId}/stream`);
+      streamRef.current = es;
+
+      es.onmessage = (e: MessageEvent) => {
+        try {
+          const event = JSON.parse(e.data as string) as { type: string; reply?: string; message?: string; code?: string; tokens?: number; cost_usd?: number };
+          if (event.type === "done") {
+            if (event.reply) {
+              setMessages((prev) => [...prev, {
+                id: crypto.randomUUID(),
+                role: "assistant",
+                content: event.reply!,
+                created_at: new Date().toISOString(),
+              }]);
+            }
+            setSending(false);
+            es.close();
+          } else if (event.type === "error") {
+            addError(event.message ?? "An error occurred during processing.");
+            es.close();
+          }
+          if (event.tokens) setTotalTokens((p) => p + event.tokens!);
+          if (event.cost_usd) setTotalCost((p) => p + event.cost_usd!);
+        } catch {
+          // ignore parse errors
+        }
       };
-      setMessages((prev) => [...prev, errMsg]);
-    } finally {
-      setSending(false);
+
+      es.onerror = () => {
+        addError("Lost connection to the server. Please try again.");
+        es.close();
+      };
+    } catch {
+      addError("Error contacting the API. Please check the backend is running.");
     }
   }, [input, sending, sessionId]);
 
@@ -239,6 +275,21 @@ export default function ChatPage({ params }: ChatPageProps) {
 
 function MessageBubble({ message }: { message: Message }) {
   const isUser = message.role === "user";
+
+  if (message.isError) {
+    return (
+      <div className="flex justify-start">
+        <div className="max-w-2xl rounded-2xl px-4 py-3 text-sm bg-red-50 border border-red-200 text-red-800">
+          <p className="font-medium mb-1">⚠ Error</p>
+          <p className="whitespace-pre-wrap">{message.content}</p>
+          <p className="text-xs mt-1.5 text-red-400">
+            {new Date(message.created_at).toLocaleTimeString()}
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className={`flex ${isUser ? "justify-end" : "justify-start"}`}>
       <div

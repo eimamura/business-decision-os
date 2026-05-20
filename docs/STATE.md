@@ -15,14 +15,14 @@ None
 
 ## Last Completed Batch
 
-B3-01 + B3-02 — Phase 3 Real Optimizer on ACA Jobs — 2026-05-19
+Fail-loud + SSE Chat wiring — 2026-05-19
 
 ## Last Validation
 
-command: `make build && make lint && make typecheck && uv run pytest tests/unit/ -v && uv run pytest tests/ -k "optimizer" -v`
+command: `uv run pytest tests/unit/ -x -q`
 exit code: 0 (all pass)
 timestamp: 2026-05-19
-note: make build OK; make lint OK (62 files, 0 errors); make typecheck OK (62 files, 0 errors); 128 unit tests PASS; 10 optimizer tests PASS; azurerm_container_app_job.optimization_worker present in infra/terraform/aca/main.tf; ReplenishmentOptimizer confirmed non-stub (PuLP CBC LP solver, MOQ multiples enumeration)
+note: 128 unit tests PASS. Fail-silent fallbacks eliminated: ANTHROPIC_API_KEY missing → RuntimeError; anthropic package missing → ImportError propagated; ACA config missing → RuntimeError; decisions.py bare except replaced with logging + SSE error event; evaluator_tool.py missing thresholds → WARNING log. Chat UI (page.tsx) now subscribes to SSE stream after POST /messages: reply displayed in chat bubble on `done`, red error bubble on `error`.
 
 ## Blockers
 

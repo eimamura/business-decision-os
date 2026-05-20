@@ -5,7 +5,7 @@ from asyncio import Queue
 from typing import Any
 
 from packages.agent.job_runner import AcaJobsRunner, InProcessJobRunner
-from packages.agent.llm import ClaudeClient, StubClaudeClient
+from packages.agent.llm import ClaudeClient
 from packages.agent.orchestrator import PhaseOrchestrator
 from packages.memory import StubMemoryStore
 from packages.tools import create_tool_registry
@@ -23,16 +23,9 @@ def _build_job_runner() -> AcaJobsRunner | InProcessJobRunner:
 
 def get_orchestrator(sse_queue: Queue[dict[str, Any]]) -> PhaseOrchestrator:
     api_key = os.environ.get("ANTHROPIC_API_KEY", "")
-    llm_client: ClaudeClient | StubClaudeClient
-    if api_key:
-        llm_client = ClaudeClient(api_key=api_key)
-    else:
-        import logging
-        logging.warning(
-            "ANTHROPIC_API_KEY is not set — using StubClaudeClient. "
-            "Set ANTHROPIC_API_KEY in .env to enable real LLM calls."
-        )
-        llm_client = StubClaudeClient()
+    if not api_key:
+        raise RuntimeError("ANTHROPIC_API_KEY is not set — add it to .env")
+    llm_client = ClaudeClient(api_key=api_key)
     job_runner = _build_job_runner()
     tool_registry = create_tool_registry(job_runner=job_runner)
     memory_store = StubMemoryStore()

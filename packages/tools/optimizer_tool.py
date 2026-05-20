@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from packages.optimization import OptimizationContext, OptimizationInput, ReplenishmentOptimizer
 from packages.tools.base import ToolContext, ToolResult
 
 
@@ -15,6 +16,7 @@ class OptimizerTool:
             "sku_id": {"type": "string"},
             "moq": {"type": "number"},
             "horizon_days": {"type": "integer", "minimum": 1},
+            "max_stockout_days": {"type": "integer", "minimum": 0},
         },
         "required": ["sku_id", "moq", "horizon_days"],
     }
@@ -26,35 +28,50 @@ class OptimizerTool:
     }
 
     async def handle(self, input: dict[str, Any], ctx: ToolContext) -> ToolResult:
-        sku_id: str = input.get("sku_id", "")
-        moq: float = float(input.get("moq", 100.0))
-        horizon_days: int = int(input.get("horizon_days", 90))
+        sku_id = input.get("sku_id", "")
+        moq = float(input.get("moq", 100.0))
+        horizon_days = int(input.get("horizon_days", 90))
+        max_stockout_days = int(input.get("max_stockout_days", 30))
 
-        multiples = [0, 1, 2, 3, 4, 5]
-        candidates = []
-        for m in multiples:
-            order_qty = moq * m
-            total_cost = order_qty * 1.2
-            candidates.append({
-                "order_qty": order_qty,
-                "total_supply_chain_cost": total_cost,
-                "constraints_satisfied": ["MOQ"] if m >= 1 else [],
-                "constraints_violated": [] if m >= 1 else ["MOQ"],
-            })
+        job_runner = getattr(ctx, "job_runner", None)
 
-        feasible = [c for c in candidates if not c["constraints_violated"]]
-        feasible.sort(key=lambda c: c["total_supply_chain_cost"])  # type: ignore[arg-type,return-value]
-        top3 = feasible[:3]
-
-        if len(top3) < 3:
-            top3 = candidates[:3]
+        if job_runner is not None:
+            from packages.agent.job_runner import JobSpec
+            spec = JobSpec(
+                kind="optimization",
+                payload={
+                    "sku_id": sku_id,
+                    "moq": moq,
+                    "horizon_days": horizon_days,
+                    "max_stockout_days": max_stockout_days,
+                },
+                idempotency_key=f"opt-{sku_id}-{moq}-{horizon_days}",
+            )
+            handle = await job_runner.submit(spec, ctx)
+            result = await job_runner.result(handle.job_id, wait=True)
+            candidates = result.output.get("candidates", []) if result.output else []
+        else:
+            opt_input = OptimizationInput(
+                sku_id=sku_id,
+                moq=moq,
+                horizon_days=horizon_days,
+                max_stockout_days=max_stockout_days,
+            )
+            opt_ctx = OptimizationContext(
+                session_id=ctx.session_id,
+                agent_step_id=ctx.agent_step_id,
+                db_session=getattr(ctx, "db_session", None),
+            )
+            optimizer = ReplenishmentOptimizer()
+            output = await optimizer.run(opt_input, opt_ctx)
+            candidates = [c.model_dump() for c in output.candidates]
 
         return ToolResult(
-            output={"candidates": top3},
+            output={"candidates": candidates},
             audit_payload={
                 "sku_id": sku_id,
                 "moq": moq,
                 "horizon_days": horizon_days,
-                "candidate_count": len(top3),
+                "candidate_count": len(candidates),
             },
         )

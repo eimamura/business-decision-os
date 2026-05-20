@@ -180,11 +180,13 @@ class ClaudeClient:
         self._client = self._build_client(resolved_key)
 
     def _build_client(self, api_key: str) -> Any:
-        try:
-            import anthropic
-            return anthropic.AsyncAnthropic(api_key=api_key)
-        except ImportError:
-            return None
+        import logging
+        import anthropic
+        client = anthropic.AsyncAnthropic(api_key=api_key)
+        logging.getLogger(__name__).info(
+            "Anthropic client initialized: anthropic==%s", anthropic.__version__
+        )
+        return client
 
     def _to_anthropic_messages(self, messages: list[LLMMessage]) -> list[dict[str, Any]]:
         result = []
@@ -250,13 +252,6 @@ class ClaudeClient:
         agent_step_id: UUID | None = None,
         specialist_role: str | None = None,
     ) -> LLMResponse:
-        if self._client is None:
-            stub = StubClaudeClient(self._usage_writer)
-            return await stub.complete(
-                messages, tools, temperature, max_tokens,
-                prompt_cache, agent_step_id, specialist_role,
-            )
-
         import anthropic
 
         system = self._extract_system(messages, prompt_cache)
@@ -344,13 +339,6 @@ class ClaudeClient:
         agent_step_id: UUID | None = None,
         specialist_role: str | None = None,
     ) -> AsyncIterator[LLMStreamEvent]:
-        if self._client is None:
-            stub = StubClaudeClient(self._usage_writer)
-            return await stub.stream(
-                messages, tools, temperature, max_tokens,
-                prompt_cache, agent_step_id, specialist_role,
-            )
-
         system = self._extract_system(messages, prompt_cache)
         ant_messages = self._to_anthropic_messages(messages)
         kwargs: dict[str, Any] = {
@@ -382,8 +370,8 @@ class ClaudeClient:
         return [[0.0] * 1536 for _ in texts]
 
 
-def create_llm_client(usage_writer: UsageWriter | None = None) -> ClaudeClient | StubClaudeClient:
+def create_llm_client(usage_writer: UsageWriter | None = None) -> ClaudeClient:
     api_key = os.environ.get("ANTHROPIC_API_KEY", "")
     if not api_key:
-        return StubClaudeClient(usage_writer)
+        raise RuntimeError("ANTHROPIC_API_KEY is not set — add it to .env")
     return ClaudeClient(api_key=api_key, usage_writer=usage_writer)

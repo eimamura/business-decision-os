@@ -2,7 +2,10 @@ from __future__ import annotations
 
 import os
 
+from dotenv import load_dotenv
 from fastapi import FastAPI
+
+load_dotenv()
 
 from apps.api.observability import configure_logging, configure_otel
 
@@ -38,6 +41,25 @@ app.add_middleware(
     allow_headers=["*"],
 )
 app.add_middleware(DevUserMiddleware)
+
+@app.get("/api/v1/debug")
+async def debug_info() -> dict:
+    import os as _os
+    api_key = _os.environ.get("ANTHROPIC_API_KEY", "")
+    try:
+        import anthropic as _anthropic
+        anthropic_version: str | None = _anthropic.__version__
+        anthropic_installed = True
+    except ImportError:
+        anthropic_version = None
+        anthropic_installed = False
+    return {
+        "anthropic_installed": anthropic_installed,
+        "anthropic_version": anthropic_version,
+        "api_key_set": bool(api_key),
+        "api_key_prefix": api_key[:12] + "..." if api_key else None,
+    }
+
 
 app.include_router(health.router)
 app.include_router(sessions.router)

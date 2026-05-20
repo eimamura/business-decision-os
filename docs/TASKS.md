@@ -208,6 +208,7 @@ New env vars: ANTHROPIC_API_KEY (from host), OTEL_EXPORTER_OTLP_ENDPOINT (option
 | T-1003 | Implement Orchestrator sequential single-LLM loop with role switching (Plan → Tool → Evaluate → Recommend) | High | Done |
 | T-1004 | Implement 4 `PromptBasedSpecialist` instances (Domain Expert, Data Engineer, Simulator/Optimizer, Evaluator) with role prompts + tool subsets | High | Done |
 | T-1005 | Implement Orchestrator error handling: 2 retries with backoff (1s, 4s); SSE `error` event; `decision_sessions.status = failed` on terminal failure | High | Done |
+| T-1005b | Wire SSE `error`/`done` events to Chat UI: reply displayed in chat bubble; errors displayed as red error bubble; Fail-silent fallbacks eliminated across codebase | High | Done |
 | T-1006 | Implement Orchestrator trade-off resolution: config defaults + Critical SKU overrides; user policy and session goal hooks present but no-op in MVP | High | Done |
 | T-1007 | Implement primary + 2 alternatives selection in Recommendation generation | High | Done |
 | T-1008 | Wire `decision_sessions.status` state machine with optimistic-retry on conflict | High | Done |

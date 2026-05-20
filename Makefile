@@ -1,6 +1,7 @@
 .PHONY: seed generate-data build test lint typecheck dev dev-api dev-web dev-compose dev-up dev-down dev-logs dev-ps dev-smoke
 
 dev-api:
+	uv sync --package api
 	uv run uvicorn apps.api.main:app --reload --port 8000
 
 dev-web:

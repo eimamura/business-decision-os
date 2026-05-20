@@ -48,10 +48,18 @@ async def create_decision(body: CreateDecisionRequest) -> StreamingResponse:
     orchestrator = get_orchestrator(queue)
 
     async def _run_and_signal() -> None:
+        import logging
+        _log = logging.getLogger(__name__)
         try:
             await orchestrator.run(UUID(session_id), goal)
-        except Exception:
-            pass
+        except Exception as exc:
+            _log.exception("Orchestrator failed for session %s: %s", session_id, exc)
+            await queue.put({
+                "type": "error",
+                "code": "orchestration_failed",
+                "message": str(exc),
+                "timestamp": _iso_now(),
+            })
         finally:
             await queue.put({
                 "type": "done",

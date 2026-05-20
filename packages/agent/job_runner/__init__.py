@@ -63,10 +63,12 @@ class InProcessJobRunner:
         if spec is None:
             raise KeyError(f"Job {job_id} not found")
 
-        if spec.kind != "simulation":
-            raise NotImplementedError(f"InProcess does not support kind={spec.kind}")
+        if spec.kind == "simulation":
+            return await self._run_simulation(job_id, spec)
+        if spec.kind == "optimization":
+            return await self._run_optimization(job_id, spec)
 
-        return await self._run_simulation(job_id, spec)
+        raise NotImplementedError(f"InProcess does not support kind={spec.kind}")
 
     async def _run_simulation(self, job_id: UUID, spec: JobSpec) -> JobResult:
         from packages.simulation import InventorySimulator, SimulationContext, SimulationInput
@@ -80,6 +82,45 @@ class InProcessJobRunner:
             )
             sim_ctx = SimulationContext(db_session=None)
             output = await InventorySimulator().run(sim_input, sim_ctx)
+            duration_ms = int(
+                (datetime.now(tz=timezone.utc) - start).total_seconds() * 1000
+            )
+            return JobResult(
+                job_id=job_id,
+                status="succeeded",
+                output=output.model_dump(),
+                error=None,
+                duration_ms=duration_ms,
+            )
+        except Exception as exc:
+            duration_ms = int(
+                (datetime.now(tz=timezone.utc) - start).total_seconds() * 1000
+            )
+            return JobResult(
+                job_id=job_id,
+                status="failed",
+                output=None,
+                error=str(exc),
+                duration_ms=duration_ms,
+            )
+
+    async def _run_optimization(self, job_id: UUID, spec: JobSpec) -> JobResult:
+        from packages.optimization import (  # noqa: E402
+            OptimizationContext,
+            OptimizationInput,
+            ReplenishmentOptimizer,
+        )
+
+        start = datetime.now(tz=timezone.utc)
+        try:
+            opt_input = OptimizationInput(
+                sku_id=spec.payload["sku_id"],
+                moq=float(spec.payload.get("moq", 100.0)),
+                horizon_days=int(spec.payload.get("horizon_days", 90)),
+                max_stockout_days=int(spec.payload.get("max_stockout_days", 30)),
+            )
+            opt_ctx = OptimizationContext(db_session=None)
+            output = await ReplenishmentOptimizer().run(opt_input, opt_ctx)
             duration_ms = int(
                 (datetime.now(tz=timezone.utc) - start).total_seconds() * 1000
             )

@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 import json
+import logging
 from typing import TYPE_CHECKING, Any, Literal, Protocol
+
+_log = logging.getLogger(__name__)
 
 SpecialistRole = Literal["orchestrator", "domain_expert", "data_engineer", "sim_opt", "evaluator"]
 
@@ -73,6 +76,7 @@ class PromptBasedSpecialist:
         last_response: Any = None
 
         for _ in range(_MAX_ITERATIONS):
+            _log.info("Specialist %s calling LLM (model=%s)", self.role, getattr(self._llm_client, "_model", "?"))
             response = await self._llm_client.complete(
                 messages=messages,
                 tools=llm_tools if llm_tools else None,
@@ -81,6 +85,10 @@ class PromptBasedSpecialist:
                 specialist_role=self.role,
             )
             last_response = response
+            _log.info(
+                "Specialist %s LLM response: finish_reason=%s tool_calls=%d model=%s",
+                self.role, response.finish_reason, len(response.tool_calls), response.model,
+            )
 
             if not response.tool_calls or response.finish_reason == "stop":
                 break

@@ -18,6 +18,10 @@ def _load_thresholds() -> dict[str, Any]:
             data: dict[str, Any] = yaml.safe_load(f) or {}
         return data.get("thresholds", {})  # type: ignore[no-any-return]
     except FileNotFoundError:
+        import logging
+        logging.getLogger(__name__).warning(
+            "risk_thresholds.yaml not found at %s — using hardcoded defaults", _THRESHOLDS_PATH
+        )
         return {}
 
 

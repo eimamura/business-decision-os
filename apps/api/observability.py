@@ -11,6 +11,11 @@ from opentelemetry.sdk.trace.export import BatchSpanProcessor
 
 
 def configure_logging() -> None:
+    import logging
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s %(levelname)s %(name)s %(message)s",
+    )
     structlog.configure(
         processors=[
             structlog.stdlib.filter_by_level,

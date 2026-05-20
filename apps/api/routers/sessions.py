@@ -110,11 +110,19 @@ async def post_message(session_id: str, body: SendMessageRequest) -> dict[str, A
     orchestrator = get_orchestrator(queue)
 
     async def _run_and_signal() -> None:
+        import logging
+        _log = logging.getLogger(__name__)
         recommendation: Recommendation | None = None
         try:
             recommendation = await orchestrator.run(UUID(session_id), goal)
-        except Exception:
-            pass
+        except Exception as exc:
+            _log.exception("Orchestrator failed for session %s: %s", session_id, exc)
+            await queue.put({
+                "type": "error",
+                "code": "orchestration_failed",
+                "message": str(exc),
+                "timestamp": _iso_now(),
+            })
         finally:
             reply = _format_recommendation(recommendation) if recommendation else (
                 "Processing failed. Please try again."
@@ -139,6 +147,7 @@ async def post_message(session_id: str, body: SendMessageRequest) -> dict[str, A
 
 @router.get("/{session_id}/stream")
 async def stream_session(session_id: str) -> StreamingResponse:
+    print(f"Client connected to stream for session {session_id}")
     async def event_generator() -> AsyncGenerator[str, None]:
         queue = sse_queues.get(session_id)
         if not queue:

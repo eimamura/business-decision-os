@@ -509,8 +509,12 @@ type SseEvent =
   | { type: "tool_completed";      tool_call_id; tool_name; duration_ms; output; executed_query?; status; error? }
   | { type: "recommendation_ready"; recommendation_id; risk_level; requires_approval }
   | { type: "awaiting_approval";   approval_id; recommendation_id; expires_at }
+  | { type: "done";                session_id; reply }               // chat reply delivery
   | { type: "error";               code; message; recoverable }
 ```
+
+- `type: "done"` carries the final assistant reply in `reply`. The Chat UI subscribes to the stream after POST `/messages` and appends the reply when this event arrives.
+- `type: "error"` is displayed directly in the Chat UI as a red error bubble. Errors must never be swallowed silently — they must propagate to the user.
 
 SSE reconnect: client sends `Last-Event-ID`; server replays from `audit_log` by `session_id` after that ID.
 
@@ -614,7 +618,14 @@ Tests assert schema conformance, not numerical accuracy. Smart stubs hide schema
 
 ### Error Handling
 
-- Specialist failure: 2 retries with exponential backoff (1s, 4s). On 3rd, fail step + session, emit SSE `error`, surface "View details in Audit" in Chat.
+**Design principle: errors are visible, never hidden.**
+
+- Missing config (API keys, packages, required env vars) raises `RuntimeError` immediately at call site — no silent fallback to stubs or no-ops.
+- Fail-silent fallbacks are prohibited. Code must never degrade silently to a stub when a real implementation was expected. See `AGENTS.md § Prohibitions`.
+- Errors always propagate to the user: SSE `type: "error"` events are displayed as red error bubbles in the Chat UI. The Reasoning Panel is supplemental, not the primary error surface.
+
+Runtime error flows:
+- Specialist failure: 2 retries with exponential backoff (1s, 4s). On 3rd, fail step + session, emit SSE `error`, display in Chat.
 - Tool failure: bubble to Specialist (retry / alternative / fail upward).
 - LLM 429: respect `Retry-After`, retry once.
 - Phase 4+ budget hard ceiling: no retry, fail immediately with `budget_exceeded`.

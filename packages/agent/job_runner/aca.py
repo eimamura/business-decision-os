@@ -7,36 +7,27 @@ from uuid import UUID
 from packages.tools.base import ToolContext
 
 if TYPE_CHECKING:
-    from packages.agent.job_runner import InProcessJobRunner, JobHandle, JobResult, JobSpec
+    from packages.agent.job_runner import JobHandle, JobResult, JobSpec
 
 
 class AcaJobsRunner:
     def __init__(self) -> None:
         self._resource_id = os.environ.get("ACA_SIMULATION_JOB_RESOURCE_ID", "").strip()
-        self._delegate: InProcessJobRunner | None = None
-
         if not self._resource_id:
-            from packages.agent.job_runner import InProcessJobRunner
-            self._delegate = InProcessJobRunner()
+            raise RuntimeError(
+                "ACA_SIMULATION_JOB_RESOURCE_ID is not set — required when JOB_RUNNER_BACKEND=aca"
+            )
 
     async def submit(self, spec: JobSpec, ctx: ToolContext) -> JobHandle:
-        if self._delegate is not None:
-            return await self._delegate.submit(spec, ctx)
         return await self._aca_submit(spec, ctx)
 
     async def status(self, job_id: UUID) -> JobHandle:
-        if self._delegate is not None:
-            return await self._delegate.status(job_id)
         return await self._aca_status(job_id)
 
     async def result(self, job_id: UUID, wait: bool = False) -> JobResult:
-        if self._delegate is not None:
-            return await self._delegate.result(job_id, wait=wait)
         return await self._aca_result(job_id, wait=wait)
 
     async def cancel(self, job_id: UUID) -> None:
-        if self._delegate is not None:
-            return await self._delegate.cancel(job_id)
         await self._aca_cancel(job_id)
 
     async def _aca_submit(self, spec: JobSpec, ctx: ToolContext) -> JobHandle:
