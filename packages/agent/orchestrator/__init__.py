@@ -233,7 +233,7 @@ class PhaseOrchestrator:
 
         try:
             results = await self._memory_store.search(
-                MemoryQuery(type="user_policy", k=1, min_similarity=0.5)
+                MemoryQuery(type="user_policy", k=1, min_similarity=0.0, query_text=goal.text)
             )
             if results:
                 mem, _score = results[0]

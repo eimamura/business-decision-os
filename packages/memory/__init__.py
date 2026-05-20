@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import math
 import struct
+from datetime import datetime, timezone
 from typing import Any, Literal, Protocol
 from uuid import UUID, uuid4
 
@@ -64,12 +66,19 @@ class PgVectorMemoryStore:
         )
         embedding_str = "[" + ",".join(str(v) for v in embedding) + "]"
         record_id = memory.id if memory.id else uuid4()
-        import json
+        created_at = (
+            datetime.fromisoformat(memory.created_at)
+            if isinstance(memory.created_at, str)
+            else memory.created_at
+        )
+        if created_at.tzinfo is None:
+            created_at = created_at.replace(tzinfo=timezone.utc)
 
         async with pool.acquire() as conn:
             await conn.execute(
                 """
-                INSERT INTO memories (id, scope, type, content, embedding, metadata, created_at)
+                INSERT INTO memories
+                    (id, scope, type, content, embedding, metadata_json, created_at)
                 VALUES ($1, $2, $3, $4, $5::vector, $6, $7)
                 """,
                 record_id,
@@ -78,7 +87,7 @@ class PgVectorMemoryStore:
                 memory.content,
                 embedding_str,
                 json.dumps(memory.metadata),
-                memory.created_at,
+                created_at,
             )
         return record_id
 
@@ -107,15 +116,13 @@ class PgVectorMemoryStore:
             where_clause = "WHERE " + " AND ".join(conditions)
 
         sql = f"""
-            SELECT id, scope, type, content, metadata, created_at,
+            SELECT id, scope, type, content, metadata_json, created_at,
                    1 - (embedding <=> $1::vector) AS similarity
             FROM memories
             {where_clause}
             ORDER BY embedding <=> $1::vector
             LIMIT $2
         """
-
-        import json
 
         results: list[tuple[Memory, float]] = []
         async with pool.acquire() as conn:
@@ -131,9 +138,9 @@ class PgVectorMemoryStore:
                     content=row["content"],
                     embedding=None,
                     metadata=(
-                        json.loads(row["metadata"])
-                        if isinstance(row["metadata"], str)
-                        else dict(row["metadata"])
+                        json.loads(row["metadata_json"])
+                        if isinstance(row["metadata_json"], str)
+                        else dict(row["metadata_json"])
                     ),
                     created_at=str(row["created_at"]),
                 )
@@ -142,11 +149,10 @@ class PgVectorMemoryStore:
 
     async def get(self, id: UUID) -> Memory | None:
         pool = await self._get_pool()
-        import json
-
         async with pool.acquire() as conn:
             row = await conn.fetchrow(
-                "SELECT id, scope, type, content, metadata, created_at FROM memories WHERE id = $1",
+                "SELECT id, scope, type, content, metadata_json, created_at"
+                " FROM memories WHERE id = $1",
                 id,
             )
         if row is None:
@@ -158,9 +164,9 @@ class PgVectorMemoryStore:
             content=row["content"],
             embedding=None,
             metadata=(
-                json.loads(row["metadata"])
-                if isinstance(row["metadata"], str)
-                else dict(row["metadata"])
+                json.loads(row["metadata_json"])
+                if isinstance(row["metadata_json"], str)
+                else dict(row["metadata_json"])
             ),
             created_at=str(row["created_at"]),
         )

@@ -113,3 +113,47 @@ class LinearRegressionPredictor:
         future_x = np.arange(n, n + horizon_days).reshape(-1, 1)
         predictions = model.predict(future_x)
         return [float(v) for v in predictions]
+
+
+class TrainedModelPredictor:
+    def __init__(self, db_session: Any) -> None:
+        self._db_session = db_session
+
+    async def predict(self, sku_id: str, horizon_days: int) -> PredictorResult:
+        from sqlalchemy import text
+
+        sql = text(
+            "SELECT predicted_units, model_version FROM prediction_features "
+            "WHERE sku_id = :sku_id LIMIT 1"
+        )
+        result = await self._db_session.execute(sql, {"sku_id": sku_id})
+        row = result.fetchone()
+
+        if row is None:
+            fallback = await LinearRegressionPredictor(self._db_session).predict(
+                sku_id, horizon_days
+            )
+            return PredictorResult(
+                sku_id=sku_id,
+                predicted_units=fallback.predicted_units,
+                model_version=fallback.model_version,
+                source="in_process_fallback",
+            )
+
+        raw_units = row[0]
+        model_version: str = row[1]
+
+        if isinstance(raw_units, list):
+            predicted_units = [float(v) for v in raw_units[:horizon_days]]
+            if len(predicted_units) < horizon_days:
+                mean_val = sum(predicted_units) / len(predicted_units) if predicted_units else 0.0
+                predicted_units += [mean_val] * (horizon_days - len(predicted_units))
+        else:
+            predicted_units = [float(raw_units)] * horizon_days
+
+        return PredictorResult(
+            sku_id=sku_id,
+            predicted_units=predicted_units,
+            model_version=model_version,
+            source="trained_model",
+        )

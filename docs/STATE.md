@@ -7,7 +7,7 @@ TASKS.md holds task definitions. This file holds runtime execution state.
 
 ## Current Phase
 
-M6 Complete — Ready for M7 (Memory & Learning Loop / pgvector)
+M7 Complete — Ready for M8 (Semi-Autonomous Execution + Databricks Lakehouse)
 
 ## Active Lease
 
@@ -15,14 +15,14 @@ None
 
 ## Last Completed Batch
 
-Phase 6 — M6 Complete (T-6001, T-6002, T-6003, T-6004) — 2026-05-20
+Phase 7 — M7 Complete (T-7001, T-7002, T-7003) — 2026-05-20
 
 ## Last Validation
 
 command: `uv run pytest tests/unit/ -q && make lint && make typecheck && make build`
 exit code: 0 (all pass)
 timestamp: 2026-05-20
-note: 172 unit tests PASS. M6 complete: LinearRegressionPredictor + DatabasePredictor in packages/prediction/__init__.py (scikit-learn, reads prediction_features table), ForecastTool upgraded to use real predictor (model_version=linear_regression_v1, adds prediction+source fields to output), Databricks Terraform in infra/terraform/databricks/ (workspace+MLflow+storage), training job in infra/databricks/jobs/train_predictor.py, batch inference job in infra/databricks/jobs/batch_inference.py. lint: 0 errors. typecheck: 0 errors. build: OK.
+note: 182 unit tests PASS. M7 complete: PgVectorMemoryStore in packages/memory/__init__.py (asyncpg, deterministic hash embeddings, cosine similarity search via pgvector), memory write hook in Orchestrator (_write_decision_memory writes user_policy after each recommendation), retrieval hook (_resolve_weights_with_memory queries pgvector before resolve_weights), API wires PgVectorMemoryStore when DATABASE_URL set. SSE emits memory_retrieved events. lint: 0 errors. typecheck: 0 errors. build: OK.
 
 ## Blockers
 
