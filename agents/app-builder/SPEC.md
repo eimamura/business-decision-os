@@ -78,8 +78,8 @@ apps/api/          FastAPI app, routers, middleware, config
 apps/web/          Next.js App Router, components, hooks, lib
 packages/agent/    LLMClient, Orchestrator, Specialists, JobRunner
 packages/tools/    Tool registry + all tools
-packages/domain/   KPI formulas, risk classification, weight resolution
-packages/state/    Repository pattern, Alembic models, migrations
+packages/knowledge/   KPI formulas, risk classification, weight resolution
+packages/persistence/ Repository pattern, Alembic models, migrations
 packages/schemas/  Pydantic schemas (source of truth)
 packages/simulation/
 packages/optimization/

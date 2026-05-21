@@ -108,7 +108,7 @@ Required assertions per stub:
 
 ## Unit Test Scope
 
-- KPI formula correctness (`packages/domain/kpi.py`)
+- KPI formula correctness (`packages/knowledge/kpi.py`)
 - Risk classification (3-tier thresholds from `config/risk_thresholds.yaml`)
 - Sample data generator: seed-42 determinism, NULL rate ≈ 2%, seasonal amplitude > 0.3
 - Approval state machine transitions

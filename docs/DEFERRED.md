@@ -44,7 +44,7 @@ During large-scale refactoring, AI agents and developers tend to expand scope by
 
 **What**: Multi-step, multi-approver, time-gated, or delegated approval chains beyond the current single-approver model.
 
-**Why deferred**: The current model in `packages/state/approvals.py` (pending → approved/rejected/needs_revision/expired) covers all identified use cases. Complexity here is premature.
+**Why deferred**: The current model in `packages/persistence/approvals.py` (pending → approved/rejected/needs_revision/expired) covers all identified use cases. Complexity here is premature.
 
 **Condition to revisit**: When a real, identified use case requires multi-step approval that cannot be modeled with the current state machine. Must be driven by user need, not architectural preference.
 

@@ -144,7 +144,7 @@ The following data survives a service restart:
 | LLM usage | `state.llm_usage_repo` | cost/token records preserved |
 | Notifications | `state.notifications_repo` | delivery state preserved |
 
-**Approval immutability**: approval rows in a terminal state (`approved`, `rejected`, `needs_revision`, `expired`) must not be mutated. This is enforced at the domain layer (`packages/state/approvals.py`), not just by convention.
+**Approval immutability**: approval rows in a terminal state (`approved`, `rejected`, `needs_revision`, `expired`) must not be mutated. This is enforced at the domain layer (`packages/persistence/approvals.py`), not just by convention.
 
 ---
 

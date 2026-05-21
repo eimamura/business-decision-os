@@ -92,7 +92,7 @@ These apply everywhere, regardless of layer:
 | Rule | Rationale |
 |------|-----------|
 | Only `packages/agent/llm/` may call the LLM provider SDK | Centralizes rate limiting, cost tracking, and failover |
-| Only `packages/tools/` and `packages/state/` may hold SQLAlchemy models or execute queries | Prevents hidden data access paths |
+| Only `packages/tools/` and `packages/persistence/` may hold SQLAlchemy models or execute queries | Prevents hidden data access paths |
 | `data/sample/ground_truth/` MUST NOT be read by any agent or tool | Test-data isolation |
 | Public interfaces (`LLMClient`, `Tool`, `JobRunner`, `MemoryStore`, `Orchestrator`, `Specialist`) MUST NOT change without an ADR | Preserves integration contracts |
 | No smart stubs: stubs MUST conform to schema, not approximate real behavior | Prevents false-passing tests |
