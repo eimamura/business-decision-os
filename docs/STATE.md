@@ -6,7 +6,7 @@ Orchestrator execution state. Written only by bdos-orchestrator.
 
 ## Active Phase
 
-Phase 0 — Protect
+Phase 1 — Tool Layer Isolation
 
 ## Active Lease
 

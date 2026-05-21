@@ -6,7 +6,23 @@ Canonical instruction file for AI coding agents working on this repository.
 
 Build the **Business Decision OS** — an agent with a simulatable learning model. The LLM acts as control tower, not calculation engine. Domain: supply chain end-to-end optimization. See `docs/PRODUCT_SPEC.md` for the full goal and `docs/DESIGN.md` for architecture.
 
-## Agent Architecture
+## Terminology: Two Kinds of "Agent"
+
+This repository uses the word "agent" in two distinct contexts. Do not confuse them.
+
+| Term | What it means | Where defined |
+|---|---|---|
+| **Coding agent** (or **subagent**) | A Claude Code harness agent that **builds** this system. Runs during development only. Never ships in production. | This file (`AGENTS.md`) and `agents/*/SPEC.md` |
+| **Product agent** | An AI agent that **is** the Business Decision OS system. Runs in production; processes user requests and calls tools. | `docs/DESIGN.md` §Agent Classification |
+
+When this file says "agent" it means a coding agent.
+When `docs/DESIGN.md` says "agent" it means a product agent.
+
+See `docs/DESIGN.md` §Terminology for the full disambiguation.
+
+---
+
+## Coding Agent Architecture
 
 This project uses a SPEC-centered Claude Code architecture. Your full execution contract is in your role's `agents/*/SPEC.md`.
 
@@ -79,12 +95,12 @@ Scopes — pick the one that matches the files changed:
 | `web` | `apps/web/` |
 | `schemas` | `packages/schemas/` |
 | `tools` | `packages/tools/` |
-| `domain` | `packages/domain/` |
+| `knowledge` | `packages/knowledge/` |
 | `simulation` | `packages/simulation/` |
 | `optimization` | `packages/optimization/` |
 | `prediction` | `packages/prediction/` |
 | `memory` | `packages/memory/` |
-| `state` | `packages/state/` |
+| `persistence` | `packages/persistence/` |
 | `infra` | `docker-compose.yml`, `Makefile`, `.claude/`, `Dockerfile` |
 | `data` | `data/`, seed scripts, migrations |
 | `docs` | `docs/`, `AGENTS.md`, `CLAUDE.md` |

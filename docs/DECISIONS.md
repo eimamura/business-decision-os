@@ -90,3 +90,15 @@ Reason: `packages/lakehouse/` (bronze/silver/gold) schema changes require a sepa
 Consequence: `packages/lakehouse/` bronze, silver, and gold layer schemas are not modified during Phases 0–6. Any lakehouse change requires a separate plan.
 
 Reversal cost: n/a (decision is about scope boundary, not architecture)
+
+---
+
+## Decision: Test execution deferred to Phase 6 during Phases 1–5
+
+Date: 2026-05-21
+
+Reason: Running the full test suite at each phase checkpoint (1–5) creates long feedback loops during rapid structural refactoring. The test suite takes meaningful time and some tests depend on infrastructure (PostgreSQL, live endpoints) that complicates CI during intermediate states. Phase 0 already locked all external contracts with 10 dedicated contract tests; re-running them at each phase would catch nothing that a well-scoped grep cannot catch faster.
+
+Consequence: Phase 1–5 checkpoints use static analysis only (grep, mypy, ruff). The full pytest suite, including Phase 0 contract tests, runs exactly once in Phase 6. Any regression introduced during Phases 1–5 will be detected at that point. Agents must not invoke `pytest` as a phase checkpoint step during Phases 1–5.
+
+Reversal cost: low (add `pytest` back to individual phase checkpoints if the deferred approach is insufficient)

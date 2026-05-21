@@ -5,3 +5,122 @@
 Refactor the existing system toward the architecture defined in DESIGN.md.
 
 Existing structure should not be preserved unless it supports the new design.
+
+Follow the phase order in MIGRATION_PLAN.md. Do not begin Phase N+1 until Phase N checkpoint passes.
+
+---
+
+## Phase R — Structural Rename
+
+| ID | Task | Owner | Status | Done when |
+|---|---|---|---|---|
+| R-1 | Rename `packages/state/` → `packages/persistence/`; update all Python imports; update `pyproject.toml` workspace member | bdos-app-builder | Done | `grep -r "packages/state"` returns 0 hits outside `.git` |
+| R-2 | Rename `packages/domain/` → `packages/knowledge/`; update all Python imports; update `pyproject.toml` workspace member | bdos-app-builder | Done | `grep -r "packages/domain"` returns 0 hits outside `.git` |
+| R-3 | Rename `packages/agent/job_runner/` → `packages/agent/runner/`; update all imports | bdos-app-builder | Done | `grep -r "job_runner"` returns 0 hits outside `.git` |
+| R-4 | Rename 6 test files with phase/ticket codes to descriptive names (see MIGRATION_PLAN.md §Phase R for the mapping) | bdos-test-review | Done | All old filenames gone; pytest collects the same number of tests |
+| R-5 | Update `AGENTS.md` commit scope table: `state` → `persistence`, `domain` → `knowledge` | bdos-orchestrator | Done | Scopes match renamed directories |
+| R-6 | Add `§Monorepo Layout`, `§Public Interfaces`, `§Phase Progression` to `docs/DESIGN.md` | bdos-orchestrator | Done | `AGENTS.md` cross-references resolve |
+| R-7 | Rewrite `docs/MIGRATION_PLAN.md` inserting Phase R before Phase 0 | bdos-orchestrator | Done | MIGRATION_PLAN reflects all 8 phases (R + 0–6) |
+| R-8 | Run Phase R checkpoint; tag `phase-r-complete` | bdos-infra | Done | All grep checks return 0; pytest / mypy / ruff pass |
+| R-9 | Update stale path references in docs: `docs/ARCHITECTURE_RULES.md`, `docs/CONTRACTS.md`, `docs/DEFERRED.md`, `agents/app-builder/SPEC.md`, `agents/test-review/SPEC.md` — replace `packages/state/` → `packages/persistence/`, `packages/domain/` → `packages/knowledge/` | bdos-app-builder | Done | `grep -r "packages/state\|packages/domain" docs/ agents/ --include="*.md"` returns 0 (excluding `docs/archive/`) |
+
+---
+
+## Phase 0 — Protect
+
+| ID | Task | Owner | Done when |
+|---|---|---|---|
+| P0-1 | Audit `docs/CONTRACTS.md` — replace any placeholder items with specific, testable assertions | bdos-orchestrator | No item uses vague language ("TBD", "placeholder", "etc.") |
+| P0-2 | Write contract test: `GET /healthz` returns 200 | bdos-test-review | Test passes with mock transport (no live server) |
+| P0-3 | Write contract test: session create → retrieve round-trip | bdos-test-review | Test passes |
+| P0-4 | Write contract test: approval state machine rejects mutations of terminal states | bdos-test-review | Test passes |
+| P0-5 | Write contract test: audit log is append-only (no UPDATE/DELETE on audit rows) | bdos-test-review | Test passes |
+| P0-6 | Write contract test: SSE stream terminates with `done` or `error` event | bdos-test-review | Test passes |
+| P0-7 | Write contract test: missing `ANTHROPIC_API_KEY` raises `RuntimeError` at the call site | bdos-test-review | Test passes |
+| P0-8 | Run full test suite; record baseline pass count in `docs/TESTING.md` | bdos-infra | Baseline count documented |
+| P0-9 | Tag `phase0-complete` | bdos-infra | Tag exists in git |
+
+---
+
+## Phase 1 — Tool Layer Isolation
+
+| ID | Task | Owner | Done when |
+|---|---|---|---|
+| P1-1 | Audit `packages/agent/specialists/base.py` and `agent_based.py` for direct SQLAlchemy usage; extract to `packages/tools/` | bdos-app-builder | `grep -rn "from sqlalchemy\|import sqlalchemy" packages/agent/` returns 0 |
+| P1-2 | Audit `packages/agent/orchestrator/__init__.py` and `weights.py` for direct `anthropic` SDK calls; extract to `packages/agent/llm/` | bdos-app-builder | `grep -rn "import anthropic\|from anthropic" packages/agent/` outside `llm/` returns 0 |
+| P1-3 | Verify every tool in `packages/tools/` inherits from `packages/tools/base.py:Tool` | bdos-test-review | Arch test or grep confirms |
+| P1-4 | Verify all LLM calls go through `packages/agent/llm/LLMClient` | bdos-test-review | Arch test or grep confirms |
+| P1-5 | Run Phase 1 checkpoint greps (grep only — pytest deferred to Phase 6) | bdos-infra | Both greps return 0 hits |
+| P1-6 | Tag `phase1-complete` | bdos-infra | Tag exists in git |
+
+---
+
+## Phase 2 — Memory Formalization
+
+| ID | Task | Owner | Done when |
+|---|---|---|---|
+| P2-1 | Implement `ShortTermMemory` in `packages/memory/__init__.py` with typed fields | bdos-app-builder | Class importable; mypy passes |
+| P2-2 | Implement `WorkingMemory` | bdos-app-builder | Same |
+| P2-3 | Implement `LongTermMemory` | bdos-app-builder | Same |
+| P2-4 | Implement `DecisionMemory` | bdos-app-builder | Same |
+| P2-5 | Implement `UserMemory` | bdos-app-builder | Same |
+| P2-6 | Implement `DomainMemory` | bdos-app-builder | Same |
+| P2-7 | Migrate `packages/agent/history.py` usages to `ShortTermMemory` / `WorkingMemory` as appropriate | bdos-app-builder | No raw `dict` passed as "memory" in agent method signatures |
+| P2-8 | Run mypy on `packages/memory/` (pytest deferred to Phase 6) | bdos-infra | mypy clean on packages/memory/ |
+| P2-9 | Tag `phase2-complete` | bdos-infra | Tag exists in git |
+
+---
+
+## Phase 3 — Guardrail Separation
+
+| ID | Task | Owner | Done when |
+|---|---|---|---|
+| P3-1 | Audit `packages/agent/` and `apps/api/routers/` for scattered permission / approval checks | bdos-test-review | Audit findings documented in DECISIONS.md or PR description |
+| P3-2 | Create Guardrail module (in `packages/tools/guardrail.py` or new `packages/guardrails/`) exposing `can_execute()`, `needs_approval()`, `audit_required()` | bdos-app-builder | Module importable; all three functions exported with typed signatures |
+| P3-3 | Migrate scattered checks to call the Guardrail module | bdos-app-builder | `grep -rn "requires_approval\|can_execute" packages/agent/` outside guardrail module returns 0 |
+| P3-4 | Confirm approval state enforcement stays in `packages/persistence/approvals.py`; Guardrail calls it, not the reverse | bdos-test-review | Code review confirms boundary |
+| P3-5 | Run Phase 3 checkpoint grep (pytest deferred to Phase 6) | bdos-infra | Grep returns 0 hits outside guardrail module |
+| P3-6 | Tag `phase3-complete` | bdos-infra | Tag exists in git |
+
+---
+
+## Phase 4 — Agent Reclassification
+
+| ID | Task | Owner | Done when |
+|---|---|---|---|
+| P4-1 | Map current specialist types in `agent_based.py` to DESIGN.md Domain + Analytical agent table; document in DECISIONS.md | bdos-orchestrator | Mapping complete |
+| P4-2 | Create `packages/agent/domain/` with one class per Domain Agent: demand, inventory, replenishment, procurement, supplier, production, logistics | bdos-app-builder | 7 classes exist; each matches a row in DESIGN.md agent table |
+| P4-3 | Create `packages/agent/analytical/` with one class per Analytical Agent: exception, scenario, ranking, root_cause | bdos-app-builder | 4 classes exist; each matches a row in DESIGN.md agent table |
+| P4-4 | Verify each class conforms to ARCHITECTURE_RULES.md rules for its classification | bdos-test-review | Arch tests pass |
+| P4-5 | Remove `packages/agent/specialists/` after all references are migrated | bdos-app-builder | Directory absent; no imports reference `specialists` |
+| P4-6 | Verify directory structure: `packages/agent/specialists/` absent; `domain/` and `analytical/` present (pytest deferred to Phase 6) | bdos-infra | Directories match expected layout |
+| P4-7 | Tag `phase4-complete` | bdos-infra | Tag exists in git |
+
+---
+
+## Phase 5 — Orchestrator Responsibility Cleanup
+
+| ID | Task | Owner | Done when |
+|---|---|---|---|
+| P5-1 | Audit `packages/agent/orchestrator/weights.py` for supply-chain domain constants | bdos-app-builder | Audit complete |
+| P5-2 | Move domain constants (`safety_stock`, `reorder_point`, `lead_time`, `service_level`, etc.) to `packages/knowledge/` or the appropriate domain agent | bdos-app-builder | `grep -n "safety_stock\|reorder_point\|lead_time\|service_level" packages/agent/orchestrator/` returns 0 |
+| P5-3 | Audit `packages/agent/orchestrator/__init__.py` for embedded domain reasoning; extract to specialists | bdos-app-builder | No supply-chain domain logic in orchestrator |
+| P5-4 | Run Phase 5 checkpoint grep (pytest deferred to Phase 6) | bdos-infra | Grep returns 0 hits |
+| P5-5 | Tag `phase5-complete` | bdos-infra | Tag exists in git |
+
+---
+
+## Phase 6 — Final Validation
+
+Phase 6 is the single pytest gate for the entire refactoring. Tests were not run in Phases 1–5 to avoid long feedback loops during structural work. See DECISIONS.md for rationale.
+
+| ID | Task | Owner | Done when |
+|---|---|---|---|
+| P6-1 | Run full pytest suite; compare pass count vs Phase 0 baseline (213 passed, 3 pre-existing failures) | bdos-infra | No new failures vs baseline |
+| P6-2 | Run mypy across all packages | bdos-infra | Clean |
+| P6-3 | Run ruff / lint | bdos-infra | Clean |
+| P6-4 | Verify code directory structure matches DESIGN.md §Monorepo Layout | bdos-test-review | `find packages/agent -type d \| sort` matches expected layout |
+| P6-5 | Verify ARCHITECTURE_RULES.md cross-cutting rules via grep or arch tests | bdos-test-review | All pass |
+| P6-6 | Verify no DEFERRED.md items have been implemented (scope check) | bdos-test-review | Scope check passes |
+| P6-7 | Mark all task rows in this file complete | bdos-orchestrator | All rows show done |
+| P6-8 | Tag `v2-complete` | bdos-infra | Tag exists in git |

@@ -13,6 +13,39 @@ The role of this document is to declare the target state that coding agents must
 
 ---
 
+## Terminology
+
+This project uses the word "agent" in two distinct, non-overlapping contexts. Confusing them is a common source of misunderstanding.
+
+### Product Agents (runtime)
+
+Agents that **are** the Business Decision OS system. They run in production, process user requests, call tools, and generate decision-ready answers.
+
+| Term used in this document | Examples |
+|---|---|
+| **Orchestrator Agent** | The central agent — intent analysis, planning, routing, aggregation |
+| **Domain Agent** | Demand Agent, Inventory Agent, Replenishment Agent, … |
+| **Analytical Agent** | Exception Agent, Scenario Agent, Ranking Agent, Root Cause Agent |
+
+When this document says "agent" without qualification, it means a product agent.
+
+### Coding Agents (development-time)
+
+Claude Code subagents that **build and maintain** this system. They run inside the Claude Code harness during development and never appear in the production system.
+
+| Term used in AGENTS.md | Role |
+|---|---|
+| `bdos-orchestrator` | Plans phases, decomposes tasks, routes to specialists, updates TASKS.md |
+| `bdos-app-builder` | Writes application code — FastAPI, Python packages, Next.js |
+| `bdos-infra` | Infrastructure, Docker Compose, CI/CD, Makefile |
+| `bdos-test-review` | Writes tests, reviews code, verifies phase checkpoints |
+
+When AGENTS.md says "agent" or "subagent", it means a coding agent.
+
+**The product agents are what the coding agents are building.** They are different things.
+
+---
+
 ## Design Principles
 
 This system is designed as an agent system that supports business decision-making, not as a simple chatbot.
@@ -340,6 +373,75 @@ The following are not defined in this DESIGN.md:
 - Deployment procedures
 
 These are managed in separate documents.
+
+---
+
+## Monorepo Layout
+
+The canonical directory structure that all agents must treat as authoritative.
+Adding new top-level packages outside this layout requires an ADR.
+
+```
+packages/
+  agent/
+    orchestrator/   ← Orchestration Layer (intent, planning, routing, aggregation)
+    domain/         ← Domain Agents (demand, inventory, replenishment, procurement,
+                       supplier, production, logistics) — populated in Phase 4
+    analytical/     ← Analytical Agents (exception, scenario, ranking, root_cause)
+                       — populated in Phase 4
+    specialists/    ← Pre-Phase-4 agent implementations (removed after Phase 4)
+    llm/            ← LLM client — only entry point to LLM provider SDK
+    runner/         ← Celery job runner infrastructure
+  tools/            ← Tool Layer (all execution capabilities)
+  memory/           ← Memory Layer (six typed stores)
+  persistence/      ← DB session management and all repository classes
+  knowledge/        ← Domain knowledge: KPI definitions, business rules
+  simulation/       ← Simulation compute engine (used by simulation_tool.py)
+  optimization/     ← Optimization compute engine (used by optimizer_tool.py)
+  prediction/       ← Prediction compute engine (used by forecast_tool.py)
+  schemas/          ← Pydantic schemas shared across Python packages
+  schemas-ts/       ← TypeScript schemas shared with apps/web
+  lakehouse/        ← Bronze / Silver / Gold data lake layers
+apps/
+  api/              ← FastAPI application (entry point)
+  web/              ← Next.js frontend (entry point)
+  simulation-worker/    ← Celery worker for simulation jobs
+  optimization-worker/  ← Celery worker for optimization jobs
+```
+
+---
+
+## Public Interfaces
+
+The following interfaces may not change signature without an ADR filed in `docs/ADR/`.
+An interface change that is not backed by an ADR will be rejected at code review.
+
+| Interface | Location |
+|---|---|
+| `LLMClient` | `packages/agent/llm/` |
+| `Tool` (base class) | `packages/tools/base.py` |
+| `JobRunner` | `packages/agent/runner/` |
+| `MemoryStore` (the six typed classes) | `packages/memory/` |
+| `Orchestrator` | `packages/agent/orchestrator/` |
+| `Specialist` (base class) | `packages/agent/specialists/` (until Phase 4 reclassification) |
+
+---
+
+## Phase Progression
+
+Implementation follows the phase order in `docs/MIGRATION_PLAN.md`.
+Do not begin Phase N+1 work while Phase N checkpoint is unverified.
+
+| Phase | Goal |
+|---|---|
+| Phase R | Structural Rename — align package names with this document's vocabulary |
+| Phase 0 | Protect — lock external contracts before touching internals |
+| Phase 1 | Tool Layer Isolation — no agent calls DB or LLM SDK directly |
+| Phase 2 | Memory Formalization — six typed memory stores, no raw dict |
+| Phase 3 | Guardrail Separation — permission logic consolidated in one module |
+| Phase 4 | Agent Reclassification — specialists → domain/ + analytical/ |
+| Phase 5 | Orchestrator Cleanup — no domain logic in orchestrator |
+| Phase 6 | Final Validation — full system matches this document |
 
 ---
 
