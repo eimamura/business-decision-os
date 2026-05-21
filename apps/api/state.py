@@ -20,7 +20,7 @@ sessions: dict[str, dict[str, Any]] = {}
 sse_queues: dict[str, Queue[dict[str, Any]]] = {}
 
 
-def _build_job_runner() -> AcaJobsRunner | InProcessJobRunner | CeleryJobRunner:
+def _build_runner() -> AcaJobsRunner | InProcessJobRunner | CeleryJobRunner:
     backend = os.environ.get("JOB_RUNNER_BACKEND", "in_process").strip()
     if backend == "aca":
         return AcaJobsRunner()
@@ -74,7 +74,7 @@ def get_orchestrator(sse_queue: Queue[dict[str, Any]]) -> PhaseOrchestrator:
     if not api_key:
         raise RuntimeError("ANTHROPIC_API_KEY is not set — add it to .env")
     llm_client = ClaudeClient(api_key=api_key, usage_writer=_real_usage_writer)
-    job_runner = _build_job_runner()
-    tool_registry = create_tool_registry(job_runner=job_runner)
+    runner = _build_runner()
+    tool_registry = create_tool_registry(runner=runner)
     memory_store = _build_memory_store()
     return PhaseOrchestrator(llm_client, tool_registry, memory_store, sse_queue)

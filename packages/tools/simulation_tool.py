@@ -28,12 +28,12 @@ class SimulationTool:
         },
     }
 
-    def __init__(self, job_runner: Any | None = None) -> None:
-        if job_runner is not None:
-            self._job_runner = job_runner
+    def __init__(self, runner: Any | None = None) -> None:
+        if runner is not None:
+            self._runner = runner
         else:
             from packages.agent.runner import InProcessJobRunner
-            self._job_runner = InProcessJobRunner()
+            self._runner = InProcessJobRunner()
 
     async def handle(self, input: dict[str, Any], ctx: ToolContext) -> ToolResult:
         from packages.agent.runner import JobSpec
@@ -51,8 +51,8 @@ class SimulationTool:
             },
             idempotency_key=str(ctx.agent_step_id),
         )
-        handle = await self._job_runner.submit(spec, ctx)
-        job_result = await self._job_runner.result(handle.job_id, wait=True)
+        handle = await self._runner.submit(spec, ctx)
+        job_result = await self._runner.result(handle.job_id, wait=True)
 
         if job_result.status != "succeeded" or job_result.output is None:
             raise RuntimeError(

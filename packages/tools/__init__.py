@@ -30,14 +30,14 @@ __all__ = [
 ]
 
 
-def create_tool_registry(job_runner: Any = None, db_session: Any = None) -> ToolRegistry:
+def create_tool_registry(runner: Any = None, db_session: Any = None) -> ToolRegistry:
     registry = ToolRegistry()
     registry.register(SqlQueryTool(db_session=db_session))
     registry.register(NlQueryTool())
     registry.register(ApprovalTool())
     registry.register(AuditLogTool())
     registry.register(ForecastTool(predictor=LinearRegressionPredictor(db_session=db_session)))
-    registry.register(SimulationTool(job_runner=job_runner))
+    registry.register(SimulationTool(runner=runner))
     registry.register(OptimizerTool())
     registry.register(EvaluatorTool())
     return registry

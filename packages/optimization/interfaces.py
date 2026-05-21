@@ -32,7 +32,7 @@ class OptimizationContext(BaseModel):
     session_id: UUID | None = None
     agent_step_id: UUID | None = None
     db_session: Any | None = None
-    job_runner: Any | None = None
+    runner: Any | None = None
 
     model_config = {"arbitrary_types_allowed": True}
 

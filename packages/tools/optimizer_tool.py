@@ -33,9 +33,9 @@ class OptimizerTool:
         horizon_days = int(input.get("horizon_days", 90))
         max_stockout_days = int(input.get("max_stockout_days", 30))
 
-        job_runner = getattr(ctx, "job_runner", None)
+        runner = getattr(ctx, "runner", None)
 
-        if job_runner is not None:
+        if runner is not None:
             from packages.agent.runner import JobSpec
             spec = JobSpec(
                 kind="optimization",
@@ -47,8 +47,8 @@ class OptimizerTool:
                 },
                 idempotency_key=f"opt-{sku_id}-{moq}-{horizon_days}",
             )
-            handle = await job_runner.submit(spec, ctx)
-            result = await job_runner.result(handle.job_id, wait=True)
+            handle = await runner.submit(spec, ctx)
+            result = await runner.result(handle.job_id, wait=True)
             candidates = result.output.get("candidates", []) if result.output else []
         else:
             opt_input = OptimizationInput(
