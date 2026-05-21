@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+import time
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any
 
@@ -81,6 +82,7 @@ class AgentBasedSpecialist:
             "specialist_role": self.role,
             "task_id": str(task.task_id),
             "started_at": datetime.now(timezone.utc).isoformat(),
+            "input_summary": task.instruction[:200],
         })
 
         system_prompt = _SPECIALIST_PROMPTS.get(self.role, f"You are a {self.role} specialist.")
@@ -136,9 +138,52 @@ class AgentBasedSpecialist:
             for call in response.tool_calls:
                 tool = self._tool_registry.get(call["name"])
                 if tool is not None:
-                    tool_result = await tool.handle(call.get("input", {}), ctx)
-                    tool_calls_made.append(ctx.agent_step_id)
-                    tool_results[call["name"]] = tool_result.output
+                    tool_call_id = call["id"]
+                    tool_input = call.get("input", {})
+                    tool_t0 = time.monotonic()
+                    await self._push({
+                        "type": "tool_called",
+                        "tool_name": call["name"],
+                        "tool_call_id": tool_call_id,
+                        "step_id": str(task.task_id),
+                        "specialist_role": self.role,
+                        "input": tool_input,
+                        "timestamp": datetime.now(timezone.utc).isoformat(),
+                    })
+                    try:
+                        tool_result = await tool.handle(tool_input, ctx)
+                        tool_duration_ms = int((time.monotonic() - tool_t0) * 1000)
+                        tool_calls_made.append(ctx.agent_step_id)
+                        tool_results[call["name"]] = tool_result.output
+                        executed_query = (
+                            tool_result.output.get("executed_query")
+                            if isinstance(tool_result.output, dict)
+                            else None
+                        )
+                        await self._push({
+                            "type": "tool_completed",
+                            "tool_name": call["name"],
+                            "tool_call_id": tool_call_id,
+                            "specialist_role": self.role,
+                            "duration_ms": tool_duration_ms,
+                            "output": tool_result.output,
+                            "executed_query": executed_query,
+                            "status": "success",
+                            "timestamp": datetime.now(timezone.utc).isoformat(),
+                        })
+                    except Exception as exc:
+                        tool_duration_ms = int((time.monotonic() - tool_t0) * 1000)
+                        await self._push({
+                            "type": "tool_completed",
+                            "tool_name": call["name"],
+                            "tool_call_id": tool_call_id,
+                            "specialist_role": self.role,
+                            "duration_ms": tool_duration_ms,
+                            "status": "error",
+                            "error": str(exc),
+                            "timestamp": datetime.now(timezone.utc).isoformat(),
+                        })
+                        raise
                     messages.append(LLMMessage(
                         role="tool",
                         content=json.dumps(tool_result.output),

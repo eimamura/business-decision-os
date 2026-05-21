@@ -34,6 +34,7 @@ def create_domain_specialists(
 def create_specialists(
     llm_client: Any,
     tool_registry: Any,
+    sse_queue: Any = None,
 ) -> dict[str, PromptBasedSpecialist]:
     roles: list[tuple[str, SpecialistRole]] = [
         ("domain_expert", "domain_expert"),
@@ -47,6 +48,7 @@ def create_specialists(
             role=role,
             llm_client=llm_client,
             tool_registry=tool_registry,
+            sse_queue=sse_queue,
         )
         for name, role in roles
     }

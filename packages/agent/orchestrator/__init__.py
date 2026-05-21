@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 from datetime import datetime, timezone
 from typing import Any, Literal, Protocol
 from uuid import UUID, uuid4
@@ -73,6 +74,20 @@ class Orchestrator(Protocol):
 
 def _iso_now() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+def _routing_rationale(roles: list[str]) -> str:
+    if not roles:
+        return "Conversational input — no specialist needed"
+    if "sim_opt" in roles and "domain_expert" in roles:
+        return "Full optimization pipeline: domain analysis + data query + simulation + evaluation"
+    if "domain_expert" in roles and "data_engineer" in roles:
+        return "Domain analysis + data query (no optimization)"
+    if "domain_expert" in roles:
+        return "Domain analysis only"
+    if "data_engineer" in roles:
+        return "Simple data lookup query"
+    return "General query"
 
 
 def _make_stub_kpi_scores(order_qty: float, idx: int) -> list[KpiScore]:
@@ -292,6 +307,7 @@ class PhaseOrchestrator:
         )
 
         async def _run_one(agent: Any) -> tuple[str, SpecialistResult]:
+            _run_one_t0 = time.monotonic()
             task_id = uuid4()
             ctx = ToolContext(
                 session_id=session_id,
@@ -316,12 +332,16 @@ class PhaseOrchestrator:
                     "recoverable": False,
                     "timestamp": _iso_now(),
                 })
+            specialist_duration_ms = int((time.monotonic() - _run_one_t0) * 1000)
             await self._push({
                 "type": "specialist_completed",
                 "specialist_name": agent.name.replace("_", " ").title(),
                 "specialist_role": agent.role,
                 "task_id": str(task_id),
-                "duration_ms": 0,
+                "duration_ms": specialist_duration_ms,
+                "output_summary": (
+                    str(result.output.get("text", ""))[:100] if result.output else None
+                ),
                 "timestamp": _iso_now(),
             })
             return agent.role, result
@@ -345,15 +365,27 @@ class PhaseOrchestrator:
         })
 
         route_step_id = str(uuid4())
+        route_started_at = _iso_now()
+        route_t0 = time.monotonic()
         await self._push({
             "type": "step_started",
             "step_id": route_step_id,
             "specialist_role": "orchestrator",
             "step_type": "routing",
-            "started_at": _iso_now(),
+            "started_at": route_started_at,
+            "input_summary": goal.text[:200],
         })
 
         role_sequence = await self._route_specialists(goal)
+        route_duration_ms = int((time.monotonic() - route_t0) * 1000)
+        rationale = _routing_rationale(role_sequence)
+
+        await self._push({
+            "type": "routing_decision",
+            "route": role_sequence if role_sequence else ["none"],
+            "rationale": rationale,
+            "timestamp": _iso_now(),
+        })
 
         await self._push({
             "type": "step_completed",
@@ -361,7 +393,8 @@ class PhaseOrchestrator:
             "specialist_role": "orchestrator",
             "step_type": "routing",
             "selected_roles": role_sequence,
-            "duration_ms": 0,
+            "duration_ms": route_duration_ms,
+            "ended_at": _iso_now(),
         })
 
         if not role_sequence:
@@ -397,7 +430,9 @@ class PhaseOrchestrator:
             )
 
         # Sequential pipeline specialists (PromptBasedSpecialist — data, sim, eval)
-        pipeline_specialists = create_specialists(self._llm_client, self._tool_registry)
+        pipeline_specialists = create_specialists(
+            self._llm_client, self._tool_registry, sse_queue=self._sse_queue
+        )
         pipeline_tools: dict[str, list[str]] = {
             "data_engineer": ["sql_query", "forecast"],
             "sim_opt": ["simulate_inventory", "optimize_replenishment"],
@@ -416,6 +451,7 @@ class PhaseOrchestrator:
             specialist = pipeline_specialists[role]
             step_id = str(uuid4())
             task_id = uuid4()
+            step_t0 = time.monotonic()
 
             await self._push({
                 "type": "step_started",
@@ -423,6 +459,7 @@ class PhaseOrchestrator:
                 "specialist_role": role,
                 "step_type": "specialist",
                 "started_at": _iso_now(),
+                "input_summary": goal.text[:200],
             })
 
             ctx = ToolContext(
@@ -441,6 +478,7 @@ class PhaseOrchestrator:
             )
 
             result = await self._run_specialist_with_retry(specialist, task, ctx)
+            step_duration_ms = int((time.monotonic() - step_t0) * 1000)
 
             if result.status == "failed":
                 self._sessions[session_id]["status"] = "failed"
@@ -459,10 +497,14 @@ class PhaseOrchestrator:
                 "type": "step_completed",
                 "step_id": step_id,
                 "specialist_role": role,
-                "duration_ms": 0,
+                "duration_ms": step_duration_ms,
                 "output_preview": str(result.output)[:200],
+                "output_summary": (
+                    str(result.output.get("text", ""))[:100] if result.output else None
+                ),
                 "tokens": 0,
                 "cost_usd": 0.0,
+                "ended_at": _iso_now(),
             })
 
         sim_opt_result = results.get(

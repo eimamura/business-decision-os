@@ -5,48 +5,112 @@ import type { SessionUsage } from "@/types/chat";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
-interface StepEvent {
+// ---- Types ----
+
+interface RawEvent {
   type: string;
-  step_id?: string;
-  specialist_role?: string;
-  step_type?: string;
-  started_at?: string;
-  duration_ms?: number;
-  output_preview?: string;
-  tokens?: number;
-  cost_usd?: number;
-  tool_name?: string;
-  tool_call_id?: string;
+  [key: string]: unknown;
+}
+
+interface ToolTrace {
+  toolName: string;
+  toolCallId: string;
   input?: unknown;
   output?: unknown;
-  executed_query?: string;
-  status?: string;
+  executedQuery?: string;
+  startedAt: string;
+  durationMs?: number;
+  status: "running" | "completed" | "error";
   error?: string;
-  code?: string;
-  message?: string;
-  recoverable?: boolean;
 }
+
+interface SpecialistTrace {
+  name: string;
+  role: string;
+  taskId?: string;
+  stepId?: string;
+  startedAt: string;
+  durationMs?: number;
+  status: "running" | "completed" | "failed";
+  tools: ToolTrace[];
+  outputSummary?: string;
+  isAgent: boolean; // true = AgentBasedSpecialist, false = pipeline PromptBasedSpecialist
+}
+
+interface OrchestratorTrace {
+  startedAt: string;
+  route: string[];
+  rationale: string;
+  specialists: SpecialistTrace[];
+  recommendation?: {
+    riskLevel: string;
+    requiresApproval: boolean;
+    autoExecute: boolean;
+  };
+  durationMs?: number;
+}
+
+// ---- BRT formatting ----
+
+function formatBRT(iso: string): string {
+  try {
+    return new Intl.DateTimeFormat("pt-BR", {
+      timeZone: "America/Sao_Paulo",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+    }).format(new Date(iso));
+  } catch {
+    return iso;
+  }
+}
+
+function fmsDuration(ms: number): string {
+  if (ms < 1000) return `${ms}ms`;
+  return `${(ms / 1000).toFixed(1)}s`;
+}
+
+// ---- Role labels ----
+
+const ROLE_LABELS: Record<string, string> = {
+  orchestrator: "Orchestrator",
+  domain_expert: "Domain Expert",
+  data_engineer: "Data Engineer",
+  sim_opt: "Sim / Opt",
+  evaluator: "Evaluator",
+  forecast: "Forecast",
+  inventory: "Inventory",
+  procurement: "Procurement",
+  production: "Production",
+  cost: "Cost",
+};
+
+const RISK_COLORS: Record<string, string> = {
+  low: "text-emerald-400 bg-emerald-400/10",
+  medium: "text-amber-400 bg-amber-400/10",
+  high: "text-red-400 bg-red-400/10",
+};
+
+// ---- Props ----
 
 interface Props {
   sessionId: string;
   usage: SessionUsage;
 }
 
-const ROLE_LABELS: Record<string, string> = {
-  domain_expert: "Domain Expert",
-  data_engineer: "Data Engineer",
-  sim_opt: "Sim/Opt",
-  evaluator: "Evaluator",
-};
+// ---- Main component ----
 
 export default function ReasoningPanel({ sessionId, usage }: Props) {
-  const [events, setEvents] = useState<StepEvent[]>([]);
-  const [activeRole, setActiveRole] = useState<string | null>(null);
+  const [orchestrator, setOrchestrator] = useState<OrchestratorTrace | null>(null);
   const [connected, setConnected] = useState(false);
+  const [sessionStartedAt, setSessionStartedAt] = useState<string | null>(null);
   const lastEventIdRef = useRef<string>("");
   const esRef = useRef<EventSource | null>(null);
 
   useEffect(() => {
+    setOrchestrator(null);
+    setSessionStartedAt(null);
+
     function connect() {
       const url = new URL(`${API_BASE}/api/v1/sessions/${sessionId}/stream`);
       if (lastEventIdRef.current) {
@@ -61,15 +125,9 @@ export default function ReasoningPanel({ sessionId, usage }: Props) {
       es.onmessage = (e: MessageEvent) => {
         if (e.lastEventId) lastEventIdRef.current = e.lastEventId;
         try {
-          const data: StepEvent = JSON.parse(e.data as string);
-          if (data.type === "error" && data.code === "no_stream") return;
-          setEvents((prev) => [...prev, data]);
-          if (data.type === "step_started" && data.specialist_role) {
-            setActiveRole(data.specialist_role);
-          }
-          if (data.type === "step_completed") {
-            setActiveRole(null);
-          }
+          const ev: RawEvent = JSON.parse(e.data as string);
+          if (ev.type === "error" && ev.code === "no_stream") return;
+          handleEvent(ev);
         } catch {
           // ignore parse errors
         }
@@ -83,124 +141,371 @@ export default function ReasoningPanel({ sessionId, usage }: Props) {
     }
 
     connect();
-
     return () => {
       esRef.current?.close();
     };
-  }, [sessionId]);
+  }, [sessionId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  function handleEvent(ev: RawEvent) {
+    switch (ev.type) {
+      case "step_started": {
+        const role = ev.specialist_role as string;
+        const stepType = ev.step_type as string;
+        const startedAt = ev.started_at as string;
+
+        if (stepType === "plan" && role === "orchestrator") {
+          setSessionStartedAt(startedAt);
+          setOrchestrator({
+            startedAt,
+            route: [],
+            rationale: "",
+            specialists: [],
+          });
+        }
+        if (stepType === "specialist") {
+          // Pipeline specialist (PromptBasedSpecialist)
+          const stepId = ev.step_id as string;
+          setOrchestrator((prev) => {
+            if (!prev) return prev;
+            return {
+              ...prev,
+              specialists: [
+                ...prev.specialists,
+                {
+                  name: ROLE_LABELS[role] ?? role,
+                  role,
+                  stepId,
+                  startedAt,
+                  status: "running",
+                  tools: [],
+                  isAgent: false,
+                  inputSummary: ev.input_summary as string | undefined,
+                },
+              ],
+            };
+          });
+        }
+        break;
+      }
+
+      case "routing_decision": {
+        const route = ev.route as string[];
+        const rationale = ev.rationale as string;
+        setOrchestrator((prev) =>
+          prev ? { ...prev, route, rationale } : prev
+        );
+        break;
+      }
+
+      case "step_completed": {
+        const role = ev.specialist_role as string;
+        const stepType = ev.step_type as string;
+        const durationMs = ev.duration_ms as number | undefined;
+        const outputSummary = (ev.output_summary ?? ev.output_preview) as string | undefined;
+
+        if (stepType === "specialist") {
+          const stepId = ev.step_id as string;
+          setOrchestrator((prev) => {
+            if (!prev) return prev;
+            return {
+              ...prev,
+              specialists: prev.specialists.map((s) =>
+                s.stepId === stepId
+                  ? { ...s, status: "completed", durationMs, outputSummary }
+                  : s
+              ),
+            };
+          });
+        }
+        if (stepType === "routing" || role === "orchestrator") {
+          setOrchestrator((prev) =>
+            prev ? { ...prev, durationMs: prev.durationMs ?? durationMs } : prev
+          );
+        }
+        break;
+      }
+
+      case "specialist_started": {
+        // AgentBasedSpecialist (domain experts running in parallel)
+        const name = ev.specialist_name as string;
+        const role = ev.specialist_role as string;
+        const taskId = ev.task_id as string;
+        const startedAt = ev.started_at as string;
+        setOrchestrator((prev) => {
+          if (!prev) return prev;
+          const exists = prev.specialists.some((s) => s.taskId === taskId);
+          if (exists) return prev;
+          return {
+            ...prev,
+            specialists: [
+              ...prev.specialists,
+              {
+                name,
+                role,
+                taskId,
+                startedAt,
+                status: "running",
+                tools: [],
+                isAgent: true,
+              },
+            ],
+          };
+        });
+        break;
+      }
+
+      case "specialist_completed": {
+        const taskId = ev.task_id as string;
+        const durationMs = ev.duration_ms as number | undefined;
+        const outputSummary = ev.output_summary as string | undefined;
+        setOrchestrator((prev) => {
+          if (!prev) return prev;
+          return {
+            ...prev,
+            specialists: prev.specialists.map((s) =>
+              s.taskId === taskId
+                ? { ...s, status: "completed", durationMs, outputSummary }
+                : s
+            ),
+          };
+        });
+        break;
+      }
+
+      case "tool_called": {
+        const toolName = ev.tool_name as string;
+        const toolCallId = ev.tool_call_id as string;
+        const specialistRole = ev.specialist_role as string;
+        const input = ev.input as unknown;
+        const timestamp = ev.timestamp as string;
+
+        setOrchestrator((prev) => {
+          if (!prev) return prev;
+          const specialists = prev.specialists.map((s) => {
+            if (s.role !== specialistRole) return s;
+            return {
+              ...s,
+              tools: [
+                ...s.tools,
+                {
+                  toolName,
+                  toolCallId,
+                  input,
+                  startedAt: timestamp,
+                  status: "running" as const,
+                },
+              ],
+            };
+          });
+          return { ...prev, specialists };
+        });
+        break;
+      }
+
+      case "tool_completed": {
+        const toolCallId = ev.tool_call_id as string;
+        const output = ev.output as unknown;
+        const executedQuery = ev.executed_query as string | undefined;
+        const durationMs = ev.duration_ms as number | undefined;
+        const toolStatus = (ev.status as string) === "error" ? "error" : "completed";
+        const toolError = ev.error as string | undefined;
+
+        setOrchestrator((prev) => {
+          if (!prev) return prev;
+          const specialists = prev.specialists.map((s) => ({
+            ...s,
+            tools: s.tools.map((t) =>
+              t.toolCallId === toolCallId
+                ? {
+                    ...t,
+                    output,
+                    executedQuery,
+                    durationMs,
+                    status: toolStatus as "completed" | "error",
+                    error: toolError,
+                  }
+                : t
+            ),
+          }));
+          return { ...prev, specialists };
+        });
+        break;
+      }
+
+      case "recommendation_ready": {
+        setOrchestrator((prev) => {
+          if (!prev) return prev;
+          return {
+            ...prev,
+            recommendation: {
+              riskLevel: ev.risk_level as string,
+              requiresApproval: ev.requires_approval as boolean,
+              autoExecute: ev.auto_execute as boolean,
+            },
+          };
+        });
+        break;
+      }
+    }
+  }
 
   return (
-    <div className="flex flex-col h-full bg-gray-900 text-gray-100">
-      <div className="px-4 py-3 border-b border-gray-700 flex items-center justify-between">
+    <div className="flex flex-col h-full bg-gray-950 text-gray-100 font-mono text-xs">
+      {/* Header */}
+      <div className="px-4 py-2.5 border-b border-gray-800 flex items-center justify-between shrink-0">
         <div className="flex items-center gap-2">
           <span
-            className={`w-2 h-2 rounded-full ${connected ? "bg-green-400" : "bg-red-400"}`}
+            className={`w-1.5 h-1.5 rounded-full ${connected ? "bg-emerald-400" : "bg-red-500"}`}
           />
-          <span className="text-xs font-semibold text-gray-300 uppercase tracking-wide">
-            Reasoning Panel
+          <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest">
+            Agent Trace
           </span>
         </div>
+        {sessionStartedAt && (
+          <span className="text-[10px] text-gray-600">
+            {formatBRT(sessionStartedAt)} BRT
+          </span>
+        )}
       </div>
 
-      {activeRole && (
-        <div className="px-4 py-2 bg-blue-900/40 border-b border-blue-700/50">
-          <p className="text-xs text-blue-300 font-medium">
-            Active: {ROLE_LABELS[activeRole] ?? activeRole}
-          </p>
-        </div>
-      )}
-
-      <div className="flex-1 overflow-y-auto px-4 py-3 space-y-2">
-        {events.length === 0 && (
-          <p className="text-xs text-gray-500 text-center py-8">
+      {/* Trace body */}
+      <div className="flex-1 overflow-y-auto px-3 py-3 space-y-2">
+        {!orchestrator && (
+          <p className="text-[11px] text-gray-600 text-center py-10">
             Waiting for agent activity...
           </p>
         )}
-        {events.map((ev, i) => (
-          <EventRow key={i} event={ev} />
-        ))}
+
+        {orchestrator && (
+          <OrchestratorNode trace={orchestrator} />
+        )}
       </div>
 
-      <div className="border-t border-gray-700 px-4 py-3">
-        <p className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-2">
-          Token Usage
-        </p>
-        <div className="space-y-1 text-xs">
-          <div className="flex justify-between text-gray-300">
-            <span>Input</span>
-            <span>{usage.inputTokens.toLocaleString()}</span>
-          </div>
-          <div className="flex justify-between text-gray-300">
-            <span>Output</span>
-            <span>{usage.outputTokens.toLocaleString()}</span>
-          </div>
-          <div className="flex justify-between text-gray-500">
-            <span>Est. cost</span>
-            <span>${usage.costUsd.toFixed(4)}</span>
-          </div>
+      {/* Footer: token usage */}
+      <div className="border-t border-gray-800 px-4 py-2.5 shrink-0">
+        <div className="flex items-center justify-between text-[10px] text-gray-500">
+          <span>{usage.inputTokens.toLocaleString()} in</span>
+          <span className="text-gray-700">|</span>
+          <span>{usage.outputTokens.toLocaleString()} out</span>
+          <span className="text-gray-700">|</span>
+          <span className="text-emerald-600">${usage.costUsd.toFixed(4)}</span>
         </div>
       </div>
     </div>
   );
 }
 
-function EventRow({ event }: { event: StepEvent }) {
-  const [expanded, setExpanded] = useState(false);
+// ---- Orchestrator node ----
 
-  const icon = EVENT_ICON[event.type] ?? "○";
-  const label = EVENT_LABEL[event.type] ?? event.type;
-  const hasDetail =
-    event.input != null ||
-    event.output != null ||
-    event.executed_query != null ||
-    event.error != null;
+function OrchestratorNode({ trace }: { trace: OrchestratorTrace }) {
+  return (
+    <div className="space-y-1.5">
+      {/* Orchestrator header */}
+      <div className="flex items-start gap-2 text-indigo-400">
+        <span className="shrink-0 mt-0.5">⬡</span>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center justify-between gap-2">
+            <span className="font-bold text-[11px] text-indigo-300 uppercase tracking-wider">
+              Orchestrator
+            </span>
+            <span className="text-gray-600 text-[10px] shrink-0">
+              {formatBRT(trace.startedAt)} BRT
+            </span>
+          </div>
+          {trace.route.length > 0 && (
+            <div className="mt-1 space-y-0.5">
+              <div className="text-gray-400">
+                Route:{" "}
+                <span className="text-indigo-300">
+                  {trace.route.join(" → ")}
+                </span>
+              </div>
+              {trace.rationale && (
+                <div className="text-gray-600 leading-relaxed">
+                  {trace.rationale}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Specialist list */}
+      {trace.specialists.length > 0 && (
+        <div className="ml-4 border-l border-gray-800 pl-3 space-y-1">
+          {trace.specialists.map((s, i) => (
+            <SpecialistNode key={s.taskId ?? s.stepId ?? i} specialist={s} />
+          ))}
+        </div>
+      )}
+
+      {/* Recommendation */}
+      {trace.recommendation && (
+        <div className="ml-4 border-l border-gray-800 pl-3">
+          <RecommendationRow rec={trace.recommendation} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ---- Specialist node ----
+
+function SpecialistNode({ specialist: s }: { specialist: SpecialistTrace }) {
+  const [expanded, setExpanded] = useState(false);
+  const hasSub = s.tools.length > 0 || !!s.outputSummary;
+  const isRunning = s.status === "running";
+  const isFailed = s.status === "failed";
 
   return (
-    <div className="text-xs">
+    <div>
       <button
-        className="w-full text-left flex items-start gap-2 hover:bg-gray-800 px-2 py-1.5 rounded"
-        onClick={() => hasDetail && setExpanded((p) => !p)}
+        onClick={() => hasSub && setExpanded((p) => !p)}
+        className={`w-full text-left flex items-start gap-2 py-1 pr-1 rounded hover:bg-gray-900/60 transition-colors ${hasSub ? "cursor-pointer" : "cursor-default"}`}
       >
-        <span className="text-gray-500 shrink-0 mt-0.5">{icon}</span>
-        <span className="flex-1 text-gray-300">
-          {label}
-          {event.specialist_role && (
-            <span className="ml-1 text-gray-500">
-              [{ROLE_LABELS[event.specialist_role] ?? event.specialist_role}]
-            </span>
-          )}
-          {event.tool_name && (
-            <span className="ml-1 text-yellow-400">{event.tool_name}</span>
-          )}
-          {event.duration_ms != null && (
-            <span className="ml-1 text-gray-600">{event.duration_ms}ms</span>
-          )}
+        <span className={`shrink-0 mt-0.5 ${isFailed ? "text-red-400" : isRunning ? "text-amber-400" : "text-emerald-400"}`}>
+          {isFailed ? "✗" : isRunning ? "▶" : "✓"}
         </span>
-        {event.cost_usd != null && (
-          <span className="text-green-400 shrink-0">
-            ${event.cost_usd.toFixed(4)}
-          </span>
-        )}
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center justify-between gap-2">
+            <span className={`font-semibold ${isFailed ? "text-red-300" : "text-gray-200"}`}>
+              {s.name}
+            </span>
+            <div className="flex items-center gap-2 shrink-0">
+              {isRunning && (
+                <span className="text-amber-400/80 text-[10px]">running…</span>
+              )}
+              {s.durationMs != null && !isRunning && (
+                <span className="text-gray-600 text-[10px]">
+                  {fmsDuration(s.durationMs)}
+                </span>
+              )}
+              {s.startedAt && (
+                <span className="text-gray-700 text-[10px]">
+                  {formatBRT(s.startedAt)}
+                </span>
+              )}
+            </div>
+          </div>
+          {s.tools.length > 0 && !expanded && (
+            <div className="text-gray-600 text-[10px]">
+              {s.tools.length} tool call{s.tools.length > 1 ? "s" : ""}
+              {" · "}
+              {[...new Set(s.tools.map((t) => t.toolName))].join(", ")}
+            </div>
+          )}
+        </div>
       </button>
-      {expanded && hasDetail && (
-        <div className="ml-6 mt-1 bg-gray-800 rounded p-2 space-y-2">
-          {event.executed_query && (
-            <pre className="text-green-300 text-xs whitespace-pre-wrap overflow-x-auto">
-              {event.executed_query}
-            </pre>
-          )}
-          {event.input != null && (
-            <pre className="text-blue-300 text-xs whitespace-pre-wrap overflow-x-auto">
-              {JSON.stringify(event.input, null, 2)}
-            </pre>
-          )}
-          {event.output != null && (
-            <pre className="text-gray-300 text-xs whitespace-pre-wrap overflow-x-auto">
-              {JSON.stringify(event.output, null, 2)}
-            </pre>
-          )}
-          {event.error && (
-            <pre className="text-red-400 text-xs whitespace-pre-wrap">{event.error}</pre>
+
+      {expanded && (
+        <div className="ml-5 border-l border-gray-800/60 pl-2.5 mt-0.5 space-y-0.5">
+          {s.tools.map((t, i) => (
+            <ToolRow key={t.toolCallId ?? i} tool={t} />
+          ))}
+          {s.outputSummary && (
+            <div className="py-1 text-gray-500 text-[10px] leading-relaxed">
+              ↳ {s.outputSummary}
+            </div>
           )}
         </div>
       )}
@@ -208,22 +513,83 @@ function EventRow({ event }: { event: StepEvent }) {
   );
 }
 
-const EVENT_ICON: Record<string, string> = {
-  step_started: "▶",
-  step_completed: "✓",
-  tool_called: "⚙",
-  tool_completed: "✓",
-  recommendation_ready: "★",
-  awaiting_approval: "⏸",
-  error: "✗",
-};
+// ---- Tool row ----
 
-const EVENT_LABEL: Record<string, string> = {
-  step_started: "Step started",
-  step_completed: "Step completed",
-  tool_called: "Tool called",
-  tool_completed: "Tool completed",
-  recommendation_ready: "Recommendation ready",
-  awaiting_approval: "Awaiting approval",
-  error: "Error",
-};
+function ToolRow({ tool: t }: { tool: ToolTrace }) {
+  const [expanded, setExpanded] = useState(false);
+  const hasDetail = !!(t.input != null || t.output != null || t.executedQuery || t.error);
+  const isRunning = t.status === "running";
+
+  return (
+    <div>
+      <button
+        onClick={() => hasDetail && setExpanded((p) => !p)}
+        className={`w-full text-left flex items-center gap-2 py-0.5 rounded hover:bg-gray-900/40 ${hasDetail ? "cursor-pointer" : "cursor-default"}`}
+      >
+        <span className={`shrink-0 text-[10px] ${isRunning ? "text-amber-500" : "text-gray-500"}`}>
+          ⚙
+        </span>
+        <span className="text-yellow-500/90 flex-1">{t.toolName}</span>
+        {t.durationMs != null && (
+          <span className="text-gray-700 text-[10px] shrink-0">
+            {fmsDuration(t.durationMs)}
+          </span>
+        )}
+        <span className="text-gray-700 text-[10px] shrink-0">
+          {formatBRT(t.startedAt)}
+        </span>
+      </button>
+      {expanded && hasDetail && (
+        <div className="ml-4 mt-0.5 mb-1 space-y-1">
+          {t.executedQuery && (
+            <pre className="text-emerald-400/80 text-[10px] whitespace-pre-wrap break-all bg-gray-900 rounded px-2 py-1 max-h-32 overflow-y-auto">
+              {t.executedQuery}
+            </pre>
+          )}
+          {t.input != null && (
+            <pre className="text-blue-400/80 text-[10px] whitespace-pre-wrap break-all bg-gray-900 rounded px-2 py-1 max-h-24 overflow-y-auto">
+              {JSON.stringify(t.input, null, 2)}
+            </pre>
+          )}
+          {t.output != null && (
+            <pre className="text-gray-400 text-[10px] whitespace-pre-wrap break-all bg-gray-900 rounded px-2 py-1 max-h-24 overflow-y-auto">
+              {JSON.stringify(t.output, null, 2)}
+            </pre>
+          )}
+          {t.error && (
+            <pre className="text-red-400 text-[10px] whitespace-pre-wrap bg-gray-900 rounded px-2 py-1">
+              {t.error}
+            </pre>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ---- Recommendation row ----
+
+function RecommendationRow({
+  rec,
+}: {
+  rec: { riskLevel: string; requiresApproval: boolean; autoExecute: boolean };
+}) {
+  const colorClass = RISK_COLORS[rec.riskLevel] ?? "text-gray-400 bg-gray-400/10";
+  return (
+    <div className="flex items-center gap-2 py-1">
+      <span className="text-amber-400 shrink-0">★</span>
+      <span className="text-gray-300">Recommendation ready</span>
+      <span
+        className={`text-[9px] font-bold uppercase px-1.5 py-0.5 rounded ${colorClass}`}
+      >
+        {rec.riskLevel}
+      </span>
+      {rec.autoExecute && (
+        <span className="text-[9px] text-emerald-500 uppercase">auto-executed</span>
+      )}
+      {rec.requiresApproval && !rec.autoExecute && (
+        <span className="text-[9px] text-amber-500 uppercase">awaiting approval</span>
+      )}
+    </div>
+  );
+}

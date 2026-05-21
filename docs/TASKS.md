@@ -25,6 +25,7 @@
 | M9 | Domain Expert specialist split | Done |
 | M10 | Chat Quality Features — history summarization, rate limiting, feedback, LLM tracking, rich UI | Done |
 | M11 | Single-Page Chat Shell — unified sidebar + chat layout, no two-page navigation | Done |
+| M12 | Agent Trace Panel — full visibility: DB trace, routing decision, per-agent timeline, tool I/O, BRT timestamps | In Progress |
 
 ## Phase 0 — Repository Foundation
 
