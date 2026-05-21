@@ -57,14 +57,14 @@ Specialists optimize their own slice but never resolve cross-KPI trade-offs unil
 
 ### Multi-Agent Architecture
 
-The Orchestrator coordinates 4 Specialists. The interface is fixed Day 1; implementation downshifts in MVP.
+The Orchestrator coordinates two tiers of specialists.
 
-| Stage | Specialist implementation | Behavior |
-|---|---|---|
-| Phase 1 (MVP) | `PromptBasedSpecialist` — role-prompt + tool subset on shared `LLMClient` | Sequential; LLM routing selects which specialists to invoke per goal |
-| Phase 9 (Final) | `AgentBasedSpecialist` — independent context, independent tool registry, possibly different model | True multi-agent with parallel execution |
+| Tier | Roles | Implementation | Execution |
+|---|---|---|---|
+| Domain tier | `forecast`, `inventory`, `procurement`, `production`, `cost` | `AgentBasedSpecialist` — independent context and tool registry | Parallel via `asyncio.gather` |
+| Pipeline tier | `data_engineer`, `sim_opt`, `evaluator` | `PromptBasedSpecialist` — role-prompt + tool subset on shared `LLMClient` | Sequential |
 
-Phase 9 splits Domain Expert into Forecast / Inventory / Procurement / Production / Cost specialists, each an `AgentBasedSpecialist` instance dispatched in parallel via `asyncio.gather`. The Orchestrator is now a pure coordinator.
+When routing selects `domain_expert`, the Orchestrator fans out to all 5 domain specialists in parallel, merges their outputs, then hands off to the pipeline tier sequentially: `data_engineer → sim_opt → evaluator`.
 
 ### Orchestrator Routing
 
