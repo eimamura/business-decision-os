@@ -1,5 +1,31 @@
 # TESTING.md
 
+## Phase Baselines
+
+### Phase 0 Baseline — 2026-05-21
+
+Command: `pytest tests/unit/ --tb=short -q`
+
+| Result | Count |
+|---|---|
+| Passed | 213 |
+| Failed | 3 (pre-existing — see below) |
+
+New tests added in Phase 0: `tests/unit/test_contracts.py` (10 tests covering P0-2 through P0-7).
+
+**Pre-existing failures** (carried forward from Phase R; all require a live PostgreSQL connection):
+
+| Test | Reason |
+|---|---|
+| `test_persistence_approvals.py::test_sessions_repo_raises` | Expects `RuntimeError("DATABASE_URL not set")`; fails with `ConnectionRefusedError` when `DATABASE_URL` is set but no Postgres is running |
+| `test_persistence_approvals.py::test_llm_usage_repo_raises` | Same cause |
+| `test_tool_isolation.py::test_sql_tool_no_db_returns_empty` | Expects a `"note"` key in the error result; receives a raw connection error dict instead |
+
+These 3 tests are **pre-existing** and do not represent Phase 0 regressions.
+They will be addressed or reclassified in Phase 1.
+
+---
+
 ## Purpose
 
 This document defines the testing strategy for the large-scale refactoring.

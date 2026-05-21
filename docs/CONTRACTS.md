@@ -137,12 +137,12 @@ The following data survives a service restart:
 
 | Entity | Persisted in | Guarantee |
 |---|---|---|
-| Sessions | `state.sessions_repo` | session_id stable; messages preserved |
-| Approvals | `state.approvals_repo` | status and all transitions preserved |
-| Audit log | `state.audit_log_repo` | append-only; no rows ever deleted |
-| Tool calls | `state.tool_calls_repo` | historical record preserved |
-| LLM usage | `state.llm_usage_repo` | cost/token records preserved |
-| Notifications | `state.notifications_repo` | delivery state preserved |
+| Sessions | `persistence.sessions_repo` | session_id stable; messages preserved |
+| Approvals | `persistence.approvals_repo` | status and all transitions preserved |
+| Audit log | `persistence.audit_log_repo` | append-only; no rows ever deleted |
+| Tool calls | `persistence.tool_calls_repo` | historical record preserved |
+| LLM usage | `persistence.llm_usage_repo` | cost/token records preserved |
+| Notifications | `persistence.notifications_repo` | delivery state preserved |
 
 **Approval immutability**: approval rows in a terminal state (`approved`, `rejected`, `needs_revision`, `expired`) must not be mutated. This is enforced at the domain layer (`packages/persistence/approvals.py`), not just by convention.
 
