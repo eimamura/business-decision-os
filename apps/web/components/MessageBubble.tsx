@@ -124,7 +124,41 @@ function AssistantMarkdown({ content }: { content: string }) {
   );
 }
 
+function SqlQueryBubble({ message }: { message: ChatMessage }) {
+  const label = message.toolName === "nl_query" ? "NL → SQL" : "SQL Query";
+  return (
+    <div className="flex justify-start">
+      <div className="w-7 h-7 rounded-full bg-[#0c0c14] flex items-center justify-center mr-3 mt-1 shrink-0 border border-emerald-900/40">
+        <span className="text-[10px] text-emerald-400">⚙</span>
+      </div>
+      <div className="max-w-[78%]">
+        <div className="rounded-xl bg-[#0b1a15] border border-emerald-900/40 px-3 pt-2 pb-1">
+          <div className="flex items-center gap-1.5 mb-1.5">
+            <span className="text-[10px] font-mono font-bold text-emerald-500 uppercase tracking-wider">
+              {label}
+            </span>
+          </div>
+          {message.sql && (
+            <DynamicSyntaxHighlighter language="sql">
+              {message.sql}
+            </DynamicSyntaxHighlighter>
+          )}
+        </div>
+        {message.created_at && (
+          <p className="text-xs mt-1 text-white/25">
+            {new Date(message.created_at).toLocaleTimeString()}
+          </p>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export default function MessageBubble({ message, onFeedback }: MessageBubbleProps) {
+  if (message.role === "tool") {
+    return <SqlQueryBubble message={message} />;
+  }
+
   const isUser = message.role === "user";
   const [justClicked, setJustClicked] = useState<1 | -1 | null>(null);
 

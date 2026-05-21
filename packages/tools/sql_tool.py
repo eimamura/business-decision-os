@@ -76,6 +76,7 @@ class SqlQueryTool:
                         "rows": row_dicts,
                         "column_names": columns,
                         "row_count": len(row_dicts),
+                        "executed_query": query,
                     },
                     audit_payload={"query": query, "row_count": len(row_dicts)},
                 )

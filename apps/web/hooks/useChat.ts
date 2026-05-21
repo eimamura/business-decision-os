@@ -77,6 +77,26 @@ export function useChat(sessionId: string): {
           }));
         }
 
+        if (
+          event.type === "tool_completed" &&
+          (event.tool_name === "sql_query" || event.tool_name === "nl_query") &&
+          event.executed_query
+        ) {
+          const sqlMsg: ChatMessage = {
+            id: crypto.randomUUID(),
+            role: "tool",
+            content: "",
+            toolName: event.tool_name,
+            sql: event.executed_query,
+            created_at: new Date().toISOString(),
+          };
+          setMessages((prev) => {
+            const idx = prev.findIndex((m) => m.id === assistantId);
+            if (idx === -1) return [...prev, sqlMsg];
+            return [...prev.slice(0, idx), sqlMsg, ...prev.slice(idx)];
+          });
+        }
+
         if (event.type === "error") {
           setMessages((prev) =>
             prev.map((m) =>

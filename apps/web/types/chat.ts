@@ -1,4 +1,4 @@
-export type MessageRole = "user" | "assistant";
+export type MessageRole = "user" | "assistant" | "tool";
 
 export interface ChatMessage {
   id: string;
@@ -9,6 +9,8 @@ export interface ChatMessage {
   created_at?: string;
   isError?: boolean;
   isStreaming?: boolean;
+  toolName?: string;
+  sql?: string;
 }
 
 export interface Session {
@@ -30,6 +32,8 @@ export type SSEEventType =
   | "step_completed"
   | "specialist_started"
   | "specialist_completed"
+  | "tool_called"
+  | "tool_completed"
   | "memory_retrieved"
   | "memory_written"
   | "recommendation_ready"
