@@ -57,7 +57,7 @@ def test_create_session() -> None:
 
 @pytest.mark.e2e
 def test_decisions_sse_stream() -> None:
-    """POST /api/v1/decisions streams SSE events ending with recommendation_ready."""
+    """POST /api/v1/decisions streams SSE events ending with response_ready and done."""
     import httpx
 
     events: list[dict] = []
@@ -77,9 +77,16 @@ def test_decisions_sse_stream() -> None:
                     break
 
     event_types = [e.get("type") for e in events]
-    assert "session_started" in event_types or "step_started" in event_types
-    assert "recommendation_ready" in event_types
-    assert "done" in event_types
+    for expected in [
+        "query_received",
+        "intent_classified",
+        "execution_mode_selected",
+        "response_ready",
+        "done",
+    ]:
+        assert expected in event_types
+    assert events[-1]["type"] == "done"
+    assert "reply" in events[-1]
 
 
 @pytest.mark.e2e

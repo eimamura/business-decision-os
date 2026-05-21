@@ -88,7 +88,7 @@ Follow the phase order in MIGRATION_PLAN.md. Do not begin Phase N+1 until Phase 
 
 | ID | Task | Owner | Status | Done when |
 |---|---|---|---|---|
-| P4-1 | Map current specialist types in `agent_based.py` to DESIGN.md Domain + Analytical agent table; document in DECISIONS.md | bdos-orchestrator | Done | Mapping complete |
+| P4-1 | Map pre-classification roles in `agent_based.py` to DESIGN.md Domain + Analytical agent table; document in DECISIONS.md | bdos-orchestrator | Done | Mapping complete |
 | P4-2 | Create `packages/agent/domain/` with one class per Domain Agent: demand, inventory, replenishment, procurement, supplier, production, logistics | bdos-app-builder | Done | 7 classes exist; each matches a row in DESIGN.md agent table |
 | P4-3 | Create `packages/agent/analytical/` with one class per Analytical Agent: exception, scenario, ranking, root_cause | bdos-app-builder | Done | 4 classes exist; each matches a row in DESIGN.md agent table |
 | P4-4 | Verify each class conforms to ARCHITECTURE_RULES.md rules for its classification | bdos-test-review | Done | No sqlalchemy or direct anthropic imports in domain/ or analytical/ (mypy + grep clean) |

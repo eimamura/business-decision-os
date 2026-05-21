@@ -1,83 +1,129 @@
 import { z } from "zod";
 
-export const SessionStartedEventSchema = z.object({
-  event: z.literal("session_started"),
-  session_id: z.string().uuid(),
+export const QueryReceivedEventSchema = z.object({
+  type: z.literal("query_received"),
+  session_id: z.string(),
   timestamp: z.string(),
 });
 
-export const SpecialistActivatedEventSchema = z.object({
-  event: z.literal("specialist_activated"),
-  session_id: z.string().uuid(),
+export const IntentClassifiedEventSchema = z.object({
+  type: z.literal("intent_classified"),
+  category: z.string(),
+  confidence: z.number(),
+  rationale: z.string(),
+  goal_text: z.string().nullable().optional(),
   timestamp: z.string(),
-  specialist_role: z.string(),
-  step_id: z.string().uuid(),
 });
 
-export const ToolCalledEventSchema = z.object({
-  event: z.literal("tool_called"),
-  session_id: z.string().uuid(),
+export const ExecutionModeSelectedEventSchema = z.object({
+  type: z.literal("execution_mode_selected"),
+  mode: z.string(),
+  agents: z.array(z.string()),
+  requires_planning: z.boolean(),
+  requires_dag: z.boolean(),
+  rationale: z.string(),
   timestamp: z.string(),
-  tool_call_id: z.string().uuid(),
-  step_id: z.string().uuid(),
+});
+
+export const PlanCreatedEventSchema = z.object({
+  type: z.literal("plan_created"),
+  mode: z.string(),
+  steps: z.array(z.record(z.unknown())).optional(),
+  nodes: z.array(z.record(z.unknown())).optional(),
+  timestamp: z.string(),
+});
+
+export const AgentStartedEventSchema = z.object({
+  type: z.literal("agent_started"),
+  agent_name: z.string(),
+  agent_role: z.string(),
+  task_id: z.string(),
+  started_at: z.string(),
+  input_summary: z.string().nullable().optional(),
+});
+
+export const AgentCompletedEventSchema = z.object({
+  type: z.literal("agent_completed"),
+  agent_name: z.string(),
+  agent_role: z.string(),
+  task_id: z.string(),
+  duration_ms: z.number().int(),
+  output_summary: z.string().nullable().optional(),
+  timestamp: z.string(),
+});
+
+export const ToolStartedEventSchema = z.object({
+  type: z.literal("tool_started"),
   tool_name: z.string(),
-  input: z.record(z.unknown()),
-  specialist_role: z.string(),
+  tool_call_id: z.string(),
+  step_id: z.string().nullable().optional(),
+  agent_role: z.string(),
+  input: z.record(z.unknown()).nullable().optional(),
+  timestamp: z.string(),
 });
 
 export const ToolCompletedEventSchema = z.object({
-  event: z.literal("tool_completed"),
-  session_id: z.string().uuid(),
-  timestamp: z.string(),
-  tool_call_id: z.string().uuid(),
+  type: z.literal("tool_completed"),
   tool_name: z.string(),
+  tool_call_id: z.string(),
+  agent_role: z.string(),
   duration_ms: z.number().int(),
-  output: z.record(z.unknown()),
+  output: z.record(z.unknown()).nullable().optional(),
   executed_query: z.string().nullable().optional(),
   status: z.enum(["success", "error"]),
   error: z.string().nullable().optional(),
+  timestamp: z.string(),
 });
 
-export const RecommendationReadyEventSchema = z.object({
-  event: z.literal("recommendation_ready"),
-  session_id: z.string().uuid(),
+export const ResponseReadyEventSchema = z.object({
+  type: z.literal("response_ready"),
+  mode: z.string(),
+  risk_level: z.enum(["low", "medium", "high"]).nullable().optional(),
+  requires_approval: z.boolean().nullable().optional(),
   timestamp: z.string(),
-  recommendation_id: z.string().uuid(),
-  risk_level: z.enum(["low", "medium", "high"]),
-  requires_approval: z.boolean(),
 });
 
-export const AwaitingApprovalEventSchema = z.object({
-  event: z.literal("awaiting_approval"),
-  session_id: z.string().uuid(),
-  timestamp: z.string(),
-  approval_id: z.string().uuid(),
-  recommendation_id: z.string().uuid(),
+export const ApprovalRequestedEventSchema = z.object({
+  type: z.literal("approval_requested"),
+  approval_id: z.string(),
   expires_at: z.string(),
+  risk_level: z.enum(["low", "medium", "high"]),
+  timestamp: z.string(),
+});
+
+export const AutoExecutedEventSchema = z.object({
+  type: z.literal("auto_executed"),
+  recommendation_id: z.string(),
+  timestamp: z.string(),
 });
 
 export const ErrorEventSchema = z.object({
-  event: z.literal("error"),
-  session_id: z.string().uuid(),
-  timestamp: z.string(),
+  type: z.literal("error"),
   code: z.string(),
   message: z.string(),
   recoverable: z.boolean(),
-});
-
-export const DoneEventSchema = z.object({
-  event: z.literal("done"),
-  session_id: z.string().uuid(),
   timestamp: z.string(),
 });
 
-export const SseEventSchema = z.discriminatedUnion("event", [
-  SessionStartedEventSchema,
-  SpecialistActivatedEventSchema,
-  ToolCalledEventSchema,
+export const DoneEventSchema = z.object({
+  type: z.literal("done"),
+  session_id: z.string(),
+  reply: z.string().nullable().optional(),
+  timestamp: z.string(),
+});
+
+export const SseEventSchema = z.discriminatedUnion("type", [
+  QueryReceivedEventSchema,
+  IntentClassifiedEventSchema,
+  ExecutionModeSelectedEventSchema,
+  PlanCreatedEventSchema,
+  AgentStartedEventSchema,
+  AgentCompletedEventSchema,
+  ToolStartedEventSchema,
   ToolCompletedEventSchema,
-  RecommendationReadyEventSchema,
-  AwaitingApprovalEventSchema,
+  ResponseReadyEventSchema,
+  ApprovalRequestedEventSchema,
+  AutoExecutedEventSchema,
   ErrorEventSchema,
   DoneEventSchema,
 ]);

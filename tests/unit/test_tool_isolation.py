@@ -11,16 +11,16 @@ from packages.agent.context_sanitizer import sanitize_for_llm, sanitize_sql_resu
 from packages.agent.llm import (
     LLMMessage,
     LLMResponse,
+    LLMUsage,
     StubClaudeClient,
 )
-from packages.agent.orchestrator import SessionGoal, SessionOrchestrator
+from packages.agent.orchestrator import SessionGoal, SessionUserQuery, SessionOrchestrator
 from packages.agent.orchestrator.weights import (
     load_global_weights,
     load_sku_overrides,
     resolve_weights,
 )
 from packages.memory import StubMemoryStore
-from packages.schemas.recommendation import Recommendation
 from packages.tools import create_tool_registry
 from packages.tools.approval_tool import ApprovalTool
 from packages.tools.audit_tool import AuditLogTool
@@ -40,6 +40,55 @@ def _ctx() -> ToolContext:
         actor="test",
         correlation_id=uuid4(),
     )
+
+
+class PlanningStubClaudeClient(StubClaudeClient):
+    async def complete(self, messages, **kwargs) -> LLMResponse:
+        system = messages[0].content if messages else ""
+        if "intent classifier" in system:
+            return LLMResponse(
+                text=(
+                    '{"category":"decision_support","confidence":0.9,'
+                    '"rationale":"Optimization requested","goal_text":"optimize replenishment"}'
+                ),
+                tool_calls=[],
+                finish_reason="stop",
+                usage=LLMUsage(input_tokens=0, output_tokens=0, total_cost_usd=Decimal("0")),
+                model="stub",
+                request_id=str(uuid4()),
+                latency_ms=0,
+            )
+        if "router inside SessionOrchestrator" in system:
+            return LLMResponse(
+                text=(
+                    '{"mode":"sequential_agents","agents":["data_engineer","simulation_optimizer"],'
+                    '"requires_planning":false,"requires_dag":false,"rationale":"serial"}'
+                ),
+                tool_calls=[],
+                finish_reason="stop",
+                usage=LLMUsage(input_tokens=0, output_tokens=0, total_cost_usd=Decimal("0")),
+                model="stub",
+                request_id=str(uuid4()),
+                latency_ms=0,
+            )
+        if messages and "Return ONLY a JSON array of task nodes" in system:
+            return LLMResponse(
+                text=(
+                    '[{"id":"domain","specialist_type":"domain_expert","deps":[],"tools":[]},'
+                    '{"id":"data","specialist_type":"data_engineer","deps":[],"tools":["sql_query"]},'
+                    '{"id":"sim","specialist_type":"simulation_optimizer","deps":["data"],'
+                    '"tools":["simulate_inventory","optimize_replenishment"]},'
+                    '{"id":"eval","specialist_type":"evaluator","deps":["sim"],'
+                    '"tools":["evaluate_candidates","write_audit_log"]}]'
+                ),
+                tool_calls=[],
+                finish_reason="stop",
+                usage=LLMUsage(input_tokens=0, output_tokens=0, total_cost_usd=Decimal("0")),
+                model="stub",
+                request_id=str(uuid4()),
+                latency_ms=0,
+            )
+        return await super().complete(messages, **kwargs)
 
 
 # ===== T-1001: StubClaudeClient =====
@@ -278,9 +327,9 @@ def test_list_for_role_domain_expert():
     assert "simulate_inventory" not in names
 
 
-def test_list_for_role_sim_opt():
+def test_list_for_role_simulation_optimizer():
     registry = create_tool_registry()
-    tools = registry.list_for_role("sim_opt")
+    tools = registry.list_for_role("simulation_optimizer")
     names = {t.name for t in tools}
     assert "simulate_inventory" in names
     assert "optimize_replenishment" in names
@@ -296,8 +345,8 @@ def test_list_for_role_orchestrator_returns_empty():
 # ===== T-1003/T-1040: Orchestrator + MemoryStore =====
 
 @pytest.mark.asyncio
-async def test_orchestrator_run_returns_recommendation():
-    client = StubClaudeClient()
+async def test_orchestrator_run_returns_session_response():
+    client = PlanningStubClaudeClient()
     registry = create_tool_registry()
     memory = StubMemoryStore()
     sse_queue: asyncio.Queue = asyncio.Queue()
@@ -310,21 +359,21 @@ async def test_orchestrator_run_returns_recommendation():
     )
 
     session_id = uuid4()
-    goal = SessionGoal(text="optimize replenishment for SKU001")
-    recommendation = await orchestrator.run(session_id, goal)
+    query = SessionUserQuery(text="optimize replenishment for SKU001")
+    response = await orchestrator.run(session_id, query)
 
-    assert isinstance(recommendation, Recommendation)
-    assert recommendation.primary is not None
-    assert len(recommendation.alternatives) >= 1
-    assert recommendation.risk_level in ("low", "medium", "high")
-    assert recommendation.tradeoff.weight_source in (
+    assert response.primary is not None
+    assert len(response.alternatives) >= 1
+    assert response.risk_level in ("low", "medium", "high")
+    assert response.tradeoff is not None
+    assert response.tradeoff.weight_source in (
         "default", "session_goal", "critical_sku", "user_policy"
     )
 
 
 @pytest.mark.asyncio
 async def test_orchestrator_emits_sse_events():
-    client = StubClaudeClient()
+    client = PlanningStubClaudeClient()
     registry = create_tool_registry()
     memory = StubMemoryStore()
     sse_queue: asyncio.Queue = asyncio.Queue()
@@ -337,22 +386,23 @@ async def test_orchestrator_emits_sse_events():
     )
 
     session_id = uuid4()
-    goal = SessionGoal(text="test goal")
-    await orchestrator.run(session_id, goal)
+    query = SessionUserQuery(text="test goal")
+    await orchestrator.run(session_id, query)
 
     events = []
     while not sse_queue.empty():
         events.append(sse_queue.get_nowait())
 
     event_types = {e["type"] for e in events}
-    assert "step_started" in event_types
-    assert "step_completed" in event_types
-    assert "recommendation_ready" in event_types
+    assert "query_received" in event_types
+    assert "intent_classified" in event_types
+    assert "execution_mode_selected" in event_types
+    assert "response_ready" in event_types
 
 
 @pytest.mark.asyncio
 async def test_orchestrator_session_goal_weight_override():
-    client = StubClaudeClient()
+    client = PlanningStubClaudeClient()
     registry = create_tool_registry()
     memory = StubMemoryStore()
 
@@ -363,25 +413,26 @@ async def test_orchestrator_session_goal_weight_override():
     )
 
     session_id = uuid4()
-    goal = SessionGoal(
+    query = SessionUserQuery(
         text="maximize service level",
         weight_override_json={"service_level": 0.9, "total_supply_chain_cost": 0.1},
     )
-    recommendation = await orchestrator.run(session_id, goal)
-    assert recommendation.tradeoff.weight_source == "session_goal"
+    response = await orchestrator.run(session_id, query)
+    assert response.tradeoff is not None
+    assert response.tradeoff.weight_source == "session_goal"
 
 
-# ===== T-1004: PromptBasedSpecialist pipeline roles =====
+# ===== T-1004: Prompt-based execution roles =====
 
-def test_pipeline_specialist_roles_instantiate():
+def test_prompt_based_execution_roles_instantiate():
     client = StubClaudeClient()
     registry = create_tool_registry()
     specialists = {
         role: PromptBasedSpecialist(name=role, role=role, llm_client=client, tool_registry=registry)
-        for role in ("domain_expert", "data_engineer", "sim_opt", "evaluator")
+        for role in ("domain_expert", "data_engineer", "simulation_optimizer", "evaluator")
     }
     assert len(specialists) == 4
-    for role in ["domain_expert", "data_engineer", "sim_opt", "evaluator"]:
+    for role in ["domain_expert", "data_engineer", "simulation_optimizer", "evaluator"]:
         assert role in specialists
 
 

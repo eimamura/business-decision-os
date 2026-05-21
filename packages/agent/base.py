@@ -138,11 +138,11 @@ class PromptBasedSpecialist:
                     tool_input = call.get("input", {})
                     tool_t0 = time.monotonic()
                     await self._push({
-                        "type": "tool_called",
+                        "type": "tool_started",
                         "tool_name": call["name"],
                         "tool_call_id": tool_call_id,
                         "step_id": str(ctx.agent_step_id),
-                        "specialist_role": self.role,
+                        "agent_role": self.role,
                         "input": tool_input,
                         "timestamp": datetime.now(timezone.utc).isoformat(),
                     })
@@ -160,7 +160,7 @@ class PromptBasedSpecialist:
                             "type": "tool_completed",
                             "tool_name": call["name"],
                             "tool_call_id": tool_call_id,
-                            "specialist_role": self.role,
+                            "agent_role": self.role,
                             "duration_ms": tool_duration_ms,
                             "output": tool_result.output,
                             "executed_query": executed_query,
@@ -173,7 +173,7 @@ class PromptBasedSpecialist:
                             "type": "tool_completed",
                             "tool_name": call["name"],
                             "tool_call_id": tool_call_id,
-                            "specialist_role": self.role,
+                            "agent_role": self.role,
                             "duration_ms": tool_duration_ms,
                             "status": "error",
                             "error": str(exc),
@@ -232,9 +232,9 @@ class AgentBasedSpecialist:
         from packages.agent.orchestrator import SpecialistResult
 
         await self._push({
-            "type": "specialist_started",
-            "specialist_name": self.name.replace("_", " ").title(),
-            "specialist_role": self.role,
+            "type": "agent_started",
+            "agent_name": self.name.replace("_", " ").title(),
+            "agent_role": self.role,
             "task_id": str(task.task_id),
             "started_at": datetime.now(timezone.utc).isoformat(),
             "input_summary": task.instruction[:200],
@@ -296,11 +296,11 @@ class AgentBasedSpecialist:
                     tool_input = call.get("input", {})
                     tool_t0 = time.monotonic()
                     await self._push({
-                        "type": "tool_called",
+                        "type": "tool_started",
                         "tool_name": call["name"],
                         "tool_call_id": tool_call_id,
                         "step_id": str(task.task_id),
-                        "specialist_role": self.role,
+                        "agent_role": self.role,
                         "input": tool_input,
                         "timestamp": datetime.now(timezone.utc).isoformat(),
                     })
@@ -318,7 +318,7 @@ class AgentBasedSpecialist:
                             "type": "tool_completed",
                             "tool_name": call["name"],
                             "tool_call_id": tool_call_id,
-                            "specialist_role": self.role,
+                            "agent_role": self.role,
                             "duration_ms": tool_duration_ms,
                             "output": tool_result.output,
                             "executed_query": executed_query,
@@ -331,7 +331,7 @@ class AgentBasedSpecialist:
                             "type": "tool_completed",
                             "tool_name": call["name"],
                             "tool_call_id": tool_call_id,
-                            "specialist_role": self.role,
+                            "agent_role": self.role,
                             "duration_ms": tool_duration_ms,
                             "status": "error",
                             "error": str(exc),

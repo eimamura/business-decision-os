@@ -12,7 +12,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 from apps.api.state import get_orchestrator, sessions, sse_queues
-from packages.agent.orchestrator import SessionGoal
+from packages.agent.orchestrator import SessionUserQuery
 
 router = APIRouter(prefix="/api/v1/decisions", tags=["decisions"])
 
@@ -62,51 +62,32 @@ async def _stream_decision(body: CreateDecisionRequest) -> StreamingResponse:
     queue: asyncio.Queue[dict[str, Any]] = asyncio.Queue()
     sse_queues[session_id] = queue
 
-    goal = SessionGoal(text=body.goal)
-
-    await queue.put({
-        "type": "session_started",
-        "session_id": session_id,
-        "timestamp": _iso_now(),
-    })
+    query = SessionUserQuery(text=body.goal)
 
     orchestrator = get_orchestrator(queue)
-
-    async def _emit_prediction(sku_id: str = "SKU001") -> None:
-        from packages.prediction import LinearRegressionPredictor
-
-        predictor = LinearRegressionPredictor(db_session=None)
-        result = await predictor.predict(sku_id, horizon_days=28)
-        await queue.put({
-            "type": "prediction_computed",
-            "session_id": session_id,
-            "sku_id": result.sku_id,
-            "prediction": result.predicted_units[0] if result.predicted_units else None,
-            "forecast_units": result.predicted_units,
-            "model_version": result.model_version,
-            "source": result.source,
-            "timestamp": _iso_now(),
-        })
 
     async def _run_and_signal() -> None:
         import logging
 
         _log = logging.getLogger(__name__)
+        response_reply: str | None = None
         try:
-            await _emit_prediction()
-            await orchestrator.run(UUID(session_id), goal)
+            response = await orchestrator.run(UUID(session_id), query)
+            response_reply = response.reply
         except Exception as exc:
             _log.exception("Orchestrator failed for session %s: %s", session_id, exc)
             await queue.put({
                 "type": "error",
                 "code": "orchestration_failed",
                 "message": str(exc),
+                "recoverable": False,
                 "timestamp": _iso_now(),
             })
         finally:
             await queue.put({
                 "type": "done",
                 "session_id": session_id,
+                "reply": response_reply,
                 "timestamp": _iso_now(),
             })
 

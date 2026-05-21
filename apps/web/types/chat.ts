@@ -27,18 +27,19 @@ export interface SessionUsage {
 }
 
 export type SSEEventType =
-  | "session_started"
-  | "step_started"
-  | "step_completed"
-  | "specialist_started"
-  | "specialist_completed"
-  | "tool_called"
+  | "query_received"
+  | "intent_classified"
+  | "execution_mode_selected"
+  | "plan_created"
+  | "agent_started"
+  | "agent_completed"
+  | "tool_started"
   | "tool_completed"
   | "memory_retrieved"
   | "memory_written"
-  | "recommendation_ready"
+  | "response_ready"
+  | "approval_requested"
   | "auto_executed"
-  | "awaiting_approval"
   | "error"
   | "done";
 
@@ -51,7 +52,10 @@ export interface SSEEvent {
   recoverable?: boolean;
   step_id?: string;
   step_type?: string;
-  specialist_role?: string;
+  agent_role?: string;
+  agent_name?: string;
+  agents?: string[];
+  mode?: string;
   started_at?: string;
   duration_ms?: number;
   output_preview?: string;

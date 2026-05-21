@@ -68,7 +68,7 @@ export function useChat(sessionId: string): {
           break;
         }
 
-        if (event.type === "step_completed" && event.tokens != null) {
+        if (event.type === "agent_completed" && event.tokens != null) {
           const half = Math.floor(event.tokens / 2);
           setUsage((prev) => ({
             inputTokens: prev.inputTokens + half,

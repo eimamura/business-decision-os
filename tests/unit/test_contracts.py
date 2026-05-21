@@ -3,15 +3,32 @@ from __future__ import annotations
 import asyncio
 import json
 from typing import Any
+from uuid import UUID
 
 import httpx
 import pytest
 from httpx import ASGITransport
 
+import apps.api.routers.decisions as decision_router
+import apps.api.routers.sessions as session_router
 from apps.api.main import app
 from apps.api.state import sessions, sse_queues
 from packages.agent.llm import create_llm_client
+from packages.agent.orchestrator import (
+    AgentRoute,
+    SessionIntent,
+    SessionResponse,
+    SessionUserQuery,
+)
 from packages.persistence.approvals import ApprovalTransition
+
+EXPECTED_SESSION_STREAM_EVENTS = [
+    "query_received",
+    "intent_classified",
+    "execution_mode_selected",
+    "response_ready",
+    "done",
+]
 
 
 @pytest.fixture
@@ -78,6 +95,195 @@ async def test_contract_sse_stream_terminates_with_done_event(client: httpx.Asyn
 
     assert len(events) > 0
     assert events[-1]["type"] == "done"
+
+
+async def _read_session_stream(
+    client: httpx.AsyncClient, session_id: str
+) -> list[dict[str, Any]]:
+    events: list[dict[str, Any]] = []
+    async with client.stream("GET", f"/api/v1/sessions/{session_id}/stream") as response:
+        assert response.status_code == 200
+        async for line in response.aiter_lines():
+            if not line.startswith("data:"):
+                continue
+            event = json.loads(line[len("data:"):].strip())
+            events.append(event)
+            if event.get("type") == "done":
+                break
+    return events
+
+
+async def test_contract_session_message_uses_user_query_and_streams_new_taxonomy(
+    client: httpx.AsyncClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: dict[str, Any] = {}
+    reply = "Inventory is stable for the requested SKU."
+
+    class StubOrchestrator:
+        def __init__(self, queue: asyncio.Queue[dict[str, Any]]) -> None:
+            self.queue = queue
+
+        async def run(self, session_id: UUID, query: SessionUserQuery) -> SessionResponse:
+            captured["session_id"] = session_id
+            captured["query"] = query
+            for event_type in EXPECTED_SESSION_STREAM_EVENTS[:-1]:
+                await self.queue.put({"type": event_type})
+            intent = SessionIntent(
+                category="question_answering",
+                confidence=0.99,
+                rationale="stubbed contract test",
+            )
+            route = AgentRoute(
+                mode="direct_chat",
+                agents=[],
+                requires_planning=False,
+                requires_dag=False,
+                rationale="stubbed contract test",
+            )
+            return SessionResponse(mode="direct_chat", reply=reply, intent=intent, route=route)
+
+    def stub_get_orchestrator(
+        queue: asyncio.Queue[dict[str, Any]],
+    ) -> StubOrchestrator:
+        return StubOrchestrator(queue)
+
+    async def allow_request(user_id: str) -> None:
+        return None
+
+    monkeypatch.setattr(session_router, "get_orchestrator", stub_get_orchestrator)
+    monkeypatch.setattr(session_router, "check_rate_limit", allow_request)
+
+    create_response = await client.post("/api/v1/sessions", json={"goal": "contract"})
+    assert create_response.status_code == 200
+    session_id = create_response.json()["session_id"]
+
+    send_response = await client.post(
+        f"/api/v1/sessions/{session_id}/messages",
+        json={"content": "How is inventory for SKU-1?"},
+    )
+    assert send_response.status_code == 200
+
+    events = await _read_session_stream(client, session_id)
+    event_types = [event["type"] for event in events]
+
+    assert isinstance(captured["query"], SessionUserQuery)
+    assert captured["query"].text == "How is inventory for SKU-1?"
+    assert captured["session_id"] == UUID(session_id)
+    assert event_types == EXPECTED_SESSION_STREAM_EVENTS
+    assert events[-1]["reply"] == reply
+
+    messages = sessions[session_id]["messages"]
+    assert messages[-1]["role"] == "assistant"
+    assert messages[-1]["content"] == reply
+
+
+async def test_contract_session_message_error_still_terminates_with_done(
+    client: httpx.AsyncClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class FailingOrchestrator:
+        async def run(self, session_id: UUID, query: SessionUserQuery) -> SessionResponse:
+            raise RuntimeError("stub failure")
+
+    def stub_get_orchestrator(
+        queue: asyncio.Queue[dict[str, Any]],
+    ) -> FailingOrchestrator:
+        return FailingOrchestrator()
+
+    async def allow_request(user_id: str) -> None:
+        return None
+
+    monkeypatch.setattr(session_router, "get_orchestrator", stub_get_orchestrator)
+    monkeypatch.setattr(session_router, "check_rate_limit", allow_request)
+
+    create_response = await client.post("/api/v1/sessions", json={"goal": "contract"})
+    assert create_response.status_code == 200
+    session_id = create_response.json()["session_id"]
+
+    send_response = await client.post(
+        f"/api/v1/sessions/{session_id}/messages",
+        json={"content": "Trigger a controlled failure"},
+    )
+    assert send_response.status_code == 200
+
+    events = await _read_session_stream(client, session_id)
+    event_types = [event["type"] for event in events]
+
+    assert "error" in event_types
+    assert events[-1]["type"] == "done"
+    assert events[-1]["reply"] == "Processing failed. Please try again."
+
+
+async def test_contract_decisions_streams_new_taxonomy_and_done_reply(
+    client: httpx.AsyncClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: dict[str, Any] = {}
+    reply = "Run the replenishment plan with the lower stockout risk."
+
+    class StubOrchestrator:
+        def __init__(self, queue: asyncio.Queue[dict[str, Any]]) -> None:
+            self.queue = queue
+
+        async def run(self, session_id: UUID, query: SessionUserQuery) -> SessionResponse:
+            captured["session_id"] = session_id
+            captured["query"] = query
+            for event_type in EXPECTED_SESSION_STREAM_EVENTS[:-1]:
+                await self.queue.put({"type": event_type})
+            intent = SessionIntent(
+                category="decision_support",
+                confidence=0.99,
+                rationale="stubbed contract test",
+                goal_text=query.text,
+            )
+            route = AgentRoute(
+                mode="planned_execution",
+                agents=["replenishment"],
+                requires_planning=True,
+                requires_dag=False,
+                rationale="stubbed contract test",
+            )
+            return SessionResponse(
+                mode="planned_execution",
+                reply=reply,
+                intent=intent,
+                route=route,
+                risk_level="low",
+                requires_approval=False,
+            )
+
+    def stub_get_orchestrator(
+        queue: asyncio.Queue[dict[str, Any]],
+    ) -> StubOrchestrator:
+        return StubOrchestrator(queue)
+
+    monkeypatch.setenv("JOB_RUNNER_BACKEND", "in_process")
+    monkeypatch.setattr(decision_router, "get_orchestrator", stub_get_orchestrator)
+
+    events: list[dict[str, Any]] = []
+    async with client.stream(
+        "POST",
+        "/api/v1/decisions",
+        json={"goal": "Optimize replenishment for SKU-1"},
+        headers={"Accept": "text/event-stream"},
+    ) as response:
+        assert response.status_code == 200
+        async for line in response.aiter_lines():
+            if not line.startswith("data:"):
+                continue
+            event = json.loads(line[len("data:"):].strip())
+            events.append(event)
+            if event.get("type") == "done":
+                break
+
+    event_types = [event["type"] for event in events]
+
+    assert isinstance(captured["query"], SessionUserQuery)
+    assert captured["query"].text == "Optimize replenishment for SKU-1"
+    assert isinstance(captured["session_id"], UUID)
+    assert event_types == EXPECTED_SESSION_STREAM_EVENTS
+    assert events[-1]["reply"] == reply
 
 
 def test_contract_missing_anthropic_key_raises_runtime_error(

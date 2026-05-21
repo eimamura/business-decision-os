@@ -104,6 +104,21 @@ Reversal cost: low (the base classes and patterns are unchanged; only the direct
 
 ---
 
+## Decision: Specialist wire fields remain stable while internal planning uses execution roles
+
+Date: 2026-05-21
+
+Superseded for SSE/API orchestrator events by `docs/ADR/2026-05-21-user-query-orchestrator-flow.md`.
+`SpecialistTask`, `SpecialistResult`, `ToolContext.specialist_role`, and LLM usage fields remain stable.
+
+Reason: `specialist_role`, `SpecialistTask`, and `SpecialistResult` are already used as API, SSE, persistence, and Python contract surfaces. Renaming those public fields would create churn without improving runtime behavior. The remaining internal DAG-planning vocabulary should still match the current DESIGN.md model, where work is routed to execution roles implemented by domain agents and cross-domain agents.
+
+Consequence: Public contract names that contain `specialist` remain unchanged for compatibility. Private SessionOrchestrator planning names and comments should use `execution role`; cross-domain capabilities should be described as cross-domain agents, including the Simulation Optimizer Agent.
+
+Reversal cost: medium (requires coordinated API, schema, persistence, and test updates)
+
+---
+
 ## Decision: Guardrail is an explicit layer, not scattered if-checks
 
 Date: 2026-05-21
@@ -161,3 +176,15 @@ Reason: Running the full test suite at each phase checkpoint (1–5) creates lon
 Consequence: Phase 1–5 checkpoints use static analysis only (grep, mypy, ruff). The full pytest suite, including Phase 0 contract tests, runs exactly once in Phase 6. Any regression introduced during Phases 1–5 will be detected at that point. Agents must not invoke `pytest` as a phase checkpoint step during Phases 1–5.
 
 Reversal cost: low (add `pytest` back to individual phase checkpoints if the deferred approach is insufficient)
+
+---
+
+## Decision: SessionOrchestrator starts from SessionUserQuery
+
+Date: 2026-05-21
+
+Reason: User sessions contain chat, factual lookup, exploration, and decision-support requests. Treating every message as a `SessionGoal` forced conversational and lightweight requests through a planning/DAG/recommendation path. The orchestrator should classify the utterance first, then create a `SessionGoal` only when decision-support behavior requires weights or decision memory.
+
+Consequence: `Orchestrator.run()` accepts `SessionUserQuery` and returns `SessionResponse`. `Recommendation` remains for persistence and approvals compatibility but is not the orchestrator run return type. SSE events use the new query/intent/mode/agent/response taxonomy recorded in `docs/ADR/2026-05-21-user-query-orchestrator-flow.md`.
+
+Reversal cost: high (public interface, API streaming, and web trace contracts would need to change together)

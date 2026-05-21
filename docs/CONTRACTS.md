@@ -103,10 +103,17 @@ The event schema is defined in `packages/schemas/sse_events.py`.
 
 | Event type | Invariant |
 |---|---|
-| `tool_called` | Emitted before tool execution begins |
+| `query_received` | Emitted when a user query enters the orchestrator |
+| `intent_classified` | Emitted after the orchestrator classifies the query |
+| `execution_mode_selected` | Emitted after routing selects `direct_chat`, `single_agent`, `sequential_agents`, `planned_execution`, or `dag_execution` |
+| `plan_created` | Emitted when planned or DAG execution creates executable steps |
+| `agent_started` | Emitted before an agent task begins; includes `agent_role` |
+| `agent_completed` | Emitted after an agent task completes; includes `agent_role` |
+| `tool_started` | Emitted before tool execution begins |
 | `tool_completed` | Emitted after tool execution; `executed_query` field is populated for SQL tools |
-| `recommendation_ready` | Emitted when a recommendation is ready; includes `risk_level` and `requires_approval` |
-| `awaiting_approval` | Emitted when approval is required before execution; includes `approval_id` |
+| `response_ready` | Emitted when the orchestrator has synthesized the response; decision responses include `risk_level` and `requires_approval` |
+| `approval_requested` | Emitted when approval is required before execution; includes `approval_id` |
+| `auto_executed` | Emitted when a low-risk decision response can proceed automatically |
 | `error` | Emitted on recoverable or fatal errors; never silently swallowed |
 | `done` | Always the final event in a stream; includes `reply` |
 
@@ -153,10 +160,10 @@ The following data survives a service restart:
 These are the behaviors a user can observe. They must not regress.
 
 1. User sends a message → receives a streaming response via SSE
-2. Tool executions are visible in the chat stream (`tool_called`, `tool_completed` events)
+2. Tool executions are visible in the chat stream (`tool_started`, `tool_completed` events)
 3. The SQL query executed by NlQueryTool/SqlQueryTool is shown in the chat (`executed_query` field on `tool_completed`)
-4. Recommendations appear in the chat stream (`recommendation_ready` event) and are retrievable via `/api/v1/recommendations/{id}`
-5. Approvals requiring human action surface as `awaiting_approval` events with a stable `approval_id`
+4. Orchestrator responses appear in the chat stream (`response_ready` followed by terminal `done.reply`)
+5. Approvals requiring human action surface as `approval_requested` events with a stable `approval_id`
 6. Every message flow ends with a `done` event; users never see a stream that hangs indefinitely
 
 ---

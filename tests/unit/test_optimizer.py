@@ -18,7 +18,7 @@ def _make_tool_ctx() -> ToolContext:
     return ToolContext(
         session_id=uuid4(),
         agent_step_id=uuid4(),
-        specialist_role="sim_opt",
+        specialist_role="simulation_optimizer",
         actor="test",
         correlation_id=uuid4(),
     )

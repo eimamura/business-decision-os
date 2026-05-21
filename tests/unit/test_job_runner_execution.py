@@ -6,52 +6,45 @@ from typing import Any
 from unittest.mock import AsyncMock
 from uuid import uuid4
 
-from packages.schemas.sse_events import AutoExecutedEvent, RecommendationReadyEvent
+from packages.schemas.sse_events import AutoExecutedEvent, ResponseReadyEvent
 
 
-class TestRecommendationReadyEventSchema:
-    def test_has_auto_execute_field(self) -> None:
-        event = RecommendationReadyEvent(
+class TestResponseReadyEventSchema:
+    def test_has_approval_fields(self) -> None:
+        event = ResponseReadyEvent(
             timestamp="2026-05-20T00:00:00Z",
-            recommendation_id=str(uuid4()),
+            mode="sequential_agents",
             risk_level="low",
             requires_approval=False,
-            auto_execute=True,
         )
-        assert event.auto_execute is True
+        assert event.requires_approval is False
 
-    def test_auto_execute_defaults_false(self) -> None:
-        event = RecommendationReadyEvent(
+    def test_non_decision_fields_are_optional(self) -> None:
+        event = ResponseReadyEvent(
             timestamp="2026-05-20T00:00:00Z",
-            recommendation_id=str(uuid4()),
-            risk_level="high",
-            requires_approval=True,
+            mode="direct_chat",
         )
-        assert event.auto_execute is False
+        assert event.risk_level is None
 
-    def test_low_risk_auto_execute_true(self) -> None:
-        event = RecommendationReadyEvent(
+    def test_low_risk_no_approval(self) -> None:
+        event = ResponseReadyEvent(
             timestamp="2026-05-20T00:00:00Z",
-            recommendation_id=str(uuid4()),
+            mode="planned_execution",
             risk_level="low",
             requires_approval=False,
-            auto_execute=True,
         )
         assert event.risk_level == "low"
         assert event.requires_approval is False
-        assert event.auto_execute is True
 
-    def test_high_risk_auto_execute_false(self) -> None:
-        event = RecommendationReadyEvent(
+    def test_high_risk_requires_approval(self) -> None:
+        event = ResponseReadyEvent(
             timestamp="2026-05-20T00:00:00Z",
-            recommendation_id=str(uuid4()),
+            mode="planned_execution",
             risk_level="high",
             requires_approval=True,
-            auto_execute=False,
         )
         assert event.risk_level == "high"
         assert event.requires_approval is True
-        assert event.auto_execute is False
 
 
 class TestAutoExecutedEvent:

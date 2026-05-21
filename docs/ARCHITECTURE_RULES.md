@@ -22,6 +22,7 @@ Each rule uses one of:
 **`packages/agent/orchestrator/`**
 
 - Orchestrator MAY route, plan, aggregate results, detect conflicts, score decisions, and generate responses.
+- Orchestrator MUST receive user-facing work as `SessionUserQuery` and return `SessionResponse`; `SessionGoal` is internal and only used when a clear decision or analytical goal exists.
 - Orchestrator MUST delegate specialized domain analysis to Domain Agents or Analytical Agents.
 - Orchestrator MUST NOT own domain-specific calculations, supply chain thresholds, or business rules.
 - Orchestrator MUST NOT call the database directly; data access goes through Tools.
@@ -95,6 +96,7 @@ These apply everywhere, regardless of layer:
 | Only `packages/tools/` and `packages/persistence/` may hold SQLAlchemy models or execute queries | Prevents hidden data access paths |
 | `data/sample/ground_truth/` MUST NOT be read by any agent or tool | Test-data isolation |
 | Public interfaces (`LLMClient`, `Tool`, `JobRunner`, `MemoryStore`, `Orchestrator`, `Specialist`) MUST NOT change without an ADR | Preserves integration contracts |
+| Orchestrator interface changes are governed by `docs/ADR/2026-05-21-user-query-orchestrator-flow.md` | Records the accepted `SessionUserQuery` → `SessionResponse` flow |
 | No smart stubs: stubs MUST conform to schema, not approximate real behavior | Prevents false-passing tests |
 | No fail-silent fallbacks: missing config raises `RuntimeError` at the call site | Prevents silent degradation in production |
 

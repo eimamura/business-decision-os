@@ -7,7 +7,7 @@ from packages.schemas.recommendation import Candidate, KpiScore, Recommendation,
 from packages.schemas.sse_events import (
     DoneEvent,
     ErrorEvent,
-    StepStartedEvent,
+    QueryReceivedEvent,
 )
 
 
@@ -68,14 +68,12 @@ def test_evaluation_result_schema():
     assert result.risk_level == "medium"
 
 
-def test_sse_step_started():
-    event = StepStartedEvent(
-        step_id=str(uuid4()),
-        specialist_role="orchestrator",
-        step_type="routing",
-        started_at="2026-01-01T00:00:00Z",
+def test_sse_query_received():
+    event = QueryReceivedEvent(
+        session_id=str(uuid4()),
+        timestamp="2026-01-01T00:00:00Z",
     )
-    assert event.type == "step_started"
+    assert event.type == "query_received"
 
 
 def test_sse_done():

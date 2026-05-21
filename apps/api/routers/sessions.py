@@ -13,11 +13,10 @@ from pydantic import BaseModel
 
 from apps.api.state import get_orchestrator, sessions, sse_queues
 from packages.agent.history import compress_history
-from packages.agent.orchestrator import SessionGoal
+from packages.agent.orchestrator import SessionResponse, SessionUserQuery
 from packages.agent.rate_limiter import RateLimitExceeded, check_rate_limit
 from packages.memory import ShortTermMemory
 from packages.persistence.sessions_repo import DecisionSessionRepository
-from packages.schemas.recommendation import Recommendation
 
 _log = logging.getLogger(__name__)
 
@@ -26,27 +25,6 @@ router = APIRouter(prefix="/api/v1/sessions", tags=["sessions"])
 
 def _iso_now() -> str:
     return datetime.now(timezone.utc).isoformat()
-
-
-def _format_recommendation(rec: Recommendation) -> str:
-    if rec.direct_reply:
-        return rec.direct_reply
-    order_qty = rec.primary.action.get("order_qty", "N/A") if rec.primary else "N/A"
-    lines = [
-        "## Recommendation",
-        "",
-        f"**Primary Action**: Order **{order_qty} units**",
-        f"**Risk Level**: {rec.risk_level}",
-        f"**Rationale**: {rec.rationale}",
-    ]
-    if rec.alternatives:
-        lines.append("\n**Alternatives**:")
-        for alt in rec.alternatives:
-            alt_qty = alt.action.get("order_qty", "N/A")
-            lines.append(f"- Order {alt_qty} units")
-    if rec.requires_approval:
-        lines.append("\n_This recommendation requires approval before execution._")
-    return "\n".join(lines)
 
 
 class CreateSessionRequest(BaseModel):
@@ -266,40 +244,35 @@ async def post_message(
     queue: asyncio.Queue[dict[str, Any]] = asyncio.Queue()
     sse_queues[session_id] = queue
 
-    goal_text = body.content
+    conversation_context: str | None = None
     try:
         msgs = await repo.get_messages(session_id, limit=60)
         short_term = [ShortTermMemory(role=m["role"], content=m["content"]) for m in msgs]
-        msgs_to_use, summary = await compress_history(short_term)
+        _msgs_to_use, summary = await compress_history(short_term)
         if summary is not None:
-            goal_text = f"[Conversation context: {summary}]\n\n{goal_text}"
+            conversation_context = summary
     except Exception:
         _log.warning("Could not load/compress history for %s; using raw goal", session_id)
 
-    goal = SessionGoal(text=goal_text)
-
-    await queue.put({
-        "type": "session_started",
-        "session_id": session_id,
-        "timestamp": _iso_now(),
-    })
+    query = SessionUserQuery(text=body.content, conversation_context=conversation_context)
 
     orchestrator = get_orchestrator(queue)
 
     async def _run_and_signal() -> None:
-        recommendation: Recommendation | None = None
+        response: SessionResponse | None = None
         try:
-            recommendation = await orchestrator.run(UUID(session_id), goal)
+            response = await orchestrator.run(UUID(session_id), query)
         except Exception as exc:
             _log.exception("Orchestrator failed for session %s: %s", session_id, exc)
             await queue.put({
                 "type": "error",
                 "code": "orchestration_failed",
                 "message": str(exc),
+                "recoverable": False,
                 "timestamp": _iso_now(),
             })
         finally:
-            reply = _format_recommendation(recommendation) if recommendation else (
+            reply = response.reply if response else (
                 "Processing failed. Please try again."
             )
             session.setdefault("messages", []).append({

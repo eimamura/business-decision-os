@@ -125,7 +125,7 @@ The system is composed of the following layers:
 
 The center of this system is the SessionOrchestrator.
 
-The SessionOrchestrator receives utterances within a user session, distinguishes between chat, question answering, exploration, consultation, and explicit goal-directed tasks, and when needed generates a plan, routes work to agents, controls execution, integrates results, and synthesizes the final response.
+The SessionOrchestrator receives `SessionUserQuery` utterances within a user session, distinguishes between chat, question answering, exploration, consultation, and explicit goal-directed tasks, and when needed generates a `SessionGoal`, creates a plan, routes work to agents, controls execution, integrates results, and synthesizes the final `SessionResponse`.
 
 In MVP and early configurations, Planner, Router, State Manager, and Aggregator are not separated into independent agents.
 These are treated as internal responsibilities of the SessionOrchestrator.
@@ -428,6 +428,7 @@ An interface change that is not backed by an ADR will be rejected at code review
 | `MemoryStore` (the six typed classes) | `packages/memory/` |
 | `Orchestrator` protocol | `packages/agent/orchestrator/` |
 | `SessionOrchestrator` | `packages/agent/orchestrator/` |
+| `SessionUserQuery`, `SessionIntent`, `AgentRoute`, `SessionResponse` | `packages/agent/orchestrator/` |
 | `Specialist` (base protocol) | `packages/agent/base.py` |
 
 ---

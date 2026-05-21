@@ -1,13 +1,15 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
+import re
 import time
-from datetime import datetime, timezone
-from typing import Any, Literal, Protocol
+from datetime import datetime, timedelta, timezone
+from typing import Any, Literal, Protocol, cast
 from uuid import UUID, uuid4
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from packages.agent.cross_domain import (
     AnomalyDetectorAgent,
@@ -21,71 +23,133 @@ from packages.knowledge.kpi import (
     make_stub_kpi_scores,
     weighted_utility,
 )
-from packages.schemas.recommendation import (
-    Candidate,
-    KpiScore,
-    Recommendation,
-    TradeoffExplanation,
-)
+from packages.schemas.recommendation import Candidate, KpiScore, TradeoffExplanation
 from packages.tools.guardrail import classify_risk, needs_approval
 
 logger = logging.getLogger(__name__)
 
-_VALID_SPECIALIST_TYPES = {
-    "domain_expert", "data_engineer", "simulation_optimizer", "evaluator", "anomaly_detector"
-}
+ExecutionMode = Literal[
+    "direct_chat",
+    "single_agent",
+    "sequential_agents",
+    "planned_execution",
+    "dag_execution",
+]
 
+_DOMAIN_AGENT_ROLES = {
+    "demand",
+    "inventory",
+    "replenishment",
+    "procurement",
+    "supplier",
+    "production",
+    "logistics",
+}
 _CROSS_DOMAIN_AGENTS: dict[str, type] = {
     "data_engineer": DataEngineerAgent,
     "simulation_optimizer": SimulationOptimizerAgent,
     "evaluator": EvaluatorAgent,
     "anomaly_detector": AnomalyDetectorAgent,
 }
+_VALID_AGENT_ROLES = _DOMAIN_AGENT_ROLES | set(_CROSS_DOMAIN_AGENTS)
 
-_PLANNING_SYSTEM = """\
-You are a planning agent for a supply chain decision system.
-Return ONLY a JSON array of task nodes needed to fulfil the goal.
+_INTENT_SYSTEM = """\
+You are the intent classifier inside SessionOrchestrator for a supply chain
+decision system. Return ONLY a JSON object:
+{"category": "...", "confidence": 0.0-1.0, "rationale": "...", "goal_text": string|null}
 
-Each node must have:
-- "id": unique string identifier (short, e.g. "domain", "data", "sim", "eval")
-- "specialist_type": one of "domain_expert" | "data_engineer" | "simulation_optimizer"
-  | "evaluator" | "anomaly_detector"
-- "deps": list of node ids that must complete before this node starts ([] for no deps)
-- "tools": list of tools this specialist may use
+Categories:
+- chat: greeting, chitchat, or off-topic
+- lookup: factual supply-chain question or data lookup
+- domain_analysis: one domain needs analysis
+- cross_domain_analysis: several domains or anomaly/root-cause analysis
+- decision_support: explicit recommendation, optimization, scenario comparison,
+  or approval-oriented decision
 
-Available specialist types:
-- "domain_expert": parallel domain analysis (forecast, inventory, procurement,
-  production, cost). tools: []
-- "data_engineer": queries operational DB via SQL.
-  tools: ["sql_query", "forecast"]
-- "simulation_optimizer": runs inventory simulation and replenishment optimisation.
-  tools: ["simulate_inventory", "optimize_replenishment"]
-- "evaluator": scores each candidate against all KPIs independently.
-  tools: ["evaluate_candidates", "write_audit_log"]
-- "anomaly_detector": detects anomalies across demand, inventory, procurement,
-  production, and logistics. tools: ["sql_query", "nl_query"]
-
-Rules:
-1. Simple data lookup -> [data_engineer node, no deps]
-2. Domain analysis without optimisation -> domain_expert and data_engineer
-   with deps=[] (run in parallel)
-3. Replenishment/optimisation -> domain_expert and data_engineer with deps=[]
-   (parallel), then simulation_optimizer depending on data_engineer, then
-   evaluator depending on simulation_optimizer
-4. "evaluator" requires "simulation_optimizer" -- evaluator.deps must include
-   simulation_optimizer's id
-5. Anomaly detection -> anomaly_detector with deps=[] or after data_engineer
-6. Greetings, chit-chat, or off-topic -> []
-
-Return ONLY a valid JSON array of node objects. No explanation, no markdown.\
+Use goal_text only when there is a clear decision or analytical goal.
 """
+
+_ROUTER_SYSTEM = """\
+You are the router inside SessionOrchestrator. Return ONLY a JSON object:
+{"mode":"...", "agents":["..."], "requires_planning":false, "requires_dag":false, "rationale":"..."}
+
+Modes:
+- direct_chat: no agents
+- single_agent: exactly one agent
+- sequential_agents: two or more agents run in the listed order
+- planned_execution: create a serial plan before execution
+- dag_execution: create dependency nodes before execution
+
+Allowed agents:
+demand, inventory, replenishment, procurement, supplier, production, logistics,
+data_engineer, simulation_optimizer, evaluator, anomaly_detector
+
+Default to sequential_agents instead of dag_execution unless the user asks for a
+complex dependency-aware workflow or the task clearly needs branching dependencies.
+"""
+
+_PLAN_SYSTEM = """\
+Create a serial execution plan for SessionOrchestrator. Return ONLY JSON:
+{"steps":[{"id":"step-1", "agent_role":"...", "instruction":"...", "tools":[]}]}
+Allowed agent_role values are:
+demand, inventory, replenishment, procurement, supplier, production, logistics,
+data_engineer, simulation_optimizer, evaluator, anomaly_detector.
+"""
+
+_DAG_SYSTEM = """\
+Create dependency nodes for SessionOrchestrator. Return ONLY a JSON array:
+[{"id":"data", "agent_role":"data_engineer", "deps":[], "instruction":"...", "tools":["sql_query"]}]
+Allowed agent_role values are:
+demand, inventory, replenishment, procurement, supplier, production, logistics,
+data_engineer, simulation_optimizer, evaluator, anomaly_detector.
+Do not include parallel execution instructions; the initial runtime executes in
+topological order.
+"""
+
+
+class SessionUserQuery(BaseModel):
+    text: str
+    conversation_context: str | None = None
+    metadata: dict[str, Any] = Field(default_factory=dict)
+    weight_override_json: dict[str, Any] | None = None
+
+
+class SessionIntent(BaseModel):
+    category: str
+    confidence: float
+    rationale: str
+    goal_text: str | None = None
+
+
+class AgentRoute(BaseModel):
+    mode: ExecutionMode
+    agents: list[str] = Field(default_factory=list)
+    requires_planning: bool = False
+    requires_dag: bool = False
+    rationale: str
+
+
+class PlanStep(BaseModel):
+    id: str
+    agent_role: str
+    instruction: str
+    tools: list[str] = Field(default_factory=list)
+
+
+class ExecutionPlan(BaseModel):
+    steps: list[PlanStep]
 
 
 class TaskNode(BaseModel):
     id: str
-    specialist_type: str
-    deps: list[str] = []
-    tools: list[str] = []
+    agent_role: str
+    deps: list[str] = Field(default_factory=list)
+    instruction: str = ""
+    tools: list[str] = Field(default_factory=list)
+
+    @property
+    def specialist_type(self) -> str:
+        return self.agent_role
 
 
 class SessionGoal(BaseModel):
@@ -108,13 +172,40 @@ class SpecialistResult(BaseModel):
     error: str | None = None
 
 
+class SessionResponse(BaseModel):
+    mode: ExecutionMode
+    reply: str
+    intent: SessionIntent
+    route: AgentRoute
+    agent_results: dict[str, SpecialistResult] = Field(default_factory=dict)
+    primary: Candidate | None = None
+    alternatives: list[Candidate] = Field(default_factory=list)
+    tradeoff: TradeoffExplanation | None = None
+    risk_level: Literal["low", "medium", "high"] = "low"
+    requires_approval: bool = False
+
+
 class Orchestrator(Protocol):
-    async def run(self, session_id: UUID, goal: SessionGoal) -> Recommendation: ...
-    async def resume(self, session_id: UUID, approval_id: UUID) -> Recommendation: ...
+    async def run(self, session_id: UUID, query: SessionUserQuery) -> SessionResponse: ...
+    async def resume(self, session_id: UUID, approval_id: UUID) -> SessionResponse: ...
 
 
 def _iso_now() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+def _json_obj(text: str) -> dict[str, Any]:
+    match = re.search(r"\{.*\}", text, re.DOTALL)
+    if not match:
+        raise ValueError("no JSON object in LLM response")
+    return cast(dict[str, Any], json.loads(match.group()))
+
+
+def _json_array(text: str) -> list[dict[str, Any]]:
+    match = re.search(r"\[.*\]", text, re.DOTALL)
+    if not match:
+        raise ValueError("no JSON array in LLM response")
+    return cast(list[dict[str, Any]], json.loads(match.group()))
 
 
 class SessionOrchestrator:
@@ -135,22 +226,122 @@ class SessionOrchestrator:
         if self._sse_queue is not None:
             await self._sse_queue.put(event)
 
+    def _query_text(self, query: SessionUserQuery) -> str:
+        if query.conversation_context:
+            return f"[Conversation context: {query.conversation_context}]\n\n{query.text}"
+        return query.text
+
+    async def classify_intent(self, query: SessionUserQuery) -> SessionIntent:
+        from packages.agent.llm import LLMMessage
+
+        response = await self._llm_client.complete(
+            messages=[
+                LLMMessage(role="system", content=_INTENT_SYSTEM),
+                LLMMessage(role="user", content=self._query_text(query)),
+            ],
+            tools=None,
+            temperature=0.0,
+            max_tokens=512,
+            prompt_cache=False,
+            specialist_role="orchestrator",
+        )
+        intent = SessionIntent(**_json_obj(response.text))
+        await self._push({
+            "type": "intent_classified",
+            "category": intent.category,
+            "confidence": intent.confidence,
+            "rationale": intent.rationale,
+            "goal_text": intent.goal_text,
+            "timestamp": _iso_now(),
+        })
+        return intent
+
+    async def select_execution_mode(
+        self, query: SessionUserQuery, intent: SessionIntent
+    ) -> AgentRoute:
+        from packages.agent.llm import LLMMessage
+
+        response = await self._llm_client.complete(
+            messages=[
+                LLMMessage(role="system", content=_ROUTER_SYSTEM),
+                LLMMessage(
+                    role="user",
+                    content=json.dumps(
+                        {"query": self._query_text(query), "intent": intent.model_dump()}
+                    ),
+                ),
+            ],
+            tools=None,
+            temperature=0.0,
+            max_tokens=512,
+            prompt_cache=False,
+            specialist_role="orchestrator",
+        )
+        route = AgentRoute(**_json_obj(response.text))
+        self._validate_route(route)
+        await self._push({
+            "type": "execution_mode_selected",
+            "mode": route.mode,
+            "agents": route.agents,
+            "requires_planning": route.requires_planning,
+            "requires_dag": route.requires_dag,
+            "rationale": route.rationale,
+            "timestamp": _iso_now(),
+        })
+        return route
+
+    def _validate_route(self, route: AgentRoute) -> None:
+        if route.mode == "direct_chat" and route.agents:
+            raise ValueError("direct_chat route must not include agents")
+        if route.mode == "single_agent" and len(route.agents) != 1:
+            raise ValueError("single_agent route requires exactly one agent")
+        if route.mode == "sequential_agents" and len(route.agents) < 1:
+            raise ValueError("sequential_agents route requires at least one agent")
+        unknown = [agent for agent in route.agents if agent not in _VALID_AGENT_ROLES]
+        if unknown:
+            raise ValueError(f"unknown agent role(s): {', '.join(unknown)}")
+
+    async def run_direct_chat(
+        self, session_id: UUID, query: SessionUserQuery, intent: SessionIntent, route: AgentRoute
+    ) -> SessionResponse:
+        from packages.agent.llm import LLMMessage
+
+        response = await self._llm_client.complete(
+            messages=[
+                LLMMessage(
+                    role="system",
+                    content=(
+                        "You are a helpful supply chain decision assistant. Reply briefly "
+                        "and naturally in the same language the user writes in. Do not make "
+                        "a decision recommendation unless the user asks for one."
+                    ),
+                ),
+                LLMMessage(role="user", content=self._query_text(query)),
+            ],
+            tools=None,
+            temperature=0.0,
+            max_tokens=512,
+            specialist_role="orchestrator",
+        )
+        await self._push({"type": "response_ready", "mode": route.mode, "timestamp": _iso_now()})
+        self._sessions[session_id]["status"] = "completed"
+        return SessionResponse(mode=route.mode, reply=response.text, intent=intent, route=route)
+
     async def _run_specialist_with_retry(
-        self,
-        specialist: Any,
-        task: SpecialistTask,
-        ctx: Any,
+        self, specialist: Any, task: SpecialistTask, ctx: Any
     ) -> SpecialistResult:
         delays = [1, 4]
         last_exc: Exception | None = None
         for attempt in range(3):
             try:
-                result: SpecialistResult = await specialist.run(task, ctx)
-                return result
+                return cast(SpecialistResult, await specialist.run(task, ctx))
             except Exception as exc:
                 last_exc = exc
                 logger.warning(
-                    "Specialist %s attempt %d failed: %s", specialist.role, attempt + 1, exc
+                    "Agent %s attempt %d failed: %s",
+                    getattr(specialist, "role", "?"),
+                    attempt + 1,
+                    exc,
                 )
                 if attempt < len(delays):
                     await asyncio.sleep(delays[attempt])
@@ -162,160 +353,244 @@ class SessionOrchestrator:
             error=str(last_exc),
         )
 
-    async def _plan_execution(self, goal: SessionGoal) -> list[TaskNode]:
-        import json
-        import re
+    def _make_agent(self, agent_role: str) -> Any:
+        if agent_role in _CROSS_DOMAIN_AGENTS:
+            return _CROSS_DOMAIN_AGENTS[agent_role](
+                self._llm_client, self._tool_registry, self._sse_queue
+            )
+        if agent_role in _DOMAIN_AGENT_ROLES:
+            from packages.agent.domain import create_domain_agents
 
-        from packages.agent.llm import LLMMessage
+            for agent in create_domain_agents(
+                self._llm_client, self._tool_registry, sse_queue=self._sse_queue
+            ):
+                if agent.role == agent_role:
+                    return agent
+        raise ValueError(f"unknown agent role: {agent_role}")
 
-        messages = [
-            LLMMessage(role="system", content=_PLANNING_SYSTEM),
-            LLMMessage(role="user", content=f"Goal: {goal.text}"),
-        ]
-        response = await self._llm_client.complete(
-            messages=messages,
-            tools=None,
-            temperature=0.0,
-            max_tokens=512,
-            prompt_cache=False,
-            specialist_role="orchestrator",
-        )
-        match = re.search(r"\[.*\]", response.text, re.DOTALL)
-        if not match:
-            raise ValueError("no JSON array in planning response")
-        raw: list[dict[str, Any]] = json.loads(match.group())
-        if not raw:
-            return []
-        nodes = [
-            TaskNode(**item) for item in raw
-            if item.get("specialist_type") in _VALID_SPECIALIST_TYPES
-        ]
-        if not nodes:
-            raise ValueError("no valid nodes in planning response")
-
-        # Enforce evaluator ↔ sim_opt co-occurrence
-        types = {n.specialist_type for n in nodes}
-        if "simulation_optimizer" in types and "evaluator" not in types:
-            sim_ids = [n.id for n in nodes if n.specialist_type == "simulation_optimizer"]
-            nodes.append(TaskNode(
-                id="eval", specialist_type="evaluator", deps=sim_ids,
-                tools=["evaluate_candidates", "write_audit_log"],
-            ))
-        if "evaluator" in types and "simulation_optimizer" not in types:
-            data_ids = [n.id for n in nodes if n.specialist_type == "data_engineer"]
-            nodes.append(TaskNode(
-                id="sim", specialist_type="simulation_optimizer", deps=data_ids,
-                tools=["simulate_inventory", "optimize_replenishment"],
-            ))
-            eval_node = next(n for n in nodes if n.specialist_type == "evaluator")
-            eval_node.deps = [*eval_node.deps, "sim"]
-
-        return nodes
-
-    async def _run_node(
+    async def _run_agent(
         self,
         session_id: UUID,
-        goal: SessionGoal,
-        node: TaskNode,
+        agent_role: str,
+        instruction: str,
+        context_payload: dict[str, Any],
+        allowed_tools: list[str],
     ) -> SpecialistResult:
         from packages.tools.base import ToolContext
 
-        if node.specialist_type == "domain_expert":
-            domain_results = await self._run_domain_specialists_parallel(session_id, goal)
-            merged: dict[str, Any] = {role: r.output for role, r in domain_results.items()}
-            all_tool_calls = [tc for r in domain_results.values() for tc in r.tool_calls_made]
-            any_failed = any(r.status == "failed" for r in domain_results.values())
-            return SpecialistResult(
-                task_id=uuid4(),
-                output=merged,
-                tool_calls_made=all_tool_calls,
-                status="failed" if any_failed else "completed",
-            )
-
-        agent_cls = _CROSS_DOMAIN_AGENTS[node.specialist_type]
-        specialist = agent_cls(self._llm_client, self._tool_registry, self._sse_queue)
+        agent = self._make_agent(agent_role)
         task_id = uuid4()
+        started_at = _iso_now()
+        await self._push({
+            "type": "agent_started",
+            "agent_name": getattr(agent, "name", agent_role).replace("_", " ").title(),
+            "agent_role": agent_role,
+            "task_id": str(task_id),
+            "started_at": started_at,
+            "input_summary": instruction[:200],
+        })
         ctx = ToolContext(
             session_id=session_id,
             agent_step_id=task_id,
-            specialist_role=node.specialist_type,  # type: ignore[arg-type]
+            specialist_role=agent_role,  # type: ignore[arg-type]
             actor="orchestrator",
             correlation_id=uuid4(),
         )
         task = SpecialistTask(
             task_id=task_id,
-            instruction=f"Process decision goal: {goal.text}",
-            context_payload={"goal": goal.text, "session_id": str(session_id)},
-            allowed_tools=node.tools,
+            instruction=instruction,
+            context_payload=context_payload,
+            allowed_tools=allowed_tools,
         )
-        return await self._run_specialist_with_retry(specialist, task, ctx)
+        t0 = time.monotonic()
+        result = await self._run_specialist_with_retry(agent, task, ctx)
+        await self._push({
+            "type": "agent_completed",
+            "agent_name": getattr(agent, "name", agent_role).replace("_", " ").title(),
+            "agent_role": agent_role,
+            "task_id": str(task_id),
+            "duration_ms": int((time.monotonic() - t0) * 1000),
+            "output_summary": str(result.output.get("text", ""))[:200] if result.output else None,
+            "timestamp": _iso_now(),
+        })
+        if result.status == "failed":
+            await self._push({
+                "type": "error",
+                "code": "agent_failed",
+                "message": f"Agent {agent_role} failed: {result.error}",
+                "recoverable": False,
+                "timestamp": _iso_now(),
+            })
+        return result
 
-    async def _execute_dag(
+    async def run_single_agent(
+        self, session_id: UUID, query: SessionUserQuery, intent: SessionIntent, route: AgentRoute
+    ) -> SessionResponse:
+        results = await self._run_agents_in_order(session_id, query, route.agents, intent)
+        return await self._synthesize_response(session_id, query, intent, route, results)
+
+    async def run_sequential_agents(
+        self, session_id: UUID, query: SessionUserQuery, intent: SessionIntent, route: AgentRoute
+    ) -> SessionResponse:
+        results = await self._run_agents_in_order(session_id, query, route.agents, intent)
+        return await self._synthesize_response(session_id, query, intent, route, results)
+
+    async def _run_agents_in_order(
         self,
         session_id: UUID,
-        goal: SessionGoal,
-        plan: list[TaskNode],
+        query: SessionUserQuery,
+        agent_roles: list[str],
+        intent: SessionIntent,
     ) -> dict[str, SpecialistResult]:
-        remaining = {node.id: node for node in plan}
-        completed: dict[str, SpecialistResult] = {}
+        results: dict[str, SpecialistResult] = {}
+        for agent_role in agent_roles:
+            context_payload = {
+                "query": query.text,
+                "conversation_context": query.conversation_context,
+                "intent": intent.model_dump(),
+                "previous_results": {role: result.output for role, result in results.items()},
+            }
+            result = await self._run_agent(
+                session_id=session_id,
+                agent_role=agent_role,
+                instruction=intent.goal_text or query.text,
+                context_payload=context_payload,
+                allowed_tools=self._default_tools(agent_role),
+            )
+            results[agent_role] = result
+        return results
 
+    async def create_execution_plan(
+        self, query: SessionUserQuery, intent: SessionIntent, route: AgentRoute
+    ) -> ExecutionPlan:
+        from packages.agent.llm import LLMMessage
+
+        response = await self._llm_client.complete(
+            messages=[
+                LLMMessage(role="system", content=_PLAN_SYSTEM),
+                LLMMessage(
+                    role="user",
+                    content=json.dumps(
+                        {
+                            "query": self._query_text(query),
+                            "intent": intent.model_dump(),
+                            "route": route.model_dump(),
+                        }
+                    ),
+                ),
+            ],
+            tools=None,
+            temperature=0.0,
+            max_tokens=1024,
+            prompt_cache=False,
+            specialist_role="orchestrator",
+        )
+        plan = ExecutionPlan(**_json_obj(response.text))
+        for step in plan.steps:
+            if step.agent_role not in _VALID_AGENT_ROLES:
+                raise ValueError(f"unknown agent role in plan: {step.agent_role}")
+        await self._push({
+            "type": "plan_created",
+            "mode": "planned_execution",
+            "steps": [s.model_dump() for s in plan.steps],
+            "timestamp": _iso_now(),
+        })
+        return plan
+
+    async def run_planned_execution(
+        self, session_id: UUID, query: SessionUserQuery, intent: SessionIntent, route: AgentRoute
+    ) -> SessionResponse:
+        plan = await self.create_execution_plan(query, intent, route)
+        results: dict[str, SpecialistResult] = {}
+        for step in plan.steps:
+            context_payload = {
+                "query": query.text,
+                "intent": intent.model_dump(),
+                "previous_results": {k: v.output for k, v in results.items()},
+            }
+            results[step.id] = await self._run_agent(
+                session_id, step.agent_role, step.instruction, context_payload, step.tools
+            )
+        return await self._synthesize_response(session_id, query, intent, route, results)
+
+    async def create_task_nodes(
+        self, query: SessionUserQuery, intent: SessionIntent, route: AgentRoute
+    ) -> list[TaskNode]:
+        from packages.agent.llm import LLMMessage
+
+        response = await self._llm_client.complete(
+            messages=[
+                LLMMessage(role="system", content=_DAG_SYSTEM),
+                LLMMessage(
+                    role="user",
+                    content=json.dumps(
+                        {
+                            "query": self._query_text(query),
+                            "intent": intent.model_dump(),
+                            "route": route.model_dump(),
+                        }
+                    ),
+                ),
+            ],
+            tools=None,
+            temperature=0.0,
+            max_tokens=1024,
+            prompt_cache=False,
+            specialist_role="orchestrator",
+        )
+        nodes = [TaskNode(**item) for item in _json_array(response.text)]
+        for node in nodes:
+            if node.agent_role not in _VALID_AGENT_ROLES:
+                raise ValueError(f"unknown agent role in DAG: {node.agent_role}")
+        await self._push({
+            "type": "plan_created",
+            "mode": "dag_execution",
+            "nodes": [n.model_dump() for n in nodes],
+            "timestamp": _iso_now(),
+        })
+        return nodes
+
+    async def run_dag_execution(
+        self, session_id: UUID, query: SessionUserQuery, intent: SessionIntent, route: AgentRoute
+    ) -> SessionResponse:
+        nodes = await self.create_task_nodes(query, intent, route)
+        remaining = {node.id: node for node in nodes}
+        completed: dict[str, SpecialistResult] = {}
         while remaining:
             ready = [
                 node for node in remaining.values()
                 if all(dep in completed for dep in node.deps)
             ]
             if not ready:
-                logger.error(
-                    "DAG execution stuck — possible cycle or unresolvable deps: %s",
-                    list(remaining),
+                raise ValueError(f"DAG has unresolvable dependencies: {list(remaining)}")
+            for node in ready:
+                context_payload = {
+                    "query": query.text,
+                    "intent": intent.model_dump(),
+                    "dependency_results": {dep: completed[dep].output for dep in node.deps},
+                }
+                completed[node.id] = await self._run_agent(
+                    session_id,
+                    node.agent_role,
+                    node.instruction or (intent.goal_text or query.text),
+                    context_payload,
+                    node.tools,
                 )
-                break
-
-            step_t0 = time.monotonic()
-            run_results = await asyncio.gather(
-                *[self._run_node(session_id, goal, node) for node in ready]
-            )
-            pairs: list[tuple[TaskNode, SpecialistResult]] = list(zip(ready, run_results))
-
-            for node, result in pairs:
-                step_duration_ms = int((time.monotonic() - step_t0) * 1000)
-                output_summary = (
-                    str(result.output.get("text", ""))[:100] if result.output else None
-                )
-                await self._push({
-                    "type": "step_completed",
-                    "step_id": node.id,
-                    "specialist_role": node.specialist_type,
-                    "duration_ms": step_duration_ms,
-                    "output_preview": str(result.output)[:200],
-                    "output_summary": output_summary,
-                    "tokens": 0,
-                    "cost_usd": 0.0,
-                    "ended_at": _iso_now(),
-                })
-                if result.status == "failed":
-                    self._sessions[session_id]["status"] = "failed"
-                    await self._push({
-                        "type": "error",
-                        "step_id": node.id,
-                        "code": "specialist_failed",
-                        "message": (
-                            f"Specialist {node.id} ({node.specialist_type})"
-                            f" failed: {result.error}"
-                        ),
-                        "recoverable": False,
-                        "timestamp": _iso_now(),
-                    })
-                completed[node.id] = result
                 del remaining[node.id]
+        return await self._synthesize_response(session_id, query, intent, route, completed)
 
-        return completed
+    def _default_tools(self, agent_role: str) -> list[str]:
+        if agent_role == "data_engineer":
+            return ["sql_query", "nl_query", "forecast"]
+        if agent_role == "simulation_optimizer":
+            return ["simulate_inventory", "optimize_replenishment"]
+        if agent_role == "evaluator":
+            return ["evaluate_candidates", "write_audit_log"]
+        if agent_role == "anomaly_detector":
+            return ["sql_query", "nl_query"]
+        return []
 
-    async def _resolve_weights_with_memory(
-        self, goal: SessionGoal
-    ) -> tuple[dict[str, float], str]:
-        import json
-
+    async def _resolve_weights_with_memory(self, goal: SessionGoal) -> tuple[dict[str, float], str]:
         from packages.agent.orchestrator.weights import resolve_weights
         from packages.memory import MemoryQuery
 
@@ -326,17 +601,10 @@ class SessionOrchestrator:
             if results:
                 mem, _score = results[0]
                 data = json.loads(mem.content)
-                if "weights" in data and isinstance(data["weights"], dict):
-                    await self._push({
-                        "type": "memory_retrieved",
-                        "count": len(results),
-                        "source": "user_policy",
-                        "timestamp": _iso_now(),
-                    })
+                if isinstance(data.get("weights"), dict):
                     return data["weights"], "user_policy"
         except Exception:
             pass
-
         return resolve_weights(goal)
 
     async def _write_decision_memory(
@@ -345,10 +613,8 @@ class SessionOrchestrator:
         goal: SessionGoal,
         weights: dict[str, float],
         weight_source: str,
-        recommendation: "Recommendation",
+        risk_level: str,
     ) -> None:
-        import json
-
         from packages.memory import Memory
 
         mem = Memory(
@@ -356,210 +622,135 @@ class SessionOrchestrator:
             scope="global",
             type="user_policy",
             content=json.dumps({
-                "goal": goal.text, "weights": weights, "weight_source": weight_source
+                "goal": goal.text,
+                "weights": weights,
+                "weight_source": weight_source,
             }),
-            metadata={"session_id": str(session_id), "risk_level": recommendation.risk_level},
-            created_at=datetime.now(timezone.utc).isoformat(),
+            metadata={"session_id": str(session_id), "risk_level": risk_level},
+            created_at=_iso_now(),
         )
         await self._memory_store.write(mem)
-        await self._push({"type": "memory_written", "timestamp": _iso_now()})
 
-    async def _run_domain_specialists_parallel(
+    async def _synthesize_response(
         self,
         session_id: UUID,
-        goal: SessionGoal,
-    ) -> dict[str, SpecialistResult]:
-        from packages.agent.domain import create_domain_agents
-        from packages.tools.base import ToolContext
-
-        domain_agents = create_domain_agents(
-            self._llm_client, self._tool_registry, sse_queue=self._sse_queue
+        query: SessionUserQuery,
+        intent: SessionIntent,
+        route: AgentRoute,
+        agent_results: dict[str, SpecialistResult],
+    ) -> SessionResponse:
+        decision_mode = (
+            intent.category == "decision_support"
+            or route.mode in ("planned_execution", "dag_execution")
+            or "simulation_optimizer" in route.agents
+            or any("simulation_optimizer" in key for key in agent_results)
         )
-
-        async def _run_one(agent: Any) -> tuple[str, SpecialistResult]:
-            _run_one_t0 = time.monotonic()
-            task_id = uuid4()
-            ctx = ToolContext(
-                session_id=session_id,
-                agent_step_id=task_id,
-                specialist_role=agent.role,
-                actor="orchestrator",
-                correlation_id=uuid4(),
+        if decision_mode:
+            return await self._build_decision_response(
+                session_id, query, intent, route, agent_results
             )
-            task = SpecialistTask(
-                task_id=task_id,
-                instruction=f"Process decision goal: {goal.text}",
-                context_payload={"goal": goal.text, "session_id": str(session_id)},
-                allowed_tools=[],
-            )
-            result = await self._run_specialist_with_retry(agent, task, ctx)
-            if result.status == "failed":
-                self._sessions[session_id]["status"] = "failed"
-                await self._push({
-                    "type": "error",
-                    "code": "specialist_failed",
-                    "message": f"Specialist {agent.name} failed: {result.error}",
-                    "recoverable": False,
-                    "timestamp": _iso_now(),
-                })
-            specialist_duration_ms = int((time.monotonic() - _run_one_t0) * 1000)
-            await self._push({
-                "type": "specialist_completed",
-                "specialist_name": agent.name.replace("_", " ").title(),
-                "specialist_role": agent.role,
-                "task_id": str(task_id),
-                "duration_ms": specialist_duration_ms,
-                "output_summary": (
-                    str(result.output.get("text", ""))[:100] if result.output else None
-                ),
-                "timestamp": _iso_now(),
-            })
-            return agent.role, result
 
-        pairs = await asyncio.gather(*[_run_one(a) for a in domain_agents])
-        return dict(pairs)
+        from packages.agent.llm import LLMMessage
 
-    async def run(self, session_id: UUID, goal: SessionGoal) -> Recommendation:
-        self._sessions[session_id] = {"status": "active"}
-
-        plan_step_id = str(uuid4())
-        plan_started_at = _iso_now()
-        plan_t0 = time.monotonic()
-        await self._push({
-            "type": "step_started",
-            "step_id": plan_step_id,
-            "specialist_role": "orchestrator",
-            "step_type": "planning",
-            "started_at": plan_started_at,
-            "input_summary": goal.text[:200],
-        })
-
-        try:
-            execution_plan = await self._plan_execution(goal)
-        except Exception as exc:
-            self._sessions[session_id]["status"] = "failed"
-            await self._push({
-                "type": "error",
-                "code": "planning_failed",
-                "message": f"Failed to generate an execution plan: {exc}",
-                "recoverable": False,
-                "timestamp": _iso_now(),
-            })
-            raise
-        plan_duration_ms = int((time.monotonic() - plan_t0) * 1000)
-
-        await self._push({
-            "type": "execution_plan",
-            "plan": [
-                {"id": n.id, "specialist_type": n.specialist_type, "deps": n.deps}
-                for n in execution_plan
-            ],
-            "timestamp": _iso_now(),
-        })
-
-        await self._push({
-            "type": "step_completed",
-            "step_id": plan_step_id,
-            "specialist_role": "orchestrator",
-            "step_type": "planning",
-            "node_count": len(execution_plan),
-            "duration_ms": plan_duration_ms,
-            "ended_at": _iso_now(),
-        })
-
-        if not execution_plan:
-            from packages.agent.llm import LLMMessage as _LLMMsg
-            conv_response = await self._llm_client.complete(
-                messages=[
-                    _LLMMsg(
-                        role="system",
-                        content=(
-                            "You are a helpful supply chain decision assistant. "
-                            "The user sent a conversational message — not a decision request. "
-                            "Reply naturally and briefly. You may mention that you can help with "
-                            "supply chain decisions such as inventory optimisation, replenishment "
-                            "planning, and demand forecasting. "
-                            "Always respond in the same language the user writes in."
-                        ),
+        response = await self._llm_client.complete(
+            messages=[
+                LLMMessage(
+                    role="system",
+                    content=(
+                        "Synthesize the agent results into a concise assistant reply. "
+                        "Use the same language as the user. Do not invent raw inventory rows."
                     ),
-                    _LLMMsg(role="user", content=goal.text),
-                ],
-                tools=None,
-                temperature=0.0,
-                max_tokens=512,
-                specialist_role="orchestrator",
-            )
-            return Recommendation(
-                primary=None,
-                alternatives=[],
-                tradeoff=None,
-                rationale=conv_response.text,
-                risk_level="low",
-                requires_approval=False,
-                direct_reply=conv_response.text,
-            )
-
-        node_results = await self._execute_dag(session_id, goal, execution_plan)
-
-        # Find sim_opt result by specialist_type for downstream KPI scoring
-        _sim_opt_node = next(
-            (n for n in execution_plan if n.specialist_type == "simulation_optimizer"), None
+                ),
+                LLMMessage(
+                    role="user",
+                    content=json.dumps(
+                        {
+                            "query": query.text,
+                            "intent": intent.model_dump(),
+                            "agent_results": {k: v.output for k, v in agent_results.items()},
+                        }
+                    ),
+                ),
+            ],
+            tools=None,
+            temperature=0.0,
+            max_tokens=1024,
+            specialist_role="orchestrator",
         )
-        sim_opt_result = (
-            node_results.get(_sim_opt_node.id) if _sim_opt_node is not None else None
-        ) or SpecialistResult(task_id=uuid4(), output={}, tool_calls_made=[], status="completed")
-        raw_candidates = sim_opt_result.output.get("candidates", [])
+        await self._push({"type": "response_ready", "mode": route.mode, "timestamp": _iso_now()})
+        self._sessions[session_id]["status"] = "completed"
+        return SessionResponse(
+            mode=route.mode,
+            reply=response.text,
+            intent=intent,
+            route=route,
+            agent_results=agent_results,
+        )
 
-        moq = 100.0
-        if not raw_candidates:
-            candidates = [
-                Candidate(
-                    id="c1",
-                    action={"order_qty": moq * 1},
-                    kpi_scores=make_stub_kpi_scores(moq * 1, 0),
-                    constraints_satisfied=["MOQ"],
-                    constraints_violated=[],
-                ),
-                Candidate(
-                    id="c2",
-                    action={"order_qty": moq * 2},
-                    kpi_scores=make_stub_kpi_scores(moq * 2, 1),
-                    constraints_satisfied=["MOQ"],
-                    constraints_violated=[],
-                ),
-                Candidate(
-                    id="c3",
-                    action={"order_qty": moq * 3},
-                    kpi_scores=make_stub_kpi_scores(moq * 3, 2),
-                    constraints_satisfied=["MOQ"],
-                    constraints_violated=[],
-                ),
-            ]
-        else:
+    async def _build_decision_response(
+        self,
+        session_id: UUID,
+        query: SessionUserQuery,
+        intent: SessionIntent,
+        route: AgentRoute,
+        agent_results: dict[str, SpecialistResult],
+    ) -> SessionResponse:
+        raw_candidates: list[dict[str, Any]] = []
+        for result in agent_results.values():
+            if isinstance(result.output.get("candidates"), list):
+                raw_candidates = result.output["candidates"]
+                break
+            tool_results = result.output.get("tool_results")
+            if isinstance(tool_results, dict):
+                optimizer_output = tool_results.get("optimize_replenishment")
+                if (
+                    isinstance(optimizer_output, dict)
+                    and isinstance(optimizer_output.get("candidates"), list)
+                ):
+                    raw_candidates = optimizer_output["candidates"]
+                    break
+
+        if raw_candidates:
             candidates = [
                 Candidate(
                     id=str(c.get("id", uuid4())),
-                    action=c.get("action", {}),
-                    kpi_scores=[KpiScore(**s) for s in c.get("kpi_scores", [])],
+                    action=c.get("action", {"order_qty": c.get("order_qty")}),
+                    kpi_scores=[KpiScore(**s) for s in c.get("kpi_scores", [])]
+                    or make_stub_kpi_scores(float(c.get("order_qty", 100.0)), idx),
                     constraints_satisfied=c.get("constraints_satisfied", []),
                     constraints_violated=c.get("constraints_violated", []),
                 )
-                for c in raw_candidates
+                for idx, c in enumerate(raw_candidates)
+            ]
+        else:
+            moq = 100.0
+            candidates = [
+                Candidate(
+                    id=f"c{idx + 1}",
+                    action={"order_qty": moq * (idx + 1)},
+                    kpi_scores=make_stub_kpi_scores(moq * (idx + 1), idx),
+                    constraints_satisfied=["MOQ"],
+                    constraints_violated=[],
+                )
+                for idx in range(3)
             ]
 
+        goal = SessionGoal(
+            text=intent.goal_text or query.text,
+            weight_override_json=query.weight_override_json,
+        )
         weights, weight_source = await self._resolve_weights_with_memory(goal)
-
-        utilities = [(c, weighted_utility(c.kpi_scores, weights)) for c in candidates]
-        utilities.sort(key=lambda x: x[1], reverse=True)
-
+        utilities = [
+            (candidate, weighted_utility(candidate.kpi_scores, weights))
+            for candidate in candidates
+        ]
+        utilities.sort(key=lambda item: item[1], reverse=True)
         primary = utilities[0][0]
-        others = [c for c, _ in utilities[1:]]
+        others = [candidate for candidate, _ in utilities[1:]]
 
         alt_service = max(
             others,
-            key=lambda c: next(
-                (s.value for s in c.kpi_scores if s.name == KPI_SERVICE_LEVEL), 0.0
-            ),
+            key=lambda c: next((s.value for s in c.kpi_scores if s.name == KPI_SERVICE_LEVEL), 0.0),
             default=None,
         )
         alt_cost = min(
@@ -570,23 +761,14 @@ class SessionOrchestrator:
             ),
             default=None,
         )
-
         alternatives: list[Candidate] = []
-        seen_ids: set[str] = set()
-        for alt in [alt_service, alt_cost]:
-            if alt is not None and alt.id not in seen_ids:
+        seen: set[str] = set()
+        for alt in [alt_service, alt_cost, *others]:
+            if alt is not None and alt.id not in seen:
                 alternatives.append(alt)
-                seen_ids.add(alt.id)
-
-        if not alternatives and others:
-            alternatives = others[:2]
-        elif len(alternatives) < 2 and others:
-            for c in others:
-                if c.id not in seen_ids:
-                    alternatives.append(c)
-                    seen_ids.add(c.id)
-                    if len(alternatives) >= 2:
-                        break
+                seen.add(alt.id)
+            if len(alternatives) >= 2:
+                break
 
         tradeoff = TradeoffExplanation(
             weight_vector=weights,
@@ -600,60 +782,95 @@ class SessionOrchestrator:
                 for alt in alternatives
             ],
         )
-
         risk_level = classify_risk(primary)
-        _approval_pending = needs_approval(risk_level)
+        requires_approval = needs_approval(risk_level)
+        await self._write_decision_memory(session_id, goal, weights, weight_source, risk_level)
 
-        recommendation = Recommendation(
-            primary=primary,
-            alternatives=alternatives,
-            tradeoff=tradeoff,
-            rationale=(
-                f"Selected candidate {primary.id} based on weighted utility. Goal: {goal.text}"
-            ),
-            risk_level=risk_level,
-            requires_approval=_approval_pending,
+        reply = (
+            f"Selected candidate {primary.id} for: {goal.text}\n\n"
+            f"Primary action: {primary.action}\n"
+            f"Risk level: {risk_level}"
         )
-
-        await self._write_decision_memory(session_id, goal, weights, weight_source, recommendation)
-
-        recommendation_id = uuid4()
-        self._sessions[session_id]["status"] = (
-            "awaiting_approval" if _approval_pending else "completed"
-        )
-
-        auto_execute = not _approval_pending
-
         await self._push({
-            "type": "recommendation_ready",
-            "recommendation_id": str(recommendation_id),
+            "type": "response_ready",
+            "mode": route.mode,
             "risk_level": risk_level,
-            "requires_approval": _approval_pending,
-            "auto_execute": auto_execute,
+            "requires_approval": requires_approval,
             "timestamp": _iso_now(),
         })
-
-        if auto_execute:
+        if requires_approval:
             await self._push({
-                "type": "auto_executed",
-                "recommendation_id": str(recommendation_id),
+                "type": "approval_requested",
+                "approval_id": str(uuid4()),
+                "expires_at": (datetime.now(timezone.utc) + timedelta(days=1)).isoformat(),
+                "risk_level": risk_level,
                 "timestamp": _iso_now(),
             })
         else:
-            from datetime import timedelta
-
-            approval_id = str(uuid4())
-            expires_at = (datetime.now(timezone.utc) + timedelta(seconds=86400)).isoformat()
             await self._push({
-                "type": "awaiting_approval",
-                "approval_id": approval_id,
-                "recommendation_id": str(recommendation_id),
-                "expires_at": expires_at,
+                "type": "auto_executed",
+                "recommendation_id": str(uuid4()),
                 "timestamp": _iso_now(),
             })
 
-        return recommendation
+        self._sessions[session_id]["status"] = (
+            "awaiting_approval" if requires_approval else "completed"
+        )
+        return SessionResponse(
+            mode=route.mode,
+            reply=reply,
+            intent=intent,
+            route=route,
+            agent_results=agent_results,
+            primary=primary,
+            alternatives=alternatives,
+            tradeoff=tradeoff,
+            risk_level=risk_level,
+            requires_approval=requires_approval,
+        )
 
-    async def resume(self, session_id: UUID, approval_id: UUID) -> Recommendation:
-        goal = SessionGoal(text="resume after approval")
-        return await self.run(session_id, goal)
+    async def run(self, session_id: UUID, query: SessionUserQuery) -> SessionResponse:
+        if isinstance(query, SessionGoal):
+            query = SessionUserQuery(
+                text=query.text,
+                weight_override_json=query.weight_override_json,
+            )
+
+        self._sessions[session_id] = {"status": "active"}
+        await self._push({
+            "type": "query_received",
+            "session_id": str(session_id),
+            "timestamp": _iso_now(),
+        })
+
+        try:
+            intent = await self.classify_intent(query)
+            route = await self.select_execution_mode(query, intent)
+            if route.mode == "direct_chat":
+                return await self.run_direct_chat(session_id, query, intent, route)
+            if route.mode == "single_agent":
+                return await self.run_single_agent(session_id, query, intent, route)
+            if route.mode == "sequential_agents":
+                return await self.run_sequential_agents(session_id, query, intent, route)
+            if route.mode == "planned_execution":
+                return await self.run_planned_execution(session_id, query, intent, route)
+            if route.mode == "dag_execution":
+                return await self.run_dag_execution(session_id, query, intent, route)
+            raise ValueError(f"unknown execution mode: {route.mode}")
+        except Exception as exc:
+            self._sessions[session_id]["status"] = "failed"
+            await self._push({
+                "type": "error",
+                "code": "orchestration_failed",
+                "message": str(exc),
+                "recoverable": False,
+                "timestamp": _iso_now(),
+            })
+            raise
+
+    async def resume(self, session_id: UUID, approval_id: UUID) -> SessionResponse:
+        query = SessionUserQuery(
+            text="Resume the approved decision.",
+            metadata={"approval_id": str(approval_id)},
+        )
+        return await self.run(session_id, query)

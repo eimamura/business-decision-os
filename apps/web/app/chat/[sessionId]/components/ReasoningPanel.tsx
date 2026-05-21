@@ -34,7 +34,8 @@ interface SpecialistTrace {
   status: "running" | "completed" | "failed";
   tools: ToolTrace[];
   outputSummary?: string;
-  isAgent: boolean; // true = AgentBasedSpecialist, false = pipeline PromptBasedSpecialist
+  isAgent: boolean; // true = product agent, false = prompt-based execution role
+  inputSummary?: string;
 }
 
 interface OrchestratorTrace {
@@ -74,15 +75,17 @@ function fmsDuration(ms: number): string {
 
 const ROLE_LABELS: Record<string, string> = {
   orchestrator: "Orchestrator",
-  domain_expert: "Domain Expert",
+  demand: "Demand",
   data_engineer: "Data Engineer",
-  sim_opt: "Sim / Opt",
+  simulation_optimizer: "Simulation Optimizer",
   evaluator: "Evaluator",
-  forecast: "Forecast",
   inventory: "Inventory",
+  replenishment: "Replenishment",
   procurement: "Procurement",
+  supplier: "Supplier",
   production: "Production",
-  cost: "Cost",
+  logistics: "Logistics",
+  anomaly_detector: "Anomaly Detector",
 };
 
 const RISK_COLORS: Record<string, string> = {
@@ -148,48 +151,20 @@ export default function ReasoningPanel({ sessionId, usage }: Props) {
 
   function handleEvent(ev: RawEvent) {
     switch (ev.type) {
-      case "step_started": {
-        const role = ev.specialist_role as string;
-        const stepType = ev.step_type as string;
-        const startedAt = ev.started_at as string;
-
-        if (stepType === "plan" && role === "orchestrator") {
-          setSessionStartedAt(startedAt);
-          setOrchestrator({
-            startedAt,
-            route: [],
-            rationale: "",
-            specialists: [],
-          });
-        }
-        if (stepType === "specialist") {
-          // Pipeline specialist (PromptBasedSpecialist)
-          const stepId = ev.step_id as string;
-          setOrchestrator((prev) => {
-            if (!prev) return prev;
-            return {
-              ...prev,
-              specialists: [
-                ...prev.specialists,
-                {
-                  name: ROLE_LABELS[role] ?? role,
-                  role,
-                  stepId,
-                  startedAt,
-                  status: "running",
-                  tools: [],
-                  isAgent: false,
-                  inputSummary: ev.input_summary as string | undefined,
-                },
-              ],
-            };
-          });
-        }
+      case "query_received": {
+        const startedAt = (ev.timestamp as string) ?? new Date().toISOString();
+        setSessionStartedAt(startedAt);
+        setOrchestrator({
+          startedAt,
+          route: [],
+          rationale: "",
+          specialists: [],
+        });
         break;
       }
 
-      case "routing_decision": {
-        const route = ev.route as string[];
+      case "execution_mode_selected": {
+        const route = ev.agents as string[];
         const rationale = ev.rationale as string;
         setOrchestrator((prev) =>
           prev ? { ...prev, route, rationale } : prev
@@ -197,38 +172,9 @@ export default function ReasoningPanel({ sessionId, usage }: Props) {
         break;
       }
 
-      case "step_completed": {
-        const role = ev.specialist_role as string;
-        const stepType = ev.step_type as string;
-        const durationMs = ev.duration_ms as number | undefined;
-        const outputSummary = (ev.output_summary ?? ev.output_preview) as string | undefined;
-
-        if (stepType === "specialist") {
-          const stepId = ev.step_id as string;
-          setOrchestrator((prev) => {
-            if (!prev) return prev;
-            return {
-              ...prev,
-              specialists: prev.specialists.map((s) =>
-                s.stepId === stepId
-                  ? { ...s, status: "completed", durationMs, outputSummary }
-                  : s
-              ),
-            };
-          });
-        }
-        if (stepType === "routing" || role === "orchestrator") {
-          setOrchestrator((prev) =>
-            prev ? { ...prev, durationMs: prev.durationMs ?? durationMs } : prev
-          );
-        }
-        break;
-      }
-
-      case "specialist_started": {
-        // AgentBasedSpecialist (domain experts running in parallel)
-        const name = ev.specialist_name as string;
-        const role = ev.specialist_role as string;
+      case "agent_started": {
+        const name = ev.agent_name as string;
+        const role = ev.agent_role as string;
         const taskId = ev.task_id as string;
         const startedAt = ev.started_at as string;
         setOrchestrator((prev) => {
@@ -247,6 +193,7 @@ export default function ReasoningPanel({ sessionId, usage }: Props) {
                 status: "running",
                 tools: [],
                 isAgent: true,
+                inputSummary: ev.input_summary as string | undefined,
               },
             ],
           };
@@ -254,7 +201,7 @@ export default function ReasoningPanel({ sessionId, usage }: Props) {
         break;
       }
 
-      case "specialist_completed": {
+      case "agent_completed": {
         const taskId = ev.task_id as string;
         const durationMs = ev.duration_ms as number | undefined;
         const outputSummary = ev.output_summary as string | undefined;
@@ -272,17 +219,17 @@ export default function ReasoningPanel({ sessionId, usage }: Props) {
         break;
       }
 
-      case "tool_called": {
+      case "tool_started": {
         const toolName = ev.tool_name as string;
         const toolCallId = ev.tool_call_id as string;
-        const specialistRole = ev.specialist_role as string;
+        const agentRole = ev.agent_role as string;
         const input = ev.input as unknown;
         const timestamp = ev.timestamp as string;
 
         setOrchestrator((prev) => {
           if (!prev) return prev;
           const specialists = prev.specialists.map((s) => {
-            if (s.role !== specialistRole) return s;
+            if (s.role !== agentRole) return s;
             return {
               ...s,
               tools: [
@@ -332,15 +279,15 @@ export default function ReasoningPanel({ sessionId, usage }: Props) {
         break;
       }
 
-      case "recommendation_ready": {
+      case "response_ready": {
         setOrchestrator((prev) => {
           if (!prev) return prev;
           return {
             ...prev,
             recommendation: {
-              riskLevel: ev.risk_level as string,
-              requiresApproval: ev.requires_approval as boolean,
-              autoExecute: ev.auto_execute as boolean,
+              riskLevel: (ev.risk_level as string) ?? "low",
+              requiresApproval: Boolean(ev.requires_approval),
+              autoExecute: !ev.requires_approval,
             },
           };
         });

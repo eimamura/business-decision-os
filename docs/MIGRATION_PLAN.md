@@ -181,7 +181,7 @@ grep -rn "requires_approval\|can_execute" packages/agent/ | grep -v "guardrail"
 **Files touched**: `packages/agent/specialists/`, new `packages/agent/domain/`, new `packages/agent/analytical/`
 
 **Actions**:
-- Map current specialist types in `agent_based.py` to DESIGN.md classifications:
+- Map pre-classification roles in `agent_based.py` to DESIGN.md classifications:
   - Domain Agents (`packages/agent/domain/`): demand, inventory, replenishment, procurement, supplier, production, logistics
   - Analytical Agents (`packages/agent/analytical/`): exception, scenario, ranking, root_cause
 - Create one class per agent in the appropriate subdirectory

@@ -6,61 +6,64 @@ from uuid import UUID
 from pydantic import BaseModel, Field
 
 
-class RoutingDecisionEvent(BaseModel):
-    type: Literal["routing_decision"] = "routing_decision"
-    route: list[str]
+class QueryReceivedEvent(BaseModel):
+    type: Literal["query_received"] = "query_received"
+    session_id: str
+    timestamp: str
+
+
+class IntentClassifiedEvent(BaseModel):
+    type: Literal["intent_classified"] = "intent_classified"
+    category: str
+    confidence: float
+    rationale: str
+    goal_text: str | None = None
+    timestamp: str
+
+
+class ExecutionModeSelectedEvent(BaseModel):
+    type: Literal["execution_mode_selected"] = "execution_mode_selected"
+    mode: str
+    agents: list[str]
+    requires_planning: bool
+    requires_dag: bool
     rationale: str
     timestamp: str
 
 
-class StepStartedEvent(BaseModel):
-    type: Literal["step_started"] = "step_started"
-    step_id: str
-    specialist_role: str
-    step_type: str
-    started_at: str
-    input_summary: str | None = None
+class PlanCreatedEvent(BaseModel):
+    type: Literal["plan_created"] = "plan_created"
+    mode: str
+    steps: list[dict[str, Any]] | None = None
+    nodes: list[dict[str, Any]] | None = None
+    timestamp: str
 
 
-class StepCompletedEvent(BaseModel):
-    type: Literal["step_completed"] = "step_completed"
-    step_id: str
-    specialist_role: str
-    step_type: str | None = None
-    duration_ms: int = 0
-    output_preview: str | None = None
-    output_summary: str | None = None
-    tokens: int | None = None
-    cost_usd: float | None = None
-    selected_roles: list[str] | None = None
-    ended_at: str | None = None
-
-
-class SpecialistStartedEvent(BaseModel):
-    type: Literal["specialist_started"] = "specialist_started"
-    specialist_name: str
-    specialist_role: str
+class AgentStartedEvent(BaseModel):
+    type: Literal["agent_started"] = "agent_started"
+    agent_name: str
+    agent_role: str
     task_id: str
     started_at: str
     input_summary: str | None = None
 
 
-class SpecialistCompletedEvent(BaseModel):
-    type: Literal["specialist_completed"] = "specialist_completed"
-    specialist_name: str
-    specialist_role: str
+class AgentCompletedEvent(BaseModel):
+    type: Literal["agent_completed"] = "agent_completed"
+    agent_name: str
+    agent_role: str
     task_id: str
     duration_ms: int = 0
     output_summary: str | None = None
     timestamp: str
 
 
-class ToolCalledEvent(BaseModel):
-    type: Literal["tool_called"] = "tool_called"
+class ToolStartedEvent(BaseModel):
+    type: Literal["tool_started"] = "tool_started"
     tool_name: str
     tool_call_id: str
     step_id: str | None = None
-    specialist_role: str
+    agent_role: str
     input: dict[str, Any] | None = None
     timestamp: str
 
@@ -69,7 +72,7 @@ class ToolCompletedEvent(BaseModel):
     type: Literal["tool_completed"] = "tool_completed"
     tool_name: str
     tool_call_id: str
-    specialist_role: str
+    agent_role: str
     duration_ms: int = 0
     output: dict[str, Any] | None = None
     executed_query: str | None = None
@@ -90,12 +93,11 @@ class MemoryWrittenEvent(BaseModel):
     timestamp: str
 
 
-class RecommendationReadyEvent(BaseModel):
-    type: Literal["recommendation_ready"] = "recommendation_ready"
-    recommendation_id: str
-    risk_level: Literal["low", "medium", "high"]
-    requires_approval: bool
-    auto_execute: bool = False
+class ResponseReadyEvent(BaseModel):
+    type: Literal["response_ready"] = "response_ready"
+    mode: str
+    risk_level: Literal["low", "medium", "high"] | None = None
+    requires_approval: bool | None = None
     timestamp: str
 
 
@@ -105,11 +107,11 @@ class AutoExecutedEvent(BaseModel):
     timestamp: str
 
 
-class AwaitingApprovalEvent(BaseModel):
-    type: Literal["awaiting_approval"] = "awaiting_approval"
+class ApprovalRequestedEvent(BaseModel):
+    type: Literal["approval_requested"] = "approval_requested"
     approval_id: str
-    recommendation_id: str
     expires_at: str
+    risk_level: Literal["low", "medium", "high"]
     timestamp: str
 
 
@@ -131,18 +133,19 @@ class DoneEvent(BaseModel):
 
 SseEvent = Annotated[
     Union[
-        RoutingDecisionEvent,
-        StepStartedEvent,
-        StepCompletedEvent,
-        SpecialistStartedEvent,
-        SpecialistCompletedEvent,
-        ToolCalledEvent,
+        QueryReceivedEvent,
+        IntentClassifiedEvent,
+        ExecutionModeSelectedEvent,
+        PlanCreatedEvent,
+        AgentStartedEvent,
+        AgentCompletedEvent,
+        ToolStartedEvent,
         ToolCompletedEvent,
         MemoryRetrievedEvent,
         MemoryWrittenEvent,
-        RecommendationReadyEvent,
+        ResponseReadyEvent,
+        ApprovalRequestedEvent,
         AutoExecutedEvent,
-        AwaitingApprovalEvent,
         ErrorEvent,
         DoneEvent,
     ],
