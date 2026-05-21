@@ -7,7 +7,7 @@ from packages.state.db import get_pool
 
 
 class DecisionSessionRepository:
-    async def create(self, session_id: str, user_id: str, goal: str) -> str:
+    async def create(self, session_id: str, user_id: str | None, goal: str) -> str:
         pool = await get_pool()
         async with pool.acquire() as conn:
             await conn.execute(
@@ -16,7 +16,7 @@ class DecisionSessionRepository:
                 VALUES ($1, $2, $3, 'pending')
                 """,
                 uuid.UUID(session_id),
-                uuid.UUID(user_id),
+                uuid.UUID(user_id) if user_id else None,
                 goal,
             )
         return session_id

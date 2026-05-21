@@ -10,5 +10,5 @@ from starlette.responses import Response
 class DevUserMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next: object) -> Response:
         if os.environ.get("APP_ENV") == "dev":
-            request.state.user_id = "dev-user"
+            request.state.user_id = None
         return await call_next(request)  # type: ignore[operator, no-any-return]

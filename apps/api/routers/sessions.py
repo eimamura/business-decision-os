@@ -61,21 +61,54 @@ class FeedbackRequest(BaseModel):
 
 
 @router.post("")
-async def create_session(body: CreateSessionRequest) -> dict[str, Any]:
+async def create_session(request: Request, body: CreateSessionRequest) -> dict[str, Any]:
     session_id = str(uuid4())
+    goal = body.goal or ""
     sessions[session_id] = {
         "session_id": session_id,
         "status": "active",
-        "goal": body.goal,
+        "goal": goal,
         "created_at": _iso_now(),
         "messages": [],
     }
+    try:
+        repo = DecisionSessionRepository()
+        user_id = getattr(request.state, "user_id", None)
+        await repo.create(session_id, user_id, goal)
+    except Exception:
+        _log.warning("DB unavailable; skipping session persist for %s", session_id)
     created_at = sessions[session_id]["created_at"]
     return {"session_id": session_id, "status": "active", "created_at": created_at}
 
 
 @router.get("")
 async def list_sessions() -> list[dict[str, Any]]:
+    try:
+        repo = DecisionSessionRepository()
+        db_rows = await repo.list_sessions()
+        if db_rows:
+            # Reconcile in-memory dict so downstream endpoints stay consistent
+            for row in db_rows:
+                sid = str(row["id"])
+                if sid not in sessions:
+                    sessions[sid] = {
+                        "session_id": sid,
+                        "status": row.get("status", "active"),
+                        "goal": row.get("goal", ""),
+                        "created_at": str(row.get("created_at", "")),
+                        "messages": [],
+                    }
+            return [
+                {
+                    "session_id": str(r["id"]),
+                    "status": r.get("status", "active"),
+                    "goal": r.get("goal", ""),
+                    "created_at": str(r.get("created_at", "")),
+                }
+                for r in db_rows
+            ]
+    except Exception:
+        pass
     return list(sessions.values())
 
 
@@ -99,7 +132,23 @@ async def delete_session(session_id: str) -> None:
 async def get_session(session_id: str) -> dict[str, Any]:
     session = sessions.get(session_id)
     if not session:
-        raise HTTPException(status_code=404, detail="Session not found")
+        try:
+            repo = DecisionSessionRepository()
+            row = await repo.get(session_id)
+            if row is None:
+                raise HTTPException(status_code=404, detail="Session not found")
+            session = {
+                "session_id": session_id,
+                "status": row.get("status", "active"),
+                "goal": row.get("goal", ""),
+                "created_at": str(row.get("created_at", "")),
+                "messages": [],
+            }
+            sessions[session_id] = session
+        except HTTPException:
+            raise
+        except Exception:
+            raise HTTPException(status_code=404, detail="Session not found")
     return session
 
 
@@ -182,7 +231,24 @@ async def post_message(
 
     session = sessions.get(session_id)
     if not session:
-        raise HTTPException(status_code=404, detail="Session not found")
+        # Server may have restarted — attempt DB recovery before returning 404
+        try:
+            repo_check = DecisionSessionRepository()
+            db_session = await repo_check.get(session_id)
+            if db_session is None:
+                raise HTTPException(status_code=404, detail="Session not found")
+            sessions[session_id] = {
+                "session_id": session_id,
+                "status": db_session.get("status", "active"),
+                "goal": db_session.get("goal", ""),
+                "created_at": str(db_session.get("created_at", _iso_now())),
+                "messages": [],
+            }
+            session = sessions[session_id]
+        except HTTPException:
+            raise
+        except Exception:
+            raise HTTPException(status_code=404, detail="Session not found")
 
     session.setdefault("messages", []).append({
         "role": "user",
