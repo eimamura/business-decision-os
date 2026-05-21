@@ -51,9 +51,11 @@ class SqlQueryTool:
     }
 
     def __init__(self, db_session: Any | None = None) -> None:
-        self._db_session = db_session
+        pass
 
     async def handle(self, input: dict[str, Any], ctx: ToolContext) -> ToolResult:
+        from packages.state.db import get_pool
+
         query: str = input.get("query", "")
 
         error = _validate_sql(query)
@@ -63,7 +65,21 @@ class SqlQueryTool:
                 audit_payload={"query": query, "error": error, "row_count": 0},
             )
 
-        if self._db_session is None:
+        try:
+            pool = await get_pool()
+            async with pool.acquire() as conn:
+                rows = await conn.fetch(query)
+                columns = list(rows[0].keys()) if rows else []
+                row_dicts = [dict(r) for r in rows]
+                return ToolResult(
+                    output={
+                        "rows": row_dicts,
+                        "column_names": columns,
+                        "row_count": len(row_dicts),
+                    },
+                    audit_payload={"query": query, "row_count": len(row_dicts)},
+                )
+        except RuntimeError:
             return ToolResult(
                 output={
                     "rows": [],
@@ -72,21 +88,6 @@ class SqlQueryTool:
                     "note": "no database connection",
                 },
                 audit_payload={"query": query, "row_count": 0},
-            )
-
-        try:
-            from sqlalchemy import text
-            result = await self._db_session.execute(text(query))
-            rows = result.fetchall()
-            columns = list(result.keys())
-            row_dicts = [dict(zip(columns, row)) for row in rows]
-            return ToolResult(
-                output={
-                    "rows": row_dicts,
-                    "column_names": columns,
-                    "row_count": len(row_dicts),
-                },
-                audit_payload={"query": query, "row_count": len(row_dicts)},
             )
         except Exception as exc:
             return ToolResult(

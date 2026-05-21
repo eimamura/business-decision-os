@@ -8,13 +8,13 @@ from pydantic import BaseModel
 from packages.agent.specialists.base import SpecialistRole
 
 _ROLE_TOOL_ALLOWLIST: dict[str, list[str]] = {
-    "domain_expert": ["sql_query", "forecast"],
-    "forecast": ["forecast", "sql_query"],
-    "inventory": ["sql_query"],
-    "procurement": ["sql_query"],
-    "production": ["sql_query"],
-    "cost": ["sql_query"],
-    "data_engineer": ["sql_query", "forecast"],
+    "domain_expert": ["sql_query", "nl_query", "forecast"],
+    "forecast": ["forecast", "sql_query", "nl_query"],
+    "inventory": ["sql_query", "nl_query"],
+    "procurement": ["sql_query", "nl_query"],
+    "production": ["sql_query", "nl_query"],
+    "cost": ["sql_query", "nl_query"],
+    "data_engineer": ["sql_query", "nl_query", "forecast"],
     "sim_opt": ["simulate_inventory", "optimize_replenishment"],
     "evaluator": ["evaluate_candidates", "write_audit_log"],
     "orchestrator": [],

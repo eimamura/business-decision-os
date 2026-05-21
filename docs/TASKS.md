@@ -26,6 +26,7 @@
 | M10 | Chat Quality Features — history summarization, rate limiting, feedback, LLM tracking, rich UI | Done |
 | M11 | Single-Page Chat Shell — unified sidebar + chat layout, no two-page navigation | Done |
 | M12 | Agent Trace Panel — full visibility: DB trace, routing decision, per-agent timeline, tool I/O, BRT timestamps | In Progress |
+| M13 | SQL Intelligence Tools — NlQueryTool (text-to-SQL via Haiku) + SqlQueryTool real DB connection | Done |
 
 ## Phase 0 — Repository Foundation
 
@@ -458,3 +459,22 @@ Dependencies: B1
 | T-12007 | Wire `sse_queue` into `create_specialists`; emit trace events from `agent_based.py` and `base.py` during execution | High | Done |
 | T-12008 | Orchestrator emits `routing_decision` SSE event with route list and rationale | High | Done |
 | T-12009 | Rebuild `ReasoningPanel` with full trace UI: routing decision card, per-agent timeline, tool I/O accordion, BRT timestamps | High | Done |
+
+## Phase 13 — SQL Intelligence Tools
+
+Goal: Implement NlQueryTool (text-to-SQL via Claude Haiku with guardrails, caching, and retry) and fix SqlQueryTool to use a real DB connection via get_pool(). Ported from reference/ecommerce-admin-chatbot.
+
+Batch execution order: B1
+
+### B1 — SQL Tools Implementation (Agent: App Builder)
+
+Dependencies: none
+
+| ID | Task | Priority | Status |
+|---|---|---|---|
+| T-13001 | Create `packages/tools/nl_query_tool.py` — `NlQueryTool` (text-to-SQL via Claude Haiku; prompt caching; 60s TTL cache; MAX_RETRIES=2; sqlparse guardrail; dynamic few-shot from session_messages feedback=1) | High | Done |
+| T-13002 | Fix `packages/tools/sql_tool.py` — replace SQLAlchemy `db_session` with `get_pool()` from `packages/state/db.py`; keep `__init__(db_session=None)` for backward compat | High | Done |
+| T-13003 | Implement `packages/tools/sql_allowlist.py` `validate_query()` — reuse `_validate_sql` logic; raise `ValueError` on violation | Medium | Done |
+| T-13004 | Update `packages/tools/base.py` `_ROLE_TOOL_ALLOWLIST` — add `"nl_query"` to domain_expert, forecast, inventory, procurement, production, cost, data_engineer | Medium | Done |
+| T-13005 | Update `packages/tools/__init__.py` — import and register `NlQueryTool` in `create_tool_registry()` | Medium | Done |
+| T-13006 | Add `sqlparse>=0.5` to `apps/api/pyproject.toml` dependencies | High | Done |

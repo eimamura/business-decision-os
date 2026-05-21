@@ -97,7 +97,8 @@ Before invoking any specialist, `PhaseOrchestrator` calls `_route_specialists(go
 | Orchestrator | Implemented | `packages/agent/orchestrator` |
 | Specialists (5 × AgentBasedSpecialist — Forecast/Inventory/Procurement/Production/Cost + data_engineer/sim_opt/evaluator) | Implemented | `packages/agent/specialists` |
 | Tool Layer (registry) | Implemented | `packages/tools` |
-| SQL Query Tool | Implemented | `packages/tools/sql` |
+| SQL Query Tool | Implemented | `packages/tools/sql_tool` |
+| NL Query Tool | Implemented | `packages/tools/nl_query_tool` |
 | Approval Tool | Implemented | `packages/tools/approval` |
 | Audit Log Tool | Implemented | `packages/tools/audit` |
 | State Store (repositories) | Implemented | `packages/state` |
@@ -112,7 +113,7 @@ Before invoking any specialist, `PhaseOrchestrator` calls `_route_specialists(go
 | JobRunner | InProcess (sync) + AcaJobsRunner (prod) | `packages/agent/job_runner` |
 | KPI domain | Implemented | `packages/domain/kpi.py` |
 
-**Deferred:** Python Analysis Tool, Report Tool (LLM + SQL Tool covers ad-hoc analysis; Chat GFM Markdown covers report rendering).
+**Deferred:** Python Analysis Tool, Report Tool (NL Query Tool covers ad-hoc analysis; Chat GFM Markdown covers report rendering).
 
 ## Monorepo Layout
 

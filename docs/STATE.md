@@ -7,7 +7,7 @@ TASKS.md holds task definitions. This file holds runtime execution state.
 
 ## Current Phase
 
-M12 In Progress — Phase 12 Agent Trace Panel
+M13 Done — Phase 13 SQL Intelligence Tools
 
 ## Active Lease
 
@@ -15,14 +15,14 @@ None
 
 ## Last Completed Batch
 
-Phase 12 — M12 B1+B2 (T-12001 through T-12009) — 2026-05-21
+Phase 13 — M13 B1 (T-13001 through T-13006) — 2026-05-21
 
 ## Last Validation
 
-command: `uv run mypy packages/state/sessions_repo.py apps/api/routers/sessions.py apps/api/middleware.py --ignore-missing-imports`
+command: `uv run mypy packages/tools/ --ignore-missing-imports && uv run ruff check packages/tools/ && uv run pytest tests/unit/ -q`
 exit code: 0 (all pass)
 timestamp: 2026-05-21
-note: T-12001 — alembic env.py async engine fix; T-12002 — migration 0004 memories.metadata→metadata_json; T-12003 — migration 0005 decision_sessions.user_id nullable; T-12004 — create_session persists to DB; T-12005 — DATABASE_URL in .env + docker-compose DB; T-12006 — RoutingDecisionEvent + input_summary/output_summary/ended_at fields; T-12007 — sse_queue wired into specialists; T-12008 — orchestrator routing_decision SSE; T-12009 — ReasoningPanel full trace UI rebuilt.
+note: T-13001 — NlQueryTool (text-to-SQL, Haiku, prompt caching, 60s cache, MAX_RETRIES=2, sqlparse guardrail); T-13002 — SqlQueryTool uses get_pool(); T-13003 — validate_query() implemented; T-13004 — nl_query added to role allowlist; T-13005 — NlQueryTool registered in create_tool_registry(); T-13006 — sqlparse>=0.5 added to api deps. 206 unit tests pass.
 
 ## Blockers
 
