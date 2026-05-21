@@ -1,4 +1,5 @@
-import type { ChatMessage, Session, SSEEvent } from "@/types/chat";
+import { SseEventSchema } from "@/types/chat";
+import type { ChatMessage, Session, SseEvent } from "@/types/chat";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
@@ -58,6 +59,16 @@ export async function fetchMessages(sessionId: string): Promise<ChatMessage[]> {
 
 type MessageRole = "user" | "assistant";
 
+function invalidSseEvent(): SseEvent {
+  return {
+    type: "error",
+    code: "invalid_sse_event",
+    message: "Invalid SSE event received.",
+    recoverable: true,
+    timestamp: new Date().toISOString(),
+  };
+}
+
 export async function postMessage(sessionId: string, content: string): Promise<void> {
   const res = await fetch(`${API_BASE}/api/v1/sessions/${sessionId}/messages`, {
     method: "POST",
@@ -90,7 +101,7 @@ export async function setFeedback(
 export async function* streamSession(
   sessionId: string,
   signal?: AbortSignal,
-): AsyncGenerator<SSEEvent> {
+): AsyncGenerator<SseEvent> {
   const res = await fetch(`${API_BASE}/api/v1/sessions/${sessionId}/stream`, {
     headers: DEV_HEADERS,
     signal,
@@ -115,7 +126,9 @@ export async function* streamSession(
           const data = line.slice(6).trim();
           if (!data) continue;
           try {
-            yield JSON.parse(data) as SSEEvent;
+            const parsed: unknown = JSON.parse(data);
+            const event = SseEventSchema.safeParse(parsed);
+            yield event.success ? event.data : invalidSseEvent();
           } catch {
             // skip malformed lines
           }

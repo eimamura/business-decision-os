@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { SseEventSchema } from "@/types/chat";
 import type { SessionUsage, SseEvent } from "@/types/chat";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
@@ -45,6 +46,186 @@ interface OrchestratorTrace {
   };
   error?: string;
   durationMs?: number;
+}
+
+type ToolStatus = ToolTrace["status"];
+
+function invalidSseEvent(): SseEvent {
+  return {
+    type: "error",
+    code: "invalid_sse_event",
+    message: "Invalid SSE event received.",
+    recoverable: true,
+    timestamp: new Date().toISOString(),
+  };
+}
+
+function parseSseEvent(data: string): SseEvent {
+  try {
+    const parsed: unknown = JSON.parse(data);
+    const event = SseEventSchema.safeParse(parsed);
+    return event.success ? event.data : invalidSseEvent();
+  } catch {
+    return invalidSseEvent();
+  }
+}
+
+export function applySseEventToTrace(
+  prev: OrchestratorTrace | null,
+  ev: SseEvent,
+): OrchestratorTrace | null {
+  switch (ev.type) {
+    case "query_received": {
+      const startedAt = ev.timestamp ?? new Date().toISOString();
+      return {
+        startedAt,
+        route: [],
+        rationale: "",
+        specialists: [],
+      };
+    }
+
+    case "execution_mode_selected":
+      return prev ? { ...prev, route: ev.agents, rationale: ev.rationale } : prev;
+
+    case "agent_started": {
+      if (!prev) return prev;
+      const exists = prev.specialists.some((s) => s.taskId === ev.task_id);
+      if (exists) return prev;
+      return {
+        ...prev,
+        specialists: [
+          ...prev.specialists,
+          {
+            name: ev.agent_name,
+            role: ev.agent_role,
+            taskId: ev.task_id,
+            startedAt: ev.started_at,
+            status: "running",
+            tools: [],
+            isAgent: true,
+            inputSummary: ev.input_summary ?? undefined,
+          },
+        ],
+      };
+    }
+
+    case "agent_completed":
+      if (!prev) return prev;
+      return {
+        ...prev,
+        specialists: prev.specialists.map((s) =>
+          s.taskId === ev.task_id
+            ? {
+                ...s,
+                status: "completed",
+                durationMs: ev.duration_ms,
+                outputSummary: ev.output_summary ?? undefined,
+              }
+            : s
+        ),
+      };
+
+    case "tool_started":
+      if (!prev) return prev;
+      return {
+        ...prev,
+        specialists: prev.specialists.map((s) => {
+          if (s.role !== ev.agent_role) return s;
+          return {
+            ...s,
+            tools: [
+              ...s.tools,
+              {
+                toolName: ev.tool_name,
+                toolCallId: ev.tool_call_id,
+                input: ev.input ?? undefined,
+                startedAt: ev.timestamp,
+                status: "running",
+              },
+            ],
+          };
+        }),
+      };
+
+    case "tool_completed": {
+      if (!prev) return prev;
+      const toolStatus: ToolStatus = ev.status === "error" ? "error" : "completed";
+      return {
+        ...prev,
+        specialists: prev.specialists.map((s) => ({
+          ...s,
+          tools: s.tools.map((t) =>
+            t.toolCallId === ev.tool_call_id
+              ? {
+                  ...t,
+                  output: ev.output ?? undefined,
+                  executedQuery: ev.executed_query ?? undefined,
+                  durationMs: ev.duration_ms,
+                  status: toolStatus,
+                  error: ev.error ?? undefined,
+                }
+              : t
+          ),
+        })),
+      };
+    }
+
+    case "response_ready":
+      if (!prev) return prev;
+      return {
+        ...prev,
+        response: {
+          riskLevel: ev.risk_level ?? "low",
+          requiresApproval: Boolean(ev.requires_approval),
+          autoExecute: !ev.requires_approval,
+        },
+      };
+
+    case "approval_requested":
+      if (!prev) return prev;
+      return {
+        ...prev,
+        response: {
+          riskLevel: ev.risk_level,
+          requiresApproval: true,
+          autoExecute: false,
+        },
+      };
+
+    case "auto_executed":
+      if (!prev) return prev;
+      return {
+        ...prev,
+        response: {
+          riskLevel: prev.response?.riskLevel ?? "low",
+          requiresApproval: false,
+          autoExecute: true,
+        },
+      };
+
+    case "error": {
+      const startedAt = ev.timestamp ?? new Date().toISOString();
+      const next = prev ?? {
+        startedAt,
+        route: [],
+        rationale: "",
+        specialists: [],
+      };
+      return {
+        ...next,
+        error: ev.message,
+        specialists: next.specialists.map((s) =>
+          s.status === "running" ? { ...s, status: "failed" } : s
+        ),
+      };
+    }
+
+    case "done":
+    case "intent_classified":
+    case "plan_created":
+      return prev;
+  }
 }
 
 // ---- BRT formatting ----
@@ -102,13 +283,11 @@ interface Props {
 export default function ReasoningPanel({ sessionId, usage }: Props) {
   const [orchestrator, setOrchestrator] = useState<OrchestratorTrace | null>(null);
   const [connected, setConnected] = useState(false);
-  const [sessionStartedAt, setSessionStartedAt] = useState<string | null>(null);
   const lastEventIdRef = useRef<string>("");
   const esRef = useRef<EventSource | null>(null);
 
   useEffect(() => {
     setOrchestrator(null);
-    setSessionStartedAt(null);
 
     function connect() {
       const url = new URL(`${API_BASE}/api/v1/sessions/${sessionId}/stream`);
@@ -123,13 +302,9 @@ export default function ReasoningPanel({ sessionId, usage }: Props) {
 
       es.onmessage = (e: MessageEvent) => {
         if (e.lastEventId) lastEventIdRef.current = e.lastEventId;
-        try {
-          const ev = JSON.parse(e.data as string) as SseEvent;
-          if (ev.type === "error" && ev.code === "no_stream") return;
-          handleEvent(ev);
-        } catch {
-          // ignore parse errors
-        }
+        const ev = parseSseEvent(e.data as string);
+        if (ev.type === "error" && ev.code === "no_stream") return;
+        setOrchestrator((prev) => applySseEventToTrace(prev, ev));
       };
 
       es.onerror = () => {
@@ -145,194 +320,6 @@ export default function ReasoningPanel({ sessionId, usage }: Props) {
     };
   }, [sessionId]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  function handleEvent(ev: SseEvent) {
-    switch (ev.type) {
-      case "query_received": {
-        const startedAt = ev.timestamp ?? new Date().toISOString();
-        setSessionStartedAt(startedAt);
-        setOrchestrator({
-          startedAt,
-          route: [],
-          rationale: "",
-          specialists: [],
-        });
-        break;
-      }
-
-      case "execution_mode_selected": {
-        setOrchestrator((prev) =>
-          prev ? { ...prev, route: ev.agents, rationale: ev.rationale } : prev
-        );
-        break;
-      }
-
-      case "agent_started": {
-        setOrchestrator((prev) => {
-          if (!prev) return prev;
-          const exists = prev.specialists.some((s) => s.taskId === ev.task_id);
-          if (exists) return prev;
-          return {
-            ...prev,
-            specialists: [
-              ...prev.specialists,
-              {
-                name: ev.agent_name,
-                role: ev.agent_role,
-                taskId: ev.task_id,
-                startedAt: ev.started_at,
-                status: "running",
-                tools: [],
-                isAgent: true,
-                inputSummary: ev.input_summary ?? undefined,
-              },
-            ],
-          };
-        });
-        break;
-      }
-
-      case "agent_completed": {
-        setOrchestrator((prev) => {
-          if (!prev) return prev;
-          return {
-            ...prev,
-            specialists: prev.specialists.map((s) =>
-              s.taskId === ev.task_id
-                ? {
-                    ...s,
-                    status: "completed",
-                    durationMs: ev.duration_ms,
-                    outputSummary: ev.output_summary ?? undefined,
-                  }
-                : s
-            ),
-          };
-        });
-        break;
-      }
-
-      case "tool_started": {
-        setOrchestrator((prev) => {
-          if (!prev) return prev;
-          const specialists = prev.specialists.map((s) => {
-            if (s.role !== ev.agent_role) return s;
-            return {
-              ...s,
-              tools: [
-                ...s.tools,
-                {
-                  toolName: ev.tool_name,
-                  toolCallId: ev.tool_call_id,
-                  input: ev.input ?? undefined,
-                  startedAt: ev.timestamp,
-                  status: "running" as const,
-                },
-              ],
-            };
-          });
-          return { ...prev, specialists };
-        });
-        break;
-      }
-
-      case "tool_completed": {
-        const toolStatus = ev.status === "error" ? "error" : "completed";
-
-        setOrchestrator((prev) => {
-          if (!prev) return prev;
-          const specialists = prev.specialists.map((s) => ({
-            ...s,
-            tools: s.tools.map((t) =>
-              t.toolCallId === ev.tool_call_id
-                ? {
-                    ...t,
-                    output: ev.output ?? undefined,
-                    executedQuery: ev.executed_query ?? undefined,
-                    durationMs: ev.duration_ms,
-                    status: toolStatus as "completed" | "error",
-                    error: ev.error ?? undefined,
-                  }
-                : t
-            ),
-          }));
-          return { ...prev, specialists };
-        });
-        break;
-      }
-
-      case "response_ready": {
-        setOrchestrator((prev) => {
-          if (!prev) return prev;
-          return {
-            ...prev,
-            response: {
-              riskLevel: ev.risk_level ?? "low",
-              requiresApproval: Boolean(ev.requires_approval),
-              autoExecute: !ev.requires_approval,
-            },
-          };
-        });
-        break;
-      }
-
-      case "approval_requested": {
-        setOrchestrator((prev) => {
-          if (!prev) return prev;
-          return {
-            ...prev,
-            response: {
-              riskLevel: ev.risk_level,
-              requiresApproval: true,
-              autoExecute: false,
-            },
-          };
-        });
-        break;
-      }
-
-      case "auto_executed": {
-        setOrchestrator((prev) => {
-          if (!prev) return prev;
-          return {
-            ...prev,
-            response: {
-              riskLevel: prev.response?.riskLevel ?? "low",
-              requiresApproval: false,
-              autoExecute: true,
-            },
-          };
-        });
-        break;
-      }
-
-      case "error": {
-        const startedAt = ev.timestamp ?? new Date().toISOString();
-        setSessionStartedAt((prev) => prev ?? startedAt);
-        setOrchestrator((prev) => {
-          const next = prev ?? {
-            startedAt,
-            route: [],
-            rationale: "",
-            specialists: [],
-          };
-          return {
-            ...next,
-            error: ev.message,
-            specialists: next.specialists.map((s) =>
-              s.status === "running" ? { ...s, status: "failed" } : s
-            ),
-          };
-        });
-        break;
-      }
-
-      case "done":
-      case "intent_classified":
-      case "plan_created":
-        break;
-    }
-  }
-
   return (
     <div className="flex flex-col h-full bg-gray-950 text-gray-100 font-mono text-xs">
       {/* Header */}
@@ -345,9 +332,9 @@ export default function ReasoningPanel({ sessionId, usage }: Props) {
             Agent Trace
           </span>
         </div>
-        {sessionStartedAt && (
+        {orchestrator?.startedAt && (
           <span className="text-[10px] text-gray-600">
-            {formatBRT(sessionStartedAt)} BRT
+            {formatBRT(orchestrator.startedAt)} BRT
           </span>
         )}
       </div>
