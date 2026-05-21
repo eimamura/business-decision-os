@@ -6,6 +6,7 @@ from uuid import UUID, uuid4
 
 from pydantic import BaseModel
 
+from packages.persistence.prediction_repo import fetch_demand_history, upsert_prediction
 from packages.tools.base import ToolContext
 
 
@@ -147,25 +148,14 @@ class InProcessJobRunner:
             )
 
     async def _run_train_forecast(self, job_id: UUID, spec: JobSpec) -> JobResult:
-        if self._db_session is None:
-            raise NotImplementedError("train_forecast requires a db_session")
-
         import numpy as np
         from sklearn.linear_model import LinearRegression
-        from sqlalchemy import text
 
         start = datetime.now(tz=timezone.utc)
         try:
             sku_id: str = spec.payload["sku_id"]
 
-            history_sql = text(
-                "SELECT units FROM demand_history "
-                "WHERE sku = :sku AND units IS NOT NULL "
-                "ORDER BY date DESC LIMIT 90"
-            )
-            result = await self._db_session.execute(history_sql, {"sku": sku_id})
-            rows = result.fetchall()
-            history = [float(row[0]) for row in rows]
+            history = await fetch_demand_history(sku_id)
 
             horizon = 90
             if len(history) >= 3:
@@ -181,16 +171,7 @@ class InProcessJobRunner:
                 predicted_units = [mean_val] * horizon
 
             model_version = "linear_regression_v1_trained"
-            upsert_sql = text(
-                "INSERT INTO prediction_features (sku_id, predicted_units, model_version) "
-                "VALUES (:sku_id, :units, :version) "
-                "ON CONFLICT (sku_id) DO UPDATE SET "
-                "predicted_units=EXCLUDED.predicted_units, model_version=EXCLUDED.model_version"
-            )
-            await self._db_session.execute(
-                upsert_sql,
-                {"sku_id": sku_id, "units": predicted_units, "version": model_version},
-            )
+            await upsert_prediction(sku_id, predicted_units, model_version)
 
             duration_ms = int(
                 (datetime.now(tz=timezone.utc) - start).total_seconds() * 1000

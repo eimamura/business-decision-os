@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from packages.agent.llm import LLMClient
 from packages.prediction import LinearRegressionPredictor
 from packages.tools.approval_tool import ApprovalTool
 from packages.tools.audit_tool import AuditLogTool
@@ -30,10 +31,14 @@ __all__ = [
 ]
 
 
-def create_tool_registry(runner: Any = None, db_session: Any = None) -> ToolRegistry:
+def create_tool_registry(
+    runner: Any = None,
+    db_session: Any = None,
+    llm_client: LLMClient | None = None,
+) -> ToolRegistry:
     registry = ToolRegistry()
     registry.register(SqlQueryTool(db_session=db_session))
-    registry.register(NlQueryTool())
+    registry.register(NlQueryTool(llm_client=llm_client))
     registry.register(ApprovalTool())
     registry.register(AuditLogTool())
     registry.register(ForecastTool(predictor=LinearRegressionPredictor(db_session=db_session)))

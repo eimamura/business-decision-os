@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import hashlib
 import logging
-import os
 import time
 from typing import Any
 
@@ -10,6 +9,7 @@ import sqlparse
 import sqlparse.sql
 import sqlparse.tokens as T
 
+from packages.agent.llm import LLMClient, LLMMessage
 from packages.tools.base import ToolContext, ToolResult
 from packages.tools.sql_allowlist import ALLOWED_READ_TABLES
 
@@ -114,28 +114,21 @@ async def _load_positive_examples(conn: Any) -> str:
 
 async def _generate_sql(
     question: str,
-    anthropic_client: Any,
+    llm_client: LLMClient,
     error_context: str = "",
     dynamic_examples: str = "",
 ) -> str:
     user_content = question + error_context
-    system_blocks: list[dict[str, Any]] = [
-        {
-            "type": "text",
-            "text": _STATIC_SYSTEM_TEXT,
-            "cache_control": {"type": "ephemeral"},
-        }
-    ]
+    system_parts = _STATIC_SYSTEM_TEXT
     if dynamic_examples:
-        system_blocks.append({"type": "text", "text": dynamic_examples})
+        system_parts = system_parts + "\n\n" + dynamic_examples
 
-    message = await anthropic_client.messages.create(
-        model="claude-haiku-4-5-20251001",
-        max_tokens=512,
-        system=system_blocks,
-        messages=[{"role": "user", "content": user_content}],
-    )
-    sql = message.content[0].text.strip()
+    llm_messages: list[LLMMessage] = [
+        LLMMessage(role="system", content=system_parts),
+        LLMMessage(role="user", content=user_content),
+    ]
+    response = await llm_client.complete(llm_messages, max_tokens=512)
+    sql = response.text.strip()
     if sql.startswith("```"):
         lines = sql.split("\n")
         sql = "\n".join(lines[1:-1] if lines[-1] == "```" else lines[1:])
@@ -145,7 +138,7 @@ async def _generate_sql(
 async def generate_and_run(
     conn: Any,
     question: str,
-    anthropic_client: Any,
+    llm_client: LLMClient,
 ) -> tuple[list[dict[str, Any]], str]:
     cache_key = hashlib.sha256(question.encode()).hexdigest()
     cached = _result_cache.get(cache_key)
@@ -156,7 +149,7 @@ async def generate_and_run(
     dynamic_examples = await _load_positive_examples(conn)
     error_context = ""
     for attempt in range(MAX_RETRIES + 1):
-        sql = await _generate_sql(question, anthropic_client, error_context, dynamic_examples)
+        sql = await _generate_sql(question, llm_client, error_context, dynamic_examples)
         try:
             validate_sql(sql)
             rows = await conn.fetch(sql)
@@ -198,19 +191,23 @@ class NlQueryTool:
         },
     }
 
-    async def handle(self, input: dict[str, Any], ctx: ToolContext) -> ToolResult:
-        import anthropic
+    def __init__(self, llm_client: LLMClient | None = None) -> None:
+        self._llm_client = llm_client
 
+    async def handle(self, input: dict[str, Any], ctx: ToolContext) -> ToolResult:
         from packages.persistence.db import get_pool
 
+        if self._llm_client is None:
+            raise RuntimeError(
+                "NlQueryTool requires an LLMClient — pass llm_client to create_tool_registry()"
+            )
+
         question: str = input.get("question", "")
-        api_key = os.environ.get("ANTHROPIC_API_KEY", "")
-        anthropic_client = anthropic.AsyncAnthropic(api_key=api_key)
 
         try:
             pool = await get_pool()
             async with pool.acquire() as conn:
-                results, sql = await generate_and_run(conn, question, anthropic_client)
+                results, sql = await generate_and_run(conn, question, self._llm_client)
                 return ToolResult(
                     output={"results": results, "count": len(results), "sql": sql, "executed_query": sql},
                     audit_payload={"question": question, "sql": sql, "count": len(results)},

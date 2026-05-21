@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-import anthropic
+from packages.agent.llm import LLMMessage, create_llm_client
 
 logger = logging.getLogger(__name__)
 
@@ -40,17 +40,16 @@ async def _summarize(messages: list[dict[str, Any]]) -> str:
     transcript = "\n".join(
         f"{m['role'].upper()}: {m['content']}" for m in messages
     )
-    client = anthropic.AsyncAnthropic()
-    response = await client.messages.create(
-        model="claude-haiku-4-5-20251001",
-        max_tokens=512,
-        system=(
-            "Summarize the following conversation history concisely. "
-            "Focus on the business decisions discussed and key facts. Plain text only."
+    llm = create_llm_client()
+    llm_messages: list[LLMMessage] = [
+        LLMMessage(
+            role="system",
+            content=(
+                "Summarize the following conversation history concisely. "
+                "Focus on the business decisions discussed and key facts. Plain text only."
+            ),
         ),
-        messages=[{"role": "user", "content": transcript}],
-    )
-    block = response.content[0]
-    if not isinstance(block, anthropic.types.TextBlock):
-        raise ValueError(f"Unexpected content block type: {type(block)}")
-    return block.text.strip()
+        LLMMessage(role="user", content=transcript),
+    ]
+    response = await llm.complete(llm_messages, max_tokens=512)
+    return response.text.strip()
