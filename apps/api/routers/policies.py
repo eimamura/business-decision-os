@@ -6,7 +6,7 @@ from fastapi import APIRouter
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
-from packages.state.policies_repo import PoliciesRepository
+from packages.persistence.policies_repo import PoliciesRepository
 
 router = APIRouter(tags=["policies"])
 

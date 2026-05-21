@@ -7,9 +7,9 @@ from fastapi import APIRouter, Header, HTTPException, Query
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
-from packages.state.approvals import ApprovalStatus, ApprovalTransition
-from packages.state.approvals_repo import ApprovalsRepository
-from packages.state.notifications_repo import NotificationsRepository
+from packages.persistence.approvals import ApprovalStatus, ApprovalTransition
+from packages.persistence.approvals_repo import ApprovalsRepository
+from packages.persistence.notifications_repo import NotificationsRepository
 
 router = APIRouter(prefix="/api/v1/approvals", tags=["approvals"])
 

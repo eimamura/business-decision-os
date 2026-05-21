@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from packages.agent.job_runner import InProcessJobRunner, JobSpec
+from packages.agent.runner import InProcessJobRunner, JobSpec
 from packages.optimization import (
     OptimizationContext,
     OptimizationInput,

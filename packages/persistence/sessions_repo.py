@@ -3,7 +3,7 @@ from __future__ import annotations
 import uuid
 from typing import Any
 
-from packages.state.db import get_pool
+from packages.persistence.db import get_pool
 
 
 class DecisionSessionRepository:

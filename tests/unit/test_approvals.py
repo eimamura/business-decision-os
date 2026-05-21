@@ -4,7 +4,7 @@ from uuid import uuid4
 
 import pytest
 
-from packages.state.approvals import ApprovalTransition, create_revision
+from packages.persistence.approvals import ApprovalTransition, create_revision
 
 
 def test_legal_transition_pending_to_approved():

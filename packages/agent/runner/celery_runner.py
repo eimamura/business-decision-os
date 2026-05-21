@@ -8,7 +8,7 @@ from uuid import UUID, uuid4
 from packages.tools.base import ToolContext
 
 if TYPE_CHECKING:
-    from packages.agent.job_runner import JobHandle, JobResult, JobSpec
+    from packages.agent.runner import JobHandle, JobResult, JobSpec
 
 
 def _require_celery() -> None:
@@ -33,13 +33,13 @@ _STATUS_MAP: dict[str, Literal["queued", "running", "succeeded", "failed", "canc
 class CeleryJobRunner:
     def __init__(self) -> None:
         _require_celery()
-        from packages.agent.job_runner.celery_app import celery_app
+        from packages.agent.runner.celery_app import celery_app
 
         self._app = celery_app
         self._task_ids: dict[UUID, str] = {}
 
     async def submit(self, spec: JobSpec, ctx: ToolContext) -> JobHandle:
-        from packages.agent.job_runner import JobHandle
+        from packages.agent.runner import JobHandle
 
         task_name_map = {
             "simulation": "bdos.run_simulation",
@@ -64,7 +64,7 @@ class CeleryJobRunner:
         )
 
     async def status(self, job_id: UUID) -> JobHandle:
-        from packages.agent.job_runner import JobHandle
+        from packages.agent.runner import JobHandle
 
         task_id = self._task_ids.get(job_id, str(job_id))
         result = self._app.AsyncResult(task_id)
@@ -81,7 +81,7 @@ class CeleryJobRunner:
     async def result(self, job_id: UUID, wait: bool = False) -> JobResult:
         import asyncio
 
-        from packages.agent.job_runner import JobResult
+        from packages.agent.runner import JobResult
 
         task_id = self._task_ids.get(job_id, str(job_id))
         start = datetime.now(tz=timezone.utc)

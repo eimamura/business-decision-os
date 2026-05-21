@@ -5,7 +5,7 @@ import os
 
 import asyncpg
 
-from packages.state.db import get_pool
+from packages.persistence.db import get_pool
 
 logger = logging.getLogger(__name__)
 

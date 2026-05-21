@@ -16,7 +16,7 @@ from packages.agent.history import compress_history
 from packages.agent.orchestrator import SessionGoal
 from packages.agent.rate_limiter import RateLimitExceeded, check_rate_limit
 from packages.schemas.recommendation import Recommendation
-from packages.state.sessions_repo import DecisionSessionRepository
+from packages.persistence.sessions_repo import DecisionSessionRepository
 
 _log = logging.getLogger(__name__)
 

@@ -54,7 +54,7 @@ class SqlQueryTool:
         pass
 
     async def handle(self, input: dict[str, Any], ctx: ToolContext) -> ToolResult:
-        from packages.state.db import get_pool
+        from packages.persistence.db import get_pool
 
         query: str = input.get("query", "")
 

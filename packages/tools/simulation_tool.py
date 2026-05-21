@@ -32,11 +32,11 @@ class SimulationTool:
         if job_runner is not None:
             self._job_runner = job_runner
         else:
-            from packages.agent.job_runner import InProcessJobRunner
+            from packages.agent.runner import InProcessJobRunner
             self._job_runner = InProcessJobRunner()
 
     async def handle(self, input: dict[str, Any], ctx: ToolContext) -> ToolResult:
-        from packages.agent.job_runner import JobSpec
+        from packages.agent.runner import JobSpec
 
         sku_id: str = input.get("sku_id", "")
         order_qty: float = float(input.get("order_qty", 0.0))

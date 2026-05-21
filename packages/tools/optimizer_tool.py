@@ -36,7 +36,7 @@ class OptimizerTool:
         job_runner = getattr(ctx, "job_runner", None)
 
         if job_runner is not None:
-            from packages.agent.job_runner import JobSpec
+            from packages.agent.runner import JobSpec
             spec = JobSpec(
                 kind="optimization",
                 payload={

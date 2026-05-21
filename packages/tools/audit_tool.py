@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from packages.state.audit_log_repo import compute_hash
+from packages.persistence.audit_log_repo import compute_hash
 from packages.tools.base import ToolContext, ToolResult
 
 _audit_store: list[dict[str, Any]] = []

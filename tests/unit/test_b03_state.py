@@ -6,8 +6,8 @@ import hashlib
 import json
 import pytest
 
-from packages.state.audit_log_repo import compute_hash
-from packages.state import (
+from packages.persistence.audit_log_repo import compute_hash
+from packages.persistence import (
     ApprovalsRepository,
     AuditLogRepository,
     DecisionSessionRepository,

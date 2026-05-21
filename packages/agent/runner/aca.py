@@ -7,7 +7,7 @@ from uuid import UUID
 from packages.tools.base import ToolContext
 
 if TYPE_CHECKING:
-    from packages.agent.job_runner import JobHandle, JobResult, JobSpec
+    from packages.agent.runner import JobHandle, JobResult, JobSpec
 
 
 class AcaJobsRunner:
@@ -36,7 +36,7 @@ class AcaJobsRunner:
 
         import httpx
 
-        from packages.agent.job_runner import JobHandle
+        from packages.agent.runner import JobHandle
 
         job_run_id = str(uuid.uuid4())
         arm_url = (
@@ -80,7 +80,7 @@ class AcaJobsRunner:
         )
 
     async def _aca_status(self, job_id: UUID) -> JobHandle:
-        from packages.agent.job_runner import JobHandle
+        from packages.agent.runner import JobHandle
 
         execution_name = getattr(self, "_execution_map", {}).get(job_id, str(job_id))
         arm_url = (
@@ -122,7 +122,7 @@ class AcaJobsRunner:
         import asyncio
         from datetime import datetime, timezone
 
-        from packages.agent.job_runner import JobResult
+        from packages.agent.runner import JobResult
 
         start = datetime.now(tz=timezone.utc)
         while True:

@@ -4,7 +4,7 @@ from uuid import uuid4
 
 import pytest
 
-from packages.agent.job_runner import InProcessJobRunner, JobSpec
+from packages.agent.runner import InProcessJobRunner, JobSpec
 from packages.simulation import InventorySimulator, SimulationContext, SimulationInput
 from packages.tools.base import ToolContext
 

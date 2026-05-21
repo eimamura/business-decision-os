@@ -201,7 +201,7 @@ class NlQueryTool:
     async def handle(self, input: dict[str, Any], ctx: ToolContext) -> ToolResult:
         import anthropic
 
-        from packages.state.db import get_pool
+        from packages.persistence.db import get_pool
 
         question: str = input.get("question", "")
         api_key = os.environ.get("ANTHROPIC_API_KEY", "")

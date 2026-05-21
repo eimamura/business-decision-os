@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from packages.agent.job_runner.celery_runner import _STATUS_MAP, _require_celery
+from packages.agent.runner.celery_runner import _STATUS_MAP, _require_celery
 
 
 def test_require_celery_raises_without_broker(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -45,14 +45,14 @@ def test_status_map_retry_is_running() -> None:
 
 
 def test_celery_runner_exported() -> None:
-    from packages.agent.job_runner import CeleryJobRunner
+    from packages.agent.runner import CeleryJobRunner
 
     assert CeleryJobRunner is not None
 
 
 def test_celery_runner_init_raises_without_broker(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("CELERY_BROKER_URL", raising=False)
-    from packages.agent.job_runner import CeleryJobRunner
+    from packages.agent.runner import CeleryJobRunner
 
     with pytest.raises(RuntimeError, match="CELERY_BROKER_URL"):
         CeleryJobRunner()

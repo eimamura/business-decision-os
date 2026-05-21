@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from packages.domain.kpi import (
+from packages.knowledge.kpi import (
     days_on_hand,
     fill_rate,
     gross_margin_return_on_investment,

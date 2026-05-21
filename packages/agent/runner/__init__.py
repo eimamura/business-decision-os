@@ -220,8 +220,8 @@ class InProcessJobRunner:
         raise NotImplementedError("cancel is not supported for InProcessJobRunner")
 
 
-from packages.agent.job_runner.aca import AcaJobsRunner  # noqa: E402
-from packages.agent.job_runner.celery_runner import CeleryJobRunner  # noqa: E402
+from packages.agent.runner.aca import AcaJobsRunner  # noqa: E402
+from packages.agent.runner.celery_runner import CeleryJobRunner  # noqa: E402
 
 __all__ = [
     "JobSpec",

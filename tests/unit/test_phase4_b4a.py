@@ -17,8 +17,8 @@ from packages.agent.llm import (
     LLMUsage,
     StubClaudeClient,
 )
-from packages.state.notifications_repo import NotificationsRepository
-from packages.state.policies_repo import PoliciesRepository
+from packages.persistence.notifications_repo import NotificationsRepository
+from packages.persistence.policies_repo import PoliciesRepository
 
 
 # ---------------------------------------------------------------------------

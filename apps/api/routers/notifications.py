@@ -3,7 +3,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Header
 from fastapi.responses import JSONResponse
 
-from packages.state.notifications_repo import NotificationsRepository
+from packages.persistence.notifications_repo import NotificationsRepository
 
 router = APIRouter(prefix="/api/v1/notifications", tags=["notifications"])
 

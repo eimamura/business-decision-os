@@ -28,7 +28,7 @@ class CreateDecisionRequest(BaseModel):
 
 
 async def _submit_celery_decision(body: CreateDecisionRequest) -> dict[str, str]:
-    from packages.agent.job_runner import CeleryJobRunner, JobSpec
+    from packages.agent.runner import CeleryJobRunner, JobSpec
     from packages.tools.base import ToolContext
 
     runner = CeleryJobRunner()
@@ -138,7 +138,7 @@ async def create_decision(body: CreateDecisionRequest) -> StreamingResponse | di
 
 @router.get("/{job_id}/status")
 async def get_decision_job_status(job_id: str) -> dict[str, str]:
-    from packages.agent.job_runner import CeleryJobRunner
+    from packages.agent.runner import CeleryJobRunner
 
     try:
         runner = CeleryJobRunner()
