@@ -260,12 +260,19 @@ async def post_message(
 
 @router.get("/{session_id}/stream")
 async def stream_session(session_id: str) -> StreamingResponse:
-    print(f"Client connected to stream for session {session_id}")
     async def event_generator() -> AsyncGenerator[str, None]:
-        queue = sse_queues.get(session_id)
-        if not queue:
-            yield 'data: {"type": "error", "code": "no_stream", "message": "Stream not found"}\n\n'
+        max_wait = 300
+        elapsed = 0
+        while elapsed < max_wait:
+            queue = sse_queues.get(session_id)
+            if queue:
+                break
+            yield ": heartbeat\n\n"
+            await asyncio.sleep(1.0)
+            elapsed += 1
+        else:
             return
+
         while True:
             try:
                 event = await asyncio.wait_for(queue.get(), timeout=30.0)

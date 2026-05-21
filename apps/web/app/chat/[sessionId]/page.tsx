@@ -117,17 +117,6 @@ export default function ChatPage({ params }: ChatPageProps) {
               {messages.map((msg) => (
                 <MessageBubble key={msg.id} message={msg} onFeedback={submitFeedback} />
               ))}
-              {isSending && (
-                <div className="flex justify-start">
-                  <div className="bg-[#1a1a2a] rounded-2xl px-4 py-3">
-                    <div className="flex gap-1.5 items-center">
-                      <span className="w-1.5 h-1.5 bg-indigo-400 rounded-full animate-bounce" style={{ animationDelay: "0ms" }} />
-                      <span className="w-1.5 h-1.5 bg-indigo-400 rounded-full animate-bounce" style={{ animationDelay: "150ms" }} />
-                      <span className="w-1.5 h-1.5 bg-indigo-400 rounded-full animate-bounce" style={{ animationDelay: "300ms" }} />
-                    </div>
-                  </div>
-                </div>
-              )}
               <div ref={messagesEndRef} />
             </div>
 

@@ -62,6 +62,7 @@ export default function ReasoningPanel({ sessionId, usage }: Props) {
         if (e.lastEventId) lastEventIdRef.current = e.lastEventId;
         try {
           const data: StepEvent = JSON.parse(e.data as string);
+          if (data.type === "error" && data.code === "no_stream") return;
           setEvents((prev) => [...prev, data]);
           if (data.type === "step_started" && data.specialist_role) {
             setActiveRole(data.specialist_role);
