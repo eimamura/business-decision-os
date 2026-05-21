@@ -27,9 +27,23 @@ This project uses a SPEC-centered Claude Code architecture. Your full execution 
 1. `docs/PRODUCT_SPEC.md` — what to build and why
 2. `docs/DESIGN.md` — architecture, components, data flow, public interfaces
 3. `docs/TASKS.md` — implementation tasks with priorities and phases
-4. `docs/DECISIONS.md` — why key decisions were made
+4. `docs/DECISIONS.md` — lightweight daily decision log; why key decisions were made
 
 Read these before any task. Do not start implementation without them in context.
+
+## Design Records
+
+Two tiers of decision documentation:
+
+| File | Role | Weight | Examples |
+|---|---|---|---|
+| `docs/DECISIONS.md` | Lightweight daily decision log | Light | "UI is English-only", "Use Postgres" |
+| `docs/ADR/` | Formal records of important architectural decisions | Heavy | "Why Temporal instead of Celery" |
+
+**Rule of thumb:**
+- Write everything in `docs/DECISIONS.md` first — it is the inbox for in-flight judgments.
+- Promote to `docs/ADR/` when the decision is architectural, affects public interfaces, or requires future accountability ("Why did we do this?").
+- `docs/DECISIONS.md` = working notes. `docs/ADR/` = design case law.
 
 ## Prohibitions
 
@@ -56,7 +70,26 @@ Format: `<type>(<scope>): <description>`
 
 Types: `feat` `fix` `refactor` `docs` `test` `chore` `perf` `ci`
 
-Scopes: `agent` `api` `web` `schemas` `tools` `domain` `simulation` `optimization` `prediction` `memory` `state` `infra` `data` `docs` `ci` `deps`
+Scopes — pick the one that matches the files changed:
+
+| Scope | Changed paths |
+|---|---|
+| `agent` | `agents/*/SPEC.md`, agent config |
+| `api` | `apps/api/` |
+| `web` | `apps/web/` |
+| `schemas` | `packages/schemas/` |
+| `tools` | `packages/tools/` |
+| `domain` | `packages/domain/` |
+| `simulation` | `packages/simulation/` |
+| `optimization` | `packages/optimization/` |
+| `prediction` | `packages/prediction/` |
+| `memory` | `packages/memory/` |
+| `state` | `packages/state/` |
+| `infra` | `docker-compose.yml`, `Makefile`, `.claude/`, `Dockerfile` |
+| `data` | `data/`, seed scripts, migrations |
+| `docs` | `docs/`, `AGENTS.md`, `CLAUDE.md` |
+| `ci` | `.github/workflows/` |
+| `deps` | `pyproject.toml`, `package.json`, lockfiles |
 
 Agent commit boundary: `git add` + `git commit` only. Never `git push` or `gh pr create` — those are the human's responsibility.
 
