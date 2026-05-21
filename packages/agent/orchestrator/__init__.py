@@ -9,12 +9,19 @@ from uuid import UUID, uuid4
 
 from pydantic import BaseModel
 
+from packages.knowledge.kpi import (
+    KPI_SERVICE_LEVEL,
+    KPI_TOTAL_SUPPLY_CHAIN_COST,
+    make_stub_kpi_scores,
+    weighted_utility,
+)
 from packages.schemas.recommendation import (
     Candidate,
     KpiScore,
     Recommendation,
     TradeoffExplanation,
 )
+from packages.tools.guardrail import classify_risk, needs_approval
 
 logger = logging.getLogger(__name__)
 
@@ -90,71 +97,6 @@ def _routing_rationale(roles: list[str]) -> str:
     return "General query"
 
 
-def _make_stub_kpi_scores(order_qty: float, idx: int) -> list[KpiScore]:
-    service_level = max(0.0, 0.95 - idx * 0.05)
-    fill_rate = max(0.0, 0.90 - idx * 0.03)
-    stockout_rate = min(1.0, 0.05 + idx * 0.03)
-    total_cost = order_qty * 1.2
-
-    return [
-        KpiScore(name="service_level", value=service_level, unit="%", direction="higher_better"),
-        KpiScore(name="fill_rate", value=fill_rate, unit="%", direction="higher_better"),
-        KpiScore(
-            name="stockout_rate", value=stockout_rate, unit="%", direction="lower_better"
-        ),
-        KpiScore(
-            name="inventory_turnover",
-            value=4.0,
-            unit="turns/year",
-            direction="higher_better",
-        ),
-        KpiScore(
-            name="days_on_hand",
-            value=30.0 + idx * 15,
-            unit="days",
-            direction="lower_better",
-        ),
-        KpiScore(
-            name="excess_inventory",
-            value=max(0.0, order_qty * 0.1 * idx),
-            unit="units",
-            direction="lower_better",
-        ),
-        KpiScore(
-            name="working_capital",
-            value=total_cost * 0.5,
-            unit="USD",
-            direction="lower_better",
-        ),
-        KpiScore(
-            name="total_supply_chain_cost",
-            value=total_cost,
-            unit="USD",
-            direction="lower_better",
-        ),
-    ]
-
-
-def _weighted_utility(kpi_scores: list[KpiScore], weights: dict[str, float]) -> float:
-    total = 0.0
-    for score in kpi_scores:
-        weight = weights.get(score.name, 0.0)
-        if score.direction == "higher_better":
-            total += weight * score.value
-        else:
-            max_val = 100.0 if score.unit == "%" else 10000.0
-            total += weight * max(0.0, 1.0 - score.value / max_val)
-    return total
-
-
-def _classify_risk(primary: Candidate) -> Literal["low", "medium", "high"]:
-    for score in primary.kpi_scores:
-        if score.name == "service_level":
-            if score.value < 0.85:
-                return "high"
-            if score.value < 0.95:
-                return "medium"
-    return "low"
 
 
 class PhaseOrchestrator:
@@ -299,10 +241,10 @@ class PhaseOrchestrator:
         session_id: UUID,
         goal: SessionGoal,
     ) -> dict[str, SpecialistResult]:
-        from packages.agent.specialists import create_domain_specialists
+        from packages.agent.domain import create_domain_agents
         from packages.tools.base import ToolContext
 
-        domain_agents = create_domain_specialists(
+        domain_agents = create_domain_agents(
             self._llm_client, self._tool_registry, sse_queue=self._sse_queue
         )
 
@@ -350,7 +292,7 @@ class PhaseOrchestrator:
         return dict(pairs)
 
     async def run(self, session_id: UUID, goal: SessionGoal) -> Recommendation:
-        from packages.agent.specialists import create_specialists
+        from packages.agent.base import PromptBasedSpecialist
         from packages.tools.base import ToolContext
 
         self._sessions[session_id] = {"status": "active"}
@@ -430,9 +372,16 @@ class PhaseOrchestrator:
             )
 
         # Sequential pipeline specialists (PromptBasedSpecialist — data, sim, eval)
-        pipeline_specialists = create_specialists(
-            self._llm_client, self._tool_registry, sse_queue=self._sse_queue
-        )
+        pipeline_specialists = {
+            role: PromptBasedSpecialist(
+                name=role,
+                role=role,
+                llm_client=self._llm_client,
+                tool_registry=self._tool_registry,
+                sse_queue=self._sse_queue,
+            )
+            for role in ("domain_expert", "data_engineer", "sim_opt", "evaluator")
+        }
         pipeline_tools: dict[str, list[str]] = {
             "data_engineer": ["sql_query", "forecast"],
             "sim_opt": ["simulate_inventory", "optimize_replenishment"],
@@ -519,21 +468,21 @@ class PhaseOrchestrator:
                 Candidate(
                     id="c1",
                     action={"order_qty": moq * 1},
-                    kpi_scores=_make_stub_kpi_scores(moq * 1, 0),
+                    kpi_scores=make_stub_kpi_scores(moq * 1, 0),
                     constraints_satisfied=["MOQ"],
                     constraints_violated=[],
                 ),
                 Candidate(
                     id="c2",
                     action={"order_qty": moq * 2},
-                    kpi_scores=_make_stub_kpi_scores(moq * 2, 1),
+                    kpi_scores=make_stub_kpi_scores(moq * 2, 1),
                     constraints_satisfied=["MOQ"],
                     constraints_violated=[],
                 ),
                 Candidate(
                     id="c3",
                     action={"order_qty": moq * 3},
-                    kpi_scores=_make_stub_kpi_scores(moq * 3, 2),
+                    kpi_scores=make_stub_kpi_scores(moq * 3, 2),
                     constraints_satisfied=["MOQ"],
                     constraints_violated=[],
                 ),
@@ -552,7 +501,7 @@ class PhaseOrchestrator:
 
         weights, weight_source = await self._resolve_weights_with_memory(goal)
 
-        utilities = [(c, _weighted_utility(c.kpi_scores, weights)) for c in candidates]
+        utilities = [(c, weighted_utility(c.kpi_scores, weights)) for c in candidates]
         utilities.sort(key=lambda x: x[1], reverse=True)
 
         primary = utilities[0][0]
@@ -561,14 +510,14 @@ class PhaseOrchestrator:
         alt_service = max(
             others,
             key=lambda c: next(
-                (s.value for s in c.kpi_scores if s.name == "service_level"), 0.0
+                (s.value for s in c.kpi_scores if s.name == KPI_SERVICE_LEVEL), 0.0
             ),
             default=None,
         )
         alt_cost = min(
             others,
             key=lambda c: next(
-                (s.value for s in c.kpi_scores if s.name == "total_supply_chain_cost"),
+                (s.value for s in c.kpi_scores if s.name == KPI_TOTAL_SUPPLY_CHAIN_COST),
                 float("inf"),
             ),
             default=None,
@@ -604,8 +553,8 @@ class PhaseOrchestrator:
             ],
         )
 
-        risk_level = _classify_risk(primary)
-        requires_approval = risk_level in ("high", "medium")
+        risk_level = classify_risk(primary)
+        _approval_pending = needs_approval(risk_level)
 
         recommendation = Recommendation(
             primary=primary,
@@ -615,23 +564,23 @@ class PhaseOrchestrator:
                 f"Selected candidate {primary.id} based on weighted utility. Goal: {goal.text}"
             ),
             risk_level=risk_level,
-            requires_approval=requires_approval,
+            requires_approval=_approval_pending,
         )
 
         await self._write_decision_memory(session_id, goal, weights, weight_source, recommendation)
 
         recommendation_id = uuid4()
         self._sessions[session_id]["status"] = (
-            "awaiting_approval" if requires_approval else "completed"
+            "awaiting_approval" if _approval_pending else "completed"
         )
 
-        auto_execute = not requires_approval
+        auto_execute = not _approval_pending
 
         await self._push({
             "type": "recommendation_ready",
             "recommendation_id": str(recommendation_id),
             "risk_level": risk_level,
-            "requires_approval": requires_approval,
+            "requires_approval": _approval_pending,
             "auto_execute": auto_execute,
             "timestamp": _iso_now(),
         })

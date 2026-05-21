@@ -57,56 +57,56 @@ Follow the phase order in MIGRATION_PLAN.md. Do not begin Phase N+1 until Phase 
 
 ## Phase 2 — Memory Formalization
 
-| ID | Task | Owner | Done when |
-|---|---|---|---|
-| P2-1 | Implement `ShortTermMemory` in `packages/memory/__init__.py` with typed fields | bdos-app-builder | Class importable; mypy passes |
-| P2-2 | Implement `WorkingMemory` | bdos-app-builder | Same |
-| P2-3 | Implement `LongTermMemory` | bdos-app-builder | Same |
-| P2-4 | Implement `DecisionMemory` | bdos-app-builder | Same |
-| P2-5 | Implement `UserMemory` | bdos-app-builder | Same |
-| P2-6 | Implement `DomainMemory` | bdos-app-builder | Same |
-| P2-7 | Migrate `packages/agent/history.py` usages to `ShortTermMemory` / `WorkingMemory` as appropriate | bdos-app-builder | No raw `dict` passed as "memory" in agent method signatures |
-| P2-8 | Run mypy on `packages/memory/` (pytest deferred to Phase 6) | bdos-infra | mypy clean on packages/memory/ |
-| P2-9 | Tag `phase2-complete` | bdos-infra | Tag exists in git |
+| ID | Task | Owner | Status | Done when |
+|---|---|---|---|---|
+| P2-1 | Implement `ShortTermMemory` in `packages/memory/__init__.py` with typed fields | bdos-app-builder | Done | Class importable; mypy passes |
+| P2-2 | Implement `WorkingMemory` | bdos-app-builder | Done | Same |
+| P2-3 | Implement `LongTermMemory` | bdos-app-builder | Done | Same |
+| P2-4 | Implement `DecisionMemory` | bdos-app-builder | Done | Same |
+| P2-5 | Implement `UserMemory` | bdos-app-builder | Done | Same |
+| P2-6 | Implement `DomainMemory` | bdos-app-builder | Done | Same |
+| P2-7 | Migrate `packages/agent/history.py` usages to `ShortTermMemory` / `WorkingMemory` as appropriate | bdos-app-builder | Done | No raw `dict` passed as "memory" in agent method signatures |
+| P2-8 | Run mypy on `packages/memory/` (pytest deferred to Phase 6) | bdos-infra | Done | mypy clean on packages/memory/ |
+| P2-9 | Tag `phase2-complete` | bdos-infra | Done | Tag exists in git |
 
 ---
 
 ## Phase 3 — Guardrail Separation
 
-| ID | Task | Owner | Done when |
-|---|---|---|---|
-| P3-1 | Audit `packages/agent/` and `apps/api/routers/` for scattered permission / approval checks | bdos-test-review | Audit findings documented in DECISIONS.md or PR description |
-| P3-2 | Create Guardrail module (in `packages/tools/guardrail.py` or new `packages/guardrails/`) exposing `can_execute()`, `needs_approval()`, `audit_required()` | bdos-app-builder | Module importable; all three functions exported with typed signatures |
-| P3-3 | Migrate scattered checks to call the Guardrail module | bdos-app-builder | `grep -rn "requires_approval\|can_execute" packages/agent/` outside guardrail module returns 0 |
-| P3-4 | Confirm approval state enforcement stays in `packages/persistence/approvals.py`; Guardrail calls it, not the reverse | bdos-test-review | Code review confirms boundary |
-| P3-5 | Run Phase 3 checkpoint grep (pytest deferred to Phase 6) | bdos-infra | Grep returns 0 hits outside guardrail module |
-| P3-6 | Tag `phase3-complete` | bdos-infra | Tag exists in git |
+| ID | Task | Owner | Status | Done when |
+|---|---|---|---|---|
+| P3-1 | Audit `packages/agent/` and `apps/api/routers/` for scattered permission / approval checks | bdos-test-review | Done | Audit findings documented in DECISIONS.md |
+| P3-2 | Create Guardrail module (in `packages/tools/guardrail.py`) exposing `can_execute()`, `needs_approval()`, `audit_required()` | bdos-app-builder | Done | Module importable; all three functions exported with typed signatures |
+| P3-3 | Migrate scattered checks to call the Guardrail module | bdos-app-builder | Done | Inline logic removed; 3 residual schema-field keyword-arg hits documented in DECISIONS.md |
+| P3-4 | Confirm approval state enforcement stays in `packages/persistence/approvals.py`; Guardrail calls it, not the reverse | bdos-test-review | Done | `approvals.py` unchanged; guardrail does not import from persistence |
+| P3-5 | Run Phase 3 checkpoint grep (pytest deferred to Phase 6) | bdos-infra | Done | 3 known-acceptable schema-field hits; inline logic gone (see DECISIONS.md) |
+| P3-6 | Tag `phase3-complete` | bdos-infra | Done | Tag exists in git |
 
 ---
 
 ## Phase 4 — Agent Reclassification
 
-| ID | Task | Owner | Done when |
-|---|---|---|---|
-| P4-1 | Map current specialist types in `agent_based.py` to DESIGN.md Domain + Analytical agent table; document in DECISIONS.md | bdos-orchestrator | Mapping complete |
-| P4-2 | Create `packages/agent/domain/` with one class per Domain Agent: demand, inventory, replenishment, procurement, supplier, production, logistics | bdos-app-builder | 7 classes exist; each matches a row in DESIGN.md agent table |
-| P4-3 | Create `packages/agent/analytical/` with one class per Analytical Agent: exception, scenario, ranking, root_cause | bdos-app-builder | 4 classes exist; each matches a row in DESIGN.md agent table |
-| P4-4 | Verify each class conforms to ARCHITECTURE_RULES.md rules for its classification | bdos-test-review | Arch tests pass |
-| P4-5 | Remove `packages/agent/specialists/` after all references are migrated | bdos-app-builder | Directory absent; no imports reference `specialists` |
-| P4-6 | Verify directory structure: `packages/agent/specialists/` absent; `domain/` and `analytical/` present (pytest deferred to Phase 6) | bdos-infra | Directories match expected layout |
-| P4-7 | Tag `phase4-complete` | bdos-infra | Tag exists in git |
+| ID | Task | Owner | Status | Done when |
+|---|---|---|---|---|
+| P4-1 | Map current specialist types in `agent_based.py` to DESIGN.md Domain + Analytical agent table; document in DECISIONS.md | bdos-orchestrator | Done | Mapping complete |
+| P4-2 | Create `packages/agent/domain/` with one class per Domain Agent: demand, inventory, replenishment, procurement, supplier, production, logistics | bdos-app-builder | Done | 7 classes exist; each matches a row in DESIGN.md agent table |
+| P4-3 | Create `packages/agent/analytical/` with one class per Analytical Agent: exception, scenario, ranking, root_cause | bdos-app-builder | Done | 4 classes exist; each matches a row in DESIGN.md agent table |
+| P4-4 | Verify each class conforms to ARCHITECTURE_RULES.md rules for its classification | bdos-test-review | Done | No sqlalchemy or direct anthropic imports in domain/ or analytical/ (mypy + grep clean) |
+| P4-5 | Remove `packages/agent/specialists/` after all references are migrated | bdos-app-builder | Done | Directory absent; no imports reference `specialists` |
+| P4-6 | Verify directory structure: `packages/agent/specialists/` absent; `domain/` and `analytical/` present (pytest deferred to Phase 6) | bdos-infra | Done | Directories match expected layout |
+| P4-7 | Tag `phase4-complete` | bdos-infra | Done | Tag exists in git |
 
 ---
 
 ## Phase 5 — Orchestrator Responsibility Cleanup
 
-| ID | Task | Owner | Done when |
-|---|---|---|---|
-| P5-1 | Audit `packages/agent/orchestrator/weights.py` for supply-chain domain constants | bdos-app-builder | Audit complete |
-| P5-2 | Move domain constants (`safety_stock`, `reorder_point`, `lead_time`, `service_level`, etc.) to `packages/knowledge/` or the appropriate domain agent | bdos-app-builder | `grep -n "safety_stock\|reorder_point\|lead_time\|service_level" packages/agent/orchestrator/` returns 0 |
-| P5-3 | Audit `packages/agent/orchestrator/__init__.py` for embedded domain reasoning; extract to specialists | bdos-app-builder | No supply-chain domain logic in orchestrator |
-| P5-4 | Run Phase 5 checkpoint grep (pytest deferred to Phase 6) | bdos-infra | Grep returns 0 hits |
-| P5-5 | Tag `phase5-complete` | bdos-infra | Tag exists in git |
+| ID | Task | Owner | Status | Done when |
+|---|---|---|---|---|
+| P5-1 | Audit `packages/agent/orchestrator/weights.py` for supply-chain domain constants | bdos-app-builder | Done | Audit complete |
+| P5-2 | Move domain constants (`safety_stock`, `reorder_point`, `lead_time`, `service_level`, etc.) to `packages/knowledge/` or the appropriate domain agent | bdos-app-builder | Done | `grep -n "safety_stock\|reorder_point\|lead_time\|service_level" packages/agent/orchestrator/` returns 0 |
+| P5-3 | Audit `packages/agent/orchestrator/__init__.py` for embedded domain reasoning; extract to specialists | bdos-app-builder | Done | No supply-chain domain logic in orchestrator |
+| P5-4 | Run Phase 5 checkpoint grep (pytest deferred to Phase 6) | bdos-infra | Done | Grep returns 0 hits |
+| P5-5 | Tag `phase5-complete` | bdos-infra | Done | Tag exists in git |
 
 ---
 

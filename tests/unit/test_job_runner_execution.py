@@ -95,7 +95,7 @@ class TestOrchestratorAutoExecution:
 
     def test_low_risk_emits_auto_executed(self) -> None:
         """Low-risk recommendation classifies as low and would auto-execute."""
-        from packages.agent.orchestrator import _classify_risk
+        from packages.tools.guardrail import classify_risk as _classify_risk
         from packages.schemas.recommendation import Candidate, KpiScore
 
         low_risk_candidate = Candidate(
@@ -114,7 +114,7 @@ class TestOrchestratorAutoExecution:
 
     def test_high_risk_does_not_auto_execute(self) -> None:
         """High-risk recommendation should NOT auto-execute."""
-        from packages.agent.orchestrator import _classify_risk
+        from packages.tools.guardrail import classify_risk as _classify_risk
         from packages.schemas.recommendation import Candidate, KpiScore
 
         high_risk_candidate = Candidate(
@@ -132,7 +132,7 @@ class TestOrchestratorAutoExecution:
         assert auto_execute is False
 
     def test_auto_execute_is_inverse_of_requires_approval(self) -> None:
-        from packages.agent.orchestrator import _classify_risk
+        from packages.tools.guardrail import classify_risk as _classify_risk
         from packages.schemas.recommendation import Candidate, KpiScore
 
         low = Candidate(
