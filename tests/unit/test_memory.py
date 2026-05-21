@@ -5,8 +5,13 @@ from uuid import uuid4
 
 import pytest
 
-from packages.memory import Memory, MemoryQuery, PgVectorMemoryStore, StubMemoryStore
-from packages.memory import _make_embedding
+from packages.memory import (
+    Memory,
+    MemoryQuery,
+    PgVectorMemoryStore,
+    StubMemoryStore,
+    _make_embedding,
+)
 
 
 def _make_memory() -> Memory:

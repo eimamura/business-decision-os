@@ -2,8 +2,6 @@ from __future__ import annotations
 
 from uuid import uuid4
 
-import pytest
-
 from packages.tools.base import ToolContext, ToolRegistry, ToolResult
 
 

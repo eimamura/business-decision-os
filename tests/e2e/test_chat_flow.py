@@ -7,10 +7,8 @@ Start the server before running: uv run uvicorn apps.api.main:app --port 8000
 from __future__ import annotations
 
 import json
-from uuid import uuid4
 
 import pytest
-
 
 # ---------------------------------------------------------------------------
 # Helpers

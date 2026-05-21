@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from uuid import uuid4
+
 import pytest
 
 from packages.agent.runner import InProcessJobRunner, JobSpec
@@ -10,7 +12,6 @@ from packages.optimization import (
     ReplenishmentOptimizer,
 )
 from packages.tools.base import ToolContext
-from uuid import uuid4
 
 
 def _make_tool_ctx() -> ToolContext:

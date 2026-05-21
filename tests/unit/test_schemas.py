@@ -2,16 +2,12 @@ from __future__ import annotations
 
 from uuid import uuid4
 
-import pytest
-
-from packages.schemas.recommendation import Candidate, KpiScore, Recommendation, TradeoffExplanation
 from packages.schemas.evaluations import EvaluationCriteria, EvaluationResult
+from packages.schemas.recommendation import Candidate, KpiScore, Recommendation, TradeoffExplanation
 from packages.schemas.sse_events import (
-    StepStartedEvent,
-    ErrorEvent,
     DoneEvent,
-    RecommendationReadyEvent,
-    SseEvent,
+    ErrorEvent,
+    StepStartedEvent,
 )
 
 

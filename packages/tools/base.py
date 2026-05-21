@@ -5,7 +5,7 @@ from uuid import UUID
 
 from pydantic import BaseModel
 
-from packages.agent.specialists.base import SpecialistRole
+from packages.agent.base import SpecialistRole
 
 _ROLE_TOOL_ALLOWLIST: dict[str, list[str]] = {
     "domain_expert": ["sql_query", "nl_query", "forecast"],

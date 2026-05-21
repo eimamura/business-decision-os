@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 import logging
-from typing import Any
 
 from packages.agent.llm import LLMMessage, create_llm_client
+from packages.memory import ShortTermMemory
 
 logger = logging.getLogger(__name__)
 
@@ -12,8 +12,8 @@ RECENT_KEEP = 10
 
 
 async def compress_history(
-    messages: list[dict[str, Any]],
-) -> tuple[list[dict[str, Any]], str | None]:
+    messages: list[ShortTermMemory],
+) -> tuple[list[ShortTermMemory], str | None]:
     """Returns (messages_to_use, summary_prefix | None).
 
     If message count <= SUMMARY_THRESHOLD, returns (messages, None) unchanged.
@@ -36,10 +36,8 @@ async def compress_history(
     return recent, summary
 
 
-async def _summarize(messages: list[dict[str, Any]]) -> str:
-    transcript = "\n".join(
-        f"{m['role'].upper()}: {m['content']}" for m in messages
-    )
+async def _summarize(messages: list[ShortTermMemory]) -> str:
+    transcript = "\n".join(f"{m.role.upper()}: {m.content}" for m in messages)
     llm = create_llm_client()
     llm_messages: list[LLMMessage] = [
         LLMMessage(

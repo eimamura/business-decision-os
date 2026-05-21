@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import hashlib
 import json
+
 import pytest
 
-from packages.persistence.audit_log_repo import compute_hash
 from packages.persistence import (
     ApprovalsRepository,
     AuditLogRepository,
@@ -15,8 +15,8 @@ from packages.persistence import (
     RecommendationsRepository,
     ToolCallsRepository,
 )
-from packages.tools.sql_allowlist import check_allowed, ALLOWED_READ_TABLES
-
+from packages.persistence.audit_log_repo import compute_hash
+from packages.tools.sql_allowlist import ALLOWED_READ_TABLES, check_allowed
 
 # ---------------------------------------------------------------------------
 # compute_hash

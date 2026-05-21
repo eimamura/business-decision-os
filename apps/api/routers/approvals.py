@@ -10,6 +10,7 @@ from pydantic import BaseModel
 from packages.persistence.approvals import ApprovalStatus, ApprovalTransition
 from packages.persistence.approvals_repo import ApprovalsRepository
 from packages.persistence.notifications_repo import NotificationsRepository
+from packages.tools.guardrail import can_execute
 
 router = APIRouter(prefix="/api/v1/approvals", tags=["approvals"])
 
@@ -55,8 +56,7 @@ async def post_decision(
     body: DecisionBody,
     x_dev_user: str | None = Header(default=None),
 ) -> JSONResponse:
-    user_role = _resolve_role(x_dev_user)
-    if user_role not in ("approver", "admin"):
+    if not can_execute(action="approve_recommendation", actor=x_dev_user):
         raise HTTPException(
             status_code=403, detail="Insufficient role — approver or admin required"
         )
@@ -121,7 +121,3 @@ async def create_approval(
     return JSONResponse(status_code=201, content=created)
 
 
-def _resolve_role(user_id: str | None) -> str:
-    if user_id in ("dev-approver", "dev-admin"):
-        return "approver"
-    return "analyst"

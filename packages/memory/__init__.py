@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 from typing import Any, Literal, Protocol
 from uuid import UUID, uuid4
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class Memory(BaseModel):
@@ -187,3 +187,72 @@ class StubMemoryStore:
 
     async def get(self, id: UUID) -> Memory | None:
         return self._store.get(id)
+
+
+class ShortTermMemory(BaseModel):
+    """Temporary information needed only during the current interaction."""
+
+    id: UUID = Field(default_factory=uuid4)
+    session_id: UUID | None = None
+    role: Literal["user", "assistant", "system"]
+    content: str
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+
+class WorkingMemory(BaseModel):
+    """Intermediate state, in-progress calculations, and shared state between agents."""
+
+    id: UUID = Field(default_factory=uuid4)
+    session_id: UUID | None = None
+    key: str
+    value: str
+    agent: str | None = None
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+
+class LongTermMemory(BaseModel):
+    """Knowledge and context to be reused in future decisions."""
+
+    id: UUID = Field(default_factory=uuid4)
+    scope: str = "global"
+    summary: str
+    source: str
+    embedding: list[float] | None = None
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+
+class DecisionMemory(BaseModel):
+    """Decision rationale, alternatives, rejection reasons, preconditions, and past decisions."""
+
+    id: UUID = Field(default_factory=uuid4)
+    session_id: UUID | None = None
+    goal: str
+    chosen_action: str
+    rationale: str
+    alternatives: list[str] = Field(default_factory=list)
+    rejection_reasons: list[str] = Field(default_factory=list)
+    preconditions: list[str] = Field(default_factory=list)
+    risk_level: Literal["low", "medium", "high"] = "medium"
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+
+class UserMemory(BaseModel):
+    """User goals, preferences, decision tendencies, and usage context."""
+
+    id: UUID = Field(default_factory=uuid4)
+    user_id: str
+    preference_key: str
+    preference_value: str
+    context: str | None = None
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+
+class DomainMemory(BaseModel):
+    """Business rules, KPI definitions, domain knowledge, and historical cases."""
+
+    id: UUID = Field(default_factory=uuid4)
+    domain: str
+    rule_key: str
+    rule_value: str
+    description: str | None = None
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))

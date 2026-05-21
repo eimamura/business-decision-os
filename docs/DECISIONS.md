@@ -69,6 +69,28 @@ Reversal cost: low (splitting a class boundary into a runtime boundary is increm
 
 ---
 
+## Decision: Phase 4 specialist → classified agent mapping
+
+Date: 2026-05-21
+
+Reason: Phase 4 required explicit documentation of how pre-classification `specialists/` roles map to the DESIGN.md agent table.
+
+Mapping:
+- `forecast` → `DemandAgent` (demand forecasting is the primary demand-domain capability)
+- `inventory` → `InventoryAgent`
+- `procurement` → `ProcurementAgent`
+- `production` → `ProductionAgent`
+- `cost` — removed as a standalone role; supply-cost reasoning is distributed across domain agents
+- `domain_expert`, `data_engineer`, `sim_opt`, `evaluator` — remain as orchestrator-internal pipeline stages; not classified agents
+
+New agents added with no pre-existing equivalent: `ReplenishmentAgent`, `SupplierAgent`, `LogisticsAgent` (Domain); `ExceptionAgent`, `ScenarioAgent`, `RankingAgent`, `RootCauseAgent` (Analytical).
+
+Consequence: `packages/agent/specialists/` is deleted. All base classes live in `packages/agent/base.py`. Pipeline stages are constructed inline in the orchestrator.
+
+Reversal cost: low (the base classes and patterns are unchanged; only the directory structure moved)
+
+---
+
 ## Decision: Guardrail is an explicit layer, not scattered if-checks
 
 Date: 2026-05-21
@@ -78,6 +100,30 @@ Reason: Ad-hoc permission and approval checks scattered across agent and router 
 Consequence: All permission checks, approval routing, and audit decisions MUST go through the Guardrail Layer API (`can_execute`, `needs_approval`, `audit_required`). Scattered checks are a defect.
 
 Reversal cost: medium (requires consolidating all existing checks and updating callers)
+
+---
+
+## Decision: Guardrail module placed in packages/tools/, not a new packages/guardrails/
+
+Date: 2026-05-21
+
+Reason: DESIGN.md Monorepo Layout does not list `packages/guardrails/`. Adding a new top-level package requires an ADR. Placing `guardrail.py` inside `packages/tools/` avoids that overhead while still centralising the three public functions.
+
+Consequence: `packages/tools/guardrail.py` is the single source of truth for `can_execute()`, `needs_approval()`, `audit_required()`, `classify_risk()`. A future ADR may promote it to its own package.
+
+Reversal cost: low (rename/move the file and update imports)
+
+---
+
+## Decision: Phase 3 checkpoint grep has 3 known-acceptable residual hits
+
+Date: 2026-05-21
+
+Reason: The P3-5 grep (`requires_approval\|can_execute` in `packages/agent/`) matches three lines in `packages/agent/orchestrator/__init__.py` — all are Pydantic keyword args or SSE event dict keys referencing the `Recommendation.requires_approval` schema field. The inline logic `risk_level in ("high","medium")` has been extracted to `needs_approval()` in guardrail. These hits are schema field references, not scattered approval logic.
+
+Consequence: The 3 hits at orchestrator lines 420, 610, 626 are permanently acceptable. Renaming the `Recommendation.requires_approval` field would require touching the DB schema and multiple callers — not worth the churn.
+
+Reversal cost: n/a (accepted exception, not a reversible decision)
 
 ---
 
