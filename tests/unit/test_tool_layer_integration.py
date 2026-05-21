@@ -7,7 +7,7 @@ import pytest
 import yaml
 
 from packages.agent.llm import StubClaudeClient
-from packages.agent.orchestrator import PhaseOrchestrator, SessionGoal
+from packages.agent.orchestrator import SessionGoal, SessionOrchestrator
 from packages.memory import StubMemoryStore
 from packages.tools import create_tool_registry
 
@@ -28,7 +28,7 @@ def stub_orchestrator():
     tool_registry = create_tool_registry()
     memory_store = StubMemoryStore()
     queue = asyncio.Queue()
-    return PhaseOrchestrator(llm_client, tool_registry, memory_store, sse_queue=queue), queue
+    return SessionOrchestrator(llm_client, tool_registry, memory_store, sse_queue=queue), queue
 
 
 @pytest.mark.asyncio

@@ -8,7 +8,7 @@ from typing import Any
 from uuid import UUID
 
 from packages.agent.llm import ClaudeClient, LLMUsage
-from packages.agent.orchestrator import PhaseOrchestrator
+from packages.agent.orchestrator import SessionOrchestrator
 from packages.agent.runner import AcaJobsRunner, CeleryJobRunner, InProcessJobRunner
 from packages.memory import PgVectorMemoryStore, StubMemoryStore
 from packages.persistence.llm_usage_repo import LlmUsageRepository
@@ -69,7 +69,7 @@ async def _real_usage_writer(
     asyncio.create_task(_write())
 
 
-def get_orchestrator(sse_queue: Queue[dict[str, Any]]) -> PhaseOrchestrator:
+def get_orchestrator(sse_queue: Queue[dict[str, Any]]) -> SessionOrchestrator:
     api_key = os.environ.get("ANTHROPIC_API_KEY", "")
     if not api_key:
         raise RuntimeError("ANTHROPIC_API_KEY is not set — add it to .env")
@@ -77,4 +77,4 @@ def get_orchestrator(sse_queue: Queue[dict[str, Any]]) -> PhaseOrchestrator:
     runner = _build_runner()
     tool_registry = create_tool_registry(runner=runner, llm_client=llm_client)
     memory_store = _build_memory_store()
-    return PhaseOrchestrator(llm_client, tool_registry, memory_store, sse_queue)
+    return SessionOrchestrator(llm_client, tool_registry, memory_store, sse_queue)

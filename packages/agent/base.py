@@ -11,23 +11,17 @@ _log = logging.getLogger(__name__)
 SpecialistRole = Literal[
     "orchestrator",
     "domain_expert",
-    "forecast",
     "inventory",
     "procurement",
     "production",
-    "cost",
     "data_engineer",
-    "sim_opt",
+    "simulation_optimizer",
     "evaluator",
-    # Phase 4 classified roles
+    "anomaly_detector",
     "demand",
     "replenishment",
     "supplier",
     "logistics",
-    "exception",
-    "scenario",
-    "ranking",
-    "root_cause",
 ]
 
 if TYPE_CHECKING:
@@ -46,18 +40,6 @@ _ROLE_PROMPTS: dict[str, str] = {
     "domain_expert": (
         "You are a supply chain domain expert. "
         "Analyze the decision goal and surface key domain considerations."
-    ),
-    "data_engineer": (
-        "You are a data engineer. "
-        "Query operational data tables using SQL to gather facts for the decision."
-    ),
-    "sim_opt": (
-        "You are a simulation/optimization specialist. "
-        "Run simulation and optimization tools to generate candidate plans."
-    ),
-    "evaluator": (
-        "You are an evaluator. "
-        "Score each candidate plan against all KPIs independently."
     ),
 }
 
@@ -215,7 +197,7 @@ class PromptBasedSpecialist:
 
     def _build_output(self, tool_results: dict[str, Any], response: Any) -> dict[str, Any]:
         text = response.text if response else ""
-        if self.role == "sim_opt" and "optimize_replenishment" in tool_results:
+        if self.role == "simulation_optimizer" and "optimize_replenishment" in tool_results:
             return {"candidates": tool_results["optimize_replenishment"].get("candidates", [])}
         if self.role == "data_engineer" and "sql_query" in tool_results:
             return {"data_summary": tool_results["sql_query"], "text": text}

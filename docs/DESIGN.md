@@ -23,9 +23,9 @@ Agents that **are** the Business Decision OS system. They run in production, pro
 
 | Term used in this document | Examples |
 |---|---|
-| **Orchestrator Agent** | The central agent — intent analysis, planning, routing, aggregation |
+| **SessionOrchestrator** | The central session-level orchestrator — intent classification, chat/QA handling, goal resolution, planning, routing, execution control, aggregation, response synthesis |
 | **Domain Agent** | Demand Agent, Inventory Agent, Replenishment Agent, … |
-| **Analytical Agent** | Exception Agent, Scenario Agent, Ranking Agent, Root Cause Agent |
+| **Cross-Domain Agent** | Data Engineer Agent, Simulation Optimizer Agent, Evaluator Agent, Anomaly Detector Agent |
 
 When this document says "agent" without qualification, it means a product agent.
 
@@ -109,7 +109,7 @@ The system is composed of the following layers:
 
 **Orchestration Layer** is responsible for understanding user requests, planning, routing, state management, result aggregation, and final judgment.
 
-**Agent Layer** is composed of domain-specific agents and cross-domain analytical agents.
+**Agent Layer** is composed of domain-specific agents and cross-domain agents.
 
 **Tool Layer** provides data retrieval, knowledge search, calculation, analysis, simulation, notification, and auditing capabilities that agents use.
 
@@ -123,28 +123,32 @@ The system is composed of the following layers:
 
 ## Orchestration Design
 
-The center of this system is the Orchestrator Agent.
+The center of this system is the SessionOrchestrator.
 
-The Orchestrator Agent understands user requests, decomposes required work, selects appropriate agents and tools, integrates results from each agent, and generates the final answer.
+The SessionOrchestrator receives utterances within a user session, distinguishes between chat, question answering, exploration, consultation, and explicit goal-directed tasks, and when needed generates a plan, routes work to agents, controls execution, integrates results, and synthesizes the final response.
 
 In MVP and early configurations, Planner, Router, State Manager, and Aggregator are not separated into independent agents.
-These are treated as internal responsibilities of the Orchestrator Agent.
+These are treated as internal responsibilities of the SessionOrchestrator.
 
-The Orchestrator Agent is responsible for:
+The SessionOrchestrator is responsible for:
 
+- Intent Classification
+- Chat / QA Handling
+- Goal Resolution
 - Intent Analysis
 - Planning
 - Routing
+- Execution Control
 - State Management
 - Result Aggregation
 - Conflict Detection
 - Decision Scoring
 - Response Generation
 
-The Orchestrator Agent does not execute all specialized processing itself.
-Specialized analysis and business judgment are delegated to Domain Agents or Analytical Agents.
+The SessionOrchestrator does not execute all specialized processing itself.
+Specialized analysis and business judgment are delegated to Domain Agents or Cross-Domain Agents.
 
-When results from multiple agents conflict, the Orchestrator Agent detects the conflict and, if necessary, requests additional confirmation, re-analysis, or escalation to a human.
+When results from multiple agents conflict, the SessionOrchestrator detects the conflict and, if necessary, requests additional confirmation, re-analysis, or escalation to a human.
 
 ---
 
@@ -152,20 +156,20 @@ When results from multiple agents conflict, the Orchestrator Agent detects the c
 
 The agents in this system are classified into three types:
 
-### Orchestrator Agent
+### SessionOrchestrator
 
-The central agent responsible for planning, routing, integration, and final judgment across the entire system.
+The central session-level orchestrator responsible for intent classification, chat/QA handling, goal resolution, planning, routing, execution control, aggregation, response synthesis, and final judgment across the entire system.
 
 ### Domain Agents
 
 Agents that handle specialized judgment for each business domain: demand, inventory, replenishment, procurement, production, logistics, and supplier.
 
-### Analytical Agents
+### Cross-Domain Agents
 
-Agents that provide cross-domain analytical capabilities — anomaly detection, scenario analysis, ranking, and root cause analysis — not confined to a specific business domain.
+Agents that provide cross-domain execution and analytical capabilities — operational data gathering, simulation and optimization, evaluation, and anomaly detection — not confined to a specific business domain.
 
 Domain Agents own responsibility for a business area.
-Analytical Agents own responsibility for an analytical capability.
+Cross-Domain Agents own responsibility for reusable capabilities that support multiple business areas.
 
 ---
 
@@ -173,7 +177,7 @@ Analytical Agents own responsibility for an analytical capability.
 
 | Agent | Purpose | Role | Available Toolset | Primary Input | Output | Memory |
 |---|---|---|---|---|---|---|
-| Orchestrator Agent | Convert user requests into business judgments | Intent understanding, planning, routing, state management, result aggregation, final response generation | Data Access, Knowledge, Analysis, Memory, Guardrail, Summary | User request, working state, past decisions, agent results | Execution plan, delegation instructions, aggregated result, final response | Working Memory, Decision Memory, User Memory |
+| SessionOrchestrator | Orchestrate user sessions across chat, QA, exploration, consultation, and explicit goal-directed tasks | Intent classification, chat/QA handling, goal resolution, planning, routing, execution control, state management, result aggregation, response synthesis | Data Access, Knowledge, Analysis, Memory, Guardrail, Summary | User utterance, session state, working state, past decisions, agent results | Direct answer, execution plan, delegation instructions, aggregated result, final response | Working Memory, Decision Memory, User Memory |
 | Demand Agent | Support demand-related judgment | Analyze demand trends, forecast deviations, demand fluctuations, and demand risk | Data Access, Metric Definition, Trend Analysis, Forecast Analysis | Demand actuals, forecasts, products, customers, period, KPI definitions | Demand insights, demand risk, forecast deviations | Domain Memory, Decision Memory |
 | Inventory Agent | Support inventory-related judgment | Analyze inventory levels, stockout risk, excess inventory, and inventory health | Data Access, Inventory Calculation, Data Quality, Business Rules | Inventory data, demand, supply, service level, inventory rules | Inventory risk, recommended review points, inventory decision inputs | Domain Memory, Working Memory |
 | Replenishment Agent | Support replenishment judgment | Analyze when, where, and how much to replenish | Data Access, Calculation, Simulation, Business Rules | Inventory, demand, lead time, replenishment constraints, location information | Replenishment candidates, replenishment risk, replenishment rationale | Working Memory, Decision Memory |
@@ -181,10 +185,10 @@ Analytical Agents own responsibility for an analytical capability.
 | Supplier Agent | Judge supplier risk | Analyze delivery performance, quality, supply stability, and supplier risk | Data Access, Risk Analysis, Knowledge Retrieval, Audit | Supplier information, delivery history, quality data, contract terms, supply risk | Supplier risk, alternative candidates, notes | Domain Memory, Decision Memory |
 | Production Agent | Support production planning judgment | Analyze production capacity, constraints, and plan change impacts | Data Access, Capacity Analysis, Scenario, Business Rules | Demand, inventory, production capacity, process constraints, plan information | Production risk, constraints, plan change impacts | Working Memory, Domain Memory |
 | Logistics Agent | Support logistics judgment | Analyze shipping, inter-location transfers, logistics constraints, and delivery risk | Data Access, Route/Network Analysis, Cost Analysis, Business Rules | Shipment information, locations, delivery conditions, logistics cost, deadline constraints | Logistics risk, delivery decision inputs, transfer candidates | Domain Memory, Decision Memory |
-| Exception Agent | Detect anomalies and items requiring attention | Detect missing data, outliers, sudden changes, rule violations, and abnormal patterns | Data Quality, Anomaly Detection, Business Rules, Alerting | Operational data, KPIs, thresholds, rules, historical trends | Anomaly list, severity, review rationale | Working Memory, Audit Memory |
-| Scenario Agent | Perform what-if analysis | Compare impacts of condition changes and evaluate multiple scenarios | Simulation, Calculation, Optimization, Summary | Assumption conditions, constraints, target data, comparison axes | Scenario comparison, impact scope, decision inputs | Working Memory, Decision Memory |
-| Ranking Agent | Perform prioritization | Rank multiple candidates based on evaluation criteria | Ranking, Scoring, Metric Definition, Business Rules | Candidate list, evaluation criteria, KPIs, constraints, risk information | Priority ranking, scores, rationale | Working Memory, Decision Memory |
-| Root Cause Agent | Perform root cause analysis | Organize background factors, related data, and causal candidates for a problem | Data Access, Correlation Analysis, Drilldown, Knowledge Retrieval | Anomalies, KPI changes, related data, business rules | Causal candidates, evidence, additional review points | Working Memory, Domain Memory |
+| Data Engineer Agent | Gather operational facts for the decision | Query operational data tables and retrieve factual context needed by other agents | Data Access, Forecast, Knowledge Retrieval | User goal, requested entities, operational tables, allowed tools | Data summary, retrieved facts, query results | Working Memory, Audit Memory |
+| Simulation Optimizer Agent | Generate candidate plans | Run simulation and optimization tools and compare scenarios across supply chain domains | Simulation, Optimization, Calculation, Summary | Goal, data summaries, constraints, assumptions, comparison axes | Candidate plans, scenario comparison, optimization rationale | Working Memory, Decision Memory |
+| Evaluator Agent | Evaluate candidate plans | Score each candidate plan against all KPIs independently | Evaluation, Scoring, Metric Definition, Audit | Candidate list, KPI definitions, weights, constraints, risk information | Per-KPI scores, evaluation rationale, audit notes | Working Memory, Decision Memory |
+| Anomaly Detector Agent | Detect anomalies and items requiring attention | Detect missing data, outliers, sudden changes, rule violations, and abnormal patterns across domains; surface root cause candidates | Data Quality, Anomaly Detection, Data Access, Knowledge Retrieval | Operational data, KPIs, thresholds, rules, historical trends | Anomaly list, severity, root cause candidates, review rationale | Working Memory, Audit Memory |
 
 ---
 
@@ -287,11 +291,11 @@ When confidence is low or business risk is high, agents prioritize requesting hu
 The basic workflow of this system is as follows:
 
 1. User submits a business question
-2. Orchestrator Agent understands the intent
-3. Orchestrator Agent decomposes the required work
-4. Orchestrator Agent selects the appropriate agents
+2. SessionOrchestrator understands the intent
+3. SessionOrchestrator decomposes the required work
+4. SessionOrchestrator selects the appropriate agents
 5. Each agent uses the necessary tools to analyze
-6. Orchestrator Agent integrates the results
+6. SessionOrchestrator integrates the results
 7. Detect conflicts, risks, and missing information
 8. Request additional confirmation or re-analysis as needed
 9. Generate the final response
@@ -384,12 +388,12 @@ Adding new top-level packages outside this layout requires an ADR.
 ```
 packages/
   agent/
-    orchestrator/   ← Orchestration Layer (intent, planning, routing, aggregation)
+    orchestrator/   ← SessionOrchestrator (intent classification, chat/QA, goal
+                      resolution, planning, routing, execution control, aggregation)
     domain/         ← Domain Agents (demand, inventory, replenishment, procurement,
-                       supplier, production, logistics) — populated in Phase 4
-    analytical/     ← Analytical Agents (exception, scenario, ranking, root_cause)
-                       — populated in Phase 4
-    specialists/    ← Pre-Phase-4 agent implementations (removed after Phase 4)
+                       supplier, production, logistics)
+    cross_domain/   ← Cross-Domain Agents (data_engineer, simulation_optimizer,
+                       evaluator, anomaly_detector)
     llm/            ← LLM client — only entry point to LLM provider SDK
     runner/         ← Celery job runner infrastructure
   tools/            ← Tool Layer (all execution capabilities)
@@ -422,8 +426,9 @@ An interface change that is not backed by an ADR will be rejected at code review
 | `Tool` (base class) | `packages/tools/base.py` |
 | `JobRunner` | `packages/agent/runner/` |
 | `MemoryStore` (the six typed classes) | `packages/memory/` |
-| `Orchestrator` | `packages/agent/orchestrator/` |
-| `Specialist` (base class) | `packages/agent/specialists/` (until Phase 4 reclassification) |
+| `Orchestrator` protocol | `packages/agent/orchestrator/` |
+| `SessionOrchestrator` | `packages/agent/orchestrator/` |
+| `Specialist` (base protocol) | `packages/agent/base.py` |
 
 ---
 
@@ -439,7 +444,7 @@ Do not begin Phase N+1 work while Phase N checkpoint is unverified.
 | Phase 1 | Tool Layer Isolation — no agent calls DB or LLM SDK directly |
 | Phase 2 | Memory Formalization — six typed memory stores, no raw dict |
 | Phase 3 | Guardrail Separation — permission logic consolidated in one module |
-| Phase 4 | Agent Reclassification — specialists → domain/ + analytical/ |
+| Phase 4 | Agent Reclassification — specialists → domain/ + cross_domain/ |
 | Phase 5 | Orchestrator Cleanup — no domain logic in orchestrator |
 | Phase 6 | Final Validation — full system matches this document |
 
@@ -447,15 +452,15 @@ Do not begin Phase N+1 work while Phase N checkpoint is unverified.
 
 ## Final State Definition
 
-The final system has a structure where user requests are received by the Orchestrator Agent, processing is delegated to the necessary Domain Agents and Analytical Agents, and decision-ready answers are generated through the Shared Tools, Memory Layer, and Guardrail Layer.
+The final system has a structure where user utterances are received by the SessionOrchestrator, processing is delegated to the necessary Domain Agents and Cross-Domain Agents, and decision-ready answers are generated through the Shared Tools, Memory Layer, and Guardrail Layer.
 
 What matters in this design is not the number of agents.
 
 What matters is:
 
-- Orchestrator handles planning, routing, and aggregation
+- SessionOrchestrator handles intent classification, chat/QA, goal resolution, planning, routing, execution control, aggregation, and response synthesis
 - Domain Agents hold responsibility for each business area
-- Analytical Agents hold cross-domain analytical capabilities
+- Cross-Domain Agents hold reusable execution and analytical capabilities
 - Tools provide execution capabilities
 - Memory retains state, context, and decision history
 - Guardrails handle safety, permissions, approvals, and auditing

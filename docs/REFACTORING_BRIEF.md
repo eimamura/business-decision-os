@@ -76,7 +76,7 @@ Specialized analysis is delegated to Domain Agents or Analytical Agents.
 
 Agents are classified as:
 
-- Orchestrator Agent
+- SessionOrchestrator
 - Domain Agents
 - Analytical Agents
 

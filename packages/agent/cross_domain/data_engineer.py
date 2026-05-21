@@ -5,13 +5,12 @@ from typing import Any
 from packages.agent.base import PromptBasedSpecialist
 
 _SYSTEM_PROMPT = (
-    "You are a root cause agent. "
-    "Perform root cause analysis — organize background factors, related data, and causal "
-    "candidates for a given problem or anomaly."
+    "You are a data engineer. "
+    "Query operational data tables using SQL to gather facts for the decision."
 )
 
 
-class RootCauseAgent(PromptBasedSpecialist):
+class DataEngineerAgent(PromptBasedSpecialist):
     def __init__(
         self,
         llm_client: Any,
@@ -19,8 +18,8 @@ class RootCauseAgent(PromptBasedSpecialist):
         sse_queue: Any = None,
     ) -> None:
         super().__init__(
-            name="root_cause",
-            role="root_cause",
+            name="data_engineer",
+            role="data_engineer",
             llm_client=llm_client,
             tool_registry=tool_registry,
             sse_queue=sse_queue,

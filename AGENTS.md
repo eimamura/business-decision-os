@@ -124,7 +124,8 @@ Agent commit boundary: `git add` + `git commit` only. Never `git push` or `gh pr
 
 ## Language Convention
 
-All code, documentation, UI, and agent output uses English only.
+All code, documentation, and user-visible product surfaces use English only.
+Coding agent chat messages and narrative responses should match the user's language; when the user writes in Japanese, respond in Japanese.
 
 | Surface | Language |
 |---|---|
@@ -133,10 +134,10 @@ All code, documentation, UI, and agent output uses English only.
 | `docs/` (all files including ADRs, DESIGN.md, TASKS.md, etc.) | English |
 | `SPEC.md`, `AGENTS.md`, `CLAUDE.md` | English |
 | All user-visible UI strings | English |
-| Chat messages and agent narrative responses | English |
+| Chat messages and agent narrative responses | Match the user's language; Japanese when the user writes in Japanese, otherwise English |
 | Log messages, error messages, metric labels | English |
 | Test names and assertion messages | English |
 
-**Exception:** Existing Japanese reference documents (`docs/business_decision_os_spec.md`, `docs/domain.md`) are preserved as-is. English official docs supersede them on conflict.
+**Exception:** Existing Japanese reference documents (`docs/business_decision_os_spec.md`, `docs/domain.md`) are preserved as-is. English official docs supersede them on conflict. Coding agent chat and narrative responses may use Japanese only when responding to Japanese user messages.
 
-This convention is enforced at code review. PRs containing non-English identifiers, log messages, or UI strings will be returned for correction.
+This convention is enforced at code review. PRs containing non-English identifiers, log messages, documentation, or UI strings will be returned for correction.

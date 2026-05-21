@@ -5,13 +5,14 @@ from typing import Any
 from packages.agent.base import PromptBasedSpecialist
 
 _SYSTEM_PROMPT = (
-    "You are a scenario agent. "
-    "Perform what-if analysis — compare impacts of condition changes and evaluate "
-    "multiple scenarios to support decision-making."
+    "You are an anomaly detector. "
+    "Detect anomalies and items requiring attention across demand, inventory, procurement, "
+    "production, and logistics — missing data, outliers, sudden changes, rule violations, "
+    "and abnormal patterns. Surface root cause candidates for detected anomalies."
 )
 
 
-class ScenarioAgent(PromptBasedSpecialist):
+class AnomalyDetectorAgent(PromptBasedSpecialist):
     def __init__(
         self,
         llm_client: Any,
@@ -19,8 +20,8 @@ class ScenarioAgent(PromptBasedSpecialist):
         sse_queue: Any = None,
     ) -> None:
         super().__init__(
-            name="scenario",
-            role="scenario",
+            name="anomaly_detector",
+            role="anomaly_detector",
             llm_client=llm_client,
             tool_registry=tool_registry,
             sse_queue=sse_queue,

@@ -77,12 +77,12 @@ class TestOrchestratorAutoExecution:
     """Verify orchestrator emits correct events for low/high risk."""
 
     def _make_orchestrator(self) -> Any:
-        from packages.agent.orchestrator import PhaseOrchestrator
+        from packages.agent.orchestrator import SessionOrchestrator
 
         llm = AsyncMock()
         llm.chat = AsyncMock(return_value='["sql", "evaluator"]')
         queue: asyncio.Queue[dict[str, Any]] = asyncio.Queue()
-        orch = PhaseOrchestrator(llm_client=llm, sse_queue=queue)
+        orch = SessionOrchestrator(llm_client=llm, sse_queue=queue)
         return orch, queue
 
     def _collect_events(self, queue: asyncio.Queue[dict[str, Any]]) -> list[dict[str, Any]]:

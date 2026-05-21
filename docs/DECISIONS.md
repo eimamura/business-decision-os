@@ -21,15 +21,27 @@ Reversal cost: low | medium | high
 
 ---
 
-## Decision: Orchestrator is a single agent, not split into Planner + Router
+## Decision: SessionOrchestrator is a single runtime component, not split into Planner + Router
 
 Date: 2026-05-21
 
-Reason: For the current system size, separating Planner and Router creates unnecessary complexity without measurable benefit. A single Orchestrator that handles intent analysis, planning, routing, state management, aggregation, conflict detection, and response generation is simpler to reason about and maintain.
+Reason: For the current system size, separating Planner and Router creates unnecessary complexity without measurable benefit. A single SessionOrchestrator that handles intent classification, chat/QA handling, goal resolution, planning, routing, execution control, state management, aggregation, conflict detection, and response generation is simpler to reason about and maintain.
 
-Consequence: Planner and Router remain internal responsibilities of Orchestrator. They MUST NOT be extracted into separate runtime agents without revisiting this decision.
+Consequence: Planner and Router remain internal responsibilities of SessionOrchestrator. They MUST NOT be extracted into separate runtime agents without revisiting this decision.
 
 Reversal cost: medium (requires new inter-agent protocol and state handoff)
+
+---
+
+## Decision: Runtime orchestrator is named SessionOrchestrator
+
+Date: 2026-05-21
+
+Reason: The runtime orchestrator operates over a user session, not only over implementation phases, goals, or final decisions. It receives utterances and distinguishes chat, question answering, exploration, consultation, and explicit goal-directed tasks before planning, routing, executing, aggregating, and synthesizing responses.
+
+Consequence: `PhaseOrchestrator` is renamed to `SessionOrchestrator`. Planner, Router, Executor, Aggregator, Intent Classifier, Chat / QA Handler, Goal Resolver, and Response Synthesizer remain internal responsibilities rather than independent runtime agents.
+
+Reversal cost: low (rename imports and public documentation)
 
 ---
 
@@ -81,11 +93,12 @@ Mapping:
 - `procurement` → `ProcurementAgent`
 - `production` → `ProductionAgent`
 - `cost` — removed as a standalone role; supply-cost reasoning is distributed across domain agents
-- `domain_expert`, `data_engineer`, `sim_opt`, `evaluator` — remain as orchestrator-internal pipeline stages; not classified agents
+- `domain_expert` — remains an orchestrator-internal role; not a classified agent
+- `data_engineer`, `simulation_optimizer`, `evaluator`, `anomaly_detector` — are active Cross-Domain Agents under `packages/agent/cross_domain/`
 
 New agents added with no pre-existing equivalent: `ReplenishmentAgent`, `SupplierAgent`, `LogisticsAgent` (Domain); `ExceptionAgent`, `ScenarioAgent`, `RankingAgent`, `RootCauseAgent` (Analytical).
 
-Consequence: `packages/agent/specialists/` is deleted. All base classes live in `packages/agent/base.py`. Pipeline stages are constructed inline in the orchestrator.
+Consequence: `packages/agent/specialists/` and the legacy `packages/agent/pipeline/` package are deleted. All base classes live in `packages/agent/base.py`. Cross-domain runtime agents live in `packages/agent/cross_domain/` and are instantiated by SessionOrchestrator.
 
 Reversal cost: low (the base classes and patterns are unchanged; only the directory structure moved)
 

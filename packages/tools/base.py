@@ -8,16 +8,19 @@ from pydantic import BaseModel
 from packages.agent.base import SpecialistRole
 
 _ROLE_TOOL_ALLOWLIST: dict[str, list[str]] = {
-    "domain_expert": ["sql_query", "nl_query", "forecast"],
-    "forecast": ["forecast", "sql_query", "nl_query"],
-    "inventory": ["sql_query", "nl_query"],
-    "procurement": ["sql_query", "nl_query"],
-    "production": ["sql_query", "nl_query"],
-    "cost": ["sql_query", "nl_query"],
-    "data_engineer": ["sql_query", "nl_query", "forecast"],
-    "sim_opt": ["simulate_inventory", "optimize_replenishment"],
-    "evaluator": ["evaluate_candidates", "write_audit_log"],
     "orchestrator": [],
+    "domain_expert": ["sql_query", "nl_query", "forecast"],
+    "data_engineer": ["sql_query", "nl_query", "forecast"],
+    "simulation_optimizer": ["simulate_inventory", "optimize_replenishment"],
+    "evaluator": ["evaluate_candidates", "write_audit_log"],
+    "anomaly_detector": ["sql_query", "nl_query"],
+    "demand": ["sql_query", "nl_query", "forecast"],
+    "inventory": ["sql_query", "nl_query"],
+    "replenishment": ["sql_query", "nl_query"],
+    "procurement": ["sql_query", "nl_query"],
+    "supplier": ["sql_query", "nl_query"],
+    "production": ["sql_query", "nl_query"],
+    "logistics": ["sql_query", "nl_query"],
 }
 
 

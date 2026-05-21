@@ -13,7 +13,7 @@ from packages.agent.llm import (
     LLMResponse,
     StubClaudeClient,
 )
-from packages.agent.orchestrator import PhaseOrchestrator, SessionGoal
+from packages.agent.orchestrator import SessionGoal, SessionOrchestrator
 from packages.agent.orchestrator.weights import (
     load_global_weights,
     load_sku_overrides,
@@ -302,7 +302,7 @@ async def test_orchestrator_run_returns_recommendation():
     memory = StubMemoryStore()
     sse_queue: asyncio.Queue = asyncio.Queue()
 
-    orchestrator = PhaseOrchestrator(
+    orchestrator = SessionOrchestrator(
         llm_client=client,
         tool_registry=registry,
         memory_store=memory,
@@ -329,7 +329,7 @@ async def test_orchestrator_emits_sse_events():
     memory = StubMemoryStore()
     sse_queue: asyncio.Queue = asyncio.Queue()
 
-    orchestrator = PhaseOrchestrator(
+    orchestrator = SessionOrchestrator(
         llm_client=client,
         tool_registry=registry,
         memory_store=memory,
@@ -356,7 +356,7 @@ async def test_orchestrator_session_goal_weight_override():
     registry = create_tool_registry()
     memory = StubMemoryStore()
 
-    orchestrator = PhaseOrchestrator(
+    orchestrator = SessionOrchestrator(
         llm_client=client,
         tool_registry=registry,
         memory_store=memory,
