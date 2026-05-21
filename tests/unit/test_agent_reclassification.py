@@ -8,10 +8,10 @@ import pytest
 from fastapi.testclient import TestClient
 
 from packages.agent.llm import (
+    BudgetedClaudeClient,
     BudgetGuard,
     BudgetHardLimitError,
     BudgetSoftLimitWarning,
-    BudgetedClaudeClient,
     LLMMessage,
     LLMResponse,
     LLMUsage,
@@ -19,7 +19,6 @@ from packages.agent.llm import (
 )
 from packages.persistence.notifications_repo import NotificationsRepository
 from packages.persistence.policies_repo import PoliciesRepository
-
 
 # ---------------------------------------------------------------------------
 # BudgetGuard
@@ -85,7 +84,7 @@ async def test_budgeted_client_accumulates_on_complete():
 
 @pytest.mark.asyncio
 async def test_budgeted_client_raises_on_hard_limit():
-    inner = StubClaudeClient()
+    _inner = StubClaudeClient()
 
     class FakeInner(StubClaudeClient):
         async def complete(self, *args, **kwargs) -> LLMResponse:

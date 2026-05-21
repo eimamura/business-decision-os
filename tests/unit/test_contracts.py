@@ -80,7 +80,9 @@ async def test_contract_sse_stream_terminates_with_done_event(client: httpx.Asyn
     assert events[-1]["type"] == "done"
 
 
-def test_contract_missing_anthropic_key_raises_runtime_error(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_contract_missing_anthropic_key_raises_runtime_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
     with pytest.raises(RuntimeError, match="ANTHROPIC_API_KEY"):
         create_llm_client()

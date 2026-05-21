@@ -1,16 +1,14 @@
 """Tests for T-8002/T-8003/T-8004: Lakehouse package."""
 from __future__ import annotations
 
-import json
-import tempfile
 from pathlib import Path
 
 import pytest
 
 from packages.lakehouse import LakehouseClient
-from packages.lakehouse.bronze import write_decisions, read_decisions
-from packages.lakehouse.silver import run_silver, transform_decisions
+from packages.lakehouse.bronze import read_decisions, write_decisions
 from packages.lakehouse.gold import run_gold
+from packages.lakehouse.silver import run_silver, transform_decisions
 
 
 @pytest.fixture
@@ -92,8 +90,10 @@ class TestSilverTransformation:
 class TestGoldAggregation:
     def test_run_gold_pipeline(self, tmp_client: LakehouseClient) -> None:
         write_decisions(tmp_client, [
-            {"session_id": "x", "created_at": "2026-05-20", "user_id": "u1", "risk_level": "low", "auto_execute": True},
-            {"session_id": "y", "created_at": "2026-05-20", "user_id": "u1", "risk_level": "high", "auto_execute": False},
+            {"session_id": "x", "created_at": "2026-05-20", "user_id": "u1",
+             "risk_level": "low", "auto_execute": True},
+            {"session_id": "y", "created_at": "2026-05-20", "user_id": "u1",
+             "risk_level": "high", "auto_execute": False},
         ])
         run_silver(tmp_client)
         n = run_gold(tmp_client)
@@ -104,8 +104,10 @@ class TestGoldAggregation:
 
     def test_gold_analytics_content(self, tmp_client: LakehouseClient) -> None:
         write_decisions(tmp_client, [
-            {"session_id": "a", "created_at": "2026", "user_id": "u1", "risk_level": "low", "auto_execute": True},
-            {"session_id": "b", "created_at": "2026", "user_id": "u1", "risk_level": "high", "auto_execute": False},
+            {"session_id": "a", "created_at": "2026", "user_id": "u1",
+             "risk_level": "low", "auto_execute": True},
+            {"session_id": "b", "created_at": "2026", "user_id": "u1",
+             "risk_level": "high", "auto_execute": False},
         ])
         run_silver(tmp_client)
         run_gold(tmp_client)
@@ -119,7 +121,9 @@ class TestGoldAggregation:
 
 
 class TestCdcScript:
-    def test_dry_run_writes_to_bronze(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_dry_run_writes_to_bronze(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         monkeypatch.setenv("LAKEHOUSE_PATH", str(tmp_path))
 
         import importlib

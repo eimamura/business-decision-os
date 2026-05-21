@@ -3,8 +3,6 @@ import csv
 import sys
 from pathlib import Path
 
-import pytest
-
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "scripts"))
 import generate_sample_data as gen
 
@@ -135,7 +133,10 @@ def test_supply_csv_columns():
 
 def test_cost_csv_columns():
     rows = _run_and_read(42, "cost.csv")
-    required = {"sku_id", "period_start", "period_end", "cogs", "holding_cost", "ordering_cost", "stockout_cost"}
+    required = {
+        "sku_id", "period_start", "period_end", "cogs",
+        "holding_cost", "ordering_cost", "stockout_cost",
+    }
     assert required <= set(rows[0].keys())
     assert len(rows) == 30
 

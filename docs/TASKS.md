@@ -114,13 +114,13 @@ Follow the phase order in MIGRATION_PLAN.md. Do not begin Phase N+1 until Phase 
 
 Phase 6 is the single pytest gate for the entire refactoring. Tests were not run in Phases 1–5 to avoid long feedback loops during structural work. See DECISIONS.md for rationale.
 
-| ID | Task | Owner | Done when |
-|---|---|---|---|
-| P6-1 | Run full pytest suite; compare pass count vs Phase 0 baseline (213 passed, 3 pre-existing failures) | bdos-infra | No new failures vs baseline |
-| P6-2 | Run mypy across all packages | bdos-infra | Clean |
-| P6-3 | Run ruff / lint | bdos-infra | Clean |
-| P6-4 | Verify code directory structure matches DESIGN.md §Monorepo Layout | bdos-test-review | `find packages/agent -type d \| sort` matches expected layout |
-| P6-5 | Verify ARCHITECTURE_RULES.md cross-cutting rules via grep or arch tests | bdos-test-review | All pass |
-| P6-6 | Verify no DEFERRED.md items have been implemented (scope check) | bdos-test-review | Scope check passes |
-| P6-7 | Mark all task rows in this file complete | bdos-orchestrator | All rows show done |
-| P6-8 | Tag `v2-complete` | bdos-infra | Tag exists in git |
+| ID | Task | Owner | Status | Done when |
+|---|---|---|---|---|
+| P6-1 | Run full pytest suite; compare pass count vs Phase 0 baseline (213 passed, 3 pre-existing failures) | bdos-infra | Done | No new failures vs baseline |
+| P6-2 | Run mypy across all packages | bdos-infra | Done | Clean |
+| P6-3 | Run ruff / lint | bdos-infra | Done | Clean |
+| P6-4 | Verify code directory structure matches DESIGN.md §Monorepo Layout | bdos-test-review | Done | `find packages/agent -type d \| sort` matches expected layout |
+| P6-5 | Verify ARCHITECTURE_RULES.md cross-cutting rules via grep or arch tests | bdos-test-review | Done | All pass |
+| P6-6 | Verify no DEFERRED.md items have been implemented (scope check) | bdos-test-review | Done | Scope check passes |
+| P6-7 | Mark all task rows in this file complete | bdos-orchestrator | Done | All rows show done |
+| P6-8 | Tag `v2-complete` | bdos-infra | Done | Tag exists in git |

@@ -209,7 +209,12 @@ class NlQueryTool:
             async with pool.acquire() as conn:
                 results, sql = await generate_and_run(conn, question, self._llm_client)
                 return ToolResult(
-                    output={"results": results, "count": len(results), "sql": sql, "executed_query": sql},
+                    output={
+                        "results": results,
+                        "count": len(results),
+                        "sql": sql,
+                        "executed_query": sql,
+                    },
                     audit_payload={"question": question, "sql": sql, "count": len(results)},
                 )
         except SQLGuardrailError as exc:

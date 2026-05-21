@@ -6,7 +6,7 @@ from logging.config import fileConfig
 
 from alembic import context
 from dotenv import load_dotenv
-from sqlalchemy.ext.asyncio import async_engine_from_config, AsyncConnection
+from sqlalchemy.ext.asyncio import AsyncConnection, async_engine_from_config
 from sqlalchemy.pool import NullPool
 
 load_dotenv()

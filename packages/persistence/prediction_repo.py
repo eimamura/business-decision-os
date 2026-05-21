@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from typing import Any
-
 from packages.persistence.db import get_pool
 
 
@@ -11,10 +9,11 @@ async def fetch_demand_history(sku_id: str) -> list[float]:
     except RuntimeError:
         return []
     async with pool.acquire() as conn:
-        rows = await conn.fetch(
-            "SELECT units FROM demand_history WHERE sku = $1 AND units IS NOT NULL ORDER BY date DESC LIMIT 90",
-            sku_id,
+        sql = (
+            "SELECT units FROM demand_history WHERE sku = $1 "
+            "AND units IS NOT NULL ORDER BY date DESC LIMIT 90"
         )
+        rows = await conn.fetch(sql, sku_id)
         return [float(row["units"]) for row in rows]
 
 

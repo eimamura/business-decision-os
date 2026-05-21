@@ -6,13 +6,12 @@ from uuid import uuid4
 
 import pytest
 
+from packages.agent.base import PromptBasedSpecialist
 from packages.agent.context_sanitizer import sanitize_for_llm, sanitize_sql_results
 from packages.agent.llm import (
     LLMMessage,
     LLMResponse,
-    LLMUsage,
     StubClaudeClient,
-    create_llm_client,
 )
 from packages.agent.orchestrator import PhaseOrchestrator, SessionGoal
 from packages.agent.orchestrator.weights import (
@@ -20,13 +19,12 @@ from packages.agent.orchestrator.weights import (
     load_sku_overrides,
     resolve_weights,
 )
-from packages.agent.specialists import create_specialists
 from packages.memory import StubMemoryStore
 from packages.schemas.recommendation import Recommendation
 from packages.tools import create_tool_registry
 from packages.tools.approval_tool import ApprovalTool
 from packages.tools.audit_tool import AuditLogTool
-from packages.tools.base import ToolContext, ToolRegistry
+from packages.tools.base import ToolContext
 from packages.tools.evaluator_tool import EvaluatorTool
 from packages.tools.forecast_tool import ForecastTool
 from packages.tools.optimizer_tool import OptimizerTool
@@ -319,7 +317,9 @@ async def test_orchestrator_run_returns_recommendation():
     assert recommendation.primary is not None
     assert len(recommendation.alternatives) >= 1
     assert recommendation.risk_level in ("low", "medium", "high")
-    assert recommendation.tradeoff.weight_source in ("default", "session_goal", "critical_sku", "user_policy")
+    assert recommendation.tradeoff.weight_source in (
+        "default", "session_goal", "critical_sku", "user_policy"
+    )
 
 
 @pytest.mark.asyncio
@@ -371,12 +371,15 @@ async def test_orchestrator_session_goal_weight_override():
     assert recommendation.tradeoff.weight_source == "session_goal"
 
 
-# ===== T-1004: create_specialists =====
+# ===== T-1004: PromptBasedSpecialist pipeline roles =====
 
-def test_create_specialists_returns_4():
+def test_pipeline_specialist_roles_instantiate():
     client = StubClaudeClient()
     registry = create_tool_registry()
-    specialists = create_specialists(client, registry)
+    specialists = {
+        role: PromptBasedSpecialist(name=role, role=role, llm_client=client, tool_registry=registry)
+        for role in ("domain_expert", "data_engineer", "sim_opt", "evaluator")
+    }
     assert len(specialists) == 4
     for role in ["domain_expert", "data_engineer", "sim_opt", "evaluator"]:
         assert role in specialists
@@ -386,7 +389,10 @@ def test_create_specialists_returns_4():
 async def test_specialist_run_returns_result():
     client = StubClaudeClient()
     registry = create_tool_registry()
-    specialists = create_specialists(client, registry)
+    specialist = PromptBasedSpecialist(
+        name="domain_expert", role="domain_expert",
+        llm_client=client, tool_registry=registry,
+    )
 
     from packages.agent.orchestrator import SpecialistTask
     task = SpecialistTask(
@@ -404,6 +410,6 @@ async def test_specialist_run_returns_result():
         correlation_id=uuid4(),
     )
 
-    result = await specialists["domain_expert"].run(task, ctx)
+    result = await specialist.run(task, ctx)
     assert result.status == "completed"
     assert isinstance(result.output, dict)

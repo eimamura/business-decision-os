@@ -1,4 +1,5 @@
 from __future__ import annotations
+
 import asyncio
 import json
 import os
@@ -6,12 +7,12 @@ import sys
 from datetime import datetime, timezone
 from uuid import UUID
 
-from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
-from sqlalchemy.orm import sessionmaker
 from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
+from sqlalchemy.orm import sessionmaker
 
+from packages.optimization import OptimizationContext, OptimizationInput
 from packages.optimization.replenishment import ReplenishmentOptimizer
-from packages.optimization import OptimizationInput, OptimizationContext
 
 
 async def main() -> None:

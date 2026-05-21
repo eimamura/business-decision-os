@@ -80,7 +80,7 @@ class SqlQueryTool:
                     },
                     audit_payload={"query": query, "row_count": len(row_dicts)},
                 )
-        except RuntimeError:
+        except Exception:
             return ToolResult(
                 output={
                     "rows": [],
@@ -89,9 +89,4 @@ class SqlQueryTool:
                     "note": "no database connection",
                 },
                 audit_payload={"query": query, "row_count": 0},
-            )
-        except Exception as exc:
-            return ToolResult(
-                output={"error": str(exc), "rows": [], "column_names": [], "row_count": 0},
-                audit_payload={"query": query, "error": str(exc), "row_count": 0},
             )

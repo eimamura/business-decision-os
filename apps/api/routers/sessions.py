@@ -15,8 +15,9 @@ from apps.api.state import get_orchestrator, sessions, sse_queues
 from packages.agent.history import compress_history
 from packages.agent.orchestrator import SessionGoal
 from packages.agent.rate_limiter import RateLimitExceeded, check_rate_limit
-from packages.schemas.recommendation import Recommendation
+from packages.memory import ShortTermMemory
 from packages.persistence.sessions_repo import DecisionSessionRepository
+from packages.schemas.recommendation import Recommendation
 
 _log = logging.getLogger(__name__)
 
@@ -268,7 +269,8 @@ async def post_message(
     goal_text = body.content
     try:
         msgs = await repo.get_messages(session_id, limit=60)
-        msgs_to_use, summary = await compress_history(msgs)
+        short_term = [ShortTermMemory(role=m["role"], content=m["content"]) for m in msgs]
+        msgs_to_use, summary = await compress_history(short_term)
         if summary is not None:
             goal_text = f"[Conversation context: {summary}]\n\n{goal_text}"
     except Exception:

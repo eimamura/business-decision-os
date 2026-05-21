@@ -64,16 +64,24 @@ def make_stub_kpi_scores(order_qty: float, idx: int) -> list[KpiScore]:
         KpiScore(name=KPI_SERVICE_LEVEL, value=sl, unit="%", direction="higher_better"),
         KpiScore(name="fill_rate", value=fr, unit="%", direction="higher_better"),
         KpiScore(name="stockout_rate", value=sr, unit="%", direction="lower_better"),
-        KpiScore(name="inventory_turnover", value=4.0, unit="turns/year", direction="higher_better"),
-        KpiScore(name="days_on_hand", value=30.0 + idx * 15, unit="days", direction="lower_better"),
+        KpiScore(
+            name="inventory_turnover", value=4.0, unit="turns/year", direction="higher_better"
+        ),
+        KpiScore(
+            name="days_on_hand", value=30.0 + idx * 15, unit="days", direction="lower_better"
+        ),
         KpiScore(
             name="excess_inventory",
             value=max(0.0, order_qty * 0.1 * idx),
             unit="units",
             direction="lower_better",
         ),
-        KpiScore(name="working_capital", value=total_cost * 0.5, unit="USD", direction="lower_better"),
-        KpiScore(name=KPI_TOTAL_SUPPLY_CHAIN_COST, value=total_cost, unit="USD", direction="lower_better"),
+        KpiScore(
+            name="working_capital", value=total_cost * 0.5, unit="USD", direction="lower_better"
+        ),
+        KpiScore(
+            name=KPI_TOTAL_SUPPLY_CHAIN_COST, value=total_cost, unit="USD", direction="lower_better"
+        ),
     ]
 
 
