@@ -428,3 +428,33 @@ Dependencies: none
 | T-11001 | Extract `ChatSidebar` component (`apps/web/components/ChatSidebar.tsx`): brand link, "New Session" button (calls `createSession`, navigates to new sessionId), scrollable session list with active highlight, bottom nav links | High | Done |
 | T-11002 | Rewrite `apps/web/app/chat/page.tsx` as single-page shell: renders `ChatSidebar` + empty-state main panel ("Select or create a session") — no redirect, no two-page navigation | High | Done |
 | T-11003 | Refactor `apps/web/app/chat/[sessionId]/page.tsx` to use `ChatSidebar` (replacing its inline sidebar) while keeping all existing chat functionality intact | High | Done |
+
+## Phase 12 — Agent Trace Panel
+
+Goal: Full visibility into the agent pipeline for each session — DB trace, routing decision, per-agent timeline, tool I/O, and BRT timestamps.
+Surfaces in the `ReasoningPanel` component on the chat page.
+
+Batch execution order: B1 → B2
+
+### B1 — DB & Infra Fixes (Agent: bdos-infra)
+
+Dependencies: none
+
+| ID | Task | Priority | Status |
+|---|---|---|---|
+| T-12001 | Fix alembic env.py to use asyncpg async engine (psycopg2 not installed) | High | Done |
+| T-12002 | Migration 0004: rename `memories.metadata` → `memories.metadata_json` (column name mismatch) | High | Done |
+| T-12003 | Migration 0005: make `decision_sessions.user_id` nullable, drop FK to users (dev env has no seeded users) | High | Done |
+| T-12004 | Fix `create_session` to persist session to `decision_sessions` on creation (was in-memory only, causing FK violation on session_messages) | High | Done |
+| T-12005 | Add `DATABASE_URL` to `.env` for local dev; wire up docker-compose DB service | Medium | Done |
+
+### B2 — Agent Trace SSE + UI (Agent: bdos-app-builder)
+
+Dependencies: B1
+
+| ID | Task | Priority | Status |
+|---|---|---|---|
+| T-12006 | Extend SSE schema: add `RoutingDecisionEvent`; add `input_summary`, `output_summary`, `ended_at` fields to step/specialist events | High | Done |
+| T-12007 | Wire `sse_queue` into `create_specialists`; emit trace events from `agent_based.py` and `base.py` during execution | High | Done |
+| T-12008 | Orchestrator emits `routing_decision` SSE event with route list and rationale | High | Done |
+| T-12009 | Rebuild `ReasoningPanel` with full trace UI: routing decision card, per-agent timeline, tool I/O accordion, BRT timestamps | High | Done |

@@ -7,7 +7,7 @@ TASKS.md holds task definitions. This file holds runtime execution state.
 
 ## Current Phase
 
-M11 Complete — Phase 11 Single-Page Chat Shell
+M12 In Progress — Phase 12 Agent Trace Panel
 
 ## Active Lease
 
@@ -15,14 +15,14 @@ None
 
 ## Last Completed Batch
 
-Phase 11 — M11 Complete (T-11001 through T-11003) — 2026-05-20
+Phase 12 — M12 B1+B2 (T-12001 through T-12009) — 2026-05-21
 
 ## Last Validation
 
-command: `cd apps/web && npx tsc --noEmit && cd ../.. && uv run pytest tests/unit/ -q`
+command: `uv run mypy packages/state/sessions_repo.py apps/api/routers/sessions.py apps/api/middleware.py --ignore-missing-imports`
 exit code: 0 (all pass)
-timestamp: 2026-05-20
-note: 206 unit tests PASS. M11 complete: T-11001 — ChatSidebar component extracted; T-11002 — /chat page rewritten as single-page shell with empty state; T-11003 — /chat/[sessionId] refactored to use ChatSidebar. tsc: 0 errors.: T-10001 — Alembic migration 0002 (session_messages + rate_limit_counters tables); T-10002 — DecisionSessionRepository + LlmUsageRepository implemented (no stubs), packages/state/db.py pool factory, real usage_writer wired in state.py; T-10003 — packages/agent/history.py compress_history() with SUMMARY_THRESHOLD=30, integrated into sessions.py post_message; T-10004 — packages/agent/rate_limiter.py per-user+global rate limiting, integrated into sessions.py; T-10005 — PATCH /api/v1/sessions/{sid}/messages/{mid}/feedback endpoint, GET messages returns feedback field; T-10006 — apps/web/types/chat.ts + apps/web/lib/api.ts typed API client with streamSession generator; T-10007 — apps/web/hooks/useChat.ts SSE streaming hook, page.tsx refactored (EventSource removed); T-10008 — apps/web/components/MessageBubble.tsx with react-syntax-highlighter (ssr:false), 👍👎 feedback UI; T-10009 — ReasoningPanel updated with SessionUsage props, Input/Output/cost token display. lint: 0 errors. typecheck: 0 errors. tsc: 0 errors.
+timestamp: 2026-05-21
+note: T-12001 — alembic env.py async engine fix; T-12002 — migration 0004 memories.metadata→metadata_json; T-12003 — migration 0005 decision_sessions.user_id nullable; T-12004 — create_session persists to DB; T-12005 — DATABASE_URL in .env + docker-compose DB; T-12006 — RoutingDecisionEvent + input_summary/output_summary/ended_at fields; T-12007 — sse_queue wired into specialists; T-12008 — orchestrator routing_decision SSE; T-12009 — ReasoningPanel full trace UI rebuilt.
 
 ## Blockers
 
