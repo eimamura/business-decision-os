@@ -59,22 +59,12 @@ export function useChat(sessionId: string): {
                 ? {
                     ...m,
                     content: event.reply ?? m.content,
-                    messageId: event.message_id ?? m.messageId,
                     isStreaming: false,
                   }
                 : m,
             ),
           );
           break;
-        }
-
-        if (event.type === "agent_completed" && event.tokens != null) {
-          const half = Math.floor(event.tokens / 2);
-          setUsage((prev) => ({
-            inputTokens: prev.inputTokens + half,
-            outputTokens: prev.outputTokens + (event.tokens! - half),
-            costUsd: prev.costUsd + (event.cost_usd ?? 0),
-          }));
         }
 
         if (

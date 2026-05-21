@@ -1,16 +1,11 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import type { SessionUsage } from "@/types/chat";
+import type { SessionUsage, SseEvent } from "@/types/chat";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
 // ---- Types ----
-
-interface RawEvent {
-  type: string;
-  [key: string]: unknown;
-}
 
 interface ToolTrace {
   toolName: string;
@@ -43,11 +38,12 @@ interface OrchestratorTrace {
   route: string[];
   rationale: string;
   specialists: SpecialistTrace[];
-  recommendation?: {
+  response?: {
     riskLevel: string;
     requiresApproval: boolean;
     autoExecute: boolean;
   };
+  error?: string;
   durationMs?: number;
 }
 
@@ -128,7 +124,7 @@ export default function ReasoningPanel({ sessionId, usage }: Props) {
       es.onmessage = (e: MessageEvent) => {
         if (e.lastEventId) lastEventIdRef.current = e.lastEventId;
         try {
-          const ev: RawEvent = JSON.parse(e.data as string);
+          const ev = JSON.parse(e.data as string) as SseEvent;
           if (ev.type === "error" && ev.code === "no_stream") return;
           handleEvent(ev);
         } catch {
@@ -149,10 +145,10 @@ export default function ReasoningPanel({ sessionId, usage }: Props) {
     };
   }, [sessionId]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  function handleEvent(ev: RawEvent) {
+  function handleEvent(ev: SseEvent) {
     switch (ev.type) {
       case "query_received": {
-        const startedAt = (ev.timestamp as string) ?? new Date().toISOString();
+        const startedAt = ev.timestamp ?? new Date().toISOString();
         setSessionStartedAt(startedAt);
         setOrchestrator({
           startedAt,
@@ -164,36 +160,30 @@ export default function ReasoningPanel({ sessionId, usage }: Props) {
       }
 
       case "execution_mode_selected": {
-        const route = ev.agents as string[];
-        const rationale = ev.rationale as string;
         setOrchestrator((prev) =>
-          prev ? { ...prev, route, rationale } : prev
+          prev ? { ...prev, route: ev.agents, rationale: ev.rationale } : prev
         );
         break;
       }
 
       case "agent_started": {
-        const name = ev.agent_name as string;
-        const role = ev.agent_role as string;
-        const taskId = ev.task_id as string;
-        const startedAt = ev.started_at as string;
         setOrchestrator((prev) => {
           if (!prev) return prev;
-          const exists = prev.specialists.some((s) => s.taskId === taskId);
+          const exists = prev.specialists.some((s) => s.taskId === ev.task_id);
           if (exists) return prev;
           return {
             ...prev,
             specialists: [
               ...prev.specialists,
               {
-                name,
-                role,
-                taskId,
-                startedAt,
+                name: ev.agent_name,
+                role: ev.agent_role,
+                taskId: ev.task_id,
+                startedAt: ev.started_at,
                 status: "running",
                 tools: [],
                 isAgent: true,
-                inputSummary: ev.input_summary as string | undefined,
+                inputSummary: ev.input_summary ?? undefined,
               },
             ],
           };
@@ -202,16 +192,18 @@ export default function ReasoningPanel({ sessionId, usage }: Props) {
       }
 
       case "agent_completed": {
-        const taskId = ev.task_id as string;
-        const durationMs = ev.duration_ms as number | undefined;
-        const outputSummary = ev.output_summary as string | undefined;
         setOrchestrator((prev) => {
           if (!prev) return prev;
           return {
             ...prev,
             specialists: prev.specialists.map((s) =>
-              s.taskId === taskId
-                ? { ...s, status: "completed", durationMs, outputSummary }
+              s.taskId === ev.task_id
+                ? {
+                    ...s,
+                    status: "completed",
+                    durationMs: ev.duration_ms,
+                    outputSummary: ev.output_summary ?? undefined,
+                  }
                 : s
             ),
           };
@@ -220,25 +212,19 @@ export default function ReasoningPanel({ sessionId, usage }: Props) {
       }
 
       case "tool_started": {
-        const toolName = ev.tool_name as string;
-        const toolCallId = ev.tool_call_id as string;
-        const agentRole = ev.agent_role as string;
-        const input = ev.input as unknown;
-        const timestamp = ev.timestamp as string;
-
         setOrchestrator((prev) => {
           if (!prev) return prev;
           const specialists = prev.specialists.map((s) => {
-            if (s.role !== agentRole) return s;
+            if (s.role !== ev.agent_role) return s;
             return {
               ...s,
               tools: [
                 ...s.tools,
                 {
-                  toolName,
-                  toolCallId,
-                  input,
-                  startedAt: timestamp,
+                  toolName: ev.tool_name,
+                  toolCallId: ev.tool_call_id,
+                  input: ev.input ?? undefined,
+                  startedAt: ev.timestamp,
                   status: "running" as const,
                 },
               ],
@@ -250,26 +236,21 @@ export default function ReasoningPanel({ sessionId, usage }: Props) {
       }
 
       case "tool_completed": {
-        const toolCallId = ev.tool_call_id as string;
-        const output = ev.output as unknown;
-        const executedQuery = ev.executed_query as string | undefined;
-        const durationMs = ev.duration_ms as number | undefined;
-        const toolStatus = (ev.status as string) === "error" ? "error" : "completed";
-        const toolError = ev.error as string | undefined;
+        const toolStatus = ev.status === "error" ? "error" : "completed";
 
         setOrchestrator((prev) => {
           if (!prev) return prev;
           const specialists = prev.specialists.map((s) => ({
             ...s,
             tools: s.tools.map((t) =>
-              t.toolCallId === toolCallId
+              t.toolCallId === ev.tool_call_id
                 ? {
                     ...t,
-                    output,
-                    executedQuery,
-                    durationMs,
+                    output: ev.output ?? undefined,
+                    executedQuery: ev.executed_query ?? undefined,
+                    durationMs: ev.duration_ms,
                     status: toolStatus as "completed" | "error",
-                    error: toolError,
+                    error: ev.error ?? undefined,
                   }
                 : t
             ),
@@ -284,8 +265,8 @@ export default function ReasoningPanel({ sessionId, usage }: Props) {
           if (!prev) return prev;
           return {
             ...prev,
-            recommendation: {
-              riskLevel: (ev.risk_level as string) ?? "low",
+            response: {
+              riskLevel: ev.risk_level ?? "low",
               requiresApproval: Boolean(ev.requires_approval),
               autoExecute: !ev.requires_approval,
             },
@@ -293,6 +274,62 @@ export default function ReasoningPanel({ sessionId, usage }: Props) {
         });
         break;
       }
+
+      case "approval_requested": {
+        setOrchestrator((prev) => {
+          if (!prev) return prev;
+          return {
+            ...prev,
+            response: {
+              riskLevel: ev.risk_level,
+              requiresApproval: true,
+              autoExecute: false,
+            },
+          };
+        });
+        break;
+      }
+
+      case "auto_executed": {
+        setOrchestrator((prev) => {
+          if (!prev) return prev;
+          return {
+            ...prev,
+            response: {
+              riskLevel: prev.response?.riskLevel ?? "low",
+              requiresApproval: false,
+              autoExecute: true,
+            },
+          };
+        });
+        break;
+      }
+
+      case "error": {
+        const startedAt = ev.timestamp ?? new Date().toISOString();
+        setSessionStartedAt((prev) => prev ?? startedAt);
+        setOrchestrator((prev) => {
+          const next = prev ?? {
+            startedAt,
+            route: [],
+            rationale: "",
+            specialists: [],
+          };
+          return {
+            ...next,
+            error: ev.message,
+            specialists: next.specialists.map((s) =>
+              s.status === "running" ? { ...s, status: "failed" } : s
+            ),
+          };
+        });
+        break;
+      }
+
+      case "done":
+      case "intent_classified":
+      case "plan_created":
+        break;
     }
   }
 
@@ -386,10 +423,16 @@ function OrchestratorNode({ trace }: { trace: OrchestratorTrace }) {
         </div>
       )}
 
-      {/* Recommendation */}
-      {trace.recommendation && (
+      {/* Response */}
+      {trace.response && (
         <div className="ml-4 border-l border-gray-800 pl-3">
-          <RecommendationRow rec={trace.recommendation} />
+          <ResponseRow response={trace.response} />
+        </div>
+      )}
+
+      {trace.error && (
+        <div className="ml-4 border-l border-gray-800 pl-3">
+          <ErrorRow message={trace.error} />
         </div>
       )}
     </div>
@@ -514,29 +557,38 @@ function ToolRow({ tool: t }: { tool: ToolTrace }) {
   );
 }
 
-// ---- Recommendation row ----
+// ---- Response row ----
 
-function RecommendationRow({
-  rec,
+function ResponseRow({
+  response,
 }: {
-  rec: { riskLevel: string; requiresApproval: boolean; autoExecute: boolean };
+  response: { riskLevel: string; requiresApproval: boolean; autoExecute: boolean };
 }) {
-  const colorClass = RISK_COLORS[rec.riskLevel] ?? "text-gray-400 bg-gray-400/10";
+  const colorClass = RISK_COLORS[response.riskLevel] ?? "text-gray-400 bg-gray-400/10";
   return (
     <div className="flex items-center gap-2 py-1">
       <span className="text-amber-400 shrink-0">★</span>
-      <span className="text-gray-300">Recommendation ready</span>
+      <span className="text-gray-300">Response ready</span>
       <span
         className={`text-[9px] font-bold uppercase px-1.5 py-0.5 rounded ${colorClass}`}
       >
-        {rec.riskLevel}
+        {response.riskLevel}
       </span>
-      {rec.autoExecute && (
+      {response.autoExecute && (
         <span className="text-[9px] text-emerald-500 uppercase">auto-executed</span>
       )}
-      {rec.requiresApproval && !rec.autoExecute && (
+      {response.requiresApproval && !response.autoExecute && (
         <span className="text-[9px] text-amber-500 uppercase">awaiting approval</span>
       )}
+    </div>
+  );
+}
+
+function ErrorRow({ message }: { message: string }) {
+  return (
+    <div className="flex items-start gap-2 py-1">
+      <span className="text-red-400 shrink-0">✗</span>
+      <span className="text-red-300 leading-relaxed">{message}</span>
     </div>
   );
 }
