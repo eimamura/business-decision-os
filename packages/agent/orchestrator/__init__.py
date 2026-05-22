@@ -1,19 +1,19 @@
 from __future__ import annotations
 
-from packages.agent.orchestrator.session_orchestrator import (
+from packages.agent.orchestrator.models import (
     AgentRoute,
     ExecutionPlan,
     Orchestrator,
     PlanStep,
     SessionGoal,
     SessionIntent,
-    SessionOrchestrator,
     SessionResponse,
     SessionUserQuery,
     SpecialistResult,
     SpecialistTask,
     TaskNode,
 )
+from packages.agent.orchestrator.session_orchestrator import SessionOrchestrator
 
 __all__ = [
     "AgentRoute",
