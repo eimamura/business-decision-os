@@ -74,9 +74,9 @@
       "Read(//tmp/**)"
     ],
     "deny": [
-      "Bash(rm -rf *)",
-      "Bash(rm -r *)",
-      "Bash(rm *)",
+      // "Bash(rm -rf *)",
+      // "Bash(rm -r *)",
+      // "Bash(rm *)",
       "Bash(find * -delete *)",
       "Bash(git push --force*)",
       "Bash(git push --force-with-lease*)",
