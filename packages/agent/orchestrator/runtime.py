@@ -15,6 +15,8 @@ from packages.agent.orchestrator.models import (
     SpecialistResult,
     SpecialistTask,
 )
+from datetime import datetime, timezone
+
 from packages.agent.orchestrator.parsing import _iso_now
 from packages.agent.orchestrator.roles import (
     CROSS_DOMAIN_AGENT_CLASSES,
@@ -25,15 +27,8 @@ logger = logging.getLogger(__name__)
 
 
 def _default_tools(agent_role: str) -> list[str]:
-    if agent_role == "data_engineer":
-        return ["sql_query", "nl_query", "forecast"]
-    if agent_role == "simulation_optimizer":
-        return ["simulate_inventory", "optimize_replenishment"]
-    if agent_role == "evaluator":
-        return ["evaluate_candidates", "write_audit_log"]
-    if agent_role == "anomaly_detector":
-        return ["sql_query", "nl_query"]
-    return []
+    from packages.tools.base import _ROLE_TOOL_ALLOWLIST
+    return list(_ROLE_TOOL_ALLOWLIST.get(agent_role, []))
 
 
 def _make_agent(orchestrator: Any, agent_role: str) -> Any:
@@ -95,13 +90,13 @@ async def _run_agent(
 
     agent = _make_agent(orchestrator, agent_role)
     task_id = uuid4()
-    started_at = _iso_now()
+    started_at = datetime.now(timezone.utc)
     await orchestrator._push({
         "type": "agent_started",
         "agent_name": getattr(agent, "name", agent_role).replace("_", " ").title(),
         "agent_role": agent_role,
         "task_id": str(task_id),
-        "started_at": started_at,
+        "started_at": started_at.isoformat(),
         "input_summary": instruction[:200],
     })
 
@@ -135,8 +130,9 @@ async def _run_agent(
     )
     t0 = time.monotonic()
     result = await _run_specialist_with_retry(orchestrator, agent, task, ctx)
-    ended_at = _iso_now()
+    ended_at = datetime.now(timezone.utc)
 
+    _usage = result.usage or {}
     await orchestrator._push({
         "type": "agent_completed",
         "agent_name": getattr(agent, "name", agent_role).replace("_", " ").title(),
@@ -144,7 +140,10 @@ async def _run_agent(
         "task_id": str(task_id),
         "duration_ms": int((time.monotonic() - t0) * 1000),
         "output_summary": str(result.output.get("text", ""))[:200] if result.output else None,
-        "timestamp": ended_at,
+        "timestamp": ended_at.isoformat(),
+        "input_tokens": _usage.get("input_tokens"),
+        "output_tokens": _usage.get("output_tokens"),
+        "cost_usd": _usage.get("cost_usd"),
     })
 
     if result.status == "failed":
@@ -154,7 +153,7 @@ async def _run_agent(
             "code": "agent_failed",
             "message": f"Agent {agent_role} failed: {result.error}",
             "recoverable": False,
-            "timestamp": ended_at,
+            "timestamp": ended_at.isoformat(),
         })
     else:
         output_json = {"summary": str(result.output.get("text", ""))[:500]}

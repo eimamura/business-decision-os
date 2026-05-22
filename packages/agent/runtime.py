@@ -4,6 +4,7 @@ import json
 import logging
 import time
 from datetime import datetime, timezone
+from decimal import Decimal
 from typing import TYPE_CHECKING, Any, Callable
 
 if TYPE_CHECKING:
@@ -66,7 +67,8 @@ class AgentRuntime:
 
     async def _push(self, event: dict[str, Any]) -> None:
         if self._sse_queue is not None:
-            await self._sse_queue.put(event)
+            from packages.agent.orchestrator.parsing import json_safe
+            await self._sse_queue.put(json_safe(event))
 
     async def run(self, task: SpecialistTask, ctx: ToolContext) -> SpecialistResult:
         from packages.agent.llm import LLMMessage, LLMToolSpec
@@ -91,6 +93,9 @@ class AgentRuntime:
         tool_calls_made: list[Any] = []
         tool_results: dict[str, Any] = {}
         last_response: Any = None
+        _total_input_tokens = 0
+        _total_output_tokens = 0
+        _total_cost_usd: Decimal = Decimal("0")
 
         for _ in range(_MAX_ITERATIONS):
             _log.info(
@@ -106,6 +111,9 @@ class AgentRuntime:
                 specialist_role=self.role,
             )
             last_response = response
+            _total_input_tokens += response.usage.input_tokens
+            _total_output_tokens += response.usage.output_tokens
+            _total_cost_usd += response.usage.total_cost_usd
             _log.info(
                 "Specialist %s LLM response: finish_reason=%s tool_calls=%d model=%s",
                 self.role, response.finish_reason, len(response.tool_calls), response.model,
@@ -188,4 +196,9 @@ class AgentRuntime:
             output=self._output_builder(tool_results, last_response),
             tool_calls_made=tool_calls_made,
             status="completed",
+            usage={
+                "input_tokens": _total_input_tokens,
+                "output_tokens": _total_output_tokens,
+                "cost_usd": float(_total_cost_usd),
+            },
         )

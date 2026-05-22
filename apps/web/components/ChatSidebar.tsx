@@ -169,7 +169,7 @@ export default function ChatSidebar({
             >
               <Link
                 href={`/chat/${s.session_id}`}
-                className={`block px-3 py-2 pr-7 text-xs rounded-md transition-colors ${
+                className={`block px-3 py-2.5 pr-7 text-xs rounded-md transition-colors ${
                   isActive
                     ? "bg-indigo-500/15 text-white"
                     : "text-white/45 hover:bg-white/5 hover:text-white/75"
@@ -178,7 +178,12 @@ export default function ChatSidebar({
                 {isActive && (
                   <span className="absolute left-1 top-0 bottom-0 w-0.5 bg-indigo-400 rounded-r" />
                 )}
-                <span className="block truncate font-medium">{s.title ?? s.goal ?? "New Session"}</span>
+                <span
+                  className="block font-medium leading-snug line-clamp-2"
+                  title={s.title ?? s.goal ?? "New Session"}
+                >
+                  {s.title ?? s.goal ?? "New Session"}
+                </span>
                 <span className="text-[10px] text-white/30 mt-0.5 block">
                   {formatSessionDate(s.created_at)}
                 </span>
@@ -194,7 +199,7 @@ export default function ChatSidebar({
                   }}
                   aria-label="Confirm delete"
                   title="Click to confirm delete"
-                  className="absolute right-1.5 top-1/2 -translate-y-1/2 px-1 py-0.5 text-red-400 hover:text-red-300 transition-colors"
+                  className="absolute right-1.5 top-3 px-1 py-0.5 text-red-400 hover:text-red-300 transition-colors"
                 >
                   <Trash2 size={13} />
                 </button>
@@ -208,7 +213,7 @@ export default function ChatSidebar({
                   }}
                   aria-label="Delete session"
                   title="Delete session"
-                  className="absolute right-1.5 top-1/2 -translate-y-1/2 opacity-0 group-hover/item:opacity-100 px-1 py-0.5 text-white/30 hover:text-white/60 transition-all text-[11px] font-bold tracking-tight"
+                  className="absolute right-1.5 top-3 opacity-0 group-hover/item:opacity-100 px-1 py-0.5 text-white/30 hover:text-white/60 transition-all text-[11px] font-bold tracking-tight"
                 >
                   ···
                 </button>

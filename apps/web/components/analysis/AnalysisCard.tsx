@@ -1,6 +1,8 @@
 "use client";
 
 import type { ChatMessage } from "@/types/chat";
+import type { InventoryShortageAnalysis } from "@/types/analysis";
+import AnalysisResultCard from "@/components/analysis/AnalysisResultCard";
 
 interface ParsedAnalysis {
   title: string;
@@ -68,14 +70,44 @@ const PRIORITY_STYLES: Record<string, string> = {
 
 interface AnalysisCardProps {
   message: ChatMessage;
-  onFeedback?: (messageId: string, feedback: 1 | -1) => void;
+}
+
+export function isInventoryShortageAnalysis(content: string): InventoryShortageAnalysis | null {
+  const match =
+    /```json\n([\s\S]*?)\n```/.exec(content) ??
+    /^(\{[\s\S]*\})$/.exec(content.trim());
+  if (!match) return null;
+  try {
+    const obj = JSON.parse(match[1]) as Record<string, unknown>;
+    if (obj.__type === "inventory_shortage_analysis") return obj as unknown as InventoryShortageAnalysis;
+  } catch {
+    /* ignore */
+  }
+  return null;
 }
 
 export function isAnalysisCard(content: string): boolean {
+  if (isInventoryShortageAnalysis(content) !== null) return true;
   return content.includes("## Summary") && content.includes("## Key Findings");
 }
 
-export default function AnalysisCard({ message, onFeedback }: AnalysisCardProps): React.ReactElement {
+export default function AnalysisCard({ message }: AnalysisCardProps): React.ReactElement {
+  // Structured JSON path — renders the rich dashboard card
+  const structured = isInventoryShortageAnalysis(message.content);
+  if (structured !== null) {
+    return (
+      <div className="max-w-[90%]">
+        <AnalysisResultCard
+          analysis={structured}
+          isStreaming={message.isStreaming}
+          isError={message.isError}
+          createdAt={message.created_at}
+        />
+      </div>
+    );
+  }
+
+  // Markdown fallback path
   const lines = message.content.split("\n");
   const firstLine = lines.find((l) => l.trim() && !l.startsWith("#"))?.trim() ?? "Analysis";
   const analysis = parseAnalysis(message.content, firstLine);
@@ -175,31 +207,14 @@ export default function AnalysisCard({ message, onFeedback }: AnalysisCardProps)
         </div>
       </div>
 
-      {/* Footer: timestamp + feedback */}
-      <div className="flex items-center justify-between mt-1 px-1">
-        {message.created_at && (
+      {/* Footer: timestamp */}
+      {message.created_at && (
+        <div className="mt-1 px-1">
           <p className="text-xs text-white/30">
             {new Date(message.created_at).toLocaleTimeString()}
           </p>
-        )}
-        {onFeedback && message.messageId && !message.isStreaming && (
-          <div className="flex gap-1">
-            {([-1, 1] as const).map((v) => (
-              <button
-                key={v}
-                onClick={() => onFeedback(message.messageId!, v)}
-                className={`text-xs px-1.5 py-0.5 rounded transition-colors ${
-                  message.feedback === v
-                    ? "text-indigo-400"
-                    : "text-white/20 hover:text-white/50"
-                }`}
-              >
-                {v === 1 ? "👍" : "👎"}
-              </button>
-            ))}
-          </div>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   );
 }

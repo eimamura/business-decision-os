@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { fetchSessionEvents } from "@/lib/api";
 import { SseEventSchema } from "@/types/chat";
 import type { SessionUsage, SseEvent } from "@/types/chat";
@@ -31,6 +31,19 @@ function eventKey(ev: SseEvent): string {
 
 // ---- Event → Step conversion ----
 
+function toolStepLabel(toolName: string): string {
+  const MAP: Record<string, string> = {
+    sql_query: "Loading inventory data",
+    nl_query: "Loading inventory data",
+    forecast: "Checking demand forecast",
+    simulate_inventory: "Running inventory simulation",
+    optimize_replenishment: "Optimizing replenishment plan",
+    evaluate_candidates: "Evaluating action candidates",
+    write_audit_log: "Writing audit log",
+  };
+  return MAP[toolName] ?? `Retrieving data: ${toolName}`;
+}
+
 function eventsToSteps(events: SseEvent[]): AgentStep[] {
   const steps: AgentStep[] = [];
   const seen = new Set<string>();
@@ -38,29 +51,66 @@ function eventsToSteps(events: SseEvent[]): AgentStep[] {
   for (const ev of events) {
     switch (ev.type) {
       case "query_received":
-        if (!seen.has("query")) {
-          steps.push({ id: "query", label: "Understanding your question", status: "completed" });
-          seen.add("query");
-        }
+        // Session start time is extracted separately via useMemo; no step pushed here.
         break;
 
       case "intent_classified":
         if (!seen.has("intent")) {
-          steps.push({ id: "intent", label: "Classifying intent", status: "completed" });
+          const evRec = ev as Record<string, unknown>;
+          const category = typeof evRec.category === "string" ? evRec.category : "";
+          const confidence = typeof evRec.confidence === "number" ? evRec.confidence : null;
+          steps.push({
+            id: "intent",
+            label: "Classifying intent",
+            status: "completed",
+            subtext:
+              category && confidence !== null
+                ? `${category} · ${Math.round(confidence * 100)}% confidence`
+                : category || undefined,
+          });
           seen.add("intent");
         }
         break;
 
       case "execution_mode_selected":
         if (!seen.has("route")) {
-          steps.push({ id: "route", label: "Planning analysis route", status: "completed" });
+          const evRec = ev as Record<string, unknown>;
+          const mode = typeof evRec.mode === "string" ? evRec.mode : "";
+          const agents = Array.isArray(evRec.agents) ? evRec.agents : [];
+          const agentCount = agents.length;
+          steps.push({
+            id: "route",
+            label: "Planning analysis route",
+            status: "completed",
+            subtext: mode
+              ? `${mode}${agentCount > 0 ? ` · ${agentCount} agent${agentCount !== 1 ? "s" : ""}` : ""}`
+              : undefined,
+          });
           seen.add("route");
         }
         break;
 
       case "plan_created":
         if (!seen.has("plan")) {
-          steps.push({ id: "plan", label: "Building execution plan", status: "completed" });
+          const evRec = ev as Record<string, unknown>;
+          const planItems = Array.isArray(evRec.steps)
+            ? (evRec.steps as Record<string, unknown>[])
+            : Array.isArray(evRec.nodes)
+            ? (evRec.nodes as Record<string, unknown>[])
+            : [];
+          const roleList = planItems
+            .map((s) => String(s.agent_role ?? ""))
+            .filter(Boolean)
+            .join(", ");
+          steps.push({
+            id: "plan",
+            label: "Building analysis plan",
+            status: "completed",
+            subtext:
+              planItems.length > 0
+                ? `${planItems.length} step${planItems.length !== 1 ? "s" : ""}${roleList ? `: ${roleList}` : ""}`
+                : undefined,
+          });
           seen.add("plan");
         }
         break;
@@ -68,7 +118,18 @@ function eventsToSteps(events: SseEvent[]): AgentStep[] {
       case "agent_started": {
         const stepId = `agent:${ev.agent_name}`;
         if (!seen.has(stepId)) {
-          steps.push({ id: stepId, label: `Analyzing with ${ev.agent_name}`, status: "running" });
+          const evRec = ev as Record<string, unknown>;
+          const inputSummary =
+            typeof evRec.input_summary === "string" ? evRec.input_summary.slice(0, 80) : undefined;
+          const startedAt =
+            typeof evRec.started_at === "string" ? evRec.started_at : undefined;
+          steps.push({
+            id: stepId,
+            label: `Running Agent: ${ev.agent_name}`,
+            status: "running",
+            startedAt,
+            subtext: inputSummary,
+          });
           seen.add(stepId);
         }
         break;
@@ -77,48 +138,76 @@ function eventsToSteps(events: SseEvent[]): AgentStep[] {
       case "agent_completed": {
         const stepId = `agent:${ev.agent_name}`;
         const existing = steps.find((s) => s.id === stepId);
+        const evRec = ev as Record<string, unknown>;
+        const timestamp = typeof evRec.timestamp === "string" ? evRec.timestamp : undefined;
         if (existing) {
           existing.status = "completed";
+          existing.completedAt = timestamp;
           if (ev.duration_ms) {
             existing.duration =
-              ev.duration_ms < 1000 ? `${ev.duration_ms}ms` : `${(ev.duration_ms / 1000).toFixed(1)}s`;
+              ev.duration_ms < 1000
+                ? `${ev.duration_ms}ms`
+                : `${(ev.duration_ms / 1000).toFixed(1)}s`;
+          }
+          const inputTok = evRec.input_tokens;
+          const outputTok = evRec.output_tokens;
+          const costUsd = evRec.cost_usd;
+          if (
+            typeof inputTok === "number" &&
+            typeof outputTok === "number" &&
+            typeof costUsd === "number"
+          ) {
+            existing.tokenCost = { inputTokens: inputTok, outputTokens: outputTok, costUsd };
           }
         } else if (!seen.has(`done:${ev.agent_name}`)) {
-          steps.push({ id: `done:${ev.agent_name}`, label: `Analysis complete`, status: "completed" });
+          steps.push({
+            id: `done:${ev.agent_name}`,
+            label: `Running Agent: ${ev.agent_name}`,
+            status: "completed",
+            completedAt: timestamp,
+            duration: ev.duration_ms
+              ? ev.duration_ms < 1000
+                ? `${ev.duration_ms}ms`
+                : `${(ev.duration_ms / 1000).toFixed(1)}s`
+              : undefined,
+          });
           seen.add(`done:${ev.agent_name}`);
         }
         break;
       }
 
       case "tool_started": {
-        const stepId = `tool:${ev.tool_name}`;
+        const stepId = `tool:${ev.tool_call_id}`;
         if (!seen.has(stepId)) {
-          steps.push({ id: stepId, label: `Retrieving data: ${ev.tool_name}`, status: "running" });
+          steps.push({ id: stepId, label: toolStepLabel(ev.tool_name), status: "running" });
           seen.add(stepId);
         }
         break;
       }
 
       case "tool_completed": {
-        const stepId = `tool:${ev.tool_name}`;
+        const stepId = `tool:${ev.tool_call_id}`;
         const existing = steps.find((s) => s.id === stepId);
         const status: AgentStepStatus = ev.status === "error" ? "failed" : "completed";
         if (existing) {
           existing.status = status;
-        } else if (!seen.has(`tdone:${ev.tool_name}`)) {
+        } else if (!seen.has(`tdone:${ev.tool_call_id}`)) {
           steps.push({
-            id: `tdone:${ev.tool_name}`,
-            label: ev.status === "error" ? "Data retrieval failed" : "Data retrieved",
+            id: `tdone:${ev.tool_call_id}`,
+            label:
+              ev.status === "error"
+                ? "Data retrieval failed"
+                : `Data loaded: ${toolStepLabel(ev.tool_name)}`,
             status,
           });
-          seen.add(`tdone:${ev.tool_name}`);
+          seen.add(`tdone:${ev.tool_call_id}`);
         }
         break;
       }
 
       case "response_ready":
         if (!seen.has("response")) {
-          steps.push({ id: "response", label: "Generating insights", status: "completed" });
+          steps.push({ id: "response", label: "Generating recommended actions", status: "completed" });
           seen.add("response");
         }
         break;
@@ -232,6 +321,18 @@ export default function AgentActivityPanel({ sessionId, usage }: Props): React.R
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [events]);
 
+  const sessionStartedAt = useMemo(() => {
+    const ev = events.find((e) => e.type === "query_received");
+    return ev ? (ev as { timestamp?: string }).timestamp ?? null : null;
+  }, [events]);
+
+  const sessionEndedAt = useMemo(() => {
+    const ev = [...events]
+      .reverse()
+      .find((e) => e.type === "response_ready" || e.type === "done");
+    return ev ? (ev as { timestamp?: string }).timestamp ?? null : null;
+  }, [events]);
+
   const steps = eventsToSteps(events);
 
   return (
@@ -272,6 +373,17 @@ export default function AgentActivityPanel({ sessionId, usage }: Props): React.R
       <div className="flex-1 overflow-y-auto px-4 pb-3 min-h-0">
         {steps.length > 0 && (
           <div>
+            {sessionStartedAt && (
+              <div className="flex items-center gap-1.5 mb-3 text-[10px] text-white/30">
+                <span className="w-1 h-1 rounded-full bg-white/20 shrink-0" />
+                Started{" "}
+                {new Date(sessionStartedAt).toLocaleTimeString([], {
+                  hour: "2-digit",
+                  minute: "2-digit",
+                  second: "2-digit",
+                })}
+              </div>
+            )}
             {steps.map((step, idx) => (
               <div key={step.id} className="relative flex items-start gap-2.5 pb-3">
                 {idx < steps.length - 1 && (
@@ -292,14 +404,46 @@ export default function AgentActivityPanel({ sessionId, usage }: Props): React.R
                   >
                     {step.label}
                   </span>
+                  {step.subtext && (
+                    <span className="block text-[10px] text-white/40 mt-0.5 leading-relaxed truncate">
+                      {step.subtext}
+                    </span>
+                  )}
                   {step.duration && (
                     <span className="block text-[10px] text-white/25 mt-0.5">
-                      Completed • {step.duration}
+                      Completed · {step.duration}
+                    </span>
+                  )}
+                  {step.tokenCost && (
+                    <span className="block text-[10px] text-white/25 mt-0.5 font-mono">
+                      {step.tokenCost.inputTokens.toLocaleString()} in ·{" "}
+                      {step.tokenCost.outputTokens.toLocaleString()} out ·{" "}
+                      <span className="text-emerald-600/60">
+                        ${step.tokenCost.costUsd.toFixed(4)}
+                      </span>
                     </span>
                   )}
                 </div>
               </div>
             ))}
+            {sessionEndedAt && (
+              <div className="flex items-center gap-1.5 mt-1 text-[10px] text-white/30">
+                <span className="w-1 h-1 rounded-full bg-emerald-400/50 shrink-0" />
+                Completed{" "}
+                {new Date(sessionEndedAt).toLocaleTimeString([], {
+                  hour: "2-digit",
+                  minute: "2-digit",
+                  second: "2-digit",
+                })}
+                {sessionStartedAt &&
+                  (() => {
+                    const diffMs =
+                      new Date(sessionEndedAt).getTime() -
+                      new Date(sessionStartedAt).getTime();
+                    return diffMs > 0 ? ` · ${(diffMs / 1000).toFixed(1)}s total` : null;
+                  })()}
+              </div>
+            )}
             <div ref={bottomRef} />
           </div>
         )}

@@ -5,6 +5,14 @@ export interface AgentStep {
   label: string;
   status: AgentStepStatus;
   duration?: string;
+  subtext?: string;
+  startedAt?: string;
+  completedAt?: string;
+  tokenCost?: {
+    inputTokens: number;
+    outputTokens: number;
+    costUsd: number;
+  };
 }
 
 export interface EvidenceSource {

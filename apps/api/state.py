@@ -20,7 +20,31 @@ from packages.tools import create_tool_registry
 logger = logging.getLogger(__name__)
 
 sessions: dict[str, dict[str, Any]] = {}
-sse_queues: dict[str, Queue[dict[str, Any]]] = {}
+
+
+class Broadcaster:
+    """Fan-out pub/sub so multiple /stream connections each get every event."""
+
+    def __init__(self) -> None:
+        self._subs: list[Queue[dict[str, Any]]] = []
+
+    async def put(self, event: dict[str, Any]) -> None:
+        for q in self._subs:
+            await q.put(event)
+
+    def subscribe(self) -> Queue[dict[str, Any]]:
+        q: Queue[dict[str, Any]] = Queue()
+        self._subs.append(q)
+        return q
+
+    def unsubscribe(self, q: Queue[dict[str, Any]]) -> None:
+        try:
+            self._subs.remove(q)
+        except ValueError:
+            pass
+
+
+broadcasters: dict[str, Broadcaster] = {}
 
 
 def _build_runner() -> AcaJobsRunner | InProcessJobRunner | CeleryJobRunner:
@@ -93,7 +117,7 @@ def make_event_persister(session_id: str) -> Callable[[dict[str, Any]], Any]:
     return _persister
 
 
-def get_orchestrator(sse_queue: Queue[dict[str, Any]]) -> SessionOrchestrator:
+def get_orchestrator(sse_queue: Any | None = None) -> SessionOrchestrator:
     api_key = os.environ.get("ANTHROPIC_API_KEY", "")
     if not api_key:
         raise RuntimeError("ANTHROPIC_API_KEY is not set — add it to .env")

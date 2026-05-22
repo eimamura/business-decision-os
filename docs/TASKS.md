@@ -175,3 +175,50 @@ Goal: Fix UX regressions and add admin tooling discovered after Phase 8 completi
 | PX-3 | Session deletion two-step confirmation: ··· → trash icon → confirm click | bdos-app-builder | Done | Clicking ··· shows trash; clicking trash deletes; mouse-leave cancels |
 | PX-4 | Fix `agent_steps_repo.py`: pass `datetime` objects to asyncpg instead of ISO strings | bdos-app-builder | Done | No more `expected datetime.datetime instance, got 'str'` warnings |
 | PX-5 | Admin bulk delete: `DELETE /api/v1/admin/sessions` endpoint + "Delete All Sessions" button in `/usage` | bdos-app-builder | Done | Button deletes all sessions and reloads stats |
+
+---
+
+## Phase 9 — Chat UI: Analysis Result Card Redesign
+
+Goal: Transform the AI response from a Markdown-table display into a structured Analysis Result Card UI.
+Supply chain decision UI — risk/findings/actions/evidence as structured components.
+
+### Batch 9-1 — Foundation: Types + Mock Data (Agent: App Builder)
+
+| ID | Task | Owner | Status | Done when |
+|---|---|---|---|---|
+| P9-1 | Create `apps/web/types/analysis.ts` — full type definitions for `InventoryShortageAnalysis`, `RiskLevel`, `AnalysisSummaryCard`, `RecommendedAction`, `RiskItem`, `RiskGroup` | bdos-app-builder | Done | `tsc --noEmit` passes; all types exported |
+| P9-2 | Create `apps/web/data/mockInventoryShortageAnalysis.ts` — full mock dataset for inventory shortage risk analysis | bdos-app-builder | Done | File importable; matches `InventoryShortageAnalysis` type |
+
+### Batch 9-2 — P0 Analysis Result Card (Agent: App Builder)
+
+| ID | Task | Owner | Status | Done when |
+|---|---|---|---|---|
+| P9-3 | Create `RiskSummaryCards.tsx` — 4-card KPI grid (Critical SKUs, High Risk SKUs, Top Driver, Action Required) with tone-based color coding | bdos-app-builder | Done | Cards render 4-across; critical=red, high=orange, warning=yellow, neutral=blue |
+| P9-4 | Create `RiskBreakdownSection.tsx` — Critical/High/Medium sections with SKU rows, location, days of supply, driver, and actions text | bdos-app-builder | Done | Three visually distinct risk sections render; Critical has strongest visual weight |
+| P9-5 | Create `RecommendedActionsPanel.tsx` — action list with priority badge, action text, optional metadata (owner/timing), `View action plan →` link | bdos-app-builder | Done | Actions render with Critical/High/Medium badges; at least 3 actions shown |
+| P9-6 | Create `ConfidencePanel.tsx` — confidence score with progress bar and label | bdos-app-builder | Done | Progress bar renders with correct width; label shows confidence level |
+| P9-7 | Create `DataUsedPanel.tsx` — data source chips with icon and name | bdos-app-builder | Done | Data sources render as styled chips |
+| P9-8 | Create `AnalysisResultCard.tsx` — top-level container orchestrating all sub-panels; header with title/status/duration/confidence; summary cards; 3-column middle; risk breakdown; footer | bdos-app-builder | Done | Full card renders with mock data; no Markdown tables visible |
+| P9-9 | Update `AnalysisCard.tsx` — detect `InventoryShortageAnalysis` JSON block in AI response and delegate to `AnalysisResultCard`; fall back to existing Markdown parser for other formats | bdos-app-builder | Done | Messages with JSON analysis block render as `AnalysisResultCard`; other messages unchanged |
+
+### Batch 9-3 — P0 Side Panel + Scrollbar (Agent: App Builder)
+
+| ID | Task | Owner | Status | Done when |
+|---|---|---|---|---|
+| P9-10 | Update `EvidenceSources.tsx` — show mock data sources when events are empty; add freshness column and icon per row; maintain `Used` badge | bdos-app-builder | Done | Right panel shows 4 data sources even with no SSE events |
+| P9-11 | Update `AgentActivityPanel.tsx` — replace abstract step labels with business-context labels: "Understanding request", "Loading inventory data", "Checking demand forecast", "Calculating days of supply", "Identifying shortage risk", "Generating recommended actions" | bdos-app-builder | Done | Step labels are business-context; no "Analysis complete" duplicates |
+| P9-12 | Add custom dark scrollbar CSS to `apps/web/app/globals.css` and apply `.custom-scrollbar` to main chat area and right panel | bdos-app-builder | Done | White scrollbar gone; dark translucent scrollbar visible on scroll |
+
+### Batch 9-4 — P1 Layout + Polish (Agent: App Builder)
+
+| ID | Task | Owner | Status | Done when |
+|---|---|---|---|---|
+| P9-13 | Update `ChatSidebar.tsx` session items — title max 2 lines (`line-clamp-2`); full title in `title` attribute; date/time visible; active session with purple left border | bdos-app-builder | Done | Session titles wrap to 2 lines; truncate after that; timestamp visible |
+| P9-14 | Header state improvement — active session shows session title; empty state shows welcome header | bdos-app-builder | Done | Header displays session title when messages exist; welcome text when empty |
+
+### Batch 9-5 — Validation (Agent: Test/Review)
+
+| ID | Task | Owner | Status | Done when |
+|---|---|---|---|---|
+| P9-15 | TypeScript + lint validation for all Phase 9 changes; add `.eslintrc.json` + `"lint"` script; fix pre-existing hook-after-return error in `MessageBubble.tsx` | bdos-test-review | Done | `tsc --noEmit` exits 0; `next lint` exits 0 (3 pre-existing useEffect warnings, no errors) |

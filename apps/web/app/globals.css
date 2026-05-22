@@ -18,3 +18,32 @@ body {
   background: radial-gradient(ellipse at 50% 0%, rgba(124, 58, 237, 0.08) 0%, #070B14 60%);
   min-height: 100vh;
 }
+
+html {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(148, 163, 184, 0.20) transparent;
+}
+
+/* Custom dark scrollbar */
+.custom-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(148, 163, 184, 0.28) transparent;
+}
+
+.custom-scrollbar::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.24);
+  border-radius: 999px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(148, 163, 184, 0.38);
+}

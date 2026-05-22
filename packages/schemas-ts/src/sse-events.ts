@@ -50,6 +50,10 @@ export const AgentCompletedEventSchema = z.object({
   duration_ms: z.number().int(),
   output_summary: z.string().nullable().optional(),
   timestamp: z.string(),
+  // token cost for this agent invocation
+  input_tokens: z.number().int().nullable().optional(),
+  output_tokens: z.number().int().nullable().optional(),
+  cost_usd: z.number().nullable().optional(),
 });
 
 export const ToolStartedEventSchema = z.object({

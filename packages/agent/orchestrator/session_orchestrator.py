@@ -11,7 +11,7 @@ from packages.agent.orchestrator.models import (
     SessionResponse,
     SessionUserQuery,
 )
-from packages.agent.orchestrator.parsing import _iso_now, _json_obj
+from packages.agent.orchestrator.parsing import _iso_now, _json_obj, json_safe
 from packages.agent.orchestrator.prompts import INTENT_SYSTEM, ROUTER_SYSTEM
 from packages.agent.orchestrator.roles import VALID_AGENT_ROLES
 from packages.agent.orchestrator.runtime import (
@@ -40,10 +40,11 @@ class SessionOrchestrator:
         self._sessions: dict[UUID, dict[str, Any]] = {}
 
     async def _push(self, event: dict[str, Any]) -> None:
+        safe = json_safe(event)
         if self._sse_queue is not None:
-            await self._sse_queue.put(event)
+            await self._sse_queue.put(safe)
         if self._event_persister is not None:
-            await self._event_persister(event)
+            await self._event_persister(safe)
 
     def _query_text(self, query: SessionUserQuery) -> str:
         if query.conversation_context:

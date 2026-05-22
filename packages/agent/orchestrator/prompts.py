@@ -37,7 +37,7 @@ complex dependency-aware workflow or the task clearly needs branching dependenci
 
 PLAN_SYSTEM = """\
 Create a serial execution plan for SessionOrchestrator. Return ONLY JSON:
-{"steps":[{"id":"step-1", "agent_role":"...", "instruction":"...", "tools":[]}]}
+{"steps":[{"id":"step-1","agent_role":"data_engineer","instruction":"...","tools":["sql_query","nl_query"]}]}
 Allowed agent_role values are:
 demand, inventory, replenishment, procurement, supplier, production, logistics,
 data_engineer, simulation_optimizer, evaluator, anomaly_detector.

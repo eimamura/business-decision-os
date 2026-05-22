@@ -14,5 +14,5 @@ async def get_pool() -> asyncpg.Pool:
         if not raw:
             raise RuntimeError("DATABASE_URL not set")
         url = raw.replace("postgresql+asyncpg://", "postgresql://")
-        _pool = await asyncpg.create_pool(url)
+        _pool = await asyncpg.create_pool(url, command_timeout=10)
     return _pool

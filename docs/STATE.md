@@ -6,7 +6,7 @@ Orchestrator execution state. Written only by bdos-orchestrator.
 
 ## Active Phase
 
-Post-Phase 8 — Ad-hoc UX Fixes & Admin Improvements
+Phase 9 — Chat UI: Analysis Result Card Redesign (COMPLETE)
 
 ## Active Lease
 
@@ -14,23 +14,25 @@ None.
 
 ## Last Completed Batch
 
-Phase 8 — UX: Design Spec Alignment (all tasks P8-1 through P8-8 complete).
+Phase 9 — Chat UI: Analysis Result Card Redesign (all tasks P9-1 through P9-15 complete, 2026-05-22).
 
-Post-Phase 8 ad-hoc fixes (2026-05-22):
-- `/chat` route: route to most recent session; create new only if 0 sessions exist
-- Session deletion: two-step confirmation UI (··· → trash icon → confirm)
-- asyncpg datetime bug fix in `agent_steps_repo.py`
-- Bulk session delete: `DELETE /api/v1/admin/sessions` + `/usage` page button
-- React 18 Strict Mode double-create fix (`useRef` guard in `ChatListPage`)
+Changes delivered:
+- New types: `apps/web/types/analysis.ts` (InventoryShortageAnalysis, RiskLevel, etc.)
+- New mock data: `apps/web/data/mockInventoryShortageAnalysis.ts`
+- New components: RiskSummaryCards, RiskBreakdownSection, RecommendedActionsPanel, ConfidencePanel, DataUsedPanel, AnalysisResultCard
+- Updated AnalysisCard: JSON-block detection → AnalysisResultCard; Markdown fallback unchanged
+- Updated EvidenceSources: default 4 data sources when no SSE events
+- Updated AgentActivityPanel: business-context step labels
+- globals.css: custom dark scrollbar CSS
+- page.tsx: custom-scrollbar class applied; header h1 hidden on empty state
+- ChatSidebar: session titles line-clamp-2 with title attribute
+- MessageBubble: fixed hook-after-return lint error
+- ESLint: .eslintrc.json + lint script added to package.json
 
 ## Last Validation
 
-pytest: 213 passed, 3 pre-existing failures (pool isolation — pre-existing)
-mypy: 0 new errors
-ruff: 0 new errors
-tag v2-complete: applied
-
-tsc (apps/web): 0 errors (Post-Phase 8 fixes validated 2026-05-22)
+tsc (apps/web): 0 errors (Phase 9 validated 2026-05-22)
+next lint: 0 errors (3 pre-existing useEffect warnings — not introduced by Phase 9)
 
 ## Phase 6 Status: COMPLETE
 

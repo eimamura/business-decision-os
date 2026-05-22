@@ -56,6 +56,10 @@ class AgentCompletedEvent(BaseModel):
     duration_ms: int = 0
     output_summary: str | None = None
     timestamp: str
+    # token cost for this agent invocation
+    input_tokens: int | None = None
+    output_tokens: int | None = None
+    cost_usd: float | None = None
 
 
 class ToolStartedEvent(BaseModel):

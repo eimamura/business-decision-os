@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { SlidersHorizontal, ChevronDown, Mic } from "lucide-react";
+import { SlidersHorizontal, ChevronDown, Mic, BrainCircuit } from "lucide-react";
 import AgentActivityPanel from "@/components/agent/AgentActivityPanel";
 import QuickActionGrid from "@/components/analysis/QuickActionGrid";
 import MessageBubble from "@/components/MessageBubble";
@@ -21,7 +21,7 @@ export default function ChatPage({ params }: ChatPageProps) {
   const [sessions, setSessions] = useState<Session[]>([]);
   const [creating, setCreating] = useState(false);
   const [input, setInput] = useState("");
-  const [showActivity, setShowActivity] = useState(false);
+  const [showActivity, setShowActivity] = useState(true);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const { messages, isSending, usage, loadMessages, sendMessage, submitFeedback } = useChat(
@@ -108,11 +108,16 @@ export default function ChatPage({ params }: ChatPageProps) {
 
       <div className="flex-1 flex flex-col min-w-0">
         <header className="bg-[#0B1020] border-b border-white/8 px-5 py-3 flex items-center justify-between shrink-0">
-          <h1 className="text-sm font-semibold text-white/80 truncate">
-            {activeSession?.title ?? activeSession?.goal ?? (
-              <span className="text-white/25 font-normal font-mono text-xs">{sessionId}</span>
-            )}
-          </h1>
+          {!isEmpty && (
+            <div className="flex items-center gap-2 min-w-0">
+              <BrainCircuit size={15} className="shrink-0 text-indigo-400" />
+              <h1 className="text-sm font-semibold text-white/80 truncate">
+                {activeSession?.title ?? activeSession?.goal ?? (
+                  <span className="text-white/25 font-normal font-mono text-xs">{sessionId}</span>
+                )}
+              </h1>
+            </div>
+          )}
           <button
             onClick={() => setShowActivity((p) => !p)}
             className={`text-xs px-3 py-1.5 rounded-md border font-medium transition-all ${
@@ -127,11 +132,11 @@ export default function ChatPage({ params }: ChatPageProps) {
 
         <main className="flex-1 flex min-h-0">
           <div className="flex-1 flex flex-col min-w-0">
-            <div className="flex-1 overflow-y-auto px-6 py-5 min-h-0">
+            <div className="flex-1 overflow-y-auto px-6 py-5 min-h-0 custom-scrollbar">
               {isEmpty ? (
-                <div className="flex flex-col h-full gap-8">
+                <div className="flex flex-col h-full gap-6">
                   {/* Empty state header */}
-                  <div className="flex items-start justify-between">
+                  <div className="flex items-start justify-between pt-2">
                     <div className="flex flex-col gap-1.5">
                       <h2 className="text-xl font-semibold text-white/90">
                         What do you want to analyze today?
@@ -164,17 +169,9 @@ export default function ChatPage({ params }: ChatPageProps) {
             </div>
 
             <div className="shrink-0 border-t border-white/8 bg-[#0B1020] px-5 pt-3 pb-4">
-              <div className="flex gap-2 items-end">
-                <button
-                  disabled
-                  title="Add context (coming soon)"
-                  className="shrink-0 flex items-center gap-1 px-3 py-2.5 rounded-xl bg-white/4 border border-white/8 text-xs text-white/30 cursor-not-allowed"
-                >
-                  <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M12 5v14M5 12h14" />
-                  </svg>
-                  Context
-                </button>
+              {/* Composer panel */}
+              <div className="rounded-2xl bg-gradient-to-b from-white/[0.04] to-[#070B14] border border-white/10 focus-within:border-indigo-500/40 focus-within:ring-1 focus-within:ring-indigo-500/15 transition-all">
+                {/* Top row: textarea */}
                 <textarea
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
@@ -186,35 +183,54 @@ export default function ChatPage({ params }: ChatPageProps) {
                   }}
                   placeholder="Ask about forecast, inventory, OTIF, demand changes, or recommended actions..."
                   rows={2}
-                  className="flex-1 resize-none rounded-xl bg-[#070B14] border border-white/10 px-4 py-2.5 text-sm text-white/85 placeholder:text-white/35 focus:outline-none focus:border-indigo-500/50 focus:ring-2 focus:ring-indigo-500/15 transition-all"
+                  className="w-full resize-none bg-transparent border-none outline-none px-4 pt-3 pb-2 text-sm text-white/85 placeholder:text-white/35 focus:outline-none"
                 />
-                <button
-                  disabled
-                  title="Voice input (coming soon)"
-                  className="shrink-0 p-2.5 rounded-xl bg-white/4 border border-white/8 text-white/25 cursor-not-allowed"
-                >
-                  <Mic size={16} />
-                </button>
-                <button
-                  onClick={handleSend}
-                  disabled={isSending || !input.trim()}
-                  className="shrink-0 flex items-center gap-1.5 bg-indigo-600 text-white px-4 py-2.5 rounded-xl text-sm font-medium hover:bg-indigo-500 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-                >
-                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <line x1="22" y1="2" x2="11" y2="13" />
-                    <polygon points="22 2 15 22 11 13 2 9 22 2" />
-                  </svg>
-                  Send
-                </button>
+                {/* Bottom row: actions */}
+                <div className="flex items-center justify-between px-3 pb-2.5">
+                  {/* Left: Add context */}
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      disabled
+                      title="Add context (coming soon)"
+                      className="flex items-center justify-center w-6 h-6 rounded-md bg-white/5 border border-white/8 text-white/30 cursor-not-allowed"
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M12 5v14M5 12h14" />
+                      </svg>
+                    </button>
+                    <span className="text-xs text-white/25 select-none">Add context</span>
+                  </div>
+                  {/* Right: mic + send */}
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      disabled
+                      title="Voice input (coming soon)"
+                      className="flex items-center justify-center w-8 h-8 rounded-lg bg-white/4 border border-white/8 text-white/25 cursor-not-allowed"
+                    >
+                      <Mic size={15} />
+                    </button>
+                    <button
+                      onClick={handleSend}
+                      disabled={isSending || !input.trim()}
+                      className="flex items-center gap-1.5 bg-indigo-600 text-white px-3 py-1.5 rounded-lg text-sm font-medium hover:bg-indigo-500 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <line x1="22" y1="2" x2="11" y2="13" />
+                        <polygon points="22 2 15 22 11 13 2 9 22 2" />
+                      </svg>
+                      Send
+                    </button>
+                  </div>
+                </div>
               </div>
-              <p className="text-xs text-white/30 text-center mt-2">
+              <p className="text-xs text-white/25 text-center mt-1.5">
                 AI can make mistakes. Verify important information.
               </p>
             </div>
           </div>
 
           {showActivity && (
-            <div className="w-80 shrink-0 border-l border-white/8 bg-[#0B1020] overflow-hidden flex flex-col">
+            <div className="w-80 shrink-0 border-l border-white/8 bg-[#0B1020] overflow-hidden flex flex-col custom-scrollbar">
               <AgentActivityPanel sessionId={sessionId} usage={usage} />
             </div>
           )}

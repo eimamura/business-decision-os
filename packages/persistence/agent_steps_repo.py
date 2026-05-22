@@ -57,7 +57,7 @@ class AgentStepsRepository:
     async def update_ended(
         self,
         step_id: str,
-        ended_at: str,
+        ended_at: datetime,
         output_json: dict[str, Any] | None = None,
     ) -> None:
         pool = await get_pool()
@@ -69,6 +69,6 @@ class AgentStepsRepository:
                 WHERE id = $1
                 """,
                 uuid.UUID(step_id),
-                datetime.fromisoformat(ended_at),
+                ended_at,
                 json.dumps(output_json) if output_json is not None else None,
             )

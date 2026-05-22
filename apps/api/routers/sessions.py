@@ -11,7 +11,7 @@ from fastapi import APIRouter, HTTPException, Request, status
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
-from apps.api.state import get_orchestrator, make_event_persister, sessions, sse_queues
+from apps.api.state import Broadcaster, broadcasters, get_orchestrator, make_event_persister, sessions
 from packages.agent.history import compress_history
 from packages.agent.orchestrator import SessionResponse, SessionUserQuery
 from packages.agent.rate_limiter import RateLimitExceeded, check_rate_limit
@@ -272,8 +272,8 @@ async def post_message(
     except Exception:
         _log.warning("DB unavailable; skipping user message persist for %s", session_id)
 
-    queue: asyncio.Queue[dict[str, Any]] = asyncio.Queue()
-    sse_queues[session_id] = queue
+    queue = Broadcaster()
+    broadcasters[session_id] = queue
 
     conversation_context: str | None = None
     try:
@@ -312,18 +312,18 @@ async def post_message(
                 "content": reply,
                 "created_at": _iso_now(),
             })
-            try:
-                await repo.add_message(session_id, role="assistant", content=reply)
-            except Exception:
-                _log.warning(
-                    "DB unavailable; skipping assistant message persist for %s", session_id
-                )
             await queue.put({
                 "type": "done",
                 "session_id": session_id,
                 "reply": reply,
                 "timestamp": _iso_now(),
             })
+            try:
+                await repo.add_message(session_id, role="assistant", content=reply)
+            except Exception:
+                _log.warning(
+                    "DB unavailable; skipping assistant message persist for %s", session_id
+                )
 
     asyncio.create_task(_run_and_signal())
 
@@ -362,8 +362,8 @@ async def stream_session(session_id: str) -> StreamingResponse:
         max_wait = 300
         elapsed = 0
         while elapsed < max_wait:
-            queue = sse_queues.get(session_id)
-            if queue:
+            broadcaster = broadcasters.get(session_id)
+            if broadcaster:
                 break
             yield ": heartbeat\n\n"
             await asyncio.sleep(1.0)
@@ -371,14 +371,18 @@ async def stream_session(session_id: str) -> StreamingResponse:
         else:
             return
 
-        while True:
-            try:
-                event = await asyncio.wait_for(queue.get(), timeout=30.0)
-                yield f"data: {json.dumps(event)}\n\n"
-                if event.get("type") == "done":
-                    break
-            except asyncio.TimeoutError:
-                yield ": keepalive\n\n"
+        sub_queue = broadcaster.subscribe()
+        try:
+            while True:
+                try:
+                    event = await asyncio.wait_for(sub_queue.get(), timeout=30.0)
+                    yield f"data: {json.dumps(event)}\n\n"
+                    if event.get("type") == "done":
+                        break
+                except asyncio.TimeoutError:
+                    yield ": keepalive\n\n"
+        finally:
+            broadcaster.unsubscribe(sub_queue)
 
     return StreamingResponse(
         event_generator(),

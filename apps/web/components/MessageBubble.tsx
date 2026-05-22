@@ -1,12 +1,12 @@
 "use client";
 
-import { useState } from "react";
 import dynamic from "next/dynamic";
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeSanitize from "rehype-sanitize";
 import type { ChatMessage } from "@/types/chat";
 import AnalysisCard, { isAnalysisCard } from "./analysis/AnalysisCard";
+import FeedbackBar from "./FeedbackBar";
 
 interface SyntaxHighlighterProps {
   language: string;
@@ -162,107 +162,83 @@ export default function MessageBubble({ message, onFeedback }: MessageBubbleProp
 
   if (message.role === "assistant" && !message.isError && isAnalysisCard(message.content)) {
     return (
-      <div className="flex justify-start">
-        <div className="w-7 h-7 rounded-full bg-[#0c0c14] flex items-center justify-center mr-3 mt-1 shrink-0">
-          <span className="text-[10px] text-white font-bold tracking-tight">AI</span>
+      <div className="flex flex-col items-start">
+        <div className="flex justify-start w-full">
+          <div className="w-7 h-7 rounded-full bg-[#0c0c14] flex items-center justify-center mr-3 mt-1 shrink-0">
+            <span className="text-[10px] text-white font-bold tracking-tight">AI</span>
+          </div>
+          <AnalysisCard message={message} />
         </div>
-        <AnalysisCard message={message} onFeedback={onFeedback} />
+        {!message.isStreaming && message.messageId && onFeedback && (
+          <FeedbackBar
+            messageId={message.messageId}
+            feedback={message.feedback}
+            onFeedback={onFeedback}
+          />
+        )}
       </div>
     );
   }
 
   const isUser = message.role === "user";
-  const [justClicked, setJustClicked] = useState<1 | -1 | null>(null);
 
-  function handleFeedback(value: 1 | -1) {
-    if (!message.messageId) return;
-    setJustClicked(value);
-    onFeedback?.(message.messageId, value);
-  }
-
-  return (
-    <div className={`flex ${isUser ? "justify-end" : "justify-start"}`}>
-      {!isUser && (
-        <div className="w-7 h-7 rounded-full bg-[#0c0c14] flex items-center justify-center mr-3 mt-1 shrink-0">
-          <span className="text-[10px] text-white font-bold tracking-tight">AI</span>
+  if (isUser) {
+    return (
+      <div className="flex justify-end">
+        <div className="max-w-[78%] flex flex-col items-end">
+          <div className="rounded-2xl px-4 py-2.5 text-sm bg-indigo-600 text-white rounded-tr-sm">
+            <p className="leading-relaxed whitespace-pre-wrap">{message.content}</p>
+          </div>
+          {message.created_at && (
+            <p className="text-xs mt-1 text-indigo-300">
+              {new Date(message.created_at).toLocaleTimeString()}
+            </p>
+          )}
         </div>
-      )}
-
-      <div className={`max-w-[78%] flex flex-col ${isUser ? "items-end" : "items-start"}`}>
-        <div
-          className={`rounded-2xl px-4 py-2.5 text-sm ${
-            isUser
-              ? "bg-indigo-600 text-white rounded-tr-sm"
-              : `bg-[#1a1a2a] rounded-tl-sm ${
-                  message.isError ? "text-red-400" : "text-white/80"
-                }`
-          }`}
-        >
-          {message.content ? (
-            isUser ? (
-              <p className="leading-relaxed whitespace-pre-wrap">{message.content}</p>
-            ) : (
-              <div className="min-w-0 max-w-full overflow-hidden leading-relaxed">
-                <AssistantMarkdown content={message.content} />
-              </div>
-            )
-          ) : message.isStreaming ? (
-            <div className="flex gap-1.5 items-center py-0.5">
-              <span className="w-1.5 h-1.5 bg-indigo-400 rounded-full animate-bounce" style={{ animationDelay: "0ms" }} />
-              <span className="w-1.5 h-1.5 bg-indigo-400 rounded-full animate-bounce" style={{ animationDelay: "150ms" }} />
-              <span className="w-1.5 h-1.5 bg-indigo-400 rounded-full animate-bounce" style={{ animationDelay: "300ms" }} />
-            </div>
-          ) : null}
-        </div>
-
-        {message.created_at && (
-          <p className={`text-xs mt-1 ${isUser ? "text-indigo-300" : "text-white/45"}`}>
-            {new Date(message.created_at).toLocaleTimeString()}
-          </p>
-        )}
-      </div>
-
-      {isUser && (
         <div className="w-7 h-7 rounded-full bg-indigo-100 flex items-center justify-center ml-3 mt-1 shrink-0">
           <span className="text-xs text-indigo-600 font-medium">U</span>
         </div>
-      )}
+      </div>
+    );
+  }
 
-      {!isUser && !message.isStreaming && message.messageId && onFeedback && (
-        <div className="flex gap-2 mt-1 ml-2">
-          <button
-            onClick={() => {
-              handleFeedback(1);
-              setTimeout(() => setJustClicked(null), 600);
-            }}
-            className={`text-base leading-none transition-all active:scale-125 ${
-              justClicked === 1 ? "scale-125" : ""
-            } ${
-              message.feedback === 1
-                ? "text-emerald-500"
-                : "text-gray-400 hover:text-emerald-500"
-            }`}
-            aria-label="Good answer"
-          >
-            👍
-          </button>
-          <button
-            onClick={() => {
-              handleFeedback(-1);
-              setTimeout(() => setJustClicked(null), 600);
-            }}
-            className={`text-base leading-none transition-all active:scale-125 ${
-              justClicked === -1 ? "scale-125" : ""
-            } ${
-              message.feedback === -1
-                ? "text-rose-500"
-                : "text-gray-400 hover:text-rose-500"
-            }`}
-            aria-label="Bad answer"
-          >
-            👎
-          </button>
+  return (
+    <div className="flex flex-col items-start">
+      <div className="flex justify-start w-full">
+        <div className="w-7 h-7 rounded-full bg-[#0c0c14] flex items-center justify-center mr-3 mt-1 shrink-0">
+          <span className="text-[10px] text-white font-bold tracking-tight">AI</span>
         </div>
+        <div className="max-w-[78%] flex flex-col items-start">
+          <div
+            className={`rounded-2xl px-4 py-2.5 text-sm bg-[#1a1a2a] rounded-tl-sm ${
+              message.isError ? "text-red-400" : "text-white/80"
+            }`}
+          >
+            {message.content ? (
+              <div className="min-w-0 max-w-full overflow-hidden leading-relaxed">
+                <AssistantMarkdown content={message.content} />
+              </div>
+            ) : message.isStreaming ? (
+              <div className="flex gap-1.5 items-center py-0.5">
+                <span className="w-1.5 h-1.5 bg-indigo-400 rounded-full animate-bounce" style={{ animationDelay: "0ms" }} />
+                <span className="w-1.5 h-1.5 bg-indigo-400 rounded-full animate-bounce" style={{ animationDelay: "150ms" }} />
+                <span className="w-1.5 h-1.5 bg-indigo-400 rounded-full animate-bounce" style={{ animationDelay: "300ms" }} />
+              </div>
+            ) : null}
+          </div>
+          {message.created_at && (
+            <p className="text-xs mt-1 text-white/45">
+              {new Date(message.created_at).toLocaleTimeString()}
+            </p>
+          )}
+        </div>
+      </div>
+      {!message.isStreaming && message.messageId && onFeedback && (
+        <FeedbackBar
+          messageId={message.messageId}
+          feedback={message.feedback}
+          onFeedback={onFeedback}
+        />
       )}
     </div>
   );
