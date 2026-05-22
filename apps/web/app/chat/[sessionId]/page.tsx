@@ -2,11 +2,13 @@
 
 import { useEffect, useRef, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import EventLog from "./components/EventLog";
+import { SlidersHorizontal, ChevronDown, Mic } from "lucide-react";
+import AgentActivityPanel from "@/components/agent/AgentActivityPanel";
+import QuickActionGrid from "@/components/analysis/QuickActionGrid";
 import MessageBubble from "@/components/MessageBubble";
 import { useChat } from "@/hooks/useChat";
 import ChatSidebar from "@/components/ChatSidebar";
-import { fetchSessions, createSession, deleteSession } from "@/lib/api";
+import { fetchSessions, fetchSession, createSession, deleteSession } from "@/lib/api";
 import type { Session } from "@/types/chat";
 
 interface ChatPageProps {
@@ -19,7 +21,7 @@ export default function ChatPage({ params }: ChatPageProps) {
   const [sessions, setSessions] = useState<Session[]>([]);
   const [creating, setCreating] = useState(false);
   const [input, setInput] = useState("");
-  const [showReasoning, setShowReasoning] = useState(false);
+  const [showActivity, setShowActivity] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const { messages, isSending, usage, loadMessages, sendMessage, submitFeedback } = useChat(
@@ -34,6 +36,12 @@ export default function ChatPage({ params }: ChatPageProps) {
   const activeSession = sessions.find((s) => s.session_id === sessionId);
 
   useEffect(() => {
+    fetchSession(sessionId)
+      .then((session) => {
+        if (session === null) router.replace("/chat");
+      })
+      .catch(() => undefined);
+
     fetchSessions()
       .then(setSessions)
       .catch(() => setSessions([]));
@@ -49,7 +57,7 @@ export default function ChatPage({ params }: ChatPageProps) {
     function handleKey(e: KeyboardEvent) {
       if ((e.metaKey || e.ctrlKey) && e.key === ".") {
         e.preventDefault();
-        setShowReasoning((p) => !p);
+        setShowActivity((p) => !p);
       }
     }
     window.addEventListener("keydown", handleKey);
@@ -82,11 +90,14 @@ export default function ChatPage({ params }: ChatPageProps) {
     const text = input.trim();
     if (!text || isSending) return;
     setInput("");
+    setShowActivity(true);
     await sendMessage(text);
   }, [input, isSending, sendMessage]);
 
+  const isEmpty = messages.length === 0;
+
   return (
-    <div className="flex h-screen bg-[#0c0c14] overflow-hidden">
+    <div className="flex h-screen bg-[#070B14] overflow-hidden">
       <ChatSidebar
         sessions={sessions}
         activeSessionId={sessionId}
@@ -96,39 +107,74 @@ export default function ChatPage({ params }: ChatPageProps) {
       />
 
       <div className="flex-1 flex flex-col min-w-0">
-        <header className="bg-[#13131e] border-b border-white/8 px-5 py-3 flex items-center justify-between shrink-0">
+        <header className="bg-[#0B1020] border-b border-white/8 px-5 py-3 flex items-center justify-between shrink-0">
           <h1 className="text-sm font-semibold text-white/80 truncate">
-            {activeSession?.title || activeSession?.goal || <span className="text-white/25 font-normal font-mono text-xs">{sessionId}</span>}
+            {activeSession?.title ?? activeSession?.goal ?? (
+              <span className="text-white/25 font-normal font-mono text-xs">{sessionId}</span>
+            )}
           </h1>
           <button
-            onClick={() => setShowReasoning((p) => !p)}
+            onClick={() => setShowActivity((p) => !p)}
             className={`text-xs px-3 py-1.5 rounded-md border font-medium transition-all ${
-              showReasoning
+              showActivity
                 ? "bg-indigo-500 text-white border-indigo-500"
                 : "bg-transparent text-white/40 border-white/10 hover:text-white/70 hover:border-white/20"
             }`}
           >
-            Reasoning <kbd className="ml-1 opacity-50 font-mono">⌘.</kbd>
+            Agent Activity <kbd className="ml-1 opacity-50 font-mono">⌘.</kbd>
           </button>
         </header>
 
         <main className="flex-1 flex min-h-0">
           <div className="flex-1 flex flex-col min-w-0">
-            <div className="flex-1 overflow-y-auto px-6 py-5 space-y-4">
-              {messages.length === 0 && (
-                <div className="flex flex-col items-center justify-center h-full pb-16 text-center gap-2">
-                  <p className="text-sm font-medium text-white/60">Start a decision analysis</p>
-                  <p className="text-xs text-white/50">Ask a supply chain question below.</p>
+            <div className="flex-1 overflow-y-auto px-6 py-5 min-h-0">
+              {isEmpty ? (
+                <div className="flex flex-col h-full gap-8">
+                  {/* Empty state header */}
+                  <div className="flex items-start justify-between">
+                    <div className="flex flex-col gap-1.5">
+                      <h2 className="text-xl font-semibold text-white/90">
+                        What do you want to analyze today?
+                      </h2>
+                      <p className="text-sm text-white/50">
+                        Ask anything about your supply chain. I&apos;ll analyze data and provide actionable insights.
+                      </p>
+                    </div>
+                    <button
+                      disabled
+                      title="Configure Agent (coming soon)"
+                      className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-white/10 bg-white/4 text-xs text-white/40 cursor-not-allowed"
+                    >
+                      <SlidersHorizontal size={13} />
+                      Configure Agent
+                      <ChevronDown size={12} className="opacity-60" />
+                    </button>
+                  </div>
+                  {/* Quick action cards */}
+                  <QuickActionGrid onSelect={(prompt) => setInput(prompt)} />
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {messages.map((msg) => (
+                    <MessageBubble key={msg.id} message={msg} onFeedback={submitFeedback} />
+                  ))}
+                  <div ref={messagesEndRef} />
                 </div>
               )}
-              {messages.map((msg) => (
-                <MessageBubble key={msg.id} message={msg} onFeedback={submitFeedback} />
-              ))}
-              <div ref={messagesEndRef} />
             </div>
 
-            <div className="shrink-0 border-t border-white/8 bg-[#13131e] px-5 py-3">
+            <div className="shrink-0 border-t border-white/8 bg-[#0B1020] px-5 pt-3 pb-4">
               <div className="flex gap-2 items-end">
+                <button
+                  disabled
+                  title="Add context (coming soon)"
+                  className="shrink-0 flex items-center gap-1 px-3 py-2.5 rounded-xl bg-white/4 border border-white/8 text-xs text-white/30 cursor-not-allowed"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M12 5v14M5 12h14" />
+                  </svg>
+                  Context
+                </button>
                 <textarea
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
@@ -138,10 +184,17 @@ export default function ChatPage({ params }: ChatPageProps) {
                       handleSend();
                     }
                   }}
-                  placeholder="Ask a supply chain question…"
+                  placeholder="Ask about forecast, inventory, OTIF, demand changes, or recommended actions..."
                   rows={2}
-                  className="flex-1 resize-none rounded-xl bg-[#0c0c14] border border-white/10 px-4 py-2.5 text-sm text-white/85 placeholder:text-white/40 focus:outline-none focus:border-indigo-500/50 focus:ring-2 focus:ring-indigo-500/15 transition-all"
+                  className="flex-1 resize-none rounded-xl bg-[#070B14] border border-white/10 px-4 py-2.5 text-sm text-white/85 placeholder:text-white/35 focus:outline-none focus:border-indigo-500/50 focus:ring-2 focus:ring-indigo-500/15 transition-all"
                 />
+                <button
+                  disabled
+                  title="Voice input (coming soon)"
+                  className="shrink-0 p-2.5 rounded-xl bg-white/4 border border-white/8 text-white/25 cursor-not-allowed"
+                >
+                  <Mic size={16} />
+                </button>
                 <button
                   onClick={handleSend}
                   disabled={isSending || !input.trim()}
@@ -154,15 +207,15 @@ export default function ChatPage({ params }: ChatPageProps) {
                   Send
                 </button>
               </div>
+              <p className="text-xs text-white/30 text-center mt-2">
+                AI can make mistakes. Verify important information.
+              </p>
             </div>
           </div>
 
-          {showReasoning && (
-            <div className="w-80 shrink-0 border-l border-white/8 bg-[#13131e] overflow-hidden">
-              <EventLog
-                sessionId={sessionId}
-                usage={usage}
-              />
+          {showActivity && (
+            <div className="w-80 shrink-0 border-l border-white/8 bg-[#0B1020] overflow-hidden flex flex-col">
+              <AgentActivityPanel sessionId={sessionId} usage={usage} />
             </div>
           )}
         </main>

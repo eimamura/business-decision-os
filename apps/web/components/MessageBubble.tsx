@@ -6,6 +6,7 @@ import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeSanitize from "rehype-sanitize";
 import type { ChatMessage } from "@/types/chat";
+import AnalysisCard, { isAnalysisCard } from "./analysis/AnalysisCard";
 
 interface SyntaxHighlighterProps {
   language: string;
@@ -157,6 +158,17 @@ function SqlQueryBubble({ message }: { message: ChatMessage }) {
 export default function MessageBubble({ message, onFeedback }: MessageBubbleProps) {
   if (message.role === "tool") {
     return <SqlQueryBubble message={message} />;
+  }
+
+  if (message.role === "assistant" && !message.isError && isAnalysisCard(message.content)) {
+    return (
+      <div className="flex justify-start">
+        <div className="w-7 h-7 rounded-full bg-[#0c0c14] flex items-center justify-center mr-3 mt-1 shrink-0">
+          <span className="text-[10px] text-white font-bold tracking-tight">AI</span>
+        </div>
+        <AnalysisCard message={message} onFeedback={onFeedback} />
+      </div>
+    );
   }
 
   const isUser = message.role === "user";

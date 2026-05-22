@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useRef, useState } from "react";
-import { fetchMessages, postMessage, setFeedback, streamSession, updateSessionTitle } from "@/lib/api";
+import { fetchMessages, fetchSessionUsage, postMessage, setFeedback, streamSession, updateSessionTitle } from "@/lib/api";
 import type { ChatMessage, SessionUsage } from "@/types/chat";
 
 export function useChat(
@@ -69,6 +69,7 @@ export function useChat(
                 : m,
             ),
           );
+          fetchSessionUsage(sessionId).then(setUsage).catch(() => undefined);
           if (!titleSetRef.current && onTitleGenerated) {
             titleSetRef.current = true;
             const titleText = text.slice(0, 60).trim();
