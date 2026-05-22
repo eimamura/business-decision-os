@@ -6,7 +6,7 @@ Orchestrator execution state. Written only by bdos-orchestrator.
 
 ## Active Phase
 
-Phase 1 — Tool Layer Isolation
+Post-Phase 8 — Ad-hoc UX Fixes & Admin Improvements
 
 ## Active Lease
 
@@ -14,16 +14,27 @@ None.
 
 ## Last Completed Batch
 
-Phase 0 — all tasks P0-1 through P0-8 complete; tag phase0-complete applied.
+Phase 8 — UX: Design Spec Alignment (all tasks P8-1 through P8-8 complete).
+
+Post-Phase 8 ad-hoc fixes (2026-05-22):
+- `/chat` route: route to most recent session; create new only if 0 sessions exist
+- Session deletion: two-step confirmation UI (··· → trash icon → confirm)
+- asyncpg datetime bug fix in `agent_steps_repo.py`
+- Bulk session delete: `DELETE /api/v1/admin/sessions` + `/usage` page button
+- React 18 Strict Mode double-create fix (`useRef` guard in `ChatListPage`)
 
 ## Last Validation
 
-pytest: 213 passed, 3 pre-existing failures (pool isolation — not Phase 0 regressions)
+pytest: 213 passed, 3 pre-existing failures (pool isolation — pre-existing)
 mypy: 0 new errors
 ruff: 0 new errors
-tag phase0-complete: applied
+tag v2-complete: applied
 
-## Phase 0 Status: COMPLETE
+tsc (apps/web): 0 errors (Post-Phase 8 fixes validated 2026-05-22)
+
+## Phase 6 Status: COMPLETE
+
+## Phase 8 Status: COMPLETE
 
 ## Blockers
 

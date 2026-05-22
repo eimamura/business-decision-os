@@ -124,3 +124,54 @@ Phase 6 is the single pytest gate for the entire refactoring. Tests were not run
 | P6-6 | Verify no DEFERRED.md items have been implemented (scope check) | bdos-test-review | Done | Scope check passes |
 | P6-7 | Mark all task rows in this file complete | bdos-orchestrator | Done | All rows show done |
 | P6-8 | Tag `v2-complete` | bdos-infra | Done | Tag exists in git |
+
+---
+
+## Phase 7 — UX: Balanced Workspace
+
+Goal: Rebuild the chat interface from a plain AI chat into a **Decision Workspace** for supply chain analysis.
+Four core elements: Quick Actions, Analysis Card, Agent Activity panel, Evidence Sources.
+
+| ID | Task | Owner | Status | Done when |
+|---|---|---|---|---|
+| P7-1 | Update harness docs (TASKS.md, STATE.md, DECISIONS.md) | bdos-orchestrator | Done | This row |
+| P7-2 | Define `apps/web/types/workspace.ts` (AgentStep, EvidenceSource, RecommendedAction, AnalysisResult, QuickAction) | bdos-app-builder | Done | `tsc --noEmit` passes |
+| P7-3 | Create `QuickActionCard` + `QuickActionGrid` components with 5 mock actions | bdos-app-builder | Done | Cards render; click fills input |
+| P7-4 | Create `AnalysisCard` component; wire into `MessageBubble` via `## Summary` + `## Key Findings` detection | bdos-app-builder | Done | Structured cards render for matching AI responses |
+| P7-5 | Create `AgentActivityPanel` (SSE + history; user-friendly step labels; empty state) | bdos-app-builder | Done | Right panel shows "Agent Activity" header and step list |
+| P7-6 | Create `EvidenceSources` component; embed in `AgentActivityPanel` | bdos-app-builder | Done | Data sources shown from `tool_completed` events |
+| P7-7 | Restructure `ChatSidebar` — Main nav section + Sessions section | bdos-app-builder | Done | Chat / KPI / Approvals / Audit Log visible as nav; sessions below |
+| P7-8 | Update `page.tsx` — integrate all new components; update placeholder + Add Context button | bdos-app-builder | Done | Full page assembled |
+| P7-9 | Delete old `EventLog.tsx` and `ReasoningPanel.tsx` | bdos-app-builder | Done | Files absent |
+| P7-10 | Final visual + TypeScript validation | bdos-test-review | Done | `tsc --noEmit` clean; browser checklist passes |
+
+---
+
+## Phase 8 — UX: Design Spec Alignment
+
+Goal: Close the visual gap between Phase 7 implementation and the target design in `docs/archive/UX_TASKS.md`. UI-only changes; no backend work. Tests consolidated at end.
+
+| ID | Task | Owner | Status | Done when |
+|---|---|---|---|---|
+| P8-1 | Update harness docs (TASKS.md, STATE.md, DECISIONS.md) | bdos-orchestrator | Done | This row |
+| P8-2 | Redesign QuickActionCard + QuickActionGrid — 5-column horizontal, per-card icon + theme color | bdos-app-builder | Done | Cards render 5-across on desktop; each has icon and color accent |
+| P8-3 | Add empty-state header to chat page — title, subtitle, Configure Agent button | bdos-app-builder | Done | Header visible when message list is empty |
+| P8-4 | Improve AgentActivityPanel — Live badge, step connector lines, Evidence/Notes tabs | bdos-app-builder | Done | Panel shows tabs; steps connected by vertical line |
+| P8-5 | Improve Chat Composer — Mic icon, disclaimer text, updated placeholder | bdos-app-builder | Done | Mic icon rendered (disabled); disclaimer visible below input |
+| P8-6 | Improve ChatSidebar — bottom user area, session hover overflow button | bdos-app-builder | Done | User area fixed at bottom; `···` button appears on session hover |
+| P8-7 | Unify design tokens — bg `#070B14`, radial gradient, CSS custom properties | bdos-app-builder | Done | Background matches spec; CSS vars defined in globals.css |
+| P8-8 | Final TypeScript + visual validation | bdos-test-review | Done | `tsc --noEmit` clean; 0 errors |
+
+---
+
+## Post-Phase 8 — Ad-hoc UX Fixes & Admin Improvements
+
+Goal: Fix UX regressions and add admin tooling discovered after Phase 8 completion.
+
+| ID | Task | Owner | Status | Done when |
+|---|---|---|---|---|
+| PX-1 | `/chat` route: auto-redirect to most recent session; create new only if 0 sessions; add `useRef` guard against React 18 Strict Mode double-fire | bdos-app-builder | Done | Clicking "Decision OS" navigates to existing session, not a new one |
+| PX-2 | Non-existent session ID redirect: `fetchSession()` on mount; 404 → `router.replace("/chat")` | bdos-app-builder | Done | `/chat/nonexistent-id` redirects to `/chat` |
+| PX-3 | Session deletion two-step confirmation: ··· → trash icon → confirm click | bdos-app-builder | Done | Clicking ··· shows trash; clicking trash deletes; mouse-leave cancels |
+| PX-4 | Fix `agent_steps_repo.py`: pass `datetime` objects to asyncpg instead of ISO strings | bdos-app-builder | Done | No more `expected datetime.datetime instance, got 'str'` warnings |
+| PX-5 | Admin bulk delete: `DELETE /api/v1/admin/sessions` endpoint + "Delete All Sessions" button in `/usage` | bdos-app-builder | Done | Button deletes all sessions and reloads stats |

@@ -188,3 +188,88 @@ Reason: User sessions contain chat, factual lookup, exploration, and decision-su
 Consequence: `Orchestrator.run()` accepts `SessionUserQuery` and returns `SessionResponse`. `Recommendation` remains for persistence and approvals compatibility but is not the orchestrator run return type. SSE events use the new query/intent/mode/agent/response taxonomy recorded in `docs/ADR/2026-05-21-user-query-orchestrator-flow.md`.
 
 Reversal cost: high (public interface, API streaming, and web trace contracts would need to change together)
+
+---
+
+## Decision: UX adopts "Balanced Workspace" layout (Phase 7)
+
+Date: 2026-05-22
+
+Reason: The plain chat UI reads as a generic AI chatbot with no supply-chain identity. The Balanced Workspace adds Quick Actions, Analysis Cards, Agent Activity panel, and Evidence Sources — making the interface feel like a purpose-built decision tool rather than a wrapped LLM.
+
+Consequence:
+- Left sidebar splits into Main Nav + Sessions sections.
+- Empty chat state replaced by QuickActionGrid (5 prebuilt prompts).
+- AI responses with structured markdown (## Summary, ## Key Findings) render as AnalysisCard instead of plain markdown bubble.
+- Right panel becomes "Agent Activity" (SSE steps translated to user-friendly labels) + "Evidence / Data Sources" (tools used).
+- EventLog.tsx and ReasoningPanel.tsx are deleted; replaced by AgentActivityPanel.tsx + EvidenceSources.tsx.
+- AnalysisCard detection is heuristic (## Summary + ## Key Findings in content); no API schema change required.
+
+Reversal cost: low (UI-only; no backend or API contract changes)
+
+---
+
+## Decision 15: Phase 8 UX Design Spec Alignment — close visual gap between Phase 7 implementation and UX_TASKS.md target
+
+Date: 2026-05-22
+
+Reason: Phase 7 delivered the Balanced Workspace skeleton, but several visual details from UX_TASKS.md were not yet realized: QuickActionGrid remained single-column, AgentActivityPanel lacked Evidence/Notes tabs and step connector lines, the empty-state header was absent, Chat Composer had no microphone or disclaimer, ChatSidebar had no bottom user area, and the background color differed from the spec (`#0c0c14` vs target `#070B14`).
+
+Consequence:
+- QuickActionGrid becomes 5-column horizontal with per-card theme color and icon (lucide-react).
+- Empty-state shows "What do you want to analyze today?" header + "Configure Agent" button.
+- AgentActivityPanel gains Live badge, step connector lines, and Evidence/Notes tab bar.
+- Chat Composer adds Mic icon (disabled) and disclaimer text.
+- ChatSidebar gains a fixed bottom user area and hover-visible session overflow button.
+- Global background shifts to `#070B14` with a subtle radial gradient; CSS custom properties introduced in globals.css.
+- No backend or API contract changes.
+
+Reversal cost: low (UI-only)
+
+---
+
+## Decision: `/chat` route navigates to most recent session, not a new one
+
+Date: 2026-05-22
+
+Reason: Auto-creating a session on every `/chat` visit (e.g., clicking "Decision OS" logo) produced unexpected new sessions. The user intent when navigating to `/chat` is to resume an existing session, not start a fresh one. A `useRef` guard also prevents React 18 Strict Mode from double-firing `useEffect` and creating two sessions.
+
+Consequence: `apps/web/app/chat/page.tsx` calls `fetchSessions()` first. If sessions exist, redirects to the most recent one (`sessions[0]`, which is `ORDER BY created_at DESC`). Only creates a new session when the list is empty. Non-existent session IDs (e.g., bookmarks of deleted sessions) redirect to `/chat` via `fetchSession()` returning null.
+
+Reversal cost: low (UI routing only)
+
+---
+
+## Decision: Session deletion requires two-step confirmation in the sidebar
+
+Date: 2026-05-22
+
+Reason: Clicking ··· immediately triggered deletion and navigation, which users perceived as an accidental "page refresh" with no recoverable confirmation step. The ··· symbol implies a menu opener, not an immediate destructive action.
+
+Consequence: `ChatSidebar` holds a `pendingDeleteId` state. First click on ··· shows a trash icon (red). Second click on the trash icon executes `onDelete`. Mouse-leave resets `pendingDeleteId` without deleting. `type="button"` added to both buttons to prevent accidental form submission.
+
+Reversal cost: low (UI state change only)
+
+---
+
+## Decision: Bulk session delete is an admin-only endpoint, not a sessions endpoint
+
+Date: 2026-05-22
+
+Reason: Deleting all sessions at once is a destructive administrative action, not a normal session lifecycle operation. Placing it under `/api/v1/admin/sessions` (DELETE) keeps the destructive surface isolated from `/api/v1/sessions` (which serves the chat UI).
+
+Consequence: `apps/api/routers/admin.py` exposes `DELETE /api/v1/admin/sessions`. It clears both the DB (`DELETE FROM decision_sessions`, cascading to messages/steps/usage) and the in-memory `sessions` dict. Returns `{"deleted": N}`. The `/usage` page exposes a two-step "Delete All Sessions" button using this endpoint.
+
+Reversal cost: low (endpoint removal or access restriction)
+
+---
+
+## Decision: asyncpg requires `datetime` objects, not ISO strings, for timestamptz columns
+
+Date: 2026-05-22
+
+Reason: asyncpg validates Python types client-side before sending to PostgreSQL. Passing an ISO 8601 string for a `timestamptz` parameter raises `invalid input for query argument: expected datetime.datetime instance, got 'str'`, even with a `::timestamptz` SQL cast.
+
+Consequence: `packages/persistence/agent_steps_repo.py` passes `datetime` objects directly. `make_step()` uses `datetime.now(timezone.utc)` (no `.isoformat()`). `update_ended()` parses its `ended_at: str` argument with `datetime.fromisoformat()` before passing to asyncpg. The `::timestamptz` casts in the SQL are removed as unnecessary.
+
+Reversal cost: low (type-only change in the repository layer)
