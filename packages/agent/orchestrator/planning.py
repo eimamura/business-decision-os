@@ -55,12 +55,15 @@ async def _run_agents_in_order(
 
 async def create_execution_plan(
     orchestrator: Any,
+    session_id: UUID,
     query: SessionUserQuery,
     intent: SessionIntent,
     route: AgentRoute,
 ) -> ExecutionPlan:
     from packages.agent.llm import LLMMessage
+    from packages.persistence.agent_steps_repo import make_step
 
+    step_id = await make_step(str(session_id), "planning")
     response = await orchestrator._llm_client.complete(
         messages=[
             LLMMessage(role="system", content=PLAN_SYSTEM),
@@ -80,6 +83,7 @@ async def create_execution_plan(
         max_tokens=1024,
         prompt_cache=False,
         specialist_role="orchestrator",
+        agent_step_id=step_id,
     )
     plan = ExecutionPlan(**_json_obj(response.text))
     for step in plan.steps:
@@ -102,7 +106,7 @@ async def run_planned_execution(
 ) -> SessionResponse:
     from packages.agent.orchestrator.runtime import _run_agent
 
-    plan = await create_execution_plan(orchestrator, query, intent, route)
+    plan = await create_execution_plan(orchestrator, session_id, query, intent, route)
     results: dict[str, SpecialistResult] = {}
     for step in plan.steps:
         context_payload = {
@@ -123,12 +127,15 @@ async def run_planned_execution(
 
 async def create_task_nodes(
     orchestrator: Any,
+    session_id: UUID,
     query: SessionUserQuery,
     intent: SessionIntent,
     route: AgentRoute,
 ) -> list[TaskNode]:
     from packages.agent.llm import LLMMessage
+    from packages.persistence.agent_steps_repo import make_step
 
+    step_id = await make_step(str(session_id), "dag_planning")
     response = await orchestrator._llm_client.complete(
         messages=[
             LLMMessage(role="system", content=DAG_SYSTEM),
@@ -148,6 +155,7 @@ async def create_task_nodes(
         max_tokens=1024,
         prompt_cache=False,
         specialist_role="orchestrator",
+        agent_step_id=step_id,
     )
     nodes = [TaskNode(**item) for item in _json_array(response.text)]
     for node in nodes:
@@ -170,7 +178,7 @@ async def run_dag_execution(
 ) -> SessionResponse:
     from packages.agent.orchestrator.runtime import _run_agent
 
-    nodes = await create_task_nodes(orchestrator, query, intent, route)
+    nodes = await create_task_nodes(orchestrator, session_id, query, intent, route)
     remaining = {node.id: node for node in nodes}
     completed: dict[str, SpecialistResult] = {}
     while remaining:

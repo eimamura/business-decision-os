@@ -241,7 +241,9 @@ async def _synthesize_response(
         )
 
     from packages.agent.llm import LLMMessage
+    from packages.persistence.agent_steps_repo import make_step
 
+    step_id = await make_step(str(session_id), "synthesis")
     response = await orchestrator._llm_client.complete(
         messages=[
             LLMMessage(
@@ -266,6 +268,7 @@ async def _synthesize_response(
         temperature=0.0,
         max_tokens=1024,
         specialist_role="orchestrator",
+        agent_step_id=step_id,
     )
     await orchestrator._push(
         {"type": "response_ready", "mode": route.mode, "timestamp": _iso_now()}

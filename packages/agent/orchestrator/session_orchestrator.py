@@ -50,9 +50,11 @@ class SessionOrchestrator:
             return f"[Conversation context: {query.conversation_context}]\n\n{query.text}"
         return query.text
 
-    async def classify_intent(self, query: SessionUserQuery) -> SessionIntent:
+    async def classify_intent(self, query: SessionUserQuery, session_id: UUID) -> SessionIntent:
         from packages.agent.llm import LLMMessage
+        from packages.persistence.agent_steps_repo import make_step
 
+        step_id = await make_step(str(session_id), "intent_classification")
         response = await self._llm_client.complete(
             messages=[
                 LLMMessage(role="system", content=INTENT_SYSTEM),
@@ -63,6 +65,7 @@ class SessionOrchestrator:
             max_tokens=512,
             prompt_cache=False,
             specialist_role="orchestrator",
+            agent_step_id=step_id,
         )
         intent = SessionIntent(**_json_obj(response.text))
         await self._push({
@@ -76,10 +79,12 @@ class SessionOrchestrator:
         return intent
 
     async def select_execution_mode(
-        self, query: SessionUserQuery, intent: SessionIntent
+        self, query: SessionUserQuery, intent: SessionIntent, session_id: UUID
     ) -> AgentRoute:
         from packages.agent.llm import LLMMessage
+        from packages.persistence.agent_steps_repo import make_step
 
+        step_id = await make_step(str(session_id), "routing")
         response = await self._llm_client.complete(
             messages=[
                 LLMMessage(role="system", content=ROUTER_SYSTEM),
@@ -98,6 +103,7 @@ class SessionOrchestrator:
             max_tokens=512,
             prompt_cache=False,
             specialist_role="orchestrator",
+            agent_step_id=step_id,
         )
         route = AgentRoute(**_json_obj(response.text))
         self._validate_route(route)
@@ -138,8 +144,8 @@ class SessionOrchestrator:
         })
 
         try:
-            intent = await self.classify_intent(query)
-            route = await self.select_execution_mode(query, intent)
+            intent = await self.classify_intent(query, session_id)
+            route = await self.select_execution_mode(query, intent, session_id)
             if route.mode == "direct_chat":
                 return await run_direct_chat(self, session_id, query, intent, route)
             if route.mode == "single_agent":

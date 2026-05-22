@@ -90,6 +90,7 @@ async def _run_agent(
     context_payload: dict[str, Any],
     allowed_tools: list[str],
 ) -> SpecialistResult:
+    from packages.persistence.agent_steps_repo import AgentStepsRepository
     from packages.tools.base import ToolContext
 
     agent = _make_agent(orchestrator, agent_role)
@@ -103,6 +104,22 @@ async def _run_agent(
         "started_at": started_at,
         "input_summary": instruction[:200],
     })
+
+    async def _persist_create() -> None:
+        try:
+            await AgentStepsRepository().create(
+                step_id=str(task_id),
+                session_id=str(session_id),
+                specialist_role=agent_role,
+                step_type="specialist_execution",
+                input_json={"instruction": instruction[:500]},
+                started_at=started_at,
+            )
+        except Exception as exc:
+            logger.warning("agent_steps INSERT failed for task %s: %s", task_id, exc)
+
+    await _persist_create()
+
     ctx = ToolContext(
         session_id=session_id,
         agent_step_id=task_id,
@@ -118,6 +135,8 @@ async def _run_agent(
     )
     t0 = time.monotonic()
     result = await _run_specialist_with_retry(orchestrator, agent, task, ctx)
+    ended_at = _iso_now()
+
     await orchestrator._push({
         "type": "agent_completed",
         "agent_name": getattr(agent, "name", agent_role).replace("_", " ").title(),
@@ -125,16 +144,33 @@ async def _run_agent(
         "task_id": str(task_id),
         "duration_ms": int((time.monotonic() - t0) * 1000),
         "output_summary": str(result.output.get("text", ""))[:200] if result.output else None,
-        "timestamp": _iso_now(),
+        "timestamp": ended_at,
     })
+
     if result.status == "failed":
+        output_json: dict[str, Any] = {"error": result.error or "unknown"}
         await orchestrator._push({
             "type": "error",
             "code": "agent_failed",
             "message": f"Agent {agent_role} failed: {result.error}",
             "recoverable": False,
-            "timestamp": _iso_now(),
+            "timestamp": ended_at,
         })
+    else:
+        output_json = {"summary": str(result.output.get("text", ""))[:500]}
+
+    async def _persist_update() -> None:
+        try:
+            await AgentStepsRepository().update_ended(
+                step_id=str(task_id),
+                ended_at=ended_at,
+                output_json=output_json,
+            )
+        except Exception:
+            logger.warning("agent_steps UPDATE failed for task %s", task_id)
+
+    asyncio.create_task(_persist_update())
+
     return result
 
 
@@ -146,7 +182,9 @@ async def run_direct_chat(
     route: AgentRoute,
 ) -> SessionResponse:
     from packages.agent.llm import LLMMessage
+    from packages.persistence.agent_steps_repo import make_step
 
+    step_id = await make_step(str(session_id), "direct_chat")
     response = await orchestrator._llm_client.complete(
         messages=[
             LLMMessage(
@@ -163,6 +201,7 @@ async def run_direct_chat(
         temperature=0.0,
         max_tokens=512,
         specialist_role="orchestrator",
+        agent_step_id=step_id,
     )
     await orchestrator._push(
         {"type": "response_ready", "mode": route.mode, "timestamp": _iso_now()}
