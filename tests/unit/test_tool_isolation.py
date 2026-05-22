@@ -6,7 +6,7 @@ from uuid import uuid4
 
 import pytest
 
-from packages.agent.base import PromptBasedSpecialist
+from packages.agent.base import AgentBasedSpecialist
 from packages.agent.context_sanitizer import sanitize_for_llm, sanitize_sql_results
 from packages.agent.llm import (
     LLMMessage,
@@ -428,7 +428,7 @@ def test_prompt_based_execution_roles_instantiate():
     client = StubClaudeClient()
     registry = create_tool_registry()
     specialists = {
-        role: PromptBasedSpecialist(name=role, role=role, llm_client=client, tool_registry=registry)
+        role: AgentBasedSpecialist(name=role, role=role, llm_client=client, tool_registry=registry)
         for role in ("domain_expert", "data_engineer", "simulation_optimizer", "evaluator")
     }
     assert len(specialists) == 4
@@ -440,7 +440,7 @@ def test_prompt_based_execution_roles_instantiate():
 async def test_specialist_run_returns_result():
     client = StubClaudeClient()
     registry = create_tool_registry()
-    specialist = PromptBasedSpecialist(
+    specialist = AgentBasedSpecialist(
         name="domain_expert", role="domain_expert",
         llm_client=client, tool_registry=registry,
     )

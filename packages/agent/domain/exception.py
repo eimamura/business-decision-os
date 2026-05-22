@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from packages.agent.base import PromptBasedSpecialist
+from packages.agent.base import AgentBasedSpecialist
 
 _SYSTEM_PROMPT = (
     "You are an exception agent. "
@@ -11,7 +11,7 @@ _SYSTEM_PROMPT = (
 )
 
 
-class ExceptionAgent(PromptBasedSpecialist):
+class ExceptionAgent(AgentBasedSpecialist):
     def __init__(
         self,
         llm_client: Any,

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from packages.agent.base import PromptBasedSpecialist
+from packages.agent.base import AgentBasedSpecialist
 
 _SYSTEM_PROMPT = (
     "You are an evaluator. "
@@ -10,7 +10,7 @@ _SYSTEM_PROMPT = (
 )
 
 
-class EvaluatorAgent(PromptBasedSpecialist):
+class EvaluatorAgent(AgentBasedSpecialist):
     def __init__(
         self,
         llm_client: Any,
