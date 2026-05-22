@@ -177,18 +177,18 @@ Cross-Domain Agents own responsibility for reusable capabilities that support mu
 
 | Agent | Purpose | Role | Available Toolset | Primary Input | Output | Memory |
 |---|---|---|---|---|---|---|
-| SessionOrchestrator | Orchestrate user sessions across chat, QA, exploration, consultation, and explicit goal-directed tasks | Intent classification, chat/QA handling, goal resolution, planning, routing, execution control, state management, result aggregation, response synthesis | Data Access, Knowledge, Analysis, Memory, Guardrail, Summary | User utterance, session state, working state, past decisions, agent results | Direct answer, execution plan, delegation instructions, aggregated result, final response | Working Memory, Decision Memory, User Memory |
-| Demand Agent | Support demand-related judgment | Analyze demand trends, forecast deviations, demand fluctuations, and demand risk | Data Access, Metric Definition, Trend Analysis, Forecast Analysis | Demand actuals, forecasts, products, customers, period, KPI definitions | Demand insights, demand risk, forecast deviations | Domain Memory, Decision Memory |
-| Inventory Agent | Support inventory-related judgment | Analyze inventory levels, stockout risk, excess inventory, and inventory health | Data Access, Inventory Calculation, Data Quality, Business Rules | Inventory data, demand, supply, service level, inventory rules | Inventory risk, recommended review points, inventory decision inputs | Domain Memory, Working Memory |
-| Replenishment Agent | Support replenishment judgment | Analyze when, where, and how much to replenish | Data Access, Calculation, Simulation, Business Rules | Inventory, demand, lead time, replenishment constraints, location information | Replenishment candidates, replenishment risk, replenishment rationale | Working Memory, Decision Memory |
-| Procurement Agent | Support procurement judgment | Analyze orders, purchase quantities, timing, and constraints | Data Access, Business Rules, Supplier Data, Calculation | Purchase history, demand, inventory, supplier terms, pricing | Procurement decision inputs, order candidates, constraint notes | Domain Memory, Decision Memory |
-| Supplier Agent | Judge supplier risk | Analyze delivery performance, quality, supply stability, and supplier risk | Data Access, Risk Analysis, Knowledge Retrieval, Audit | Supplier information, delivery history, quality data, contract terms, supply risk | Supplier risk, alternative candidates, notes | Domain Memory, Decision Memory |
-| Production Agent | Support production planning judgment | Analyze production capacity, constraints, and plan change impacts | Data Access, Capacity Analysis, Scenario, Business Rules | Demand, inventory, production capacity, process constraints, plan information | Production risk, constraints, plan change impacts | Working Memory, Domain Memory |
-| Logistics Agent | Support logistics judgment | Analyze shipping, inter-location transfers, logistics constraints, and delivery risk | Data Access, Route/Network Analysis, Cost Analysis, Business Rules | Shipment information, locations, delivery conditions, logistics cost, deadline constraints | Logistics risk, delivery decision inputs, transfer candidates | Domain Memory, Decision Memory |
-| Data Engineer Agent | Gather operational facts for the decision | Query operational data tables and retrieve factual context needed by other agents | Data Access, Forecast, Knowledge Retrieval | User goal, requested entities, operational tables, allowed tools | Data summary, retrieved facts, query results | Working Memory, Audit Memory |
-| Simulation Optimizer Agent | Generate candidate plans | Run simulation and optimization tools and compare scenarios across supply chain domains | Simulation, Optimization, Calculation, Summary | Goal, data summaries, constraints, assumptions, comparison axes | Candidate plans, scenario comparison, optimization rationale | Working Memory, Decision Memory |
-| Evaluator Agent | Evaluate candidate plans | Score each candidate plan against all KPIs independently | Evaluation, Scoring, Metric Definition, Audit | Candidate list, KPI definitions, weights, constraints, risk information | Per-KPI scores, evaluation rationale, audit notes | Working Memory, Decision Memory |
-| Anomaly Detector Agent | Detect anomalies and items requiring attention | Detect missing data, outliers, sudden changes, rule violations, and abnormal patterns across domains; surface root cause candidates | Data Quality, Anomaly Detection, Data Access, Knowledge Retrieval | Operational data, KPIs, thresholds, rules, historical trends | Anomaly list, severity, root cause candidates, review rationale | Working Memory, Audit Memory |
+| SessionOrchestrator | Orchestrate user sessions across chat, QA, exploration, consultation, and explicit goal-directed tasks | Intent classification, chat/QA handling, goal resolution, planning, routing, execution control, state management, result aggregation, response synthesis | Data Access Tools, Knowledge Tools, Analysis Tools, Memory / Audit Tools, Guardrail Tools, Communication Tools | User utterance, session state, working state, past decisions, agent results | Direct answer, execution plan, delegation instructions, aggregated result, final response | Working Memory, Decision Memory, User Memory |
+| Demand Agent | Support demand-related judgment | Analyze demand trends, forecast deviations, demand fluctuations, and demand risk | Data Access Tools, Knowledge Tools, Analysis Tools | Demand actuals, forecasts, products, customers, period, KPI definitions | Demand insights, demand risk, forecast deviations | Domain Memory, Decision Memory |
+| Inventory Agent | Support inventory-related judgment | Analyze inventory levels, stockout risk, excess inventory, and inventory health | Data Access Tools, Calculation Tools, Knowledge Tools | Inventory data, demand, supply, service level, inventory rules | Inventory risk, recommended review points, inventory decision inputs | Domain Memory, Working Memory |
+| Replenishment Agent | Support replenishment judgment | Analyze when, where, and how much to replenish | Data Access Tools, Calculation Tools, Simulation Tools, Knowledge Tools | Inventory, demand, lead time, replenishment constraints, location information | Replenishment candidates, replenishment risk, replenishment rationale | Working Memory, Decision Memory |
+| Procurement Agent | Support procurement judgment | Analyze orders, purchase quantities, timing, and constraints | Data Access Tools, Knowledge Tools, Calculation Tools | Purchase history, demand, inventory, supplier terms, pricing | Procurement decision inputs, order candidates, constraint notes | Domain Memory, Decision Memory |
+| Supplier Agent | Judge supplier risk | Analyze delivery performance, quality, supply stability, and supplier risk | Data Access Tools, Analysis Tools, Knowledge Tools, Memory / Audit Tools | Supplier information, delivery history, quality data, contract terms, supply risk | Supplier risk, alternative candidates, notes | Domain Memory, Decision Memory |
+| Production Agent | Support production planning judgment | Analyze production capacity, constraints, and plan change impacts | Data Access Tools, Analysis Tools, Simulation Tools, Knowledge Tools | Demand, inventory, production capacity, process constraints, plan information | Production risk, constraints, plan change impacts | Working Memory, Domain Memory |
+| Logistics Agent | Support logistics judgment | Analyze shipping, inter-location transfers, logistics constraints, and delivery risk | Data Access Tools, Analysis Tools, Calculation Tools, Knowledge Tools | Shipment information, locations, delivery conditions, logistics cost, deadline constraints | Logistics risk, delivery decision inputs, transfer candidates | Domain Memory, Decision Memory |
+| Data Engineer Agent | Gather operational facts for the decision | Query operational data tables and retrieve factual context needed by other agents | Data Access Tools, Analysis Tools, Knowledge Tools | User goal, requested entities, operational tables, allowed tools | Data summary, retrieved facts, query results | Working Memory, Audit Memory |
+| Simulation Optimizer Agent | Generate candidate plans | Run simulation and optimization tools and compare scenarios across supply chain domains | Simulation Tools, Optimization Tools, Calculation Tools, Communication Tools | Goal, data summaries, constraints, assumptions, comparison axes | Candidate plans, scenario comparison, optimization rationale | Working Memory, Decision Memory |
+| Evaluator Agent | Evaluate candidate plans | Score each candidate plan against all KPIs independently | Analysis Tools, Calculation Tools, Knowledge Tools, Memory / Audit Tools | Candidate list, KPI definitions, weights, constraints, risk information | Per-KPI scores, evaluation rationale, audit notes | Working Memory, Decision Memory |
+| Anomaly Detector Agent | Detect anomalies and items requiring attention | Detect missing data, outliers, sudden changes, rule violations, and abnormal patterns across domains; surface root cause candidates | Data Access Tools, Analysis Tools, Knowledge Tools, Memory / Audit Tools | Operational data, KPIs, thresholds, rules, historical trends | Anomaly list, severity, root cause candidates, review rationale | Working Memory, Audit Memory |
 
 ---
 
@@ -199,22 +199,43 @@ Tools define the execution capabilities of agents.
 Agents retrieve data, perform calculations, run analyses, and interact with external systems through Tools.
 Data retrieval and calculation logic must not be embedded directly in agents.
 
+The quality of an agent is determined by the quality of the tools it can use.
+
 Tools are classified into the following categories:
 
-- Data Access Tools
-- Knowledge Tools
-- Calculation Tools
-- Analysis Tools
-- Optimization Tools
-- Simulation Tools
-- Communication Tools
-- Action Tools
-- Memory / Audit Tools
-- Guardrail Tools
+| Category | Responsibility | Examples |
+|---|---|---|
+| Data Access Tools | Query operational tables, discover available data, inspect schemas, detect data quality issues | SQL queries, data catalog search, schema reader, data quality checker |
+| Knowledge Tools | Retrieve business documents, KPI definitions, and business rules | Business rules reader, metric definition reader, domain document search |
+| Calculation Tools | Perform numeric calculations, unit conversions, and statistical computations | Formula calculator, unit converter, statistical aggregator |
+| Analysis Tools | Trend analysis, variance analysis, root cause analysis, forecast analysis, anomaly detection | Trend analyzer, diff analyzer, root cause analyzer, forecast analyzer |
+| Optimization Tools | Constraint-based optimization, allocation optimization | LP/MIP solver, allocation optimizer |
+| Simulation Tools | Scenario building, Monte Carlo simulation, inventory trajectory simulation | Scenario builder, Monte Carlo runner, inventory simulator |
+| Communication Tools | Notifications, report generation, summarization for human consumption | Summary generator, report builder, notification dispatcher |
+| Action Tools | Generate order proposals, approval requests, ticket creation | Order proposal creator, approval requester, ticket creator |
+| Memory / Audit Tools | Decision history, assumption logging, audit trail | Audit log writer, decision history reader, assumption store |
+| Guardrail Tools | Permission checks, approval workflows, risk assessment | Permission checker, approval gate, risk evaluator |
 
-Specific specifications, arguments, return values, permissions, and failure handling for each tool are defined in a separate document.
+Specific specifications, arguments, return values, permissions, and failure handling for each tool are defined in `docs/TOOLS.md`.
 
 In DESIGN.md, only the purpose and responsibility boundaries of tools are defined.
+
+### MVP Tool Priority
+
+The following tools are required first to achieve the minimum viable agent capability:
+
+| Priority | Tool | Rationale |
+|---|---|---|
+| 1 | `data_catalog_search` | Discover what data is available |
+| 2 | `sql_query_tool` | Retrieve actual operational data |
+| 3 | `table_schema_reader` | Understand data structure |
+| 4 | `data_quality_checker` | Detect missing values and anomalies |
+| 5 | `business_rules_reader` | Enforce business constraints |
+| 6 | `metric_definition_reader` | Prevent KPI definition drift |
+| 7 | `calculator` | Perform basic numeric calculations |
+| 8 | `scenario_builder` | Enable what-if analysis |
+| 9 | `summary_generator` | Produce human-readable explanations |
+| 10 | `audit_log_writer` | Record decision history and accountability |
 
 ---
 
