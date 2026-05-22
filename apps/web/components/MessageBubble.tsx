@@ -68,7 +68,7 @@ const markdownComponents: Components = {
   ),
   li: ({ children }) => <li className="pl-1">{children}</li>,
   blockquote: ({ children }) => (
-    <blockquote className="mb-3 border-l-2 border-white/20 pl-3 text-white/50 last:mb-0">
+    <blockquote className="mb-3 border-l-2 border-white/20 pl-3 text-white/65 last:mb-0">
       {children}
     </blockquote>
   ),
@@ -106,7 +106,7 @@ const markdownComponents: Components = {
     </th>
   ),
   td: ({ children }) => (
-    <td className="border border-white/10 px-2 py-1 align-top text-white/55">
+    <td className="border border-white/10 px-2 py-1 align-top text-white/70">
       {children}
     </td>
   ),
@@ -134,7 +134,7 @@ function SqlQueryBubble({ message }: { message: ChatMessage }) {
       <div className="max-w-[78%]">
         <div className="rounded-xl bg-[#0b1a15] border border-emerald-900/40 px-3 pt-2 pb-1">
           <div className="flex items-center gap-1.5 mb-1.5">
-            <span className="text-[10px] font-mono font-bold text-emerald-500 uppercase tracking-wider">
+            <span className="text-xs font-mono font-bold text-emerald-500 uppercase tracking-wider">
               {label}
             </span>
           </div>
@@ -145,7 +145,7 @@ function SqlQueryBubble({ message }: { message: ChatMessage }) {
           )}
         </div>
         {message.created_at && (
-          <p className="text-xs mt-1 text-white/25">
+          <p className="text-xs mt-1 text-white/45">
             {new Date(message.created_at).toLocaleTimeString()}
           </p>
         )}
@@ -204,7 +204,7 @@ export default function MessageBubble({ message, onFeedback }: MessageBubbleProp
         </div>
 
         {message.created_at && (
-          <p className={`text-xs mt-1 ${isUser ? "text-indigo-300" : "text-white/25"}`}>
+          <p className={`text-xs mt-1 ${isUser ? "text-indigo-300" : "text-white/45"}`}>
             {new Date(message.created_at).toLocaleTimeString()}
           </p>
         )}

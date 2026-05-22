@@ -69,6 +69,26 @@ function invalidSseEvent(): SseEvent {
   };
 }
 
+export async function fetchSessionEvents(sessionId: string): Promise<SseEvent[]> {
+  try {
+    const res = await fetch(
+      `${API_BASE}/api/v1/sessions/${sessionId}/events`,
+      { headers: DEV_HEADERS },
+    );
+    if (!res.ok) return [];
+    const rows: Array<{ event_type: string; payload: unknown; created_at: string }> =
+      await res.json();
+    const events: SseEvent[] = [];
+    for (const row of rows) {
+      const result = SseEventSchema.safeParse(row.payload);
+      if (result.success) events.push(result.data);
+    }
+    return events;
+  } catch {
+    return [];
+  }
+}
+
 export async function postMessage(sessionId: string, content: string): Promise<void> {
   const res = await fetch(`${API_BASE}/api/v1/sessions/${sessionId}/messages`, {
     method: "POST",
@@ -96,6 +116,17 @@ export async function setFeedback(
   } catch {
     return false;
   }
+}
+
+export async function updateSessionTitle(sessionId: string, title: string): Promise<void> {
+  const truncated = title.slice(0, 60).trim();
+  if (!truncated) return;
+  const res = await fetch(`${API_BASE}/api/v1/sessions/${sessionId}/title`, {
+    method: "PATCH",
+    headers: DEV_HEADERS,
+    body: JSON.stringify({ title: truncated }),
+  });
+  if (!res.ok) throw new Error(`updateSessionTitle: ${res.status}`);
 }
 
 export async function* streamSession(

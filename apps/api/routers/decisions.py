@@ -11,7 +11,7 @@ from fastapi import APIRouter
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
-from apps.api.state import get_orchestrator, sessions, sse_queues
+from apps.api.state import get_orchestrator, make_event_persister, sessions, sse_queues
 from packages.agent.orchestrator import SessionUserQuery
 
 router = APIRouter(prefix="/api/v1/decisions", tags=["decisions"])
@@ -65,6 +65,7 @@ async def _stream_decision(body: CreateDecisionRequest) -> StreamingResponse:
     query = SessionUserQuery(text=body.goal)
 
     orchestrator = get_orchestrator(queue)
+    orchestrator._event_persister = make_event_persister(session_id)
 
     async def _run_and_signal() -> None:
         import logging

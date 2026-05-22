@@ -1,10 +1,13 @@
 "use client";
 
 import { useCallback, useRef, useState } from "react";
-import { fetchMessages, postMessage, setFeedback, streamSession } from "@/lib/api";
+import { fetchMessages, postMessage, setFeedback, streamSession, updateSessionTitle } from "@/lib/api";
 import type { ChatMessage, SessionUsage } from "@/types/chat";
 
-export function useChat(sessionId: string): {
+export function useChat(
+  sessionId: string,
+  onTitleGenerated?: (title: string) => void,
+): {
   messages: ChatMessage[];
   isSending: boolean;
   usage: SessionUsage;
@@ -16,10 +19,12 @@ export function useChat(sessionId: string): {
   const [isSending, setIsSending] = useState(false);
   const [usage, setUsage] = useState<SessionUsage>({ inputTokens: 0, outputTokens: 0, costUsd: 0 });
   const abortRef = useRef<AbortController | null>(null);
+  const titleSetRef = useRef(false);
 
   const loadMessages = useCallback(async () => {
     const fetched = await fetchMessages(sessionId);
     setMessages(fetched);
+    if (fetched.length > 0) titleSetRef.current = true;
   }, [sessionId]);
 
   const sendMessage = useCallback(async (text: string) => {
@@ -64,6 +69,13 @@ export function useChat(sessionId: string): {
                 : m,
             ),
           );
+          if (!titleSetRef.current && onTitleGenerated) {
+            titleSetRef.current = true;
+            const titleText = text.slice(0, 60).trim();
+            updateSessionTitle(sessionId, titleText)
+              .then(() => onTitleGenerated(titleText))
+              .catch(() => undefined);
+          }
           break;
         }
 

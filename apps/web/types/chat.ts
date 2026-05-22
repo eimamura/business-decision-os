@@ -17,6 +17,7 @@ export interface Session {
   session_id: string;
   status: string;
   goal?: string;
+  title?: string;
   created_at: string;
 }
 

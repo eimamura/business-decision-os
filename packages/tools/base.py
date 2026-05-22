@@ -9,7 +9,6 @@ from packages.agent.base import SpecialistRole
 
 _ROLE_TOOL_ALLOWLIST: dict[str, list[str]] = {
     "orchestrator": [],
-    "domain_expert": ["sql_query", "nl_query", "forecast"],
     "data_engineer": ["sql_query", "nl_query", "forecast"],
     "simulation_optimizer": ["simulate_inventory", "optimize_replenishment"],
     "evaluator": ["evaluate_candidates", "write_audit_log"],

@@ -30,16 +30,20 @@ class SessionOrchestrator:
         tool_registry: Any,
         memory_store: Any,
         sse_queue: Any | None = None,
+        event_persister: Any | None = None,
     ) -> None:
         self._llm_client = llm_client
         self._tool_registry = tool_registry
         self._memory_store = memory_store
         self._sse_queue = sse_queue
+        self._event_persister = event_persister
         self._sessions: dict[UUID, dict[str, Any]] = {}
 
     async def _push(self, event: dict[str, Any]) -> None:
         if self._sse_queue is not None:
             await self._sse_queue.put(event)
+        if self._event_persister is not None:
+            await self._event_persister(event)
 
     def _query_text(self, query: SessionUserQuery) -> str:
         if query.conversation_context:

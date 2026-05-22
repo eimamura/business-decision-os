@@ -10,7 +10,6 @@ if TYPE_CHECKING:
 
 SpecialistRole = Literal[
     "orchestrator",
-    "domain_expert",
     "inventory",
     "procurement",
     "production",

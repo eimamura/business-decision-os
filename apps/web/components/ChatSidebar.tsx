@@ -27,7 +27,7 @@ export default function ChatSidebar({
         >
           Decision OS
         </Link>
-        <p className="text-[10px] text-white/30 mt-0.5 tracking-wide uppercase">Supply Chain Intelligence</p>
+        <p className="text-xs text-white/50 mt-0.5 tracking-wide uppercase">Supply Chain Intelligence</p>
       </div>
 
       <div className="px-3 py-2.5 border-b border-white/8">
@@ -45,7 +45,7 @@ export default function ChatSidebar({
 
       <div className="flex-1 overflow-y-auto py-1">
         {sessions.length === 0 && (
-          <p className="px-4 py-3 text-[11px] text-white/25">No sessions yet</p>
+          <p className="px-4 py-3 text-xs text-white/50">No sessions yet</p>
         )}
         {sessions.map((s) => {
           const isActive = s.session_id === activeSessionId;
@@ -62,8 +62,8 @@ export default function ChatSidebar({
                 {isActive && (
                   <span className="absolute left-0 top-0 bottom-0 w-0.5 bg-indigo-400 rounded-r" />
                 )}
-                <span className="block truncate font-medium">{s.goal || "New Session"}</span>
-                <span className="text-[10px] text-white/25 mt-0.5 block">
+                <span className="block truncate font-medium">{s.title || s.goal || "New Session"}</span>
+                <span className="text-xs text-white/50 mt-0.5 block">
                   {new Date(s.created_at).toLocaleDateString()}
                 </span>
               </Link>
@@ -97,7 +97,7 @@ export default function ChatSidebar({
           <Link
             key={href}
             href={href}
-            className="flex items-center gap-2 px-0 py-1.5 text-[11px] text-white/35 hover:text-white/65 transition-colors"
+            className="flex items-center gap-2 px-0 py-1.5 text-xs text-white/55 hover:text-white/75 transition-colors"
           >
             {label}
           </Link>

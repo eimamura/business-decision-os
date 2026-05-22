@@ -7,11 +7,14 @@ from asyncio import Queue
 from typing import Any
 from uuid import UUID
 
+from collections.abc import Callable
+
 from packages.agent.llm import ClaudeClient, LLMUsage
 from packages.agent.orchestrator import SessionOrchestrator
 from packages.agent.runner import AcaJobsRunner, CeleryJobRunner, InProcessJobRunner
 from packages.memory import PgVectorMemoryStore, StubMemoryStore
 from packages.persistence.llm_usage_repo import LlmUsageRepository
+from packages.persistence.session_events_repo import SessionEventRepository
 from packages.tools import create_tool_registry
 
 logger = logging.getLogger(__name__)
@@ -67,6 +70,27 @@ async def _real_usage_writer(
             logger.warning("LLM usage write failed: %s", exc)
 
     asyncio.create_task(_write())
+
+
+def make_event_persister(session_id: str) -> Callable[[dict[str, Any]], Any]:
+    async def _persister(event: dict[str, Any]) -> None:
+        repo = SessionEventRepository()
+
+        async def _write() -> None:
+            try:
+                await repo.create(
+                    session_id=session_id,
+                    event_type=event.get("type", "unknown"),
+                    payload=event,
+                )
+            except RuntimeError as exc:
+                logger.warning("event persist skipped: %s", exc)
+            except Exception as exc:
+                logger.warning("event persist failed: %s", exc)
+
+        asyncio.create_task(_write())
+
+    return _persister
 
 
 def get_orchestrator(sse_queue: Queue[dict[str, Any]]) -> SessionOrchestrator:

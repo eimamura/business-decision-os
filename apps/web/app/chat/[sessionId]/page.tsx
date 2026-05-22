@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import ReasoningPanel from "./components/ReasoningPanel";
+import EventLog from "./components/EventLog";
 import MessageBubble from "@/components/MessageBubble";
 import { useChat } from "@/hooks/useChat";
 import ChatSidebar from "@/components/ChatSidebar";
@@ -22,7 +22,14 @@ export default function ChatPage({ params }: ChatPageProps) {
   const [showReasoning, setShowReasoning] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  const { messages, isSending, usage, loadMessages, sendMessage, submitFeedback } = useChat(sessionId);
+  const { messages, isSending, usage, loadMessages, sendMessage, submitFeedback } = useChat(
+    sessionId,
+    (title) => {
+      setSessions((prev) =>
+        prev.map((s) => (s.session_id === sessionId ? { ...s, title } : s)),
+      );
+    },
+  );
 
   const activeSession = sessions.find((s) => s.session_id === sessionId);
 
@@ -91,7 +98,7 @@ export default function ChatPage({ params }: ChatPageProps) {
       <div className="flex-1 flex flex-col min-w-0">
         <header className="bg-[#13131e] border-b border-white/8 px-5 py-3 flex items-center justify-between shrink-0">
           <h1 className="text-sm font-semibold text-white/80 truncate">
-            {activeSession?.goal || <span className="text-white/25 font-normal font-mono text-xs">{sessionId}</span>}
+            {activeSession?.title || activeSession?.goal || <span className="text-white/25 font-normal font-mono text-xs">{sessionId}</span>}
           </h1>
           <button
             onClick={() => setShowReasoning((p) => !p)}
@@ -110,8 +117,8 @@ export default function ChatPage({ params }: ChatPageProps) {
             <div className="flex-1 overflow-y-auto px-6 py-5 space-y-4">
               {messages.length === 0 && (
                 <div className="flex flex-col items-center justify-center h-full pb-16 text-center gap-2">
-                  <p className="text-sm font-medium text-white/40">Start a decision analysis</p>
-                  <p className="text-xs text-white/20">Ask a supply chain question below.</p>
+                  <p className="text-sm font-medium text-white/60">Start a decision analysis</p>
+                  <p className="text-xs text-white/50">Ask a supply chain question below.</p>
                 </div>
               )}
               {messages.map((msg) => (
@@ -133,7 +140,7 @@ export default function ChatPage({ params }: ChatPageProps) {
                   }}
                   placeholder="Ask a supply chain question…"
                   rows={2}
-                  className="flex-1 resize-none rounded-xl bg-[#0c0c14] border border-white/10 px-4 py-2.5 text-sm text-white/85 placeholder:text-white/25 focus:outline-none focus:border-indigo-500/50 focus:ring-2 focus:ring-indigo-500/15 transition-all"
+                  className="flex-1 resize-none rounded-xl bg-[#0c0c14] border border-white/10 px-4 py-2.5 text-sm text-white/85 placeholder:text-white/40 focus:outline-none focus:border-indigo-500/50 focus:ring-2 focus:ring-indigo-500/15 transition-all"
                 />
                 <button
                   onClick={handleSend}
@@ -152,7 +159,7 @@ export default function ChatPage({ params }: ChatPageProps) {
 
           {showReasoning && (
             <div className="w-80 shrink-0 border-l border-white/8 bg-[#13131e] overflow-hidden">
-              <ReasoningPanel
+              <EventLog
                 sessionId={sessionId}
                 usage={usage}
               />

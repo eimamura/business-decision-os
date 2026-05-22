@@ -7,15 +7,16 @@ from datetime import datetime, timezone
 from typing import Any, AsyncGenerator
 from uuid import UUID, uuid4
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Request, status
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
-from apps.api.state import get_orchestrator, sessions, sse_queues
+from apps.api.state import get_orchestrator, make_event_persister, sessions, sse_queues
 from packages.agent.history import compress_history
 from packages.agent.orchestrator import SessionResponse, SessionUserQuery
 from packages.agent.rate_limiter import RateLimitExceeded, check_rate_limit
 from packages.memory import ShortTermMemory
+from packages.persistence.session_events_repo import SessionEventRepository
 from packages.persistence.sessions_repo import DecisionSessionRepository
 
 _log = logging.getLogger(__name__)
@@ -39,6 +40,10 @@ class FeedbackRequest(BaseModel):
     feedback: int
 
 
+class UpdateTitleRequest(BaseModel):
+    title: str
+
+
 @router.post("")
 async def create_session(request: Request, body: CreateSessionRequest) -> dict[str, Any]:
     session_id = str(uuid4())
@@ -47,6 +52,7 @@ async def create_session(request: Request, body: CreateSessionRequest) -> dict[s
         "session_id": session_id,
         "status": "active",
         "goal": goal,
+        "title": None,
         "created_at": _iso_now(),
         "messages": [],
     }
@@ -74,6 +80,7 @@ async def list_sessions() -> list[dict[str, Any]]:
                         "session_id": sid,
                         "status": row.get("status", "active"),
                         "goal": row.get("goal", ""),
+                        "title": row.get("title"),
                         "created_at": str(row.get("created_at", "")),
                         "messages": [],
                     }
@@ -82,6 +89,7 @@ async def list_sessions() -> list[dict[str, Any]]:
                     "session_id": str(r["id"]),
                     "status": r.get("status", "active"),
                     "goal": r.get("goal", ""),
+                    "title": r.get("title"),
                     "created_at": str(r.get("created_at", "")),
                 }
                 for r in db_rows
@@ -107,6 +115,20 @@ async def delete_session(session_id: str) -> None:
         raise HTTPException(status_code=500, detail="Internal error")
 
 
+@router.patch("/{session_id}/title", status_code=status.HTTP_204_NO_CONTENT)
+async def update_session_title(session_id: str, body: UpdateTitleRequest) -> None:
+    title = body.title[:60].strip()
+    if not title:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="title must not be empty")
+    if session_id in sessions:
+        sessions[session_id]["title"] = title
+    try:
+        repo = DecisionSessionRepository()
+        await repo.set_title(session_id, title)
+    except Exception:
+        _log.warning("DB unavailable; skipping title persist for %s", session_id)
+
+
 @router.get("/{session_id}")
 async def get_session(session_id: str) -> dict[str, Any]:
     session = sessions.get(session_id)
@@ -120,6 +142,7 @@ async def get_session(session_id: str) -> dict[str, Any]:
                 "session_id": session_id,
                 "status": row.get("status", "active"),
                 "goal": row.get("goal", ""),
+                "title": row.get("title"),
                 "created_at": str(row.get("created_at", "")),
                 "messages": [],
             }
@@ -220,6 +243,7 @@ async def post_message(
                 "session_id": session_id,
                 "status": db_session.get("status", "active"),
                 "goal": db_session.get("goal", ""),
+                "title": db_session.get("title"),
                 "created_at": str(db_session.get("created_at", _iso_now())),
                 "messages": [],
             }
@@ -257,6 +281,7 @@ async def post_message(
     query = SessionUserQuery(text=body.content, conversation_context=conversation_context)
 
     orchestrator = get_orchestrator(queue)
+    orchestrator._event_persister = make_event_persister(session_id)
 
     async def _run_and_signal() -> None:
         response: SessionResponse | None = None
@@ -297,6 +322,21 @@ async def post_message(
 
     message_id = str(uuid4())
     return {"message_id": message_id, "session_id": session_id, "status": "processing"}
+
+
+@router.get("/{session_id}/events")
+async def get_session_events(
+    session_id: str, limit: int = 200
+) -> list[dict[str, Any]]:
+    try:
+        repo = SessionEventRepository()
+        return await repo.list_for_session(session_id, limit=limit)
+    except RuntimeError as exc:
+        if "DATABASE_URL" in str(exc):
+            return []
+        raise HTTPException(status_code=500, detail="Internal error")
+    except Exception:
+        return []
 
 
 @router.get("/{session_id}/stream")

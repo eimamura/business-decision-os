@@ -45,7 +45,7 @@ services:
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
       CELERY_BROKER_URL: redis://redis:6379/0
       CELERY_RESULT_BACKEND: redis://redis:6379/0
-    command: ["/app/.venv/bin/celery", "-A", "packages.agent.job_runner.celery_app", "worker", "--loglevel=info", "--concurrency=2"]
+    command: ["/app/.venv/bin/celery", "-A", "packages.agent.runner.celery_app", "worker", "--loglevel=info", "--concurrency=2"]
 
   web:
     build:

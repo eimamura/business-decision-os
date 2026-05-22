@@ -25,7 +25,7 @@ class DecisionSessionRepository:
         pool = await get_pool()
         async with pool.acquire() as conn:
             row = await conn.fetchrow(
-                "SELECT id, user_id, goal, status, created_at, updated_at"
+                "SELECT id, user_id, goal, title, status, created_at, updated_at"
                 " FROM decision_sessions WHERE id = $1",
                 uuid.UUID(session_id),
             )
@@ -57,14 +57,14 @@ class DecisionSessionRepository:
         async with pool.acquire() as conn:
             if user_id is not None:
                 rows = await conn.fetch(
-                    "SELECT id, user_id, goal, status, created_at, updated_at"
+                    "SELECT id, user_id, goal, title, status, created_at, updated_at"
                     " FROM decision_sessions WHERE user_id = $1"
                     " ORDER BY created_at DESC",
                     uuid.UUID(user_id),
                 )
             else:
                 rows = await conn.fetch(
-                    "SELECT id, user_id, goal, status, created_at, updated_at"
+                    "SELECT id, user_id, goal, title, status, created_at, updated_at"
                     " FROM decision_sessions ORDER BY created_at DESC"
                 )
         return [dict(r) for r in rows]
@@ -121,6 +121,15 @@ class DecisionSessionRepository:
                 uuid.UUID(session_id),
             )
         return deleted is not None
+
+    async def set_title(self, session_id: str, title: str) -> None:
+        pool = await get_pool()
+        async with pool.acquire() as conn:
+            await conn.execute(
+                "UPDATE decision_sessions SET title = $2, updated_at = now() WHERE id = $1",
+                uuid.UUID(session_id),
+                title,
+            )
 
     async def set_message_feedback(
         self, message_id: str, feedback: int, session_id: str
