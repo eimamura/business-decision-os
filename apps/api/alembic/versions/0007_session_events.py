@@ -22,10 +22,10 @@ def upgrade() -> None:
             payload     JSONB NOT NULL DEFAULT '{}',
             event_id    TEXT,
             created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
-        );
-        CREATE INDEX ON session_events (session_id, created_at);
-        CREATE INDEX ON session_events (session_id, event_type);
+        )
     """)
+    op.execute("CREATE INDEX ON session_events (session_id, created_at)")
+    op.execute("CREATE INDEX ON session_events (session_id, event_type)")
 
 
 def downgrade() -> None:

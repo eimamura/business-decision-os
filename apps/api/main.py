@@ -15,6 +15,7 @@ from fastapi.middleware.cors import CORSMiddleware  # noqa: E402
 
 from apps.api.middleware import DevUserMiddleware  # noqa: E402
 from apps.api.routers import (  # noqa: E402
+    admin,
     approvals,
     audit,
     decisions,
@@ -64,6 +65,7 @@ async def debug_info() -> dict[str, object]:
 
 
 app.include_router(health.router)
+app.include_router(admin.router)
 app.include_router(sessions.router)
 app.include_router(decisions.router)
 app.include_router(recommendations.router)

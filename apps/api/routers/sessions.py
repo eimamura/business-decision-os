@@ -16,6 +16,7 @@ from packages.agent.history import compress_history
 from packages.agent.orchestrator import SessionResponse, SessionUserQuery
 from packages.agent.rate_limiter import RateLimitExceeded, check_rate_limit
 from packages.memory import ShortTermMemory
+from packages.persistence.llm_usage_repo import LlmUsageRepository
 from packages.persistence.session_events_repo import SessionEventRepository
 from packages.persistence.sessions_repo import DecisionSessionRepository
 
@@ -42,6 +43,12 @@ class FeedbackRequest(BaseModel):
 
 class UpdateTitleRequest(BaseModel):
     title: str
+
+
+class SessionUsageResponse(BaseModel):
+    input_tokens: int
+    output_tokens: int
+    total_cost_usd: float
 
 
 @router.post("")
@@ -337,6 +344,16 @@ async def get_session_events(
         raise HTTPException(status_code=500, detail="Internal error")
     except Exception:
         return []
+
+
+@router.get("/{session_id}/usage", response_model=SessionUsageResponse)
+async def get_session_usage(session_id: str) -> SessionUsageResponse:
+    try:
+        repo = LlmUsageRepository()
+        totals = await repo.get_session_totals(session_id)
+        return SessionUsageResponse(**totals)
+    except Exception:
+        return SessionUsageResponse(input_tokens=0, output_tokens=0, total_cost_usd=0.0)
 
 
 @router.get("/{session_id}/stream")
