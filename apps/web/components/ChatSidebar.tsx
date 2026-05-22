@@ -1,6 +1,9 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname } from "next/navigation";
+import { User, Trash2 } from "lucide-react";
+import { useState } from "react";
 import type { Session } from "@/types/chat";
 
 interface ChatSidebarProps {
@@ -11,6 +14,77 @@ interface ChatSidebarProps {
   onDelete: (sessionId: string) => void;
 }
 
+const NAV_ITEMS = [
+  {
+    href: "/chat",
+    label: "Chat",
+    icon: (
+      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+      </svg>
+    ),
+  },
+  {
+    href: "/kpi",
+    label: "KPI Dashboard",
+    icon: (
+      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <line x1="18" y1="20" x2="18" y2="10" />
+        <line x1="12" y1="20" x2="12" y2="4" />
+        <line x1="6" y1="20" x2="6" y2="14" />
+      </svg>
+    ),
+  },
+  {
+    href: "/approvals",
+    label: "Approvals",
+    icon: (
+      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <polyline points="9 11 12 14 22 4" />
+        <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
+      </svg>
+    ),
+  },
+  {
+    href: "/audit",
+    label: "Audit Log",
+    icon: (
+      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+        <polyline points="14 2 14 8 20 8" />
+        <line x1="16" y1="13" x2="8" y2="13" />
+        <line x1="16" y1="17" x2="8" y2="17" />
+        <polyline points="10 9 9 9 8 9" />
+      </svg>
+    ),
+  },
+  {
+    href: "/usage",
+    label: "Usage & Cost",
+    icon: (
+      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <circle cx="12" cy="12" r="10" />
+        <path d="M12 6v6l4 2" />
+      </svg>
+    ),
+  },
+];
+
+function formatSessionDate(dateStr: string): string {
+  const date = new Date(dateStr);
+  const now = new Date();
+  const diffMs = now.getTime() - date.getTime();
+  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+
+  if (diffDays === 0) {
+    return `Today, ${date.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}`;
+  }
+  if (diffDays === 1) {
+    return `Yesterday, ${date.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}`;
+  }
+  return date.toLocaleDateString([], { month: "short", day: "numeric", year: "numeric" });
+}
+
 export default function ChatSidebar({
   sessions,
   activeSessionId,
@@ -18,8 +92,12 @@ export default function ChatSidebar({
   creating,
   onDelete,
 }: ChatSidebarProps) {
+  const pathname = usePathname();
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
+
   return (
-    <aside className="w-56 shrink-0 bg-[#0c0c14] flex flex-col">
+    <aside className="w-60 shrink-0 bg-[#0B1020] flex flex-col border-r border-white/5">
+      {/* Brand */}
       <div className="px-4 py-4 border-b border-white/8">
         <Link
           href="/chat"
@@ -30,78 +108,127 @@ export default function ChatSidebar({
         <p className="text-xs text-white/50 mt-0.5 tracking-wide uppercase">Supply Chain Intelligence</p>
       </div>
 
-      <div className="px-3 py-2.5 border-b border-white/8">
-        <button
-          onClick={onNewSession}
-          disabled={creating}
-          className="w-full flex items-center justify-center gap-1.5 bg-indigo-500 hover:bg-indigo-400 disabled:opacity-50 text-white px-3 py-1.5 rounded-md text-xs font-medium transition-colors"
-        >
-          <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M12 5v14M5 12h14" />
-          </svg>
-          {creating ? "Creating…" : "New Session"}
-        </button>
+      {/* Main Navigation */}
+      <div className="px-3 pt-3 pb-2">
+        <p className="px-1 mb-1.5 text-[10px] font-semibold uppercase tracking-widest text-white/25">
+          Main
+        </p>
+        <nav className="space-y-0.5">
+          {NAV_ITEMS.map(({ href, label, icon }) => {
+            const isActive = href === "/chat" ? pathname.startsWith("/chat") : pathname === href;
+            return (
+              <Link
+                key={href}
+                href={href}
+                className={`flex items-center gap-2.5 px-2.5 py-1.5 rounded-md text-xs transition-colors ${
+                  isActive
+                    ? "bg-indigo-500/15 text-white font-medium"
+                    : "text-white/45 hover:text-white/75 hover:bg-white/5"
+                }`}
+              >
+                <span className={isActive ? "text-indigo-400" : "text-white/30"}>{icon}</span>
+                {label}
+              </Link>
+            );
+          })}
+        </nav>
       </div>
 
-      <div className="flex-1 overflow-y-auto py-1">
+      {/* Sessions */}
+      <div className="px-3 pt-2 border-t border-white/5">
+        <div className="flex items-center justify-between px-1 mb-1.5">
+          <p className="text-[10px] font-semibold uppercase tracking-widest text-white/25">Sessions</p>
+          <button
+            onClick={onNewSession}
+            disabled={creating}
+            title="New Session"
+            className="flex items-center gap-1 text-[10px] text-indigo-400/70 hover:text-indigo-300 disabled:opacity-40 transition-colors"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M12 5v14M5 12h14" />
+            </svg>
+            {creating ? "…" : "New"}
+          </button>
+        </div>
+      </div>
+
+      <div className="flex-1 overflow-y-auto pb-2">
         {sessions.length === 0 && (
-          <p className="px-4 py-3 text-xs text-white/50">No sessions yet</p>
+          <p className="px-4 py-3 text-xs text-white/30">No sessions yet</p>
         )}
         {sessions.map((s) => {
           const isActive = s.session_id === activeSessionId;
+          const isPending = pendingDeleteId === s.session_id;
           return (
-            <div key={s.session_id} className="relative group/item">
+            <div
+              key={s.session_id}
+              className="relative group/item mx-1"
+              onMouseLeave={() => {
+                if (isPending) setPendingDeleteId(null);
+              }}
+            >
               <Link
                 href={`/chat/${s.session_id}`}
-                className={`block px-4 py-2.5 pr-8 text-xs transition-colors ${
+                className={`block px-3 py-2 pr-7 text-xs rounded-md transition-colors ${
                   isActive
                     ? "bg-indigo-500/15 text-white"
-                    : "text-white/50 hover:bg-white/5 hover:text-white/80"
+                    : "text-white/45 hover:bg-white/5 hover:text-white/75"
                 }`}
               >
                 {isActive && (
-                  <span className="absolute left-0 top-0 bottom-0 w-0.5 bg-indigo-400 rounded-r" />
+                  <span className="absolute left-1 top-0 bottom-0 w-0.5 bg-indigo-400 rounded-r" />
                 )}
-                <span className="block truncate font-medium">{s.title || s.goal || "New Session"}</span>
-                <span className="text-xs text-white/50 mt-0.5 block">
-                  {new Date(s.created_at).toLocaleDateString()}
+                <span className="block truncate font-medium">{s.title ?? s.goal ?? "New Session"}</span>
+                <span className="text-[10px] text-white/30 mt-0.5 block">
+                  {formatSessionDate(s.created_at)}
                 </span>
               </Link>
-              <button
-                onClick={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  onDelete(s.session_id);
-                }}
-                aria-label="Delete session"
-                className="absolute right-1.5 top-1/2 -translate-y-1/2 opacity-0 group-hover/item:opacity-100 p-1 text-white/20 hover:text-red-400 transition-all"
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <polyline points="3 6 5 6 21 6" />
-                  <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
-                  <path d="M10 11v6M14 11v6" />
-                  <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
-                </svg>
-              </button>
+              {isPending ? (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setPendingDeleteId(null);
+                    onDelete(s.session_id);
+                  }}
+                  aria-label="Confirm delete"
+                  title="Click to confirm delete"
+                  className="absolute right-1.5 top-1/2 -translate-y-1/2 px-1 py-0.5 text-red-400 hover:text-red-300 transition-colors"
+                >
+                  <Trash2 size={13} />
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setPendingDeleteId(s.session_id);
+                  }}
+                  aria-label="Delete session"
+                  title="Delete session"
+                  className="absolute right-1.5 top-1/2 -translate-y-1/2 opacity-0 group-hover/item:opacity-100 px-1 py-0.5 text-white/30 hover:text-white/60 transition-all text-[11px] font-bold tracking-tight"
+                >
+                  ···
+                </button>
+              )}
             </div>
           );
         })}
       </div>
 
-      <div className="px-4 py-3 border-t border-white/8 space-y-0.5">
-        {[
-          { href: "/approvals", label: "Approvals" },
-          { href: "/audit", label: "Audit Log" },
-          { href: "/kpi", label: "KPI Dashboard" },
-        ].map(({ href, label }) => (
-          <Link
-            key={href}
-            href={href}
-            className="flex items-center gap-2 px-0 py-1.5 text-xs text-white/55 hover:text-white/75 transition-colors"
-          >
-            {label}
-          </Link>
-        ))}
+      {/* User area */}
+      <div className="border-t border-white/8 px-3 py-3 shrink-0">
+        <div className="flex items-center gap-2.5 px-1">
+          <div className="w-7 h-7 rounded-full bg-indigo-600/40 border border-indigo-500/30 flex items-center justify-center shrink-0">
+            <User size={14} className="text-indigo-300" />
+          </div>
+          <div className="min-w-0">
+            <p className="text-xs font-medium text-white/70 truncate">User</p>
+            <p className="text-[10px] text-white/35 truncate">Supply Chain Analyst</p>
+          </div>
+        </div>
       </div>
     </aside>
   );

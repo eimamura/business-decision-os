@@ -1,5 +1,5 @@
 import { SseEventSchema } from "@/types/chat";
-import type { ChatMessage, Session, SseEvent } from "@/types/chat";
+import type { ChatMessage, Session, SessionUsage, SseEvent } from "@/types/chat";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
@@ -7,6 +7,13 @@ const DEV_HEADERS: Record<string, string> = {
   "Content-Type": "application/json",
   "X-Dev-User": "dev-user",
 };
+
+export async function fetchSession(sessionId: string): Promise<Session | null> {
+  const res = await fetch(`${API_BASE}/api/v1/sessions/${sessionId}`, { headers: DEV_HEADERS });
+  if (res.status === 404) return null;
+  if (!res.ok) throw new Error(`fetchSession: ${res.status}`);
+  return res.json() as Promise<Session>;
+}
 
 export async function fetchSessions(): Promise<Session[]> {
   const res = await fetch(`${API_BASE}/api/v1/sessions`, { headers: DEV_HEADERS });
@@ -168,5 +175,22 @@ export async function* streamSession(
     }
   } finally {
     reader.cancel();
+  }
+}
+
+export async function fetchSessionUsage(sessionId: string): Promise<SessionUsage> {
+  try {
+    const res = await fetch(`${API_BASE}/api/v1/sessions/${sessionId}/usage`, {
+      headers: DEV_HEADERS,
+    });
+    if (!res.ok) return { inputTokens: 0, outputTokens: 0, costUsd: 0 };
+    const data = await res.json() as { input_tokens: number; output_tokens: number; total_cost_usd: number };
+    return {
+      inputTokens: data.input_tokens,
+      outputTokens: data.output_tokens,
+      costUsd: data.total_cost_usd,
+    };
+  } catch {
+    return { inputTokens: 0, outputTokens: 0, costUsd: 0 };
   }
 }

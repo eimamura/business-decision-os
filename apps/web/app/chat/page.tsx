@@ -1,60 +1,51 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import ChatSidebar from "@/components/ChatSidebar";
-import { fetchSessions, createSession, deleteSession } from "@/lib/api";
-import type { Session } from "@/types/chat";
+import { fetchSessions, createSession } from "@/lib/api";
 
-export default function ChatListPage() {
+export default function ChatListPage(): React.JSX.Element {
   const router = useRouter();
-  const [sessions, setSessions] = useState<Session[]>([]);
-  const [creating, setCreating] = useState(false);
+  const [error, setError] = useState(false);
+  const started = useRef(false);
 
-  useEffect(() => {
+  function start() {
+    setError(false);
     fetchSessions()
-      .then(setSessions)
-      .catch(() => setSessions([]));
-  }, []);
-
-  async function handleDelete(sessionId: string) {
-    setSessions((prev) => prev.filter((s) => s.session_id !== sessionId));
-    const ok = await deleteSession(sessionId);
-    if (!ok) {
-      fetchSessions().then(setSessions).catch(() => undefined);
-    }
+      .then((sessions) => {
+        if (sessions.length > 0) {
+          router.replace(`/chat/${sessions[0].session_id}`);
+        } else {
+          return createSession("New decision session")
+            .then((data) => router.replace(`/chat/${data.session_id}`));
+        }
+      })
+      .catch(() => setError(true));
   }
 
-  async function handleNewSession() {
-    setCreating(true);
-    try {
-      const data = await createSession("New decision session");
-      router.push(`/chat/${data.session_id}`);
-    } catch {
-      setCreating(false);
-    }
+  useEffect(() => {
+    if (started.current) return;
+    started.current = true;
+    start();
+  }, []);
+
+  if (error) {
+    return (
+      <div className="flex h-screen bg-[#0c0c14] items-center justify-center flex-col gap-3">
+        <p className="text-sm text-white/50">Failed to start session</p>
+        <button
+          onClick={start}
+          className="text-xs px-3 py-1.5 rounded-md bg-indigo-600 text-white hover:bg-indigo-500"
+        >
+          Try again
+        </button>
+      </div>
+    );
   }
 
   return (
-    <div className="flex h-screen bg-[#0c0c14] overflow-hidden">
-      <ChatSidebar
-        sessions={sessions}
-        activeSessionId={undefined}
-        onNewSession={handleNewSession}
-        creating={creating}
-        onDelete={handleDelete}
-      />
-      <main className="flex-1 flex flex-col items-center justify-center gap-3">
-        <div className="w-10 h-10 rounded-xl bg-white/5 flex items-center justify-center">
-          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="text-indigo-400">
-            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-          </svg>
-        </div>
-        <div className="text-center">
-          <p className="text-sm font-semibold text-white/70">Start a decision session</p>
-          <p className="text-xs text-white/30 mt-0.5">Select a session or create a new one</p>
-        </div>
-      </main>
+    <div className="flex h-screen bg-[#0c0c14] items-center justify-center">
+      <p className="text-sm text-white/30">Starting session…</p>
     </div>
   );
 }
