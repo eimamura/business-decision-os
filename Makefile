@@ -15,13 +15,13 @@ dev-compose:
 	docker compose --env-file .env -f infra/compose/compose.yaml up --build
 
 dev-up:
-	docker compose --env-file .env -f infra/compose/compose.yaml up -d --build
+	docker compose --env-file .env -f infra/compose/compose.yaml up --build
 
 dev-down:
 	docker compose --env-file .env -f infra/compose/compose.yaml down
 
 dev-logs:
-	docker compose --env-file .env -f infra/compose/compose.yaml logs --tail=100
+	docker compose --env-file .env -f infra/compose/compose.yaml logs --tail=100 --follow
 
 dev-ps:
 	docker compose --env-file .env -f infra/compose/compose.yaml ps
