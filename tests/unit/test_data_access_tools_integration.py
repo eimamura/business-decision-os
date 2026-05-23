@@ -25,6 +25,23 @@ def _ctx() -> ToolContext:
     )
 
 
+@pytest.fixture(autouse=True)
+async def reset_db_pool():
+    """Reset the global asyncpg pool before and after each test.
+
+    pytest-asyncio creates a new event loop per test function. The global pool
+    singleton in packages/persistence/db.py is bound to the event loop in which
+    it was created, so it becomes invalid across tests. Resetting it forces
+    recreation in the current loop.
+    """
+    import packages.persistence.db as db_module
+    db_module._pool = None
+    yield
+    if db_module._pool is not None:
+        await db_module._pool.close()
+        db_module._pool = None
+
+
 # ===== DataCatalogSearchTool =====
 
 async def test_data_catalog_search_returns_row_counts():
@@ -56,7 +73,9 @@ async def test_data_quality_checker_dynamic_sql_executes():
     tool = DataQualityCheckerTool()
     result = await tool.handle({"table_name": "inventory"}, _ctx())
     assert "error" not in result.output
-    assert result.output["total_rows"] > 0
+    assert "note" not in result.output  # real DB path, not the no-DB fallback
+    assert isinstance(result.output["total_rows"], int)
+    assert len(result.output["columns"]) > 0  # columns fetched from information_schema
     for col in result.output["columns"]:
         assert "null_count" in col
         assert "null_pct" in col
