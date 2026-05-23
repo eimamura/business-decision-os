@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from packages.persistence.catalog_repo import get_table_schema
 from packages.tools.base import ToolContext, ToolResult
 from packages.tools.sql_allowlist import ALLOWED_READ_TABLES
 
@@ -51,28 +52,7 @@ class TableSchemaReaderTool:
             )
 
         try:
-            from packages.persistence.db import get_pool
-
-            pool = await get_pool()
-            async with pool.acquire() as conn:
-                rows = await conn.fetch(
-                    """
-                    SELECT column_name, data_type, is_nullable, column_default
-                    FROM information_schema.columns
-                    WHERE table_schema = 'public' AND table_name = $1
-                    ORDER BY ordinal_position
-                    """,
-                    table_name,
-                )
-                columns = [
-                    {
-                        "column_name": r["column_name"],
-                        "data_type": r["data_type"],
-                        "is_nullable": r["is_nullable"] == "YES",
-                        "column_default": r["column_default"],
-                    }
-                    for r in rows
-                ]
+            columns = await get_table_schema(table_name)
             return ToolResult(
                 output={
                     "table_name": table_name,

@@ -37,6 +37,32 @@ Tests must support the new design, not block it.
 
 ---
 
+## Current Focused Verification Notes
+
+### SQL Guardrail Hardening — 2026-05-23
+
+The SQL read guardrail is covered by `tests/unit/test_tool_isolation.py`.
+
+Focused command:
+
+```
+pytest tests/unit/test_tool_isolation.py -q
+```
+
+Coverage expectations:
+
+- `SELECT * FROM sku_master`, `SELECT * FROM public.sku_master`, and `SELECT * FROM "sku_master"` are accepted.
+- Table-less `SELECT`, multi-statement SQL, write operations, `COPY`, and dangerous functions such as `pg_sleep` are rejected.
+- Non-allowlisted tables are rejected through plain identifiers, quoted identifiers, joins, comma joins, CTEs, subqueries, and `UNION` branches.
+- `SqlQueryTool` and `NlQueryTool` return guardrail errors without executing blocked SQL.
+
+Environment-dependent commands:
+
+- `pytest tests/unit/test_data_access_tools_integration.py -q` requires a live PostgreSQL database; without it, the data access tools use their no-database fallback and integration assertions fail.
+- `pytest tests/ -x -q` currently stops on the known `tests/unit/test_contracts.py` import issue for `sse_queues` from `apps.api.state`.
+
+---
+
 ## Core Principle
 
 During large-scale refactoring, not all existing tests are authoritative.

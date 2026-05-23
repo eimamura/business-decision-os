@@ -14,7 +14,7 @@ from packages.agent.llm import (
     LLMUsage,
     StubClaudeClient,
 )
-from packages.agent.orchestrator import SessionGoal, SessionUserQuery, SessionOrchestrator
+from packages.agent.orchestrator import SessionGoal, SessionOrchestrator, SessionUserQuery
 from packages.agent.orchestrator.weights import (
     load_global_weights,
     load_sku_overrides,
@@ -29,9 +29,11 @@ from packages.tools.data_catalog_search_tool import DataCatalogSearchTool
 from packages.tools.data_quality_checker_tool import DataQualityCheckerTool
 from packages.tools.evaluator_tool import EvaluatorTool
 from packages.tools.forecast_tool import ForecastTool
+from packages.tools.nl_query_tool import NlQueryTool
 from packages.tools.optimizer_tool import OptimizerTool
 from packages.tools.simulation_tool import SimulationTool
 from packages.tools.sql_allowlist import ALLOWED_READ_TABLES
+from packages.tools.sql_guardrail import SQLGuardrailError, validate_read_sql
 from packages.tools.sql_tool import SqlQueryTool
 from packages.tools.table_schema_reader_tool import TableSchemaReaderTool
 
@@ -93,6 +95,23 @@ class PlanningStubClaudeClient(StubClaudeClient):
                 latency_ms=0,
             )
         return await super().complete(messages, **kwargs)
+
+
+class SQLStubClaudeClient(StubClaudeClient):
+    def __init__(self, sql: str) -> None:
+        super().__init__()
+        self._sql = sql
+
+    async def complete(self, messages, **kwargs) -> LLMResponse:
+        return LLMResponse(
+            text=self._sql,
+            tool_calls=[],
+            finish_reason="stop",
+            usage=LLMUsage(input_tokens=0, output_tokens=0, total_cost_usd=Decimal("0")),
+            model="stub",
+            request_id=str(uuid4()),
+            latency_ms=0,
+        )
 
 
 # ===== T-1001: StubClaudeClient =====
@@ -217,6 +236,41 @@ async def test_data_quality_checker_no_db_fallback():
 
 # ===== T-1010: SqlQueryTool =====
 
+@pytest.mark.parametrize(
+    "sql",
+    [
+        "SELECT * FROM sku_master",
+        "SELECT * FROM public.sku_master",
+        'SELECT * FROM "sku_master"',
+    ],
+)
+def test_sql_guardrail_allows_allowlisted_tables(sql: str):
+    validate_read_sql(sql)
+
+
+@pytest.mark.parametrize(
+    "sql",
+    [
+        "SELECT 1",
+        "SELECT pg_sleep(10)",
+        "COPY sku_master TO STDOUT",
+        "DELETE FROM sku_master WHERE 1=1",
+        "SELECT * FROM sku_master; DELETE FROM sku_master WHERE 1=1",
+        "SELECT * FROM users",
+        'SELECT * FROM "users"',
+        'SELECT * FROM sku_master JOIN "users" u ON u.id = sku_master.sku_id',
+        "SELECT * FROM sku_master, users",
+        "WITH u AS (SELECT * FROM users) SELECT * FROM sku_master",
+        "SELECT * FROM (SELECT * FROM users) u JOIN sku_master s ON 1=1",
+        "SELECT * FROM sku_master UNION SELECT * FROM users",
+        "SELECT * FROM other_schema.sku_master",
+    ],
+)
+def test_sql_guardrail_rejects_unsafe_sql(sql: str):
+    with pytest.raises(SQLGuardrailError):
+        validate_read_sql(sql)
+
+
 @pytest.mark.asyncio
 async def test_sql_tool_no_db_returns_empty():
     tool = SqlQueryTool()
@@ -238,6 +292,49 @@ async def test_sql_tool_blocks_non_allowlist_table():
     tool = SqlQueryTool()
     result = await tool.handle({"query": "SELECT * FROM users"}, _ctx())
     assert "error" in result.output
+
+
+@pytest.mark.parametrize(
+    "sql",
+    [
+        "SELECT 1",
+        "SELECT pg_sleep(10)",
+        "SELECT * FROM sku_master; DELETE FROM sku_master WHERE 1=1",
+        'SELECT * FROM sku_master JOIN "users" u ON u.id = sku_master.sku_id',
+        "WITH u AS (SELECT * FROM users) SELECT * FROM sku_master",
+    ],
+)
+@pytest.mark.asyncio
+async def test_sql_tool_guardrail_blocks_without_execution(
+    sql: str,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    async def fail_execute(query: str):
+        raise AssertionError(f"query should not execute: {query}")
+
+    monkeypatch.setattr("packages.tools.sql_tool.execute_read_query", fail_execute)
+    tool = SqlQueryTool()
+    result = await tool.handle({"query": sql}, _ctx())
+    assert "error" in result.output
+    assert result.output["rows"] == []
+    assert result.output["column_names"] == []
+    assert result.output["row_count"] == 0
+
+
+@pytest.mark.asyncio
+async def test_nl_query_tool_guardrail_blocks_without_execution(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    async def fail_execute(query: str):
+        raise AssertionError(f"query should not execute: {query}")
+
+    monkeypatch.setattr("packages.tools.nl_query_tool.execute_read_query", fail_execute)
+    tool = NlQueryTool(llm_client=SQLStubClaudeClient("SELECT pg_sleep(10)"))
+    result = await tool.handle({"question": "wait"}, _ctx())
+    assert "error" in result.output
+    assert result.output["results"] == []
+    assert result.output["count"] == 0
+    assert result.output["sql"] == ""
 
 
 # ===== T-1011: ApprovalTool =====

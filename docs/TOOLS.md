@@ -45,13 +45,25 @@ A tool is only callable when it appears in both layers.
 
 ### Table Allowlist (SQL-level)
 
-All tools that issue SQL queries are additionally restricted to the tables in `ALLOWED_READ_TABLES` (`packages/tools/sql_allowlist.py`):
+All tools that issue user- or LLM-provided SQL queries are additionally restricted by `validate_read_sql()` in `packages/tools/sql_guardrail.py` before any database execution. The guardrail uses `ALLOWED_READ_TABLES` (`packages/tools/sql_allowlist.py`) as the read table allowlist:
 
 ```
 sku_master, inventory, demand_history, supply, cost, customers
 ```
 
-Write statements (INSERT, UPDATE, DELETE, DROP, CREATE, ALTER, TRUNCATE) are rejected regardless of table.
+Guardrail rules:
+
+- SQL must be non-empty and parse to exactly one statement.
+- Statement type must be `SELECT`.
+- The query must reference at least one allowlisted table.
+- Referenced tables must be in `ALLOWED_READ_TABLES`.
+- `public.<allowed_table>` and quoted allowlisted names such as `"sku_master"` are allowed.
+- Non-public schema references such as `other_schema.sku_master` are rejected.
+- Table extraction covers `FROM`, `JOIN`, comma joins, CTE bodies, subqueries, and `UNION` branches.
+- Non-read operations are rejected regardless of table, including `INSERT`, `UPDATE`, `DELETE`, `DROP`, `CREATE`, `ALTER`, `TRUNCATE`, `COPY`, `CALL`, `DO`, `GRANT`, and `REVOKE`.
+- Operationally dangerous functions or features are rejected, including `pg_sleep`, `dblink`, `postgres_fdw`, `lo_import`, `lo_export`, and `copy`.
+
+This guardrail is a Tool Layer responsibility. Repository functions in `packages/persistence/` execute already-validated SQL and do not duplicate SQL safety policy.
 
 ---
 
@@ -198,9 +210,9 @@ Execute a read-only SQL query against operational tables.
 
 **Failure handling**
 
-- Write statements: rejected with `error` in output, no exception.
-- Non-allowlisted table: rejected with `error` in output, no exception.
+- SQL guardrail rejection: returns `error`, empty `rows`, empty `column_names`, and `row_count: 0`; the query is not executed.
 - Database unreachable: returns empty rows, `note: "no database connection"`.
+- SQL/schema execution error after guardrail validation: returns `error` with the database exception message.
 
 **Audit payload:** `{query, row_count}`
 
@@ -208,7 +220,7 @@ Execute a read-only SQL query against operational tables.
 
 #### `nl_query`
 
-Translate a natural-language question into SQL and execute it. Uses the LLM to generate SQL, validates it against the allowlist, and retries on guardrail failure.
+Translate a natural-language question into SQL and execute it. Uses the LLM to generate SQL, validates it through `packages/tools/sql_guardrail.py`, and executes it through the repository layer.
 
 The DB schema provided to the LLM is **auto-generated at API startup** from `information_schema.columns` via `packages/tools/schema_context.py`. Do not write or maintain a hand-coded schema string in this tool or anywhere else.
 
@@ -233,7 +245,7 @@ The DB schema provided to the LLM is **auto-generated at API startup** from `inf
 **Failure handling**
 
 - No `LLMClient` provided at registry creation: raises `RuntimeError` at call time (configuration error — must not silently degrade).
-- SQL guardrail rejection after max retries: returns `error` in output.
+- SQL guardrail rejection: returns `error` in output immediately; unsafe generated SQL is not retried or executed.
 - Database unreachable: returns empty results with `error`.
 - Schema context not yet loaded (DB unavailable at startup): LLM receives no schema section; query quality degrades but the tool does not raise.
 

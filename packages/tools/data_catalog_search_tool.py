@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from packages.persistence.catalog_repo import list_tables_with_counts
 from packages.tools.base import ToolContext, ToolResult
 from packages.tools.sql_allowlist import ALLOWED_READ_TABLES
 
@@ -41,14 +42,7 @@ class DataCatalogSearchTool:
         tables = sorted(t for t in ALLOWED_READ_TABLES if not keyword or keyword in t)
 
         try:
-            from packages.persistence.db import get_pool
-
-            pool = await get_pool()
-            result: list[dict[str, Any]] = []
-            async with pool.acquire() as conn:
-                for table in tables:
-                    row_count: int = await conn.fetchval(f"SELECT COUNT(*) FROM {table}")
-                    result.append({"table_name": table, "row_count": row_count})
+            result = await list_tables_with_counts(tables)
         except Exception:
             result = [{"table_name": t, "row_count": None} for t in tables]
 

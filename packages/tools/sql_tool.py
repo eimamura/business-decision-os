@@ -1,33 +1,10 @@
 from __future__ import annotations
 
-import re
 from typing import Any
 
+from packages.persistence import execute_read_query
 from packages.tools.base import ToolContext, ToolResult
-from packages.tools.sql_allowlist import ALLOWED_READ_TABLES
-
-_WRITE_KEYWORDS = re.compile(
-    r"\b(INSERT|UPDATE|DELETE|DROP|CREATE|ALTER|TRUNCATE)\b", re.IGNORECASE
-)
-_TABLE_PATTERN = re.compile(r"\bFROM\s+(\w+)|\bJOIN\s+(\w+)", re.IGNORECASE)
-
-
-def _extract_tables(sql: str) -> list[str]:
-    tables = []
-    for match in _TABLE_PATTERN.finditer(sql):
-        table = match.group(1) or match.group(2)
-        if table:
-            tables.append(table.lower())
-    return tables
-
-
-def _validate_sql(sql: str) -> str | None:
-    if _WRITE_KEYWORDS.search(sql):
-        return "Write statements are not allowed"
-    for table in _extract_tables(sql):
-        if table not in ALLOWED_READ_TABLES:
-            return f"Table '{table}' is not in the allowlist"
-    return None
+from packages.tools.sql_guardrail import SQLGuardrailError, validate_read_sql
 
 
 class SqlQueryTool:
@@ -54,39 +31,56 @@ class SqlQueryTool:
         pass
 
     async def handle(self, input: dict[str, Any], ctx: ToolContext) -> ToolResult:
-        from packages.persistence.db import get_pool
-
         query: str = input.get("query", "")
 
-        error = _validate_sql(query)
-        if error:
+        try:
+            validate_read_sql(query)
+        except SQLGuardrailError as exc:
+            error = str(exc)
             return ToolResult(
                 output={"error": error, "rows": [], "column_names": [], "row_count": 0},
                 audit_payload={"query": query, "error": error, "row_count": 0},
             )
 
         try:
-            pool = await get_pool()
-            async with pool.acquire() as conn:
-                rows = await conn.fetch(query)
-                columns = list(rows[0].keys()) if rows else []
-                row_dicts = [dict(r) for r in rows]
-                return ToolResult(
-                    output={
-                        "rows": row_dicts,
-                        "column_names": columns,
-                        "row_count": len(row_dicts),
-                        "executed_query": query,
-                    },
-                    audit_payload={"query": query, "row_count": len(row_dicts)},
-                )
-        except Exception:
+            result = await execute_read_query(query)
             return ToolResult(
                 output={
-                    "rows": [],
-                    "column_names": [],
-                    "row_count": 0,
-                    "note": "no database connection",
+                    "rows": result["rows"],
+                    "column_names": result["column_names"],
+                    "row_count": result["row_count"],
+                    "executed_query": query,
                 },
+                audit_payload={"query": query, "row_count": result["row_count"]},
+            )
+        except Exception as exc:
+            output: dict[str, Any] = {
+                "rows": [],
+                "column_names": [],
+                "row_count": 0,
+            }
+            if _is_connection_error(exc):
+                output["note"] = "no database connection"
+            else:
+                output["error"] = str(exc)
+            return ToolResult(
+                output=output,
                 audit_payload={"query": query, "row_count": 0},
             )
+
+
+def _is_connection_error(exc: Exception) -> bool:
+    message = str(exc).lower()
+    class_name = exc.__class__.__name__.lower()
+    module_name = exc.__class__.__module__.lower()
+    if isinstance(exc, RuntimeError) and "database_url" in message:
+        return True
+    return (
+        "asyncpg" in module_name
+        and (
+            "connection" in class_name
+            or "connection" in message
+            or "connect call failed" in message
+            or "connection refused" in message
+        )
+    )

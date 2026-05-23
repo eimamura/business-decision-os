@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 
+from packages.persistence import get_schema_context_columns
 from packages.tools.sql_allowlist import ALLOWED_READ_TABLES
 
 logger = logging.getLogger(__name__)
@@ -16,32 +17,22 @@ async def load_schema_context() -> str:
     """
     global _schema_context
     try:
-        from packages.persistence.db import get_pool
-
-        pool = await get_pool()
-        async with pool.acquire() as conn:
-            lines: list[str] = []
-            for table in sorted(ALLOWED_READ_TABLES):
-                rows = await conn.fetch(
-                    """
-                    SELECT column_name, data_type
-                    FROM information_schema.columns
-                    WHERE table_schema = 'public' AND table_name = $1
-                    ORDER BY ordinal_position
-                    """,
-                    table,
+        tables = sorted(ALLOWED_READ_TABLES)
+        table_columns = await get_schema_context_columns(tables)
+        lines: list[str] = []
+        for table in tables:
+            rows = table_columns[table]
+            if rows:
+                cols = ", ".join(
+                    f"{r['column_name']} {r['data_type'].upper()}" for r in rows
                 )
-                if rows:
-                    cols = ", ".join(
-                        f"{r['column_name']} {r['data_type'].upper()}" for r in rows
-                    )
-                    lines.append(f"{table}({cols})")
-            lines.append(
-                "Join rule: all sku_id columns are TEXT; "
-                "join with ON table.sku_id = sku_master.sku_id (not UUID)."
-            )
-            _schema_context = "\n".join(lines)
-            logger.info("Schema context loaded: %d tables", len(sorted(ALLOWED_READ_TABLES)))
+                lines.append(f"{table}({cols})")
+        lines.append(
+            "Join rule: all sku_id columns are TEXT; "
+            "join with ON table.sku_id = sku_master.sku_id (not UUID)."
+        )
+        _schema_context = "\n".join(lines)
+        logger.info("Schema context loaded: %d tables", len(tables))
     except Exception as exc:
         logger.warning("Could not load schema context from DB: %s", exc)
     return _schema_context

@@ -5,14 +5,11 @@ import logging
 import time
 from typing import Any
 
-import sqlparse
-import sqlparse.sql
-import sqlparse.tokens as T
-
 from packages.agent.llm import LLMClient, LLMMessage
+from packages.persistence import execute_read_query
 from packages.tools.base import ToolContext, ToolResult
 from packages.tools.schema_context import get_schema_context
-from packages.tools.sql_allowlist import ALLOWED_READ_TABLES
+from packages.tools.sql_guardrail import SQLGuardrailError, validate_read_sql
 
 logger = logging.getLogger(__name__)
 
@@ -54,51 +51,17 @@ def _build_system_text() -> str:
         if schema
         else _SQL_RULES
     )
-    return f"You are a SQL expert. Generate a PostgreSQL SELECT query.\n\n{schema_section}{FEW_SHOT_EXAMPLES}"
+    return (
+        "You are a SQL expert. Generate a PostgreSQL SELECT query.\n\n"
+        f"{schema_section}{FEW_SHOT_EXAMPLES}"
+    )
 
 _result_cache: dict[str, tuple[list[dict[str, Any]], str, float]] = {}
 
-
-class SQLGuardrailError(Exception):
-    pass
+validate_sql = validate_read_sql
 
 
-def _extract_tables(stmt: sqlparse.sql.Statement) -> set[str]:
-    tables: set[str] = set()
-    from_seen = False
-
-    for token in stmt.flatten():  # type: ignore[no-untyped-call]
-        if token.ttype in (T.Keyword, T.Keyword.DML):
-            val = token.normalized.upper()
-            if val in ("FROM", "JOIN", "INNER JOIN", "LEFT JOIN", "RIGHT JOIN", "FULL JOIN"):
-                from_seen = True
-                continue
-            elif val in ("WHERE", "ON", "SET", "GROUP", "HAVING", "ORDER", "LIMIT", "UNION"):
-                from_seen = False
-        elif from_seen and token.ttype in (T.Name, T.Literal.String.Single):
-            tables.add(token.normalized.lower().strip('"').strip("'"))
-            from_seen = False
-
-    return tables
-
-
-def validate_sql(sql: str) -> None:
-    parsed = sqlparse.parse(sql)
-    if not parsed:
-        raise SQLGuardrailError("Empty SQL statement")
-
-    stmt = parsed[0]
-    stmt_type: str = stmt.get_type()  # type: ignore[no-untyped-call]
-    if stmt_type != "SELECT":
-        raise SQLGuardrailError(f"Only SELECT statements are allowed, got: {stmt_type}")
-
-    tables = _extract_tables(stmt)
-    disallowed = tables - ALLOWED_READ_TABLES
-    if disallowed:
-        raise SQLGuardrailError(f"Table(s) not allowed: {disallowed}")
-
-
-async def _load_positive_examples(conn: Any) -> str:
+async def _load_positive_examples() -> str:
     return ""
 
 
@@ -126,7 +89,6 @@ async def _generate_sql(
 
 
 async def generate_and_run(
-    conn: Any,
     question: str,
     llm_client: LLMClient,
 ) -> tuple[list[dict[str, Any]], str]:
@@ -136,14 +98,14 @@ async def generate_and_run(
         logger.debug("Cache hit for question hash %s", cache_key[:8])
         return cached[0], cached[1]
 
-    dynamic_examples = await _load_positive_examples(conn)
+    dynamic_examples = await _load_positive_examples()
     error_context = ""
     for attempt in range(MAX_RETRIES + 1):
         sql = await _generate_sql(question, llm_client, error_context, dynamic_examples)
         try:
             validate_sql(sql)
-            rows = await conn.fetch(sql)
-            result = [dict(r) for r in rows]
+            query_result = await execute_read_query(sql)
+            result = query_result["rows"]
             _result_cache[cache_key] = (result, sql, time.time())
             return result, sql
         except SQLGuardrailError:
@@ -185,8 +147,6 @@ class NlQueryTool:
         self._llm_client = llm_client
 
     async def handle(self, input: dict[str, Any], ctx: ToolContext) -> ToolResult:
-        from packages.persistence.db import get_pool
-
         if self._llm_client is None:
             raise RuntimeError(
                 "NlQueryTool requires an LLMClient — pass llm_client to create_tool_registry()"
@@ -195,18 +155,16 @@ class NlQueryTool:
         question: str = input.get("question", "")
 
         try:
-            pool = await get_pool()
-            async with pool.acquire() as conn:
-                results, sql = await generate_and_run(conn, question, self._llm_client)
-                return ToolResult(
-                    output={
-                        "results": results,
-                        "count": len(results),
-                        "sql": sql,
-                        "executed_query": sql,
-                    },
-                    audit_payload={"question": question, "sql": sql, "count": len(results)},
-                )
+            results, sql = await generate_and_run(question, self._llm_client)
+            return ToolResult(
+                output={
+                    "results": results,
+                    "count": len(results),
+                    "sql": sql,
+                    "executed_query": sql,
+                },
+                audit_payload={"question": question, "sql": sql, "count": len(results)},
+            )
         except SQLGuardrailError as exc:
             return ToolResult(
                 output={"results": [], "count": 0, "sql": "", "error": str(exc)},

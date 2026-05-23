@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from packages.persistence.catalog_repo import get_null_profile
 from packages.tools.base import ToolContext, ToolResult
 from packages.tools.sql_allowlist import ALLOWED_READ_TABLES
 
@@ -47,66 +48,20 @@ class DataQualityCheckerTool:
             )
 
         try:
-            from packages.persistence.db import get_pool
-
-            pool = await get_pool()
-            async with pool.acquire() as conn:
-                col_rows = await conn.fetch(
-                    """
-                    SELECT column_name
-                    FROM information_schema.columns
-                    WHERE table_schema = 'public' AND table_name = $1
-                    ORDER BY ordinal_position
-                    """,
-                    table_name,
-                )
-                col_names = [r["column_name"] for r in col_rows]
-
-                if not col_names:
-                    return ToolResult(
-                        output={
-                            "table_name": table_name,
-                            "total_rows": 0,
-                            "columns": [],
-                            "has_issues": False,
-                        },
-                        audit_payload={"table_name": table_name, "total_rows": 0},
-                    )
-
-                # table_name validated against ALLOWED_READ_TABLES (compile-time frozenset).
-                # col_names sourced from information_schema for this specific table — safe to interpolate.
-                null_exprs = ", ".join(
-                    f'COUNT(*) FILTER (WHERE "{col}" IS NULL) AS "{col}_nulls"'
-                    for col in col_names
-                )
-                row = await conn.fetchrow(
-                    f'SELECT COUNT(*) AS total, {null_exprs} FROM "{table_name}"'
-                )
-                if row is None:
-                    raise RuntimeError("fetchrow returned None")
-
-                total: int = row["total"]
-                columns: list[dict[str, Any]] = []
-                for col in col_names:
-                    null_count: int = row[f"{col}_nulls"]
-                    null_pct = round(null_count / total * 100, 2) if total > 0 else 0.0
-                    columns.append(
-                        {
-                            "column_name": col,
-                            "null_count": null_count,
-                            "null_pct": null_pct,
-                        }
-                    )
-
-                return ToolResult(
-                    output={
-                        "table_name": table_name,
-                        "total_rows": total,
-                        "columns": columns,
-                        "has_issues": any(c["null_count"] > 0 for c in columns),
-                    },
-                    audit_payload={"table_name": table_name, "total_rows": total},
-                )
+            profile = await get_null_profile(table_name)
+            has_issues = any(column["null_count"] > 0 for column in profile["columns"])
+            return ToolResult(
+                output={
+                    "table_name": table_name,
+                    "total_rows": profile["total_rows"],
+                    "columns": profile["columns"],
+                    "has_issues": has_issues,
+                },
+                audit_payload={
+                    "table_name": table_name,
+                    "total_rows": profile["total_rows"],
+                },
+            )
         except Exception:
             return ToolResult(
                 output={

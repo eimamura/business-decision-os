@@ -84,6 +84,13 @@ Each rule uses one of:
 - Agents MUST surface low-confidence or high-risk decisions to Guardrail; never silently degrade or self-approve.
 - Approval rows in terminal states (`approved`, `rejected`, `needs_revision`, `expired`) MUST NOT be mutated by any layer.
 
+### SQL Read Guardrail
+
+- `SqlQueryTool` and `NlQueryTool` MUST validate SQL through `packages/tools/sql_guardrail.py:validate_read_sql()` before calling any persistence repository function.
+- SQL read guardrail policy MUST stay in the Tool Layer. `packages/persistence/` executes validated queries and MUST NOT become the policy owner for table allowlisting or SQL safety.
+- User- or LLM-provided SQL MUST be a single `SELECT` statement, reference at least one allowlisted table, and avoid non-read operations or dangerous database features.
+- SQL guardrail tests MUST cover direct SQL, generated SQL, quoted identifiers, schema-qualified names, joins, comma joins, CTEs, subqueries, and `UNION` references.
+
 ---
 
 ## Cross-cutting Rules

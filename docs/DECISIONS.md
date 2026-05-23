@@ -291,3 +291,20 @@ Reason: asyncpg validates Python types client-side before sending to PostgreSQL.
 Consequence: `packages/persistence/agent_steps_repo.py` passes `datetime` objects directly. `make_step()` uses `datetime.now(timezone.utc)` (no `.isoformat()`). `update_ended()` parses its `ended_at: str` argument with `datetime.fromisoformat()` before passing to asyncpg. The `::timestamptz` casts in the SQL are removed as unnecessary.
 
 Reversal cost: low (type-only change in the repository layer)
+
+---
+
+## Decision: SQL read validation is a shared Tool Layer guardrail
+
+Date: 2026-05-23
+
+Reason: `sql_query` and `nl_query` previously used separate SQL checks. The shallow regex/table parsing missed important unsafe cases: multiple statements, table-less `SELECT`, quoted non-allowlisted tables, comma joins, schema-qualified tables, CTEs, subqueries, `UNION` branches, and operationally risky functions such as `pg_sleep`. Duplicating SQL safety logic across tools also made future changes easy to apply inconsistently.
+
+Consequence:
+- `packages/tools/sql_guardrail.py` owns `validate_read_sql()` and `SQLGuardrailError`.
+- `SqlQueryTool` and `NlQueryTool` call the shared validator before database execution.
+- SQL safety remains in the Tool Layer. Repository functions in `packages/persistence/` execute validated SQL and do not decide allowlist policy.
+- Guardrail rejection returns a tool error payload and does not execute SQL.
+- `NlQueryTool` does not retry guardrail failures; unsafe generated SQL is returned as a guardrail error immediately. Retries remain only for execution errors after SQL passes validation.
+
+Reversal cost: low (restore per-tool validation if a parser replacement or policy split becomes necessary)
