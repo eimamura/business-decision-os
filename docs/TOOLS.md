@@ -210,6 +210,8 @@ Execute a read-only SQL query against operational tables.
 
 Translate a natural-language question into SQL and execute it. Uses the LLM to generate SQL, validates it against the allowlist, and retries on guardrail failure.
 
+The DB schema provided to the LLM is **auto-generated at API startup** from `information_schema.columns` via `packages/tools/schema_context.py`. Do not write or maintain a hand-coded schema string in this tool or anywhere else.
+
 **Class:** `NlQueryTool` (`packages/tools/nl_query_tool.py`)
 **Requires approval:** No
 
@@ -233,6 +235,7 @@ Translate a natural-language question into SQL and execute it. Uses the LLM to g
 - No `LLMClient` provided at registry creation: raises `RuntimeError` at call time (configuration error — must not silently degrade).
 - SQL guardrail rejection after max retries: returns `error` in output.
 - Database unreachable: returns empty results with `error`.
+- Schema context not yet loaded (DB unavailable at startup): LLM receives no schema section; query quality degrades but the tool does not raise.
 
 **Audit payload:** `{question, sql, count}`
 
@@ -437,6 +440,20 @@ This tool never fails — it always returns a pending record.
 
 ---
 
+## Schema Context
+
+`packages/tools/schema_context.py` is the single source of DB schema information for LLM prompts.
+
+- **`load_schema_context() -> str`** — async function called once at API startup (FastAPI lifespan in `apps/api/main.py`). Reads `information_schema.columns` for every table in `ALLOWED_READ_TABLES` and caches the result as a compact text block.
+- **`get_schema_context() -> str`** — synchronous accessor that returns the cached string. Free to call from any tool or agent code.
+
+**Rules:**
+- Never write a hand-coded table-schema string (`DB_SCHEMA`, `TABLE_COLUMNS`, etc.). Call `get_schema_context()`.
+- Never reference column names as string literals in tool code or agent system prompts. If the schema changes, only the Alembic migration and `ALLOWED_READ_TABLES` need to change — everything else derives from them automatically.
+- Raw SQL with hardcoded column names belongs in `packages/persistence/` repository functions only. Tool code and agent code must not contain inline SQL.
+
+---
+
 ## Adding a New Tool
 
 1. Create `packages/tools/<tool_name>_tool.py` implementing the `Tool` protocol (`packages/tools/base.py`).
@@ -444,3 +461,4 @@ This tool never fails — it always returns a pending record.
 3. Import and register the tool in `create_tool_registry()` in `packages/tools/__init__.py`.
 4. Add the tool's specification to this document under the appropriate category.
 5. If the tool queries the database, confirm the tables it touches are in `ALLOWED_READ_TABLES`.
+6. Do not hardcode column names. If the tool needs schema information, call `get_schema_context()`. If the tool issues DB queries, put the SQL in a repository function under `packages/persistence/`.

@@ -264,6 +264,24 @@ Reversal cost: low (endpoint removal or access restriction)
 
 ---
 
+## Decision: DB schema context is generated from information_schema at startup, not hardcoded
+
+Date: 2026-05-23
+
+Reason: Hand-maintained `DB_SCHEMA` strings in `nl_query_tool.py` and agent system prompts drifted from the Alembic migration, causing LLMs to generate SQL referencing nonexistent columns (`sku_code`, `units`, `location_id`, `lead_time_days`, etc.). The root cause was not a typo but a missing synchronization mechanism: any hand-written copy of the schema is guaranteed to diverge eventually, especially when LLM prompts are involved because they cannot be checked by a type system or linter.
+
+The fix is structural: `packages/tools/schema_context.py` reads `information_schema.columns` for all `ALLOWED_READ_TABLES` at API startup (FastAPI lifespan) and caches the result. `nl_query_tool` and `AgentRuntime` consume `get_schema_context()` instead of maintaining their own copies. The Alembic migration is now the only place where the schema is defined; every other layer derives from it at runtime.
+
+Consequence:
+- `packages/tools/schema_context.py` is the single injection point for DB schema context. Do not write DB schema descriptions elsewhere.
+- `DB_SCHEMA` constants and hand-written column lists in tool code, agent prompts, or raw SQL are prohibited (see AGENTS.md §Prohibitions).
+- All raw SQL outside `packages/persistence/` is banned. If a package needs a DB query, it must go through a repository function, not inline SQL with hardcoded column names.
+- API startup requires a live DB connection to load the schema; the lifespan handler in `apps/api/main.py` calls `load_schema_context()` before routes go live.
+
+Reversal cost: low (replace `get_schema_context()` calls with a static string if needed)
+
+---
+
 ## Decision: asyncpg requires `datetime` objects, not ISO strings, for timestamptz columns
 
 Date: 2026-05-22

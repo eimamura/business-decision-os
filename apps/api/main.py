@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+from contextlib import asynccontextmanager
 
 from dotenv import load_dotenv
 from fastapi import FastAPI
@@ -29,7 +30,14 @@ from apps.api.routers import (  # noqa: E402
     settings,
 )
 
-app = FastAPI(title="Business Decision OS API", version="0.1.0")
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    from packages.tools.schema_context import load_schema_context
+    await load_schema_context()
+    yield
+
+
+app = FastAPI(title="Business Decision OS API", version="0.1.0", lifespan=lifespan)
 
 _dev_origins = ["http://localhost:3000"]
 _prod_origins_raw = os.environ.get("CORS_ALLOWED_ORIGINS", "")

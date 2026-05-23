@@ -10,11 +10,11 @@ async def fetch_demand_history(sku_id: str) -> list[float]:
         return []
     async with pool.acquire() as conn:
         sql = (
-            "SELECT units FROM demand_history WHERE sku = $1 "
-            "AND units IS NOT NULL ORDER BY date DESC LIMIT 90"
+            "SELECT quantity FROM demand_history WHERE sku_id = $1 "
+            "AND quantity IS NOT NULL ORDER BY date DESC LIMIT 90"
         )
         rows = await conn.fetch(sql, sku_id)
-        return [float(row["units"]) for row in rows]
+        return [float(row["quantity"]) for row in rows]
 
 
 async def upsert_prediction(sku_id: str, predicted_units: list[float], model_version: str) -> None:

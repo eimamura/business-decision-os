@@ -8,6 +8,7 @@ import QuickActionGrid from "@/components/analysis/QuickActionGrid";
 import MessageBubble from "@/components/MessageBubble";
 import { useChat } from "@/hooks/useChat";
 import ChatSidebar from "@/components/ChatSidebar";
+import ToolScenarioBar from "@/components/ToolScenarioBar";
 import { fetchSessions, fetchSession, createSession, deleteSession } from "@/lib/api";
 import type { Session } from "@/types/chat";
 
@@ -171,6 +172,8 @@ export default function ChatPage({ params }: ChatPageProps) {
             <div className="shrink-0 border-t border-white/8 bg-[#0B1020] px-5 pt-3 pb-4">
               {/* Composer panel */}
               <div className="rounded-2xl bg-gradient-to-b from-white/[0.04] to-[#070B14] border border-white/10 focus-within:border-indigo-500/40 focus-within:ring-1 focus-within:ring-indigo-500/15 transition-all">
+                {/* Tool scenario chips for demo / reproducibility */}
+                <ToolScenarioBar onSelect={(prompt) => setInput(prompt)} />
                 {/* Top row: textarea */}
                 <textarea
                   value={input}

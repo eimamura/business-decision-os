@@ -46,8 +46,8 @@ class InventorySimulator:
 
         demand_row = await session.execute(
             text(
-                "SELECT AVG(units) as mean_demand FROM demand_history "
-                "WHERE sku_id = :sku_id AND units IS NOT NULL"
+                "SELECT AVG(quantity) as mean_demand FROM demand_history "
+                "WHERE sku_id = :sku_id AND quantity IS NOT NULL"
             ),
             {"sku_id": input.sku_id},
         )
@@ -65,7 +65,7 @@ class InventorySimulator:
 
         lead_row = await session.execute(
             text(
-                "SELECT AVG(lead_time_days) as mean_lt FROM supply "
+                "SELECT lead_time_days_mean as mean_lt FROM sku_master "
                 "WHERE sku_id = :sku_id"
             ),
             {"sku_id": input.sku_id},

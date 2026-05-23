@@ -91,11 +91,11 @@ class LinearRegressionPredictor:
         from sqlalchemy import text
 
         sql = text(
-            "SELECT units FROM demand_history "
-            "WHERE sku = :sku AND units IS NOT NULL "
+            "SELECT quantity FROM demand_history "
+            "WHERE sku_id = :sku_id AND quantity IS NOT NULL "
             "ORDER BY date DESC LIMIT 90"
         )
-        result = await self._db_session.execute(sql, {"sku": sku_id})
+        result = await self._db_session.execute(sql, {"sku_id": sku_id})
         rows = result.fetchall()
         return [float(row[0]) for row in rows]
 

@@ -69,6 +69,8 @@ The following are explicitly forbidden across all agents:
 - Changing public interface signatures (`LLMClient`, `Tool`, `JobRunner`, `MemoryStore`, `Orchestrator`, `Specialist`) without an ADR.
 - Reading or referencing `data/sample/ground_truth/`.
 - Hardcoded secrets in source code or committed `.env` files.
+- Hardcoding table column names or table schemas as string literals in tool code, agent system prompts, or raw SQL outside `packages/persistence/`. Use `get_schema_context()` from `packages/tools/schema_context.py` for LLM prompts; use the repository layer for DB queries.
+- Writing a hand-maintained `DB_SCHEMA` string or any schema description that duplicates what `information_schema` already provides. Schema context must flow from the DB, not from human memory.
 - Sending raw inventory rows to LLM context.
 - Mutating closed `approvals` rows.
 - Bypassing `LLMClient` to call the LLM provider SDK directly.

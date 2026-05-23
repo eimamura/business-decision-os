@@ -11,6 +11,7 @@ import sqlparse.tokens as T
 
 from packages.agent.llm import LLMClient, LLMMessage
 from packages.tools.base import ToolContext, ToolResult
+from packages.tools.schema_context import get_schema_context
 from packages.tools.sql_allowlist import ALLOWED_READ_TABLES
 
 logger = logging.getLogger(__name__)
@@ -18,53 +19,42 @@ logger = logging.getLogger(__name__)
 CACHE_TTL_SECONDS = 60
 MAX_RETRIES = 2
 
-DB_SCHEMA = """
-Tables available for querying:
-
-sku_master(id UUID, sku_code TEXT, name TEXT, category TEXT, unit_cost NUMERIC, lead_time_days INT)
-
-inventory(id UUID, sku_id UUID FK->sku_master.id, warehouse TEXT,
-          quantity INT, updated_at TIMESTAMPTZ)
-
-demand_history(id UUID, sku_id UUID FK->sku_master.id, period DATE,
-               quantity INT, created_at TIMESTAMPTZ)
-
-supply(id UUID, sku_id UUID FK->sku_master.id, supplier TEXT,
-       quantity INT, eta DATE, created_at TIMESTAMPTZ)
-
-cost(id UUID, sku_id UUID FK->sku_master.id, cost_type TEXT, amount NUMERIC, period DATE)
-
-customers(id UUID, email TEXT, name TEXT, created_at TIMESTAMPTZ)
-
-Rules:
-- Write a single SELECT statement only.
-- Do not reference any table not listed above.
-- Use standard SQL compatible with PostgreSQL 16.
-- Return only the SQL query, no explanation.
-"""
+_SQL_RULES = (
+    "Rules:\n"
+    "- Write a single SELECT statement only.\n"
+    "- Do not reference any table not listed above.\n"
+    "- Use standard SQL compatible with PostgreSQL 16.\n"
+    "- Return only the SQL query, no explanation.\n"
+)
 
 FEW_SHOT_EXAMPLES = """
 Examples:
 Q: Which SKUs have the highest inventory?
-A: SELECT s.sku_code, s.name, SUM(i.quantity) AS total_qty
-   FROM inventory i JOIN sku_master s ON i.sku_id = s.id
-   GROUP BY s.id, s.sku_code, s.name ORDER BY total_qty DESC LIMIT 10;
+A: SELECT s.sku_id, s.name, SUM(i.on_hand) AS total_on_hand
+   FROM inventory i JOIN sku_master s ON i.sku_id = s.sku_id
+   GROUP BY s.sku_id, s.name ORDER BY total_on_hand DESC LIMIT 10;
 
 Q: What is the demand trend for the last 6 months?
-A: SELECT period, SUM(quantity) AS total_demand
+A: SELECT date, SUM(quantity) AS total_demand
    FROM demand_history
-   WHERE period >= CURRENT_DATE - INTERVAL '6 months'
-   GROUP BY period ORDER BY period;
+   WHERE date >= CURRENT_DATE - INTERVAL '6 months'
+   GROUP BY date ORDER BY date;
 
 Q: Which suppliers have pending supply orders?
-A: SELECT supplier, COUNT(*) AS orders, SUM(quantity) AS total_qty
-   FROM supply WHERE eta >= CURRENT_DATE
-   GROUP BY supplier ORDER BY total_qty DESC;
+A: SELECT supplier_id, COUNT(*) AS orders, SUM(quantity) AS total_qty
+   FROM supply WHERE expected_arrival >= CURRENT_DATE
+   GROUP BY supplier_id ORDER BY total_qty DESC;
 """
 
-_STATIC_SYSTEM_TEXT = (
-    f"You are a SQL expert. Generate a PostgreSQL SELECT query.\n\n{DB_SCHEMA}{FEW_SHOT_EXAMPLES}"
-)
+
+def _build_system_text() -> str:
+    schema = get_schema_context()
+    schema_section = (
+        f"Tables available for querying:\n{schema}\n\n{_SQL_RULES}"
+        if schema
+        else _SQL_RULES
+    )
+    return f"You are a SQL expert. Generate a PostgreSQL SELECT query.\n\n{schema_section}{FEW_SHOT_EXAMPLES}"
 
 _result_cache: dict[str, tuple[list[dict[str, Any]], str, float]] = {}
 
@@ -119,7 +109,7 @@ async def _generate_sql(
     dynamic_examples: str = "",
 ) -> str:
     user_content = question + error_context
-    system_parts = _STATIC_SYSTEM_TEXT
+    system_parts = _build_system_text()
     if dynamic_examples:
         system_parts = system_parts + "\n\n" + dynamic_examples
 

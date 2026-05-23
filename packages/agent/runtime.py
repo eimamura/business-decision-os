@@ -74,7 +74,18 @@ class AgentRuntime:
         from packages.agent.llm import LLMMessage, LLMToolSpec
         from packages.agent.orchestrator import SpecialistResult
 
-        system_prompt = self._system_prompt + "\n\nAlways respond in the same language the user writes in."
+        from packages.tools.schema_context import get_schema_context
+        schema = get_schema_context()
+        schema_section = (
+            f"\n\nOperational DB schema (use exact column names):\n{schema}"
+            if schema
+            else ""
+        )
+        system_prompt = (
+            self._system_prompt
+            + schema_section
+            + "\n\nAlways respond in the same language the user writes in."
+        )
         messages: list[LLMMessage] = [
             LLMMessage(role="system", content=system_prompt),
             LLMMessage(role="user", content=task.instruction),
