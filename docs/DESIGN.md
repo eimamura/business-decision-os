@@ -216,26 +216,9 @@ Tools are classified into the following categories:
 | Memory / Audit Tools | Decision history, assumption logging, audit trail | Audit log writer, decision history reader, assumption store |
 | Guardrail Tools | Permission checks, approval workflows, risk assessment | Permission checker, approval gate, risk evaluator |
 
-Specific specifications, arguments, return values, permissions, and failure handling for each tool are defined in `docs/TOOLS.md`.
+Tool specifications, arguments, return values, permissions, failure handling, access control, and MVP implementation priority are defined in `docs/TOOLS.md`.
 
-In DESIGN.md, only the purpose and responsibility boundaries of tools are defined.
-
-### MVP Tool Priority
-
-The following tools are required first to achieve the minimum viable agent capability:
-
-| Priority | Tool | Rationale |
-|---|---|---|
-| 1 | `data_catalog_search` | Discover what data is available |
-| 2 | `sql_query_tool` | Retrieve actual operational data |
-| 3 | `table_schema_reader` | Understand data structure |
-| 4 | `data_quality_checker` | Detect missing values and anomalies |
-| 5 | `business_rules_reader` | Enforce business constraints |
-| 6 | `metric_definition_reader` | Prevent KPI definition drift |
-| 7 | `calculator` | Perform basic numeric calculations |
-| 8 | `scenario_builder` | Enable what-if analysis |
-| 9 | `summary_generator` | Produce human-readable explanations |
-| 10 | `audit_log_writer` | Record decision history and accountability |
+In DESIGN.md, only the purpose and responsibility boundaries of tool categories are defined.
 
 ---
 

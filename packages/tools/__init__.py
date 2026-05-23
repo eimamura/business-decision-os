@@ -7,12 +7,15 @@ from packages.prediction import LinearRegressionPredictor
 from packages.tools.approval_tool import ApprovalTool
 from packages.tools.audit_tool import AuditLogTool
 from packages.tools.base import Tool, ToolContext, ToolRegistry, ToolResult
+from packages.tools.data_catalog_search_tool import DataCatalogSearchTool
+from packages.tools.data_quality_checker_tool import DataQualityCheckerTool
 from packages.tools.evaluator_tool import EvaluatorTool
 from packages.tools.forecast_tool import ForecastTool
 from packages.tools.nl_query_tool import NlQueryTool
 from packages.tools.optimizer_tool import OptimizerTool
 from packages.tools.simulation_tool import SimulationTool
 from packages.tools.sql_tool import SqlQueryTool
+from packages.tools.table_schema_reader_tool import TableSchemaReaderTool
 
 __all__ = [
     "Tool",
@@ -21,12 +24,15 @@ __all__ = [
     "ToolResult",
     "ApprovalTool",
     "AuditLogTool",
+    "DataCatalogSearchTool",
+    "DataQualityCheckerTool",
     "EvaluatorTool",
     "ForecastTool",
     "NlQueryTool",
     "OptimizerTool",
     "SimulationTool",
     "SqlQueryTool",
+    "TableSchemaReaderTool",
     "create_tool_registry",
 ]
 
@@ -45,4 +51,7 @@ def create_tool_registry(
     registry.register(SimulationTool(runner=runner))
     registry.register(OptimizerTool())
     registry.register(EvaluatorTool())
+    registry.register(DataCatalogSearchTool())
+    registry.register(TableSchemaReaderTool())
+    registry.register(DataQualityCheckerTool())
     return registry
