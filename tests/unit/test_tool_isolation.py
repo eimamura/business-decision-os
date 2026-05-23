@@ -25,11 +25,15 @@ from packages.tools import create_tool_registry
 from packages.tools.approval_tool import ApprovalTool
 from packages.tools.audit_tool import AuditLogTool
 from packages.tools.base import ToolContext
+from packages.tools.data_catalog_search_tool import DataCatalogSearchTool
+from packages.tools.data_quality_checker_tool import DataQualityCheckerTool
 from packages.tools.evaluator_tool import EvaluatorTool
 from packages.tools.forecast_tool import ForecastTool
 from packages.tools.optimizer_tool import OptimizerTool
 from packages.tools.simulation_tool import SimulationTool
+from packages.tools.sql_allowlist import ALLOWED_READ_TABLES
 from packages.tools.sql_tool import SqlQueryTool
+from packages.tools.table_schema_reader_tool import TableSchemaReaderTool
 
 
 def _ctx() -> ToolContext:
@@ -159,6 +163,56 @@ def test_resolve_weights_session_goal_override():
     weights, source = resolve_weights(goal)
     assert source == "session_goal"
     assert weights["service_level"] == 0.8
+
+
+# ===== T-1007: DataCatalogSearchTool =====
+
+async def test_data_catalog_search_no_db_returns_all_tables():
+    tool = DataCatalogSearchTool()
+    result = await tool.handle({}, _ctx())
+    assert result.output["count"] == len(ALLOWED_READ_TABLES)
+    assert all(row["row_count"] is None for row in result.output["tables"])
+
+
+async def test_data_catalog_search_keyword_filter_no_db():
+    tool = DataCatalogSearchTool()
+    result = await tool.handle({"keyword": "inv"}, _ctx())
+    names = [row["table_name"] for row in result.output["tables"]]
+    assert names == ["inventory"]
+    assert result.output["count"] == 1
+
+
+# ===== T-1008: TableSchemaReaderTool =====
+
+async def test_table_schema_reader_rejects_non_allowlist_table():
+    tool = TableSchemaReaderTool()
+    result = await tool.handle({"table_name": "users"}, _ctx())
+    assert "error" in result.output
+
+
+async def test_table_schema_reader_no_db_fallback():
+    tool = TableSchemaReaderTool()
+    result = await tool.handle({"table_name": "sku_master"}, _ctx())
+    assert "error" not in result.output
+    assert "note" in result.output
+    assert result.output["column_count"] == 0
+
+
+# ===== T-1009: DataQualityCheckerTool =====
+
+async def test_data_quality_checker_rejects_non_allowlist_table():
+    tool = DataQualityCheckerTool()
+    result = await tool.handle({"table_name": "users"}, _ctx())
+    assert "error" in result.output
+
+
+async def test_data_quality_checker_no_db_fallback():
+    tool = DataQualityCheckerTool()
+    result = await tool.handle({"table_name": "inventory"}, _ctx())
+    assert "error" not in result.output
+    assert result.output["total_rows"] == 0
+    assert result.output["has_issues"] is False
+    assert "note" in result.output
 
 
 # ===== T-1010: SqlQueryTool =====
@@ -314,6 +368,7 @@ def test_create_tool_registry_has_all_tools():
         "sql_query", "request_approval", "write_audit_log",
         "forecast", "simulate_inventory", "optimize_replenishment",
         "evaluate_candidates",
+        "data_catalog_search", "table_schema_reader", "data_quality_checker",
     ]
     for name in expected:
         assert registry.get(name) is not None
