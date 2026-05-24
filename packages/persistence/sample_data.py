@@ -71,7 +71,20 @@ TABLES: tuple[TableSpec, ...] = (
         ),
     ),
     TableSpec(
-        "customers",
+        "location_master",
+        (
+            ColumnSpec("location_id", _text),
+            ColumnSpec("name", _text),
+            ColumnSpec("region", _text),
+            ColumnSpec("country", _text),
+            ColumnSpec("location_type", _text),
+            ColumnSpec("capacity_units", _decimal),
+            ColumnSpec("handling_cost_per_unit", _decimal),
+            ColumnSpec("lead_time_to_customer_days", _int),
+        ),
+    ),
+    TableSpec(
+        "customer_master",
         (
             ColumnSpec("customer_id", _text),
             ColumnSpec("segment", _text),
@@ -79,7 +92,7 @@ TABLES: tuple[TableSpec, ...] = (
         ),
     ),
     TableSpec(
-        "inventory",
+        "inventory_snapshot",
         (
             ColumnSpec("sku_id", _text),
             ColumnSpec("warehouse_id", _text),
@@ -98,7 +111,7 @@ TABLES: tuple[TableSpec, ...] = (
         ),
     ),
     TableSpec(
-        "supply",
+        "supply_orders",
         (
             ColumnSpec("sku_id", _text),
             ColumnSpec("supplier_id", _text),
@@ -109,7 +122,7 @@ TABLES: tuple[TableSpec, ...] = (
         ),
     ),
     TableSpec(
-        "cost",
+        "cost_master",
         (
             ColumnSpec("sku_id", _text),
             ColumnSpec("period_start", _date),
@@ -120,10 +133,38 @@ TABLES: tuple[TableSpec, ...] = (
             ColumnSpec("stockout_cost", _decimal),
         ),
     ),
+    TableSpec(
+        "forecast_history",
+        (
+            ColumnSpec("sku_id", _text),
+            ColumnSpec("forecast_date", _date),
+            ColumnSpec("target_date", _date),
+            ColumnSpec("forecast_qty", _decimal),
+            ColumnSpec("model_version", _text),
+        ),
+    ),
 )
 
-DELETE_ORDER = ("cost", "supply", "demand_history", "inventory", "sku_master", "customers")
-INSERT_ORDER = ("sku_master", "customers", "inventory", "demand_history", "supply", "cost")
+DELETE_ORDER = (
+    "forecast_history",
+    "cost_master",
+    "supply_orders",
+    "demand_history",
+    "inventory_snapshot",
+    "customer_master",
+    "location_master",
+    "sku_master",
+)
+INSERT_ORDER = (
+    "sku_master",
+    "location_master",
+    "customer_master",
+    "inventory_snapshot",
+    "demand_history",
+    "supply_orders",
+    "cost_master",
+    "forecast_history",
+)
 
 
 def _table_by_name() -> dict[str, TableSpec]:

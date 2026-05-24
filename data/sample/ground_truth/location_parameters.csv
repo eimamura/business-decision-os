@@ -1,0 +1,11 @@
+location_id,name,region,country,location_type,capacity_units,handling_cost_per_unit,lead_time_to_customer_days
+WH-001,Central Distribution Hub,Kanto,JP,warehouse,50000,0.15,2
+WH-002,Western Storage Facility,Kansai,JP,warehouse,35000,0.20,3
+WH-003,Northern Depot,Tohoku,JP,warehouse,25000,0.18,4
+WH-004,Southern Cross Center,Kyushu,JP,distribution_center,40000,0.22,3
+WH-005,Chubu Regional Hub,Chubu,JP,warehouse,30000,0.17,2
+WH-006,Shikoku Forward Base,Shikoku,JP,distribution_center,15000,0.25,5
+WH-007,Chugoku Logistics Park,Chugoku,JP,warehouse,20000,0.19,4
+WH-008,Hokkaido Cold Storage,Hokkaido,JP,warehouse,18000,0.30,6
+WH-009,Tokyo Metropolitan DC,Kanto,JP,distribution_center,60000,0.12,1
+WH-010,Osaka Import Hub,Kansai,JP,distribution_center,45000,0.16,2

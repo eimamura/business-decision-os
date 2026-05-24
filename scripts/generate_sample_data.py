@@ -17,7 +17,6 @@ from pathlib import Path
 CsvRow = dict[str, str]
 
 START_DATE = date(2025, 1, 1)
-SUPPLIERS = {"critical": "SUP-001", "standard": "SUP-002", "slow_moving": "SUP-003"}
 
 DETERMINISTIC_NULL_SKUS = {"SKU-003", "SKU-005", "SKU-007"}
 CONTIGUOUS_GAP_SKU = "SKU-001"
@@ -83,7 +82,7 @@ def generate_sku_master(skus: list[CsvRow], out_dir: Path) -> None:
 
 def generate_customers(customers: list[CsvRow], out_dir: Path) -> None:
     fields = ["customer_id", "segment", "sku_affinity_json"]
-    with open(out_dir / "customers.csv", "w", newline="") as f:
+    with open(out_dir / "customer_master.csv", "w", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=fields)
         writer.writeheader()
         for row in customers:
@@ -137,7 +136,7 @@ def generate_inventory(
     snapshot_date = date(2026, 5, 19).isoformat()
     fields = ["sku_id", "warehouse_id", "on_hand", "on_order", "snapshot_date"]
 
-    with open(out_dir / "inventory.csv", "w", newline="") as f:
+    with open(out_dir / "inventory_snapshot.csv", "w", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=fields)
         writer.writeheader()
 
@@ -170,18 +169,23 @@ def generate_inventory(
                 })
 
 
-def generate_supply(skus: list[CsvRow], rng: random.Random, out_dir: Path) -> None:
+def generate_supply(skus: list[CsvRow], suppliers: list[CsvRow], rng: random.Random, out_dir: Path) -> None:
     fields = ["sku_id", "supplier_id", "order_date", "expected_arrival", "quantity", "status"]
     base_order_date = date(2026, 4, 1)
+    supplier_by_type = {s["sku_type"]: s for s in suppliers}
 
-    with open(out_dir / "supply.csv", "w", newline="") as f:
+    with open(out_dir / "supply_orders.csv", "w", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=fields)
         writer.writeheader()
 
         for sku in skus:
             sku_id = sku["sku_id"]
             sku_type = sku["sku_type"]
-            supplier_id = SUPPLIERS[sku_type]
+            supplier = supplier_by_type[sku_type]
+            supplier_id = supplier["supplier_id"]
+            on_time_rate = float(supplier["on_time_delivery_rate"])
+            avg_delay = float(supplier["avg_delay_days"])
+            delay_std = float(supplier["delay_std_days"])
             moq = int(sku["moq"])
             lt_mean = float(sku["lead_time_days_mean"])
             lt_std = float(sku["lead_time_days_std"])
@@ -191,6 +195,8 @@ def generate_supply(skus: list[CsvRow], rng: random.Random, out_dir: Path) -> No
                 order_offset = rng.randint(0, 45)
                 order_date = base_order_date + timedelta(days=order_offset)
                 lead_days = _lognormal_lead_time(rng, lt_mean, lt_std)
+                if rng.random() > on_time_rate:
+                    lead_days += max(0, int(rng.gauss(avg_delay, delay_std)))
                 arrival_date = order_date + timedelta(days=lead_days)
                 quantity = moq * rng.randint(1, 4)
 
@@ -221,7 +227,7 @@ def generate_cost(
         "cogs", "holding_cost", "ordering_cost", "stockout_cost",
     ]
 
-    with open(out_dir / "cost.csv", "w", newline="") as f:
+    with open(out_dir / "cost_master.csv", "w", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=fields)
         writer.writeheader()
 
@@ -251,6 +257,53 @@ def generate_cost(
             })
 
 
+def generate_location_master(locations: list[CsvRow], out_dir: Path) -> None:
+    fields = [
+        "location_id", "name", "region", "country", "location_type",
+        "capacity_units", "handling_cost_per_unit", "lead_time_to_customer_days",
+    ]
+    with open(out_dir / "location_master.csv", "w", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=fields)
+        writer.writeheader()
+        for row in locations:
+            writer.writerow({k: row[k] for k in fields})
+
+
+def generate_forecast_history(
+    skus: list[CsvRow], rng: random.Random, out_dir: Path, config: SampleDataConfig
+) -> None:
+    fields = ["sku_id", "forecast_date", "target_date", "forecast_qty", "model_version"]
+    forecast_lead_days = 30
+    num_months = max(1, config.horizon_days // 30)
+
+    with open(out_dir / "forecast_history.csv", "w", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=fields)
+        writer.writeheader()
+
+        for sku in skus:
+            sku_id = sku["sku_id"]
+            base_mean = float(sku["base_demand_mean"])
+            dispersion = float(sku["demand_dispersion"])
+            amplitude = float(sku["seasonal_amplitude"])
+            period = float(sku["seasonal_period_days"])
+            model_version = "v2.0-seasonal" if amplitude > 0 else "v1.0-naive"
+
+            for month_idx in range(num_months):
+                day_idx = month_idx * 30
+                target_date = START_DATE + timedelta(days=day_idx)
+                forecast_date = target_date - timedelta(days=forecast_lead_days)
+                monthly_mean = base_mean * 30 * _seasonal_factor(day_idx, amplitude, period)
+                error_pct = rng.gauss(0, dispersion * 0.5)
+                forecast_qty = max(0.0, monthly_mean * (1 + error_pct))
+                writer.writerow({
+                    "sku_id": sku_id,
+                    "forecast_date": forecast_date.isoformat(),
+                    "target_date": target_date.isoformat(),
+                    "forecast_qty": round(forecast_qty, 2),
+                    "model_version": model_version,
+                })
+
+
 def generate(config: SampleDataConfig, out_dir: Path = Path("data/sample")) -> None:
     rng = random.Random(config.seed)
 
@@ -259,13 +312,17 @@ def generate(config: SampleDataConfig, out_dir: Path = Path("data/sample")) -> N
 
     skus = _load_csv(gt_dir / "sku_parameters.csv")[: config.sku_count]
     customers = _load_csv(gt_dir / "customer_parameters.csv")
+    suppliers = _load_csv(gt_dir / "supplier_parameters.csv")
+    locations = _load_csv(gt_dir / "location_parameters.csv")[: config.warehouse_count]
 
     generate_sku_master(skus, out_dir)
+    generate_location_master(locations, out_dir)
     generate_customers(customers, out_dir)
     generate_demand_history(skus, rng, out_dir, config)
     generate_inventory(skus, rng, out_dir, config)
-    generate_supply(skus, rng, out_dir)
+    generate_supply(skus, suppliers, rng, out_dir)
     generate_cost(skus, rng, out_dir, config)
+    generate_forecast_history(skus, rng, out_dir, config)
 
     print(
         f"Sample data generated in {out_dir}/ "

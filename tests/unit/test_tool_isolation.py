@@ -197,7 +197,7 @@ async def test_data_catalog_search_keyword_filter_no_db():
     tool = DataCatalogSearchTool()
     result = await tool.handle({"keyword": "inv"}, _ctx())
     names = [row["table_name"] for row in result.output["tables"]]
-    assert names == ["inventory"]
+    assert names == ["inventory_snapshot"]
     assert result.output["count"] == 1
 
 
@@ -227,7 +227,7 @@ async def test_data_quality_checker_rejects_non_allowlist_table():
 
 async def test_data_quality_checker_no_db_fallback():
     tool = DataQualityCheckerTool()
-    result = await tool.handle({"table_name": "inventory"}, _ctx())
+    result = await tool.handle({"table_name": "inventory_snapshot"}, _ctx())
     assert "error" not in result.output
     assert result.output["total_rows"] == 0
     assert result.output["has_issues"] is False

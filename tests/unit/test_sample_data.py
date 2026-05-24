@@ -45,7 +45,7 @@ def test_configurable_sku_horizon_and_warehouse_counts():
 
     with open(OUT_DIR / "sku_master.csv", newline="") as f:
         sku_rows = list(csv.DictReader(f))
-    with open(OUT_DIR / "inventory.csv", newline="") as f:
+    with open(OUT_DIR / "inventory_snapshot.csv", newline="") as f:
         inventory_rows = list(csv.DictReader(f))
     with open(OUT_DIR / "demand_history.csv", newline="") as f:
         demand_rows = list(csv.DictReader(f))
@@ -132,7 +132,7 @@ def test_slow_moving_low_demand():
 
 
 def test_customers_csv_columns():
-    rows = _run_and_read(42, "customers.csv")
+    rows = _run_and_read(42, "customer_master.csv")
     assert len(rows) == 20
     required = {"customer_id", "segment", "sku_affinity_json"}
     assert required <= set(rows[0].keys())
@@ -149,26 +149,41 @@ def test_customer_segment_counts():
 
 
 def test_inventory_csv_columns():
-    rows = _run_and_read(42, "inventory.csv")
+    rows = _run_and_read(42, "inventory_snapshot.csv")
     required = {"sku_id", "warehouse_id", "on_hand", "on_order", "snapshot_date"}
     assert required <= set(rows[0].keys())
     assert len(rows) == 30 * 2
 
 
 def test_supply_csv_columns():
-    rows = _run_and_read(42, "supply.csv")
+    rows = _run_and_read(42, "supply_orders.csv")
     required = {"sku_id", "supplier_id", "order_date", "expected_arrival", "quantity", "status"}
     assert required <= set(rows[0].keys())
 
 
 def test_cost_csv_columns():
-    rows = _run_and_read(42, "cost.csv")
+    rows = _run_and_read(42, "cost_master.csv")
     required = {
         "sku_id", "period_start", "period_end", "cogs",
         "holding_cost", "ordering_cost", "stockout_cost",
     }
     assert required <= set(rows[0].keys())
     assert len(rows) == 30
+
+
+def test_location_master_csv_columns():
+    rows = _run_and_read(42, "location_master.csv")
+    required = {"location_id", "name", "region", "country", "location_type",
+                "capacity_units", "handling_cost_per_unit", "lead_time_to_customer_days"}
+    assert required <= set(rows[0].keys())
+    assert len(rows) == 2  # default warehouse_count=2
+
+
+def test_forecast_history_csv_columns():
+    rows = _run_and_read(42, "forecast_history.csv")
+    required = {"sku_id", "forecast_date", "target_date", "forecast_qty", "model_version"}
+    assert required <= set(rows[0].keys())
+    assert len(rows) == 30 * 12  # 30 SKUs × 12 months (365 // 30)
 
 
 def _load_gt_sku_params() -> list[dict]:

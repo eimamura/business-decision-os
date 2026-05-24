@@ -120,12 +120,13 @@ async def test_tool_calls_repo_raises():
 # SQL allowlist
 # ---------------------------------------------------------------------------
 
-def test_allowed_tables_are_exactly_six():
-    assert len(ALLOWED_READ_TABLES) == 6
+def test_allowed_tables_are_exactly_eight():
+    assert len(ALLOWED_READ_TABLES) == 8
 
 
 @pytest.mark.parametrize("table", [
-    "sku_master", "inventory", "demand_history", "supply", "cost", "customers",
+    "sku_master", "location_master", "customer_master",
+    "inventory_snapshot", "demand_history", "supply_orders", "cost_master", "forecast_history",
 ])
 def test_allowed_tables_pass(table: str):
     assert check_allowed(table) is True
@@ -141,4 +142,4 @@ def test_non_allowed_tables_fail(table: str):
 
 def test_check_allowed_is_case_insensitive():
     assert check_allowed("SKU_MASTER") is True
-    assert check_allowed("Inventory") is True
+    assert check_allowed("Inventory_Snapshot") is True

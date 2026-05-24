@@ -71,7 +71,7 @@ async def test_table_schema_reader_sku_master_schema():
 
 async def test_data_quality_checker_dynamic_sql_executes():
     tool = DataQualityCheckerTool()
-    result = await tool.handle({"table_name": "inventory"}, _ctx())
+    result = await tool.handle({"table_name": "inventory_snapshot"}, _ctx())
     assert "error" not in result.output
     assert "note" not in result.output  # real DB path, not the no-DB fallback
     assert isinstance(result.output["total_rows"], int)

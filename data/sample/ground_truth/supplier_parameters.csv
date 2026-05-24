@@ -1,0 +1,4 @@
+supplier_id,name,sku_type,on_time_delivery_rate,avg_delay_days,delay_std_days,quality_reject_rate,payment_terms_days
+SUP-001,FastTrack Precision Parts,critical,0.92,3,1,0.005,30
+SUP-002,Standard Supply Corp,standard,0.85,6,3,0.015,45
+SUP-003,Specialty Materials Ltd,slow_moving,0.72,12,7,0.030,60

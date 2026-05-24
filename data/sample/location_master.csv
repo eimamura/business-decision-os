@@ -1,0 +1,3 @@
+location_id,name,region,country,location_type,capacity_units,handling_cost_per_unit,lead_time_to_customer_days
+WH-001,Central Distribution Hub,Kanto,JP,warehouse,50000,0.15,2
+WH-002,Western Storage Facility,Kansai,JP,warehouse,35000,0.20,3

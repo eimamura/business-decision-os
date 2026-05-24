@@ -47,26 +47,23 @@ def _write_csv(path: Path, columns: list[str], rows: list[list[str]]) -> None:
 async def test_replace_operational_tables_uses_fk_safe_order(tmp_path: Path) -> None:
     _write_csv(
         tmp_path / "sku_master.csv",
-        [
-            "sku_id",
-            "name",
-            "category",
-            "sku_type",
-            "moq",
-            "lead_time_days_mean",
-            "lead_time_days_std",
-            "holding_cost_pct",
-            "unit_cost",
-        ],
+        ["sku_id", "name", "category", "sku_type", "moq",
+         "lead_time_days_mean", "lead_time_days_std", "holding_cost_pct", "unit_cost"],
         [["SKU-001", "Test SKU", "parts", "critical", "10", "5", "1", "0.1", "25.5"]],
     )
     _write_csv(
-        tmp_path / "customers.csv",
+        tmp_path / "location_master.csv",
+        ["location_id", "name", "region", "country", "location_type",
+         "capacity_units", "handling_cost_per_unit", "lead_time_to_customer_days"],
+        [["WH-001", "Test Hub", "Kanto", "JP", "warehouse", "50000", "0.15", "2"]],
+    )
+    _write_csv(
+        tmp_path / "customer_master.csv",
         ["customer_id", "segment", "sku_affinity_json"],
         [["CUST-001", "large", '{"SKU-001": 1.0}']],
     )
     _write_csv(
-        tmp_path / "inventory.csv",
+        tmp_path / "inventory_snapshot.csv",
         ["sku_id", "warehouse_id", "on_hand", "on_order", "snapshot_date"],
         [["SKU-001", "WH-001", "10", "2", "2026-05-19"]],
     )
@@ -76,40 +73,42 @@ async def test_replace_operational_tables_uses_fk_safe_order(tmp_path: Path) -> 
         [["SKU-001", "2025-01-01", "", "True"]],
     )
     _write_csv(
-        tmp_path / "supply.csv",
+        tmp_path / "supply_orders.csv",
         ["sku_id", "supplier_id", "order_date", "expected_arrival", "quantity", "status"],
         [["SKU-001", "SUP-001", "2026-04-01", "2026-04-07", "10", "delivered"]],
     )
     _write_csv(
-        tmp_path / "cost.csv",
-        [
-            "sku_id",
-            "period_start",
-            "period_end",
-            "cogs",
-            "holding_cost",
-            "ordering_cost",
-            "stockout_cost",
-        ],
+        tmp_path / "cost_master.csv",
+        ["sku_id", "period_start", "period_end", "cogs",
+         "holding_cost", "ordering_cost", "stockout_cost"],
         [["SKU-001", "2025-01-01", "2025-12-31", "100.50", "10.25", "5.75", "2.50"]],
+    )
+    _write_csv(
+        tmp_path / "forecast_history.csv",
+        ["sku_id", "forecast_date", "target_date", "forecast_qty", "model_version"],
+        [["SKU-001", "2024-12-02", "2025-01-01", "310.50", "v1.0-naive"]],
     )
 
     conn = FakeConnection()
 
     summaries = await replace_operational_tables(conn, tmp_path)  # type: ignore[arg-type]
 
-    deletes = [statement for statement in conn.statements if statement.startswith("DELETE")]
-    inserts = [
-        statement.split()[2] for statement in conn.statements if statement.startswith("INSERT")
-    ]
+    deletes = [s for s in conn.statements if s.startswith("DELETE")]
+    inserts = [s.split()[2] for s in conn.statements if s.startswith("INSERT")]
 
     assert deletes == [
-        "DELETE FROM cost",
-        "DELETE FROM supply",
+        "DELETE FROM forecast_history",
+        "DELETE FROM cost_master",
+        "DELETE FROM supply_orders",
         "DELETE FROM demand_history",
-        "DELETE FROM inventory",
+        "DELETE FROM inventory_snapshot",
+        "DELETE FROM customer_master",
+        "DELETE FROM location_master",
         "DELETE FROM sku_master",
-        "DELETE FROM customers",
     ]
-    assert inserts == ["sku_master", "customers", "inventory", "demand_history", "supply", "cost"]
+    assert inserts == [
+        "sku_master", "location_master", "customer_master",
+        "inventory_snapshot", "demand_history", "supply_orders",
+        "cost_master", "forecast_history",
+    ]
     assert [summary["table_name"] for summary in summaries] == inserts

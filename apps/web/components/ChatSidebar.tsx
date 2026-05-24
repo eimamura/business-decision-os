@@ -2,8 +2,8 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { User, Trash2 } from "lucide-react";
-import { useState } from "react";
+import { User, Trash2, ChevronUp, ChevronDown, Database, Settings } from "lucide-react";
+import { useState, useEffect, useRef } from "react";
 import type { Session } from "@/types/chat";
 
 interface ChatSidebarProps {
@@ -94,6 +94,20 @@ export default function ChatSidebar({
 }: ChatSidebarProps) {
   const pathname = usePathname();
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
+  const [profileOpen, setProfileOpen] = useState(false);
+  const profileRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (profileRef.current && !profileRef.current.contains(e.target as Node)) {
+        setProfileOpen(false);
+      }
+    }
+    if (profileOpen) {
+      document.addEventListener("mousedown", handleClickOutside);
+    }
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [profileOpen]);
 
   return (
     <aside className="w-60 shrink-0 bg-[#0B1020] flex flex-col border-r border-white/5">
@@ -224,16 +238,43 @@ export default function ChatSidebar({
       </div>
 
       {/* User area */}
-      <div className="border-t border-white/8 px-3 py-3 shrink-0">
-        <div className="flex items-center gap-2.5 px-1">
+      <div ref={profileRef} className="border-t border-white/8 px-3 py-3 shrink-0 relative">
+        {profileOpen && (
+          <div className="absolute bottom-full left-2 right-2 mb-1 bg-[#0F1629] border border-white/10 rounded-lg shadow-xl overflow-hidden">
+            <Link
+              href="/settings"
+              onClick={() => setProfileOpen(false)}
+              className="flex items-center gap-2.5 px-3 py-2.5 text-xs text-white/60 hover:text-white hover:bg-white/5 transition-colors"
+            >
+              <Database size={13} className="text-indigo-400 shrink-0" />
+              Data Generation
+            </Link>
+            <Link
+              href="/settings"
+              onClick={() => setProfileOpen(false)}
+              className="flex items-center gap-2.5 px-3 py-2.5 text-xs text-white/60 hover:text-white hover:bg-white/5 transition-colors"
+            >
+              <Settings size={13} className="text-white/40 shrink-0" />
+              Settings
+            </Link>
+          </div>
+        )}
+        <button
+          onClick={() => setProfileOpen((prev) => !prev)}
+          className="w-full flex items-center gap-2.5 px-1 rounded-md hover:bg-white/5 transition-colors py-0.5"
+        >
           <div className="w-7 h-7 rounded-full bg-indigo-600/40 border border-indigo-500/30 flex items-center justify-center shrink-0">
             <User size={14} className="text-indigo-300" />
           </div>
-          <div className="min-w-0">
+          <div className="min-w-0 flex-1 text-left">
             <p className="text-xs font-medium text-white/70 truncate">User</p>
             <p className="text-[10px] text-white/35 truncate">Supply Chain Analyst</p>
           </div>
-        </div>
+          {profileOpen
+            ? <ChevronUp size={12} className="text-white/30 shrink-0" />
+            : <ChevronDown size={12} className="text-white/30 shrink-0" />
+          }
+        </button>
       </div>
     </aside>
   );

@@ -4,11 +4,13 @@ import re
 
 ALLOWED_READ_TABLES: frozenset[str] = frozenset([
     "sku_master",
-    "inventory",
+    "location_master",
+    "customer_master",
+    "inventory_snapshot",
     "demand_history",
-    "supply",
-    "cost",
-    "customers",
+    "supply_orders",
+    "cost_master",
+    "forecast_history",
 ])
 
 _WRITE_KEYWORDS = re.compile(
