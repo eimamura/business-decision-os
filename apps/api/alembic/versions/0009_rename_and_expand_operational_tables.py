@@ -1,7 +1,7 @@
 """Rename operational tables and add location_master and forecast_history.
 
 Revision ID: 0009
-Revises: 0008
+Revises: 0008_merge_0007_branches
 Create Date: 2026-05-24
 
 customers        → customer_master
@@ -17,7 +17,7 @@ from __future__ import annotations
 from alembic import op
 
 revision = "0009"
-down_revision = "0008"
+down_revision = "0008_merge_0007_branches"
 branch_labels = None
 depends_on = None
 
