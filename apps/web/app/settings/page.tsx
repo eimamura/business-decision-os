@@ -1,17 +1,20 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
-interface Policy {
-  id: string;
-  budget_soft_limit_usd: number | null;
-  budget_hard_limit_usd: number | null;
-  budget_period: string;
-  updated_by: string | null;
-  updated_at: string | null;
+interface GroundTruthDataset {
+  columns: string[];
+  rows: string[][];
+}
+
+interface GroundTruthResponse {
+  sku_parameters: GroundTruthDataset;
+  location_parameters: GroundTruthDataset;
+  supplier_parameters: GroundTruthDataset;
+  customer_parameters: GroundTruthDataset;
 }
 
 interface SampleDataTable {
@@ -24,99 +27,104 @@ interface SampleDataResponse {
   tables: SampleDataTable[];
 }
 
-export default function SettingsPage() {
-  const [policy, setPolicy] = useState<Policy | null>(null);
-  const [loading, setLoading] = useState(true);
+type StatusMsg = { type: "success" | "error"; message: string };
+
+type TabKey = keyof GroundTruthResponse;
+
+const TABS: { key: TabKey; label: string }[] = [
+  { key: "sku_parameters", label: "SKU Parameters" },
+  { key: "location_parameters", label: "Locations" },
+  { key: "supplier_parameters", label: "Suppliers" },
+  { key: "customer_parameters", label: "Customers" },
+];
+
+function formatCell(value: unknown): string {
+  if (value == null) return "";
+  if (typeof value === "object") return JSON.stringify(value);
+  return String(value);
+}
+
+export default function SettingsPage(): React.ReactElement {
+  const [groundTruth, setGroundTruth] = useState<GroundTruthResponse | null>(null);
+  const [gtLoading, setGtLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState<TabKey>("sku_parameters");
   const [saving, setSaving] = useState(false);
-  const [softLimit, setSoftLimit] = useState("");
-  const [hardLimit, setHardLimit] = useState("");
-  const [status, setStatus] = useState<{ type: "success" | "error"; message: string } | null>(null);
+  const [saveStatus, setSaveStatus] = useState<StatusMsg | null>(null);
+
   const [sampleSeed, setSampleSeed] = useState("42");
   const [sampleSkuCount, setSampleSkuCount] = useState("30");
   const [sampleHorizonDays, setSampleHorizonDays] = useState("365");
   const [sampleWarehouseCount, setSampleWarehouseCount] = useState("2");
   const [sampleMissingRate, setSampleMissingRate] = useState("0.02");
   const [sampleGenerating, setSampleGenerating] = useState(false);
-  const [sampleStatus, setSampleStatus] = useState<{ type: "success" | "error"; message: string } | null>(null);
+  const [sampleStatus, setSampleStatus] = useState<StatusMsg | null>(null);
   const [sampleTables, setSampleTables] = useState<SampleDataTable[]>([]);
 
   useEffect(() => {
-    fetch(`${API_BASE}/api/v1/policies`, {
-      headers: { "X-Dev-User": "dev-user" },
+    fetch(`${API_BASE}/api/v1/admin/ground-truth`, {
+      headers: { "X-Dev-User": "dev-admin" },
     })
-      .then((r) => r.json())
-      .then((data: Policy) => {
-        setPolicy(data);
-        setSoftLimit(data.budget_soft_limit_usd != null ? String(data.budget_soft_limit_usd) : "");
-        setHardLimit(data.budget_hard_limit_usd != null ? String(data.budget_hard_limit_usd) : "");
+      .then((r) => {
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        return r.json() as Promise<GroundTruthResponse>;
       })
-      .catch(() => setStatus({ type: "error", message: "Failed to load policy." }))
-      .finally(() => setLoading(false));
+      .then(setGroundTruth)
+      .catch(() => setSaveStatus({ type: "error", message: "Failed to load ground truth parameters." }))
+      .finally(() => setGtLoading(false));
   }, []);
 
-  async function handleSave(e: React.FormEvent) {
-    e.preventDefault();
+  const updateCell = useCallback((tab: TabKey, rowIdx: number, colIdx: number, value: string) => {
+    setGroundTruth((prev) => {
+      if (!prev) return prev;
+      const dataset = prev[tab];
+      const newRows = dataset.rows.map((r, ri) =>
+        ri === rowIdx ? r.map((c, ci) => (ci === colIdx ? value : c)) : r
+      );
+      return { ...prev, [tab]: { ...dataset, rows: newRows } };
+    });
+  }, []);
+
+  async function handleSave(): Promise<void> {
+    if (!groundTruth) return;
     setSaving(true);
-    setStatus(null);
-
-    const body: Record<string, number> = {};
-    const soft = parseFloat(softLimit);
-    const hard = parseFloat(hardLimit);
-    if (!isNaN(soft)) body.budget_soft_limit_usd = soft;
-    if (!isNaN(hard)) body.budget_hard_limit_usd = hard;
-
+    setSaveStatus(null);
     try {
-      const res = await fetch(`${API_BASE}/api/v1/policies`, {
+      const res = await fetch(`${API_BASE}/api/v1/admin/ground-truth`, {
         method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-          "X-Dev-User": "dev-user",
-        },
-        body: JSON.stringify(body),
+        headers: { "Content-Type": "application/json", "X-Dev-User": "dev-admin" },
+        body: JSON.stringify(groundTruth),
       });
-
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
         throw new Error((err as { detail?: string }).detail ?? `HTTP ${res.status}`);
       }
-
-      const updated: Policy = await res.json();
-      setPolicy(updated);
-      setSoftLimit(updated.budget_soft_limit_usd != null ? String(updated.budget_soft_limit_usd) : "");
-      setHardLimit(updated.budget_hard_limit_usd != null ? String(updated.budget_hard_limit_usd) : "");
-      setStatus({ type: "success", message: "Settings saved." });
+      const updated = await res.json() as GroundTruthResponse;
+      setGroundTruth(updated);
+      setSaveStatus({ type: "success", message: "Ground truth parameters saved." });
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : "Save failed.";
-      setStatus({ type: "error", message });
+      setSaveStatus({ type: "error", message: err instanceof Error ? err.message : "Save failed." });
     } finally {
       setSaving(false);
     }
   }
 
-  async function handleGenerateSampleData(e: React.FormEvent) {
+  async function handleGenerate(e: React.FormEvent): Promise<void> {
     e.preventDefault();
     setSampleGenerating(true);
     setSampleStatus(null);
     setSampleTables([]);
-
-    const body = {
-      seed: Number(sampleSeed),
-      sku_count: Number(sampleSkuCount),
-      horizon_days: Number(sampleHorizonDays),
-      warehouse_count: Number(sampleWarehouseCount),
-      missing_rate: Number(sampleMissingRate),
-    };
-
     try {
       const res = await fetch(`${API_BASE}/api/v1/admin/sample-data/generate`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-Dev-User": "dev-admin",
-        },
-        body: JSON.stringify(body),
+        headers: { "Content-Type": "application/json", "X-Dev-User": "dev-admin" },
+        body: JSON.stringify({
+          seed: Number(sampleSeed),
+          sku_count: Number(sampleSkuCount),
+          horizon_days: Number(sampleHorizonDays),
+          warehouse_count: Number(sampleWarehouseCount),
+          missing_rate: Number(sampleMissingRate),
+        }),
       });
-
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
         const detail = (err as { detail?: string | { msg?: string }[] }).detail;
@@ -125,155 +133,165 @@ export default function SettingsPage() {
         }
         throw new Error(typeof detail === "string" ? detail : `HTTP ${res.status}`);
       }
-
-      const data: SampleDataResponse = await res.json();
+      const data = await res.json() as SampleDataResponse;
       setSampleTables(data.tables);
-      setSampleStatus({ type: "success", message: "Sample data generated and loaded." });
+      setSampleStatus({ type: "success", message: "Sample data generated and loaded into database." });
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : "Sample data generation failed.";
-      setSampleStatus({ type: "error", message });
+      setSampleStatus({ type: "error", message: err instanceof Error ? err.message : "Generation failed." });
     } finally {
       setSampleGenerating(false);
     }
   }
 
-  function formatCell(value: unknown): string {
-    if (value == null) return "";
-    if (typeof value === "object") return JSON.stringify(value);
-    return String(value);
-  }
+  const currentDataset = groundTruth?.[activeTab];
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <header className="bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
-        <h1 className="text-lg font-semibold text-gray-900">Business Decision OS</h1>
-        <nav className="flex gap-4 text-sm text-gray-600">
-          <Link href="/chat" className="hover:text-gray-900">Chat</Link>
-          <Link href="/approvals" className="hover:text-gray-900">Approvals</Link>
-          <Link href="/audit" className="hover:text-gray-900">Audit</Link>
-          <Link href="/kpi" className="hover:text-gray-900">KPI</Link>
-          <Link href="/settings" className="font-medium text-gray-900">Settings</Link>
-        </nav>
+    <div className="min-h-screen bg-[#070B14] text-white">
+      {/* Header */}
+      <header className="border-b border-white/5 px-6 py-3 flex items-center gap-4">
+        <Link
+          href="/chat"
+          className="flex items-center gap-1.5 text-xs text-white/40 hover:text-white/70 transition-colors"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M19 12H5M12 5l-7 7 7 7" />
+          </svg>
+          Back to Chat
+        </Link>
+        <span className="text-white/10">|</span>
+        <h1 className="text-sm font-semibold text-white/80 tracking-tight">Data Generation Studio</h1>
       </header>
 
-      <main className="max-w-5xl mx-auto px-6 py-10 space-y-10">
-        <section>
-          <h2 className="text-xl font-semibold text-gray-900 mb-6">Budget Thresholds</h2>
+      <main className="max-w-6xl mx-auto px-6 py-8 space-y-6">
 
-          {loading ? (
-            <div className="space-y-4">
-              <div className="h-12 bg-gray-200 rounded-lg animate-pulse" />
-              <div className="h-12 bg-gray-200 rounded-lg animate-pulse" />
-              <div className="h-10 bg-gray-200 rounded-lg animate-pulse w-24" />
+        {/* Ground Truth Parameters */}
+        <section className="bg-[#0F1629] border border-white/8 rounded-xl overflow-hidden">
+          <div className="px-5 py-4 border-b border-white/5 flex items-center justify-between">
+            <div>
+              <h2 className="text-sm font-semibold text-white">Ground Truth Parameters</h2>
+              <p className="text-[11px] text-white/35 mt-0.5">
+                Edit parameters → Save → Generate to reflect changes in sample data
+              </p>
             </div>
-          ) : (
-            <form onSubmit={handleSave} className="bg-white border border-gray-200 rounded-xl p-6 space-y-5">
-              <div>
-                <label htmlFor="soft-limit" className="block text-sm font-medium text-gray-700 mb-1.5">
-                  Soft limit (USD)
-                </label>
-                <input
-                  id="soft-limit"
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  value={softLimit}
-                  onChange={(e) => setSoftLimit(e.target.value)}
-                  placeholder="e.g. 10.00"
-                  className="w-full text-sm border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-                <p className="mt-1 text-xs text-gray-500">
-                  A warning is triggered when spending approaches this amount within the current period.
-                </p>
-              </div>
-
-              <div>
-                <label htmlFor="hard-limit" className="block text-sm font-medium text-gray-700 mb-1.5">
-                  Hard limit (USD)
-                </label>
-                <input
-                  id="hard-limit"
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  value={hardLimit}
-                  onChange={(e) => setHardLimit(e.target.value)}
-                  placeholder="e.g. 50.00"
-                  className="w-full text-sm border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-                <p className="mt-1 text-xs text-gray-500">
-                  LLM calls are blocked once spending reaches this amount within the current period.
-                </p>
-              </div>
-
-              {policy && (
-                <div className="text-xs text-gray-400 border-t border-gray-100 pt-4">
-                  Period: <span className="font-medium text-gray-600">{policy.budget_period}</span>
-                  {policy.updated_at && (
-                    <> &middot; Last updated: <span className="font-medium text-gray-600">{new Date(policy.updated_at).toLocaleString()}</span></>
-                  )}
-                </div>
+            <div className="flex items-center gap-3">
+              {saveStatus && (
+                <span className={`text-xs ${saveStatus.type === "success" ? "text-emerald-400" : "text-red-400"}`}>
+                  {saveStatus.message}
+                </span>
               )}
+              <button
+                onClick={handleSave}
+                disabled={saving || gtLoading || !groundTruth}
+                className="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 text-white px-4 py-1.5 rounded-lg text-xs font-medium transition-colors"
+              >
+                {saving ? "Saving…" : "Save Ground Truth"}
+              </button>
+            </div>
+          </div>
 
-              {status && (
-                <div
-                  className={`text-sm px-4 py-2.5 rounded-lg ${
-                    status.type === "success"
-                      ? "bg-green-50 text-green-700 border border-green-200"
-                      : "bg-red-50 text-red-700 border border-red-200"
-                  }`}
-                >
-                  {status.message}
-                </div>
-              )}
+          {/* Tabs */}
+          <div className="flex border-b border-white/5">
+            {TABS.map(({ key, label }) => (
+              <button
+                key={key}
+                onClick={() => setActiveTab(key)}
+                className={`px-5 py-2.5 text-xs font-medium transition-colors border-b-2 -mb-px ${
+                  activeTab === key
+                    ? "border-indigo-400 text-white bg-indigo-500/10"
+                    : "border-transparent text-white/40 hover:text-white/70 hover:bg-white/3"
+                }`}
+              >
+                {label}
+                {groundTruth && (
+                  <span className="ml-1.5 text-[10px] text-white/25">
+                    {groundTruth[key].rows.length}
+                  </span>
+                )}
+              </button>
+            ))}
+          </div>
 
-              <div className="flex justify-end">
-                <button
-                  type="submit"
-                  disabled={saving}
-                  className="bg-blue-600 text-white px-5 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
-                >
-                  {saving ? "Saving..." : "Save"}
-                </button>
+          {/* Editable Table */}
+          <div className="overflow-x-auto">
+            {gtLoading ? (
+              <div className="px-5 py-8 space-y-2">
+                {[1, 2, 3].map((i) => (
+                  <div key={i} className="h-8 bg-white/5 rounded animate-pulse" />
+                ))}
               </div>
-            </form>
-          )}
+            ) : !currentDataset ? (
+              <p className="px-5 py-6 text-xs text-white/30">No data</p>
+            ) : (
+              <table className="min-w-full text-xs">
+                <thead>
+                  <tr className="border-b border-white/5">
+                    {currentDataset.columns.map((col) => (
+                      <th
+                        key={col}
+                        className="px-3 py-2.5 text-left text-[10px] font-semibold uppercase tracking-widest text-white/30 whitespace-nowrap"
+                      >
+                        {col}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {currentDataset.rows.map((row, rowIdx) => (
+                    <tr key={rowIdx} className="border-b border-white/3 hover:bg-white/2">
+                      {row.map((cell, colIdx) => (
+                        <td key={colIdx} className="px-2 py-1.5">
+                          <input
+                            type="text"
+                            value={cell}
+                            onChange={(e) => updateCell(activeTab, rowIdx, colIdx, e.target.value)}
+                            className="w-full min-w-[80px] bg-white/5 border border-white/10 rounded px-2 py-1 text-xs text-white placeholder-white/20 focus:border-indigo-500/50 focus:outline-none focus:bg-white/8 transition-colors"
+                          />
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
         </section>
 
-        <section>
-          <h2 className="text-xl font-semibold text-gray-900 mb-6">Sample Data</h2>
-          <form onSubmit={handleGenerateSampleData} className="bg-white border border-gray-200 rounded-xl p-6 space-y-5">
-            <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
-              <div>
-                <label htmlFor="sample-seed" className="block text-sm font-medium text-gray-700 mb-1.5">Seed</label>
-                <input id="sample-seed" type="number" value={sampleSeed} onChange={(e) => setSampleSeed(e.target.value)} className="w-full text-sm border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500" />
-              </div>
-              <div>
-                <label htmlFor="sample-sku-count" className="block text-sm font-medium text-gray-700 mb-1.5">SKU count</label>
-                <input id="sample-sku-count" type="number" min="1" max="30" value={sampleSkuCount} onChange={(e) => setSampleSkuCount(e.target.value)} className="w-full text-sm border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500" />
-              </div>
-              <div>
-                <label htmlFor="sample-horizon-days" className="block text-sm font-medium text-gray-700 mb-1.5">Horizon days</label>
-                <input id="sample-horizon-days" type="number" min="1" max="1095" value={sampleHorizonDays} onChange={(e) => setSampleHorizonDays(e.target.value)} className="w-full text-sm border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500" />
-              </div>
-              <div>
-                <label htmlFor="sample-warehouse-count" className="block text-sm font-medium text-gray-700 mb-1.5">Warehouse count</label>
-                <input id="sample-warehouse-count" type="number" min="1" max="10" value={sampleWarehouseCount} onChange={(e) => setSampleWarehouseCount(e.target.value)} className="w-full text-sm border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500" />
-              </div>
-              <div>
-                <label htmlFor="sample-missing-rate" className="block text-sm font-medium text-gray-700 mb-1.5">Missing rate</label>
-                <input id="sample-missing-rate" type="number" min="0" max="0.25" step="0.01" value={sampleMissingRate} onChange={(e) => setSampleMissingRate(e.target.value)} className="w-full text-sm border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500" />
-              </div>
+        {/* Generation Config */}
+        <section className="bg-[#0F1629] border border-white/8 rounded-xl p-5">
+          <h2 className="text-sm font-semibold text-white mb-4">Generation Config</h2>
+          <form onSubmit={handleGenerate} className="space-y-4">
+            <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+              {[
+                { id: "seed", label: "Seed", value: sampleSeed, set: setSampleSeed, step: "1", min: undefined, max: undefined },
+                { id: "sku-count", label: "SKU count", value: sampleSkuCount, set: setSampleSkuCount, step: "1", min: "1", max: "30" },
+                { id: "horizon-days", label: "Horizon days", value: sampleHorizonDays, set: setSampleHorizonDays, step: "1", min: "1", max: "1095" },
+                { id: "warehouse-count", label: "Warehouses", value: sampleWarehouseCount, set: setSampleWarehouseCount, step: "1", min: "1", max: "10" },
+                { id: "missing-rate", label: "Missing rate", value: sampleMissingRate, set: setSampleMissingRate, step: "0.01", min: "0", max: "0.25" },
+              ].map(({ id, label, value, set, step, min, max }) => (
+                <div key={id}>
+                  <label htmlFor={id} className="block text-[10px] font-semibold uppercase tracking-widest text-white/30 mb-1.5">
+                    {label}
+                  </label>
+                  <input
+                    id={id}
+                    type="number"
+                    value={value}
+                    onChange={(e) => set(e.target.value)}
+                    step={step}
+                    min={min}
+                    max={max}
+                    className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-xs text-white focus:border-indigo-500/50 focus:outline-none focus:bg-white/8 transition-colors"
+                  />
+                </div>
+              ))}
             </div>
 
             {sampleStatus && (
-              <div
-                className={`text-sm px-4 py-2.5 rounded-lg ${
-                  sampleStatus.type === "success"
-                    ? "bg-green-50 text-green-700 border border-green-200"
-                    : "bg-red-50 text-red-700 border border-red-200"
-                }`}
-              >
+              <div className={`text-xs px-3 py-2 rounded-lg ${
+                sampleStatus.type === "success"
+                  ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
+                  : "bg-red-500/10 text-red-400 border border-red-500/20"
+              }`}>
                 {sampleStatus.message}
               </div>
             )}
@@ -282,38 +300,56 @@ export default function SettingsPage() {
               <button
                 type="submit"
                 disabled={sampleGenerating}
-                className="bg-blue-600 text-white px-5 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
+                className="bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 text-white px-5 py-2 rounded-lg text-xs font-medium transition-colors flex items-center gap-2"
               >
-                {sampleGenerating ? "Generating..." : "Generate Sample Data"}
+                {sampleGenerating ? (
+                  <>
+                    <svg className="animate-spin" xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M21 12a9 9 0 1 1-6.219-8.56" />
+                    </svg>
+                    Generating…
+                  </>
+                ) : "Generate Sample Data"}
               </button>
             </div>
           </form>
+        </section>
 
-          {sampleTables.length > 0 && (
-            <div className="mt-6 space-y-5">
+        {/* Preview Results */}
+        {sampleTables.length > 0 && (
+          <section>
+            <h2 className="text-sm font-semibold text-white/60 mb-3 px-1">
+              Generated Tables
+              <span className="ml-2 text-[10px] font-normal text-white/25">{sampleTables.length} tables</span>
+            </h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {sampleTables.map((table) => {
                 const columns = table.top_rows[0] ? Object.keys(table.top_rows[0]) : [];
                 return (
-                  <div key={table.table_name} className="bg-white border border-gray-200 rounded-xl p-4">
-                    <div className="flex items-center justify-between mb-3">
-                      <h3 className="text-sm font-semibold text-gray-900">{table.table_name}</h3>
-                      <span className="text-xs font-medium text-gray-500">{table.row_count.toLocaleString()} rows</span>
+                  <div key={table.table_name} className="bg-[#0F1629] border border-white/8 rounded-xl overflow-hidden">
+                    <div className="px-4 py-3 border-b border-white/5 flex items-center justify-between">
+                      <h3 className="text-xs font-semibold text-white">{table.table_name}</h3>
+                      <span className="text-[10px] font-medium text-white/35">
+                        {table.row_count.toLocaleString()} rows
+                      </span>
                     </div>
                     <div className="overflow-x-auto">
-                      <table className="min-w-full text-xs">
+                      <table className="min-w-full text-[11px]">
                         <thead>
-                          <tr className="border-b border-gray-200 text-left text-gray-500">
-                            {columns.map((column) => (
-                              <th key={column} className="px-3 py-2 font-medium whitespace-nowrap">{column}</th>
+                          <tr className="border-b border-white/5">
+                            {columns.map((col) => (
+                              <th key={col} className="px-3 py-2 text-left text-[10px] font-semibold uppercase tracking-widest text-white/25 whitespace-nowrap">
+                                {col}
+                              </th>
                             ))}
                           </tr>
                         </thead>
                         <tbody>
                           {table.top_rows.map((row, rowIndex) => (
-                            <tr key={`${table.table_name}-${rowIndex}`} className="border-b border-gray-100 last:border-b-0">
-                              {columns.map((column) => (
-                                <td key={column} className="px-3 py-2 text-gray-700 whitespace-nowrap max-w-xs truncate">
-                                  {formatCell(row[column])}
+                            <tr key={`${table.table_name}-${rowIndex}`} className="border-b border-white/3 last:border-b-0">
+                              {columns.map((col) => (
+                                <td key={col} className="px-3 py-2 text-white/60 whitespace-nowrap max-w-[200px] truncate">
+                                  {formatCell(row[col])}
                                 </td>
                               ))}
                             </tr>
@@ -325,8 +361,8 @@ export default function SettingsPage() {
                 );
               })}
             </div>
-          )}
-        </section>
+          </section>
+        )}
       </main>
     </div>
   );

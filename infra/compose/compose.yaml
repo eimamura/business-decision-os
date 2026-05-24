@@ -45,6 +45,7 @@ services:
       - ../../apps/api:/app/apps/api
       - ../../packages:/app/packages
       - ../../config:/app/config
+      - ../../data:/app/data
     ports:
       - "${API_PORT:-8000}:8000"
     healthcheck:

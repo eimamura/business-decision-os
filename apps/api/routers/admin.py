@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import csv
+import io
 import logging
+from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, status
@@ -11,9 +14,44 @@ from packages.persistence.db import get_pool
 from packages.persistence.sample_data import replace_operational_tables
 from scripts.generate_sample_data import SampleDataConfig, generate
 
+GROUND_TRUTH_DIR = Path("data/sample/ground_truth")
+
 _log = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1/admin", tags=["admin"])
+
+
+class GroundTruthDataset(BaseModel):
+    columns: list[str]
+    rows: list[list[str]]
+
+
+class GroundTruthResponse(BaseModel):
+    sku_parameters: GroundTruthDataset
+    location_parameters: GroundTruthDataset
+    supplier_parameters: GroundTruthDataset
+    customer_parameters: GroundTruthDataset
+
+
+def _read_ground_truth_csv(name: str) -> GroundTruthDataset:
+    path = GROUND_TRUTH_DIR / f"{name}.csv"
+    if not path.exists():
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"{name}.csv not found")
+    with path.open(newline="", encoding="utf-8") as f:
+        reader = csv.reader(f)
+        rows = list(reader)
+    if not rows:
+        return GroundTruthDataset(columns=[], rows=[])
+    return GroundTruthDataset(columns=rows[0], rows=rows[1:])
+
+
+def _write_ground_truth_csv(name: str, dataset: GroundTruthDataset) -> None:
+    path = GROUND_TRUTH_DIR / f"{name}.csv"
+    buf = io.StringIO()
+    writer = csv.writer(buf, lineterminator="\n")
+    writer.writerow(dataset.columns)
+    writer.writerows(dataset.rows)
+    path.write_text(buf.getvalue(), encoding="utf-8")
 
 
 class GenerateSampleDataRequest(BaseModel):
@@ -196,3 +234,36 @@ async def generate_sample_data(
     except Exception as e:
         _log.exception("generate_sample_data failed")
         raise HTTPException(status_code=500, detail="Internal error") from e
+
+
+@router.get(
+    "/ground-truth",
+    response_model=GroundTruthResponse,
+    status_code=status.HTTP_200_OK,
+)
+async def get_ground_truth() -> GroundTruthResponse:
+    return GroundTruthResponse(
+        sku_parameters=_read_ground_truth_csv("sku_parameters"),
+        location_parameters=_read_ground_truth_csv("location_parameters"),
+        supplier_parameters=_read_ground_truth_csv("supplier_parameters"),
+        customer_parameters=_read_ground_truth_csv("customer_parameters"),
+    )
+
+
+@router.put(
+    "/ground-truth",
+    response_model=GroundTruthResponse,
+    status_code=status.HTTP_200_OK,
+)
+async def save_ground_truth(body: GroundTruthResponse) -> GroundTruthResponse:
+    try:
+        _write_ground_truth_csv("sku_parameters", body.sku_parameters)
+        _write_ground_truth_csv("location_parameters", body.location_parameters)
+        _write_ground_truth_csv("supplier_parameters", body.supplier_parameters)
+        _write_ground_truth_csv("customer_parameters", body.customer_parameters)
+    except HTTPException:
+        raise
+    except Exception as e:
+        _log.exception("save_ground_truth failed")
+        raise HTTPException(status_code=500, detail="Internal error") from e
+    return await get_ground_truth()
