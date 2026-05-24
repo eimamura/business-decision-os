@@ -4,6 +4,8 @@ COPY pyproject.toml .
 COPY apps/api/ apps/api/
 COPY packages/ packages/
 COPY config config
+COPY scripts/ scripts/
+COPY data/sample/ data/sample/
 RUN pip install uv && uv sync --no-dev --package api
 
 FROM python:3.12-slim

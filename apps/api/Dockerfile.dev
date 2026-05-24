@@ -4,6 +4,8 @@ COPY pyproject.toml .
 COPY packages/ packages/
 COPY apps/api/ apps/api/
 COPY config config
+COPY scripts/ scripts/
+COPY data/sample/ data/sample/
 RUN pip install uv && uv sync --package api
 ENV PYTHONPATH="/app"
 CMD ["/app/.venv/bin/uvicorn", "apps.api.main:app", \

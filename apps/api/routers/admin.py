@@ -4,13 +4,34 @@ import logging
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, status
+from pydantic import BaseModel, Field
 
 from apps.api.state import sessions as _sessions_cache
 from packages.persistence.db import get_pool
+from packages.persistence.sample_data import replace_operational_tables
+from scripts.generate_sample_data import SampleDataConfig, generate
 
 _log = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1/admin", tags=["admin"])
+
+
+class GenerateSampleDataRequest(BaseModel):
+    seed: int = 42
+    sku_count: int = Field(default=30, ge=1, le=30)
+    horizon_days: int = Field(default=365, ge=1, le=1095)
+    warehouse_count: int = Field(default=2, ge=1, le=10)
+    missing_rate: float = Field(default=0.02, ge=0, le=0.25)
+
+
+class SampleDataTableSummary(BaseModel):
+    table_name: str
+    row_count: int
+    top_rows: list[dict[str, Any]]
+
+
+class GenerateSampleDataResponse(BaseModel):
+    tables: list[SampleDataTableSummary]
 
 
 @router.get("/steps", response_model=list[dict[str, Any]], status_code=status.HTTP_200_OK)
@@ -142,3 +163,36 @@ async def delete_all_sessions() -> dict[str, int]:
     except Exception:
         _log.exception("delete_all_sessions failed")
         raise HTTPException(status_code=500, detail="Internal error")
+
+
+@router.post(
+    "/sample-data/generate",
+    response_model=GenerateSampleDataResponse,
+    status_code=status.HTTP_200_OK,
+)
+async def generate_sample_data(
+    body: GenerateSampleDataRequest,
+) -> GenerateSampleDataResponse:
+    try:
+        generate(
+            SampleDataConfig(
+                seed=body.seed,
+                sku_count=body.sku_count,
+                horizon_days=body.horizon_days,
+                warehouse_count=body.warehouse_count,
+                missing_rate=body.missing_rate,
+            )
+        )
+        pool = await get_pool()
+        async with pool.acquire() as conn:
+            tables = await replace_operational_tables(conn)
+        return GenerateSampleDataResponse(
+            tables=[SampleDataTableSummary.model_validate(table) for table in tables]
+        )
+    except RuntimeError as e:
+        if "DATABASE_URL" in str(e):
+            raise HTTPException(status_code=500, detail="DATABASE_URL not set") from e
+        raise HTTPException(status_code=500, detail="Internal error") from e
+    except Exception as e:
+        _log.exception("generate_sample_data failed")
+        raise HTTPException(status_code=500, detail="Internal error") from e

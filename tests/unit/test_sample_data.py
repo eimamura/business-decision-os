@@ -40,6 +40,36 @@ def test_demand_history_row_count():
     assert len(rows) == 30 * 365
 
 
+def test_configurable_sku_horizon_and_warehouse_counts():
+    gen.main(seed=42, sku_count=5, horizon_days=10, warehouse_count=3)
+
+    with open(OUT_DIR / "sku_master.csv", newline="") as f:
+        sku_rows = list(csv.DictReader(f))
+    with open(OUT_DIR / "inventory.csv", newline="") as f:
+        inventory_rows = list(csv.DictReader(f))
+    with open(OUT_DIR / "demand_history.csv", newline="") as f:
+        demand_rows = list(csv.DictReader(f))
+
+    assert len(sku_rows) == 5
+    assert len(inventory_rows) == 5 * 3
+    assert len(demand_rows) == 5 * 10
+    assert {r["warehouse_id"] for r in inventory_rows} == {"WH-001", "WH-002", "WH-003"}
+
+
+def test_configurable_missing_rate_applies_to_demand_history():
+    gen.main(seed=42, sku_count=30, horizon_days=365, missing_rate=0.10)
+    with open(OUT_DIR / "demand_history.csv", newline="") as f:
+        rows = list(csv.DictReader(f))
+
+    non_gap_rows = [
+        r for r in rows
+        if not (r["sku_id"] == gen.CONTIGUOUS_GAP_SKU and r["is_missing"] == "True")
+    ]
+    missing = sum(1 for r in non_gap_rows if r["is_missing"] == "True")
+    rate = missing / len(non_gap_rows)
+    assert 0.08 <= rate <= 0.12
+
+
 def test_null_rate_approximately_two_percent():
     rows = _run_and_read(42, "demand_history.csv")
     non_gap_rows = [

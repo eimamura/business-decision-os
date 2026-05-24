@@ -10,22 +10,35 @@ import argparse
 import csv
 import math
 import random
+from dataclasses import dataclass
 from datetime import date, timedelta
 from pathlib import Path
 
-HORIZON_DAYS = 365
+CsvRow = dict[str, str]
+
 START_DATE = date(2025, 1, 1)
-WAREHOUSES = ["WH-001", "WH-002"]
 SUPPLIERS = {"critical": "SUP-001", "standard": "SUP-002", "slow_moving": "SUP-003"}
 
 DETERMINISTIC_NULL_SKUS = {"SKU-003", "SKU-005", "SKU-007"}
 CONTIGUOUS_GAP_SKU = "SKU-001"
 CONTIGUOUS_GAP_START_DAY = 60
 CONTIGUOUS_GAP_LENGTH = 7
-OVERALL_NULL_RATE = 0.02
 
 
-def _load_csv(path: Path) -> list[dict]:
+@dataclass(frozen=True)
+class SampleDataConfig:
+    seed: int = 42
+    sku_count: int = 30
+    horizon_days: int = 365
+    warehouse_count: int = 2
+    missing_rate: float = 0.02
+
+    @property
+    def warehouses(self) -> list[str]:
+        return [f"WH-{idx:03d}" for idx in range(1, self.warehouse_count + 1)]
+
+
+def _load_csv(path: Path) -> list[CsvRow]:
     with open(path, newline="") as f:
         return list(csv.DictReader(f))
 
@@ -56,7 +69,7 @@ def _seasonal_factor(day: int, amplitude: float, period: float) -> float:
     return 1.0 + amplitude * math.sin(2 * math.pi * day / period)
 
 
-def generate_sku_master(skus: list[dict], out_dir: Path) -> None:
+def generate_sku_master(skus: list[CsvRow], out_dir: Path) -> None:
     fields = [
         "sku_id", "name", "category", "sku_type", "moq",
         "lead_time_days_mean", "lead_time_days_std", "holding_cost_pct", "unit_cost",
@@ -68,7 +81,7 @@ def generate_sku_master(skus: list[dict], out_dir: Path) -> None:
             writer.writerow({k: row[k] for k in fields})
 
 
-def generate_customers(customers: list[dict], out_dir: Path) -> None:
+def generate_customers(customers: list[CsvRow], out_dir: Path) -> None:
     fields = ["customer_id", "segment", "sku_affinity_json"]
     with open(out_dir / "customers.csv", "w", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=fields)
@@ -77,7 +90,9 @@ def generate_customers(customers: list[dict], out_dir: Path) -> None:
             writer.writerow({k: row[k] for k in fields})
 
 
-def generate_demand_history(skus: list[dict], rng: random.Random, out_dir: Path) -> None:
+def generate_demand_history(
+    skus: list[CsvRow], rng: random.Random, out_dir: Path, config: SampleDataConfig
+) -> None:
     gap_end = CONTIGUOUS_GAP_START_DAY + CONTIGUOUS_GAP_LENGTH
     gap_days = set(range(CONTIGUOUS_GAP_START_DAY, gap_end))
 
@@ -93,7 +108,7 @@ def generate_demand_history(skus: list[dict], rng: random.Random, out_dir: Path)
             amplitude = float(sku["seasonal_amplitude"])
             period = float(sku["seasonal_period_days"])
 
-            for day_idx in range(HORIZON_DAYS):
+            for day_idx in range(config.horizon_days):
                 current_date = START_DATE + timedelta(days=day_idx)
                 mu = base_mean * _seasonal_factor(day_idx, amplitude, period)
                 qty = _neg_binom_demand(rng, mu, dispersion)
@@ -102,10 +117,10 @@ def generate_demand_history(skus: list[dict], rng: random.Random, out_dir: Path)
 
                 if sku_id == CONTIGUOUS_GAP_SKU and day_idx in gap_days:
                     is_missing = True
-                elif sku_id in DETERMINISTIC_NULL_SKUS and rng.random() < OVERALL_NULL_RATE:
+                elif sku_id in DETERMINISTIC_NULL_SKUS and rng.random() < config.missing_rate:
                     is_missing = True
                 elif sku_id not in DETERMINISTIC_NULL_SKUS and sku_id != CONTIGUOUS_GAP_SKU:
-                    if rng.random() < OVERALL_NULL_RATE:
+                    if rng.random() < config.missing_rate:
                         is_missing = True
 
                 writer.writerow({
@@ -116,7 +131,9 @@ def generate_demand_history(skus: list[dict], rng: random.Random, out_dir: Path)
                 })
 
 
-def generate_inventory(skus: list[dict], rng: random.Random, out_dir: Path) -> None:
+def generate_inventory(
+    skus: list[CsvRow], rng: random.Random, out_dir: Path, config: SampleDataConfig
+) -> None:
     snapshot_date = date(2026, 5, 19).isoformat()
     fields = ["sku_id", "warehouse_id", "on_hand", "on_order", "snapshot_date"]
 
@@ -132,7 +149,7 @@ def generate_inventory(skus: list[dict], rng: random.Random, out_dir: Path) -> N
 
             normal_on_hand = int(daily_demand * (lt_mean + 14))
 
-            for wh in WAREHOUSES:
+            for wh in config.warehouses:
                 roll = rng.random()
                 if roll < 0.15 and unit_cost > 100:
                     on_hand = int(daily_demand * 150)
@@ -153,7 +170,7 @@ def generate_inventory(skus: list[dict], rng: random.Random, out_dir: Path) -> N
                 })
 
 
-def generate_supply(skus: list[dict], rng: random.Random, out_dir: Path) -> None:
+def generate_supply(skus: list[CsvRow], rng: random.Random, out_dir: Path) -> None:
     fields = ["sku_id", "supplier_id", "order_date", "expected_arrival", "quantity", "status"]
     base_order_date = date(2026, 4, 1)
 
@@ -194,7 +211,9 @@ def generate_supply(skus: list[dict], rng: random.Random, out_dir: Path) -> None
                 })
 
 
-def generate_cost(skus: list[dict], rng: random.Random, out_dir: Path) -> None:
+def generate_cost(
+    skus: list[CsvRow], rng: random.Random, out_dir: Path, config: SampleDataConfig
+) -> None:
     period_start = date(2025, 1, 1).isoformat()
     period_end = date(2025, 12, 31).isoformat()
     fields = [
@@ -211,7 +230,7 @@ def generate_cost(skus: list[dict], rng: random.Random, out_dir: Path) -> None:
             unit_cost = float(sku["unit_cost"])
             holding_pct = float(sku["holding_cost_pct"])
             daily_demand = float(sku["base_demand_mean"])
-            annual_demand = daily_demand * HORIZON_DAYS
+            annual_demand = daily_demand * config.horizon_days
 
             cogs = round(annual_demand * unit_cost * rng.uniform(0.9, 1.1), 2)
             avg_inventory = daily_demand * float(sku["lead_time_days_mean"])
@@ -232,28 +251,69 @@ def generate_cost(skus: list[dict], rng: random.Random, out_dir: Path) -> None:
             })
 
 
-def main(seed: int = 42) -> None:
-    rng = random.Random(seed)
+def generate(config: SampleDataConfig, out_dir: Path = Path("data/sample")) -> None:
+    rng = random.Random(config.seed)
 
     gt_dir = Path("data/sample/ground_truth")
-    out_dir = Path("data/sample")
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    skus = _load_csv(gt_dir / "sku_parameters.csv")
+    skus = _load_csv(gt_dir / "sku_parameters.csv")[: config.sku_count]
     customers = _load_csv(gt_dir / "customer_parameters.csv")
 
     generate_sku_master(skus, out_dir)
     generate_customers(customers, out_dir)
-    generate_demand_history(skus, rng, out_dir)
-    generate_inventory(skus, rng, out_dir)
+    generate_demand_history(skus, rng, out_dir, config)
+    generate_inventory(skus, rng, out_dir, config)
     generate_supply(skus, rng, out_dir)
-    generate_cost(skus, rng, out_dir)
+    generate_cost(skus, rng, out_dir, config)
 
-    print(f"Sample data generated in {out_dir}/ (seed={seed})")
+    print(
+        f"Sample data generated in {out_dir}/ "
+        f"(seed={config.seed}, sku_count={config.sku_count}, "
+        f"horizon_days={config.horizon_days}, warehouse_count={config.warehouse_count}, "
+        f"missing_rate={config.missing_rate})"
+    )
+
+
+def main(
+    seed: int = 42,
+    sku_count: int = 30,
+    horizon_days: int = 365,
+    warehouse_count: int = 2,
+    missing_rate: float = 0.02,
+) -> None:
+    generate(
+        SampleDataConfig(
+            seed=seed,
+            sku_count=sku_count,
+            horizon_days=horizon_days,
+            warehouse_count=warehouse_count,
+            missing_rate=missing_rate,
+        )
+    )
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Generate synthetic sample data")
     parser.add_argument("--seed", type=int, default=42, help="Random seed (default: 42)")
+    parser.add_argument("--sku-count", type=int, default=30, help="SKU count, 1..30 (default: 30)")
+    parser.add_argument(
+        "--horizon-days", type=int, default=365, help="Demand horizon days, 1..1095 (default: 365)"
+    )
+    parser.add_argument(
+        "--warehouse-count", type=int, default=2, help="Warehouse count, 1..10 (default: 2)"
+    )
+    parser.add_argument(
+        "--missing-rate",
+        type=float,
+        default=0.02,
+        help="Demand missing rate, 0..0.25 (default: 0.02)",
+    )
     args = parser.parse_args()
-    main(seed=args.seed)
+    main(
+        seed=args.seed,
+        sku_count=args.sku_count,
+        horizon_days=args.horizon_days,
+        warehouse_count=args.warehouse_count,
+        missing_rate=args.missing_rate,
+    )

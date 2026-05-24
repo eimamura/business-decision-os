@@ -8,9 +8,13 @@ Reads data/sample/*.csv and inserts into the database.
 """
 import asyncio
 
+from packages.persistence.sample_data import seed_from_database_url
+
 
 async def seed_db() -> None:
-    raise NotImplementedError("Phase 1 — DATABASE_URL required")
+    summaries = await seed_from_database_url()
+    for table in summaries:
+        print(f"{table['table_name']}: {table['row_count']} rows")
 
 
 if __name__ == "__main__":
