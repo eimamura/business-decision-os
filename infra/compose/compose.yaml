@@ -25,6 +25,22 @@ services:
       timeout: 5s
       retries: 10
 
+  migrator:
+    build:
+      context: ../..
+      dockerfile: apps/api/Dockerfile.dev
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql+asyncpg://bdos:bdos_dev@db:5432/bdos
+      APP_ENV: dev
+    volumes:
+      - ../../apps/api:/app/apps/api
+      - ../../data:/app/data
+    command: ["/bin/sh", "-c", "cd /app/apps/api && /app/.venv/bin/alembic upgrade head"]
+    restart: "no"
+
   api:
     build:
       context: ../..
@@ -34,6 +50,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      migrator:
+        condition: service_completed_successfully
     environment:
       DATABASE_URL: postgresql+asyncpg://bdos:bdos_dev@db:5432/bdos
       APP_ENV: dev
@@ -64,6 +82,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      migrator:
+        condition: service_completed_successfully
     environment:
       DATABASE_URL: postgresql+asyncpg://bdos:bdos_dev@db:5432/bdos
       APP_ENV: dev

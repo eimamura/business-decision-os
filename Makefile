@@ -1,4 +1,4 @@
-.PHONY: seed generate-data build test lint typecheck dev dev-api dev-web dev-compose dev-up dev-down dev-logs dev-ps dev-smoke
+.PHONY: migrate seed generate-data build test lint typecheck dev dev-api dev-web dev-compose dev-up dev-down dev-logs dev-ps dev-smoke
 
 dev-api:
 	uv sync --package api
@@ -29,10 +29,13 @@ dev-ps:
 dev-smoke:
 	curl -sf http://localhost:$${API_PORT:-8000}/healthz
 
+migrate:
+	cd apps/api && uv run alembic upgrade head
+
 generate-data:
 	uv run python scripts/generate_sample_data.py
 
-seed: generate-data
+seed: migrate generate-data
 	uv run python scripts/seed_db.py
 
 build:
