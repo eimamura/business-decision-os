@@ -196,9 +196,10 @@ class AgentRuntime:
                             "timestamp": datetime.now(timezone.utc).isoformat(),
                         })
                         raise
+                    from packages.agent.orchestrator.parsing import json_safe
                     messages.append(LLMMessage(
                         role="tool",
-                        content=json.dumps(tool_result.output),
+                        content=json.dumps(json_safe(tool_result.output)),
                         tool_call_id=call["id"],
                     ))
 
