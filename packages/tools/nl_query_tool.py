@@ -5,6 +5,7 @@ import logging
 import time
 from typing import Any
 
+from packages.agent.context_sanitizer import sanitize_sql_results
 from packages.agent.llm import LLMClient, LLMMessage
 from packages.persistence import execute_read_query
 from packages.tools.base import ToolContext, ToolResult
@@ -22,6 +23,7 @@ _SQL_RULES = (
     "- Do not reference any table not listed above.\n"
     "- Use standard SQL compatible with PostgreSQL 16.\n"
     "- Return only the SQL query, no explanation.\n"
+    "- Always include LIMIT 100 or less at the end of every query.\n"
 )
 
 FEW_SHOT_EXAMPLES = """
@@ -35,12 +37,12 @@ Q: What is the demand trend for the last 6 months?
 A: SELECT date, SUM(quantity) AS total_demand
    FROM demand_history
    WHERE date >= CURRENT_DATE - INTERVAL '6 months'
-   GROUP BY date ORDER BY date;
+   GROUP BY date ORDER BY date LIMIT 90;
 
 Q: Which suppliers have pending supply orders?
 A: SELECT supplier_id, COUNT(*) AS orders, SUM(quantity) AS total_qty
    FROM supply WHERE expected_arrival >= CURRENT_DATE
-   GROUP BY supplier_id ORDER BY total_qty DESC;
+   GROUP BY supplier_id ORDER BY total_qty DESC LIMIT 90;
 """
 
 
@@ -137,8 +139,10 @@ class NlQueryTool:
     output_schema: dict[str, Any] = {
         "type": "object",
         "properties": {
-            "results": {"type": "array"},
-            "count": {"type": "integer"},
+            "rows": {"type": "array"},
+            "row_count": {"type": "integer"},
+            "truncated": {"type": "boolean"},
+            "columns": {"type": "array"},
             "sql": {"type": "string"},
         },
     }
@@ -156,14 +160,11 @@ class NlQueryTool:
 
         try:
             results, sql = await generate_and_run(question, self._llm_client)
+            real_count = len(results)
+            sanitized = sanitize_sql_results(results, max_rows=100)
             return ToolResult(
-                output={
-                    "results": results,
-                    "count": len(results),
-                    "sql": sql,
-                    "executed_query": sql,
-                },
-                audit_payload={"question": question, "sql": sql, "count": len(results)},
+                output={**sanitized, "sql": sql, "executed_query": sql},
+                audit_payload={"question": question, "sql": sql, "count": real_count},
             )
         except SQLGuardrailError as exc:
             return ToolResult(

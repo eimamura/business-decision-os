@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from packages.agent.context_sanitizer import sanitize_sql_results
 from packages.persistence import execute_read_query
 from packages.tools.base import ToolContext, ToolResult
 from packages.tools.sql_guardrail import SQLGuardrailError, validate_read_sql
@@ -22,8 +23,9 @@ class SqlQueryTool:
         "type": "object",
         "properties": {
             "rows": {"type": "array"},
-            "column_names": {"type": "array"},
+            "columns": {"type": "array"},
             "row_count": {"type": "integer"},
+            "truncated": {"type": "boolean"},
         },
     }
 
@@ -44,14 +46,11 @@ class SqlQueryTool:
 
         try:
             result = await execute_read_query(query)
+            real_row_count = result["row_count"]
+            sanitized = sanitize_sql_results(result["rows"], max_rows=100)
             return ToolResult(
-                output={
-                    "rows": result["rows"],
-                    "column_names": result["column_names"],
-                    "row_count": result["row_count"],
-                    "executed_query": query,
-                },
-                audit_payload={"query": query, "row_count": result["row_count"]},
+                output={**sanitized, "executed_query": query},
+                audit_payload={"query": query, "row_count": real_row_count},
             )
         except Exception as exc:
             output: dict[str, Any] = {

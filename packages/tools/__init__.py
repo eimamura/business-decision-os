@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 from packages.agent.llm import LLMClient
-from packages.prediction import LinearRegressionPredictor
+from packages.prediction import DatabasePredictor
 from packages.tools.approval_tool import ApprovalTool
 from packages.tools.audit_tool import AuditLogTool
 from packages.tools.base import Tool, ToolContext, ToolRegistry, ToolResult
@@ -47,7 +47,7 @@ def create_tool_registry(
     registry.register(NlQueryTool(llm_client=llm_client))
     registry.register(ApprovalTool())
     registry.register(AuditLogTool())
-    registry.register(ForecastTool(predictor=LinearRegressionPredictor(db_session=db_session)))
+    registry.register(ForecastTool(predictor=DatabasePredictor(db_session=db_session)))
     registry.register(SimulationTool(runner=runner))
     registry.register(OptimizerTool())
     registry.register(EvaluatorTool())

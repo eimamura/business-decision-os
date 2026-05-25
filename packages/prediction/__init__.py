@@ -20,7 +20,6 @@ class Predictor(Protocol):
 class DatabasePredictor:
     def __init__(self, db_session: Any) -> None:
         self._db_session = db_session
-        self._fallback = LinearRegressionPredictor(db_session)
 
     async def predict(self, sku_id: str, horizon_days: int) -> PredictorResult:
         from sqlalchemy import text
@@ -33,13 +32,7 @@ class DatabasePredictor:
         row = result.fetchone()
 
         if row is None:
-            fallback = await self._fallback.predict(sku_id, horizon_days)
-            return PredictorResult(
-                sku_id=sku_id,
-                predicted_units=fallback.predicted_units,
-                model_version=fallback.model_version,
-                source="databricks_features",
-            )
+            raise RuntimeError(f"No prediction found for sku_id={sku_id!r}")
 
         raw_units = row[0]
         model_version: str = row[1]

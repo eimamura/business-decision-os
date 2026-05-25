@@ -434,18 +434,59 @@ async def test_evaluator_no_collapsed_total():
 
 # ===== T-1017: Context sanitizer =====
 
-def test_sanitize_sql_results_no_raw_rows():
+def test_sanitize_sql_results_includes_rows():
     rows = [{"sku": "A", "units": 10}, {"sku": "B", "units": 20}]
     result = sanitize_sql_results(rows)
-    assert "rows" not in result
+    assert result["rows"] == rows
     assert result["row_count"] == 2
-    assert "sample_aggregates" in result
-    assert result["note"] == "summarized for LLM context"
+    assert result["truncated"] is False
+    assert result["columns"] == ["sku", "units"]
+    assert "sample_aggregates" not in result
 
 
 def test_sanitize_sql_results_empty():
     result = sanitize_sql_results([])
     assert result["row_count"] == 0
+    assert result["rows"] == []
+    assert result["truncated"] is False
+    assert result["columns"] == []
+
+
+def test_sanitize_sql_results_truncates_rows():
+    rows = [{"id": i, "value": float(i)} for i in range(200)]
+    result = sanitize_sql_results(rows, max_rows=100)
+    assert len(result["rows"]) == 100
+    assert result["row_count"] == 200
+    assert result["truncated"] is True
+    assert result["columns"] == ["id", "value"]
+    assert "sample_aggregates" in result
+
+
+def test_inject_limit_adds_when_missing():
+    from packages.persistence.query_repo import _inject_limit
+    result = _inject_limit("SELECT * FROM sku_master", 1000)
+    assert result.endswith("LIMIT 1000")
+
+
+def test_inject_limit_skips_when_present():
+    from packages.persistence.query_repo import _inject_limit
+    result = _inject_limit("SELECT * FROM sku_master LIMIT 10", 1000)
+    assert result.count("LIMIT") == 1
+    assert "LIMIT 10" in result
+
+
+def test_inject_limit_strips_trailing_semicolon():
+    from packages.persistence.query_repo import _inject_limit
+    result = _inject_limit("SELECT * FROM sku_master;", 1000)
+    assert result.endswith("LIMIT 1000")
+    assert ";" not in result
+
+
+def test_inject_limit_cte_without_limit():
+    from packages.persistence.query_repo import _inject_limit
+    sql = "WITH t AS (SELECT sku_id FROM sku_master) SELECT * FROM t"
+    result = _inject_limit(sql, 1000)
+    assert result.endswith("LIMIT 1000")
 
 
 def test_sanitize_for_llm_returns_string():
@@ -455,6 +496,27 @@ def test_sanitize_for_llm_returns_string():
     import json
     parsed = json.loads(s)
     assert parsed["key"] == "value"
+
+
+@pytest.mark.asyncio
+async def test_sql_tool_output_is_sanitized(monkeypatch: pytest.MonkeyPatch):
+    fake_rows = [{"id": i, "val": float(i)} for i in range(200)]
+
+    async def fake_execute(query: str) -> dict:
+        return {"rows": fake_rows, "column_names": ["id", "val"], "row_count": 200}
+
+    monkeypatch.setattr("packages.tools.sql_tool.execute_read_query", fake_execute)
+    tool = SqlQueryTool()
+    result = await tool.handle({"query": "SELECT * FROM sku_master"}, _ctx())
+    assert len(result.output["rows"]) <= 100
+    assert result.output["truncated"] is True
+    assert result.output["row_count"] == 200
+    assert result.audit_payload["row_count"] == 200
+
+
+def test_nl_query_rules_include_limit():
+    from packages.tools.nl_query_tool import _SQL_RULES
+    assert "LIMIT" in _SQL_RULES
 
 
 # ===== create_tool_registry =====

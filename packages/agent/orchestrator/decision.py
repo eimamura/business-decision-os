@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from datetime import datetime, timedelta, timezone
+from decimal import Decimal
 from typing import Any, cast
 from uuid import UUID, uuid4
 
@@ -260,7 +261,8 @@ async def _synthesize_response(
                         "query": query.text,
                         "intent": intent.model_dump(),
                         "agent_results": {k: v.output for k, v in agent_results.items()},
-                    }
+                    },
+                    default=lambda o: float(o) if isinstance(o, Decimal) else str(o),
                 ),
             ),
         ],
