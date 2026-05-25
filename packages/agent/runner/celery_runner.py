@@ -44,16 +44,19 @@ class CeleryJobRunner:
         task_name_map = {
             "simulation": "bdos.run_simulation",
             "optimization": "bdos.run_optimization",
+            "train_forecast": "bdos.train_predictor",
         }
         task_name = task_name_map.get(spec.kind)
         if task_name is None:
             raise NotImplementedError(f"CeleryJobRunner does not support kind={spec.kind}")
 
+        queue: str | None = "training" if spec.kind == "train_forecast" else None
         job_id = uuid4()
         result = self._app.send_task(
             task_name,
             args=[spec.payload],
             task_id=str(job_id),
+            **({"queue": queue} if queue else {}),
         )
         self._task_ids[job_id] = result.id
 

@@ -362,13 +362,18 @@ async def test_audit_tool_returns_hash():
 
 # ===== T-1013: ForecastTool =====
 
+def test_forecast_tool_raises_without_predictor():
+    with pytest.raises(RuntimeError, match="requires a predictor"):
+        ForecastTool(predictor=None)
+
+
 @pytest.mark.asyncio
-async def test_forecast_tool_stub_returns_schema():
-    tool = ForecastTool()
+async def test_forecast_tool_with_predictor_returns_schema():
+    from packages.prediction import LinearRegressionPredictor
+    tool = ForecastTool(predictor=LinearRegressionPredictor(db_session=None))
     result = await tool.handle({"sku_id": "SKU001", "horizon_days": 7}, _ctx())
     assert result.output["sku_id"] == "SKU001"
     assert len(result.output["forecast_units"]) == 7
-    assert result.output["model_version"] == "moving_avg_v1_stub"
     assert result.output["nulls_skipped"] == 0
 
 

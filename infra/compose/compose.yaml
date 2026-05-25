@@ -95,7 +95,36 @@ services:
       - ../../packages:/app/packages
       - ../../config:/app/config
     command: ["/app/.venv/bin/celery", "-A", "packages.agent.runner.celery_app",
-              "worker", "--loglevel=info", "--concurrency=2"]
+              "worker", "--loglevel=info", "--concurrency=2", "--queues=celery"]
+    healthcheck:
+      test: ["CMD-SHELL", "/app/.venv/bin/celery -A packages.agent.runner.celery_app inspect ping --timeout=5 || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 20s
+
+  celery-worker-training:
+    build:
+      context: ../..
+      dockerfile: apps/api/Dockerfile.dev
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrator:
+        condition: service_completed_successfully
+    environment:
+      DATABASE_URL: postgresql+asyncpg://bdos:bdos_dev@db:5432/bdos
+      APP_ENV: dev
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/0
+    volumes:
+      - ../../apps/api:/app/apps/api
+      - ../../packages:/app/packages
+      - ../../config:/app/config
+    command: ["/app/.venv/bin/celery", "-A", "packages.agent.runner.celery_app",
+              "worker", "--loglevel=info", "--concurrency=1", "--queues=training"]
     healthcheck:
       test: ["CMD-SHELL", "/app/.venv/bin/celery -A packages.agent.runner.celery_app inspect ping --timeout=5 || exit 1"]
       interval: 30s

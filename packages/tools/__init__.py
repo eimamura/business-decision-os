@@ -16,6 +16,7 @@ from packages.tools.optimizer_tool import OptimizerTool
 from packages.tools.simulation_tool import SimulationTool
 from packages.tools.sql_tool import SqlQueryTool
 from packages.tools.table_schema_reader_tool import TableSchemaReaderTool
+from packages.tools.train_forecast_tool import TrainForecastTool
 
 __all__ = [
     "Tool",
@@ -33,6 +34,7 @@ __all__ = [
     "SimulationTool",
     "SqlQueryTool",
     "TableSchemaReaderTool",
+    "TrainForecastTool",
     "create_tool_registry",
 ]
 
@@ -49,6 +51,7 @@ def create_tool_registry(
     registry.register(AuditLogTool())
     registry.register(ForecastTool(predictor=DatabasePredictor(db_session=db_session)))
     registry.register(SimulationTool(runner=runner))
+    registry.register(TrainForecastTool(runner=runner))
     registry.register(OptimizerTool())
     registry.register(EvaluatorTool())
     registry.register(DataCatalogSearchTool())

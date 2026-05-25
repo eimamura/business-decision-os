@@ -62,3 +62,31 @@ def run_optimization_task(self: Any, payload: dict[str, Any]) -> dict[str, Any]:
     output = _run_async(ReplenishmentOptimizer().run(opt_input, opt_ctx))
     result: dict[str, Any] = output.model_dump()
     return result
+
+
+@celery_app.task(bind=True, name="bdos.train_predictor", queue="training")  # type: ignore[untyped-decorator]
+def train_predictor_task(self: Any, payload: dict[str, Any]) -> dict[str, Any]:
+    import numpy as np
+    from sklearn.linear_model import LinearRegression
+
+    from packages.persistence.prediction_repo import fetch_demand_history, upsert_prediction
+
+    sku_id: str = payload["sku_id"]
+    history: list[float] = _run_async(fetch_demand_history(sku_id))
+    horizon = 90
+
+    if len(history) >= 3:
+        n = len(history)
+        x = np.arange(n).reshape(-1, 1)
+        y = np.array(history)
+        model = LinearRegression()
+        model.fit(x, y)
+        future_x = np.arange(n, n + horizon).reshape(-1, 1)
+        predicted_units = [float(v) for v in model.predict(future_x)]
+    else:
+        mean_val = sum(history) / len(history) if history else 0.0
+        predicted_units = [mean_val] * horizon
+
+    model_version = "linear_regression_v1_trained"
+    _run_async(upsert_prediction(sku_id, predicted_units, model_version))
+    return {"sku_id": sku_id, "model_version": model_version, "horizon_days": horizon}

@@ -57,35 +57,15 @@ def test_predictor_protocol_is_satisfied():
     assert isinstance(predictor, Predictor)
 
 
-@pytest.mark.asyncio
-async def test_forecast_tool_no_db_no_predictor_returns_stub():
-    tool = ForecastTool(db_session=None, predictor=None)
-    ctx = _make_tool_ctx()
-    tool_result = await tool.handle({"sku_id": "SKU001", "horizon_days": 7}, ctx)
-
-    assert tool_result.output["sku_id"] == "SKU001"
-    assert len(tool_result.output["forecast_units"]) == 7
-    assert tool_result.output["model_version"] == "moving_avg_v1_stub"
-    assert tool_result.output["source"] == "stub"
-    assert "prediction" in tool_result.output
+def test_forecast_tool_raises_without_predictor():
+    with pytest.raises(RuntimeError, match="requires a predictor"):
+        ForecastTool(predictor=None)
 
 
 @pytest.mark.asyncio
-async def test_forecast_tool_output_has_prediction_and_source_keys():
-    tool = ForecastTool(db_session=None, predictor=None)
-    ctx = _make_tool_ctx()
-    tool_result = await tool.handle({"sku_id": "SKU_X", "horizon_days": 5}, ctx)
-
-    output = tool_result.output
-    assert "prediction" in output
-    assert "source" in output
-    assert output["prediction"] == output["forecast_units"][0]
-
-
-@pytest.mark.asyncio
-async def test_forecast_tool_with_predictor_uses_predictor():
+async def test_forecast_tool_with_predictor_returns_output():
     predictor = LinearRegressionPredictor(db_session=None)
-    tool = ForecastTool(db_session=None, predictor=predictor)
+    tool = ForecastTool(predictor=predictor)
     ctx = _make_tool_ctx()
     tool_result = await tool.handle({"sku_id": "SKU001", "horizon_days": 10}, ctx)
 
@@ -94,5 +74,4 @@ async def test_forecast_tool_with_predictor_uses_predictor():
     assert len(output["forecast_units"]) == 10
     assert output["model_version"] == "linear_regression_v1_fallback"
     assert output["source"] == "in_process"
-    assert "prediction" in output
-    assert "source" in output
+    assert output["prediction"] == output["forecast_units"][0]
