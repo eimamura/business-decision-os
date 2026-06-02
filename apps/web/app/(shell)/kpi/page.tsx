@@ -1,0 +1,168 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import {
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  Legend,
+  ResponsiveContainer,
+} from "recharts";
+
+const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+
+interface KpiTrend {
+  date: string;
+  service_level?: number;
+  inventory_cost?: number;
+  stockout_days?: number;
+  working_capital?: number;
+}
+
+interface LlmCostEntry {
+  date: string;
+  specialist: string;
+  model: string;
+  cost_usd: number;
+}
+
+export default function KpiPage() {
+  const [kpiData, setKpiData] = useState<KpiTrend[]>([]);
+  const [llmData, setLlmData] = useState<LlmCostEntry[]>([]);
+  const [kpiLoading, setKpiLoading] = useState(true);
+  const [llmLoading, setLlmLoading] = useState(true);
+
+  useEffect(() => {
+    fetch(`${API_BASE}/api/v1/kpi/trends`, {
+      headers: { "X-Dev-User": "dev-user" },
+    })
+      .then((r) => r.json())
+      .then((data) => setKpiData(Array.isArray(data) ? data : data.items ?? []))
+      .catch(() => setKpiData([]))
+      .finally(() => setKpiLoading(false));
+
+    fetch(`${API_BASE}/api/v1/kpi/llm-cost`, {
+      headers: { "X-Dev-User": "dev-user" },
+    })
+      .then((r) => r.json())
+      .then((data) => setLlmData(Array.isArray(data) ? data : data.items ?? []))
+      .catch(() => setLlmData([]))
+      .finally(() => setLlmLoading(false));
+  }, []);
+
+  const llmByDate = aggregateLlmByDate(llmData);
+
+  return (
+    <div className="min-h-screen bg-gray-50">
+      <header className="bg-white border-b border-gray-200 px-6 py-4">
+        <h1 className="text-lg font-semibold text-gray-900">KPI Dashboard</h1>
+      </header>
+
+      <main className="max-w-6xl mx-auto px-6 py-8 space-y-8">
+        <div className="bg-white rounded-xl border border-gray-200 p-6">
+          <h2 className="text-base font-semibold text-gray-800 mb-4">Service Level Trend</h2>
+          {kpiLoading ? (
+            <div className="h-64 bg-gray-100 rounded-lg animate-pulse" />
+          ) : kpiData.length === 0 ? (
+            <PlaceholderChart label="Service Level" />
+          ) : (
+            <ResponsiveContainer width="100%" height={256}>
+              <LineChart data={kpiData}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                <XAxis dataKey="date" tick={{ fontSize: 11 }} />
+                <YAxis domain={[0, 1]} tickFormatter={(v: number) => `${(v * 100).toFixed(0)}%`} tick={{ fontSize: 11 }} />
+                <Tooltip formatter={(v: number) => `${(v * 100).toFixed(1)}%`} />
+                <Legend />
+                <Line type="monotone" dataKey="service_level" name="Service Level" stroke="#3b82f6" dot={false} strokeWidth={2} />
+              </LineChart>
+            </ResponsiveContainer>
+          )}
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          {[
+            { key: "inventory_cost", label: "Inventory Cost", color: "#10b981", format: (v: number) => `$${v.toFixed(0)}` },
+            { key: "stockout_days", label: "Stockout Days", color: "#ef4444", format: (v: number) => `${v.toFixed(1)}d` },
+            { key: "working_capital", label: "Working Capital", color: "#8b5cf6", format: (v: number) => `$${v.toFixed(0)}` },
+          ].map(({ key, label, color, format }) => (
+            <div key={key} className="bg-white rounded-xl border border-gray-200 p-4">
+              <h3 className="text-sm font-semibold text-gray-700 mb-3">{label}</h3>
+              {kpiLoading ? (
+                <div className="h-32 bg-gray-100 rounded animate-pulse" />
+              ) : kpiData.length === 0 ? (
+                <PlaceholderChart label={label} height={128} />
+              ) : (
+                <ResponsiveContainer width="100%" height={128}>
+                  <LineChart data={kpiData}>
+                    <XAxis dataKey="date" hide />
+                    <YAxis hide />
+                    <Tooltip formatter={(v: number) => format(v)} />
+                    <Line type="monotone" dataKey={key} stroke={color} dot={false} strokeWidth={2} />
+                  </LineChart>
+                </ResponsiveContainer>
+              )}
+            </div>
+          ))}
+        </div>
+
+        <div className="bg-white rounded-xl border border-gray-200 p-6">
+          <h2 className="text-base font-semibold text-gray-800 mb-4">LLM Cost Trend</h2>
+          {llmLoading ? (
+            <div className="h-64 bg-gray-100 rounded-lg animate-pulse" />
+          ) : llmByDate.length === 0 ? (
+            <PlaceholderChart label="LLM Cost (USD)" />
+          ) : (
+            <ResponsiveContainer width="100%" height={256}>
+              <LineChart data={llmByDate}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                <XAxis dataKey="date" tick={{ fontSize: 11 }} />
+                <YAxis
+                  tickFormatter={(v: number) =>
+                    new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", minimumFractionDigits: 2 }).format(v)
+                  }
+                  tick={{ fontSize: 11 }}
+                />
+                <Tooltip
+                  formatter={(v: number) =>
+                    new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", minimumFractionDigits: 4 }).format(v)
+                  }
+                />
+                <Legend />
+                <Line type="monotone" dataKey="domain_expert" name="Domain Expert" stroke="#3b82f6" dot={false} strokeWidth={2} />
+                <Line type="monotone" dataKey="data_engineer" name="Data Engineer" stroke="#10b981" dot={false} strokeWidth={2} />
+                <Line type="monotone" dataKey="sim_opt" name="Sim/Opt" stroke="#f59e0b" dot={false} strokeWidth={2} />
+                <Line type="monotone" dataKey="evaluator" name="Evaluator" stroke="#8b5cf6" dot={false} strokeWidth={2} />
+              </LineChart>
+            </ResponsiveContainer>
+          )}
+        </div>
+      </main>
+    </div>
+  );
+}
+
+function PlaceholderChart({ label, height = 256 }: { label: string; height?: number }) {
+  return (
+    <div
+      className="flex items-center justify-center bg-gray-50 rounded-lg border border-dashed border-gray-300 text-gray-400 text-sm"
+      style={{ height }}
+    >
+      {label} — no data yet
+    </div>
+  );
+}
+
+function aggregateLlmByDate(entries: LlmCostEntry[]): Record<string, number | string>[] {
+  const byDate: Record<string, Record<string, number>> = {};
+  for (const e of entries) {
+    if (!byDate[e.date]) byDate[e.date] = {};
+    const role = e.specialist ?? "unknown";
+    byDate[e.date][role] = (byDate[e.date][role] ?? 0) + e.cost_usd;
+  }
+  return Object.entries(byDate)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([date, costs]) => ({ date, ...costs }));
+}
