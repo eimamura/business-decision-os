@@ -1,33 +1,38 @@
 .PHONY: migrate seed generate-data build test lint typecheck dev dev-api dev-web dev-compose dev-up dev-down dev-logs dev-ps dev-smoke
 
+WEB_PORT ?= 3002
+API_PORT ?= 8002
+
+COMPOSE = WEB_PORT=$(WEB_PORT) API_PORT=$(API_PORT) docker compose --env-file .env -f infra/compose/compose.yaml
+
 dev-api:
 	uv sync --package api
-	uv run uvicorn apps.api.main:app --reload --port 8000
+	uv run uvicorn apps.api.main:app --reload --port $(API_PORT)
 
 dev-web:
-	cd apps/web && npm run dev
+	cd apps/web && npm run dev -- --port $(WEB_PORT)
 
 dev:
-	@echo "Starting API on :8000 and Web on :3000 ..."
+	@echo "Starting API on :$(API_PORT) and Web on :$(WEB_PORT) ..."
 	@$(MAKE) dev-api & $(MAKE) dev-web
 
 dev-compose:
-	docker compose --env-file .env -f infra/compose/compose.yaml up --build
+	$(COMPOSE) up --build
 
 dev-up:
-	docker compose --env-file .env -f infra/compose/compose.yaml up --build
+	$(COMPOSE) up --build
 
 dev-down:
-	docker compose --env-file .env -f infra/compose/compose.yaml down
+	$(COMPOSE) down
 
 dev-logs:
-	docker compose --env-file .env -f infra/compose/compose.yaml logs --tail=100 --follow
+	$(COMPOSE) logs --tail=100 --follow
 
 dev-ps:
-	docker compose --env-file .env -f infra/compose/compose.yaml ps
+	$(COMPOSE) ps
 
 dev-smoke:
-	curl -sf http://localhost:$${API_PORT:-8000}/healthz
+	curl -sf http://localhost:$(API_PORT)/healthz
 
 migrate:
 	cd apps/api && uv run alembic upgrade head

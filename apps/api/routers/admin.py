@@ -4,7 +4,7 @@ import csv
 import io
 import logging
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel, Field
@@ -70,6 +70,125 @@ class SampleDataTableSummary(BaseModel):
 
 class GenerateSampleDataResponse(BaseModel):
     tables: list[SampleDataTableSummary]
+
+
+class AgentRegistryEntry(BaseModel):
+    role: str
+    display_name: str
+    category: Literal["domain", "cross_domain", "orchestrator"]
+    tools: list[str]
+    execution_count: int
+    last_executed_at: str | None
+
+
+class ToolRegistryEntry(BaseModel):
+    name: str
+    display_name: str
+    used_by_agents: list[str]
+    execution_count: int
+    last_executed_at: str | None
+
+
+class RegistryResponse(BaseModel):
+    agents: list[AgentRegistryEntry]
+    tools: list[ToolRegistryEntry]
+
+
+@router.get("/registry", response_model=RegistryResponse, status_code=status.HTTP_200_OK)
+async def get_registry() -> RegistryResponse:
+    """All agents and tools with execution counts and last-run timestamps."""
+    from packages.agent.orchestrator.roles import CROSS_DOMAIN_AGENT_CLASSES, DOMAIN_AGENT_ROLES
+    from packages.tools.base import _ROLE_TOOL_ALLOWLIST
+
+    try:
+        pool = await get_pool()
+        async with pool.acquire() as conn:
+            agent_rows = await conn.fetch(
+                """
+                SELECT specialist_role,
+                       COUNT(*)::int         AS execution_count,
+                       MAX(started_at)       AS last_executed_at
+                FROM agent_steps
+                WHERE step_type = 'specialist_execution'
+                GROUP BY specialist_role
+                """
+            )
+            tool_rows = await conn.fetch(
+                """
+                SELECT payload->>'tool_name'           AS tool_name,
+                       COUNT(*)::int                   AS execution_count,
+                       MAX(created_at)                 AS last_executed_at
+                FROM session_events
+                WHERE event_type = 'tool_completed'
+                  AND payload->>'tool_name' IS NOT NULL
+                GROUP BY payload->>'tool_name'
+                """
+            )
+    except RuntimeError as e:
+        if "DATABASE_URL" in str(e):
+            agent_rows = []
+            tool_rows = []
+        else:
+            raise HTTPException(status_code=500, detail="Internal error")
+    except Exception:
+        _log.exception("get_registry failed")
+        raise HTTPException(status_code=500, detail="Internal error")
+
+    agent_stats: dict[str, dict[str, Any]] = {
+        r["specialist_role"]: {
+            "execution_count": r["execution_count"],
+            "last_executed_at": r["last_executed_at"].isoformat() if r["last_executed_at"] else None,
+        }
+        for r in agent_rows
+    }
+    tool_stats: dict[str, dict[str, Any]] = {
+        r["tool_name"]: {
+            "execution_count": r["execution_count"],
+            "last_executed_at": r["last_executed_at"].isoformat() if r["last_executed_at"] else None,
+        }
+        for r in tool_rows
+    }
+
+    def _category(role: str) -> Literal["domain", "cross_domain", "orchestrator"]:
+        if role == "orchestrator":
+            return "orchestrator"
+        if role in CROSS_DOMAIN_AGENT_CLASSES:
+            return "cross_domain"
+        return "domain"
+
+    agents: list[AgentRegistryEntry] = []
+    for role, allowed_tools in _ROLE_TOOL_ALLOWLIST.items():
+        stats = agent_stats.get(role, {"execution_count": 0, "last_executed_at": None})
+        agents.append(AgentRegistryEntry(
+            role=role,
+            display_name=role.replace("_", " ").title(),
+            category=_category(role),
+            tools=list(allowed_tools),
+            execution_count=stats["execution_count"],
+            last_executed_at=stats["last_executed_at"],
+        ))
+
+    all_tool_names: set[str] = set()
+    for tools in _ROLE_TOOL_ALLOWLIST.values():
+        all_tool_names.update(tools)
+
+    tool_to_agents: dict[str, list[str]] = {t: [] for t in all_tool_names}
+    for role, allowed_tools in _ROLE_TOOL_ALLOWLIST.items():
+        for t in allowed_tools:
+            tool_to_agents[t].append(role)
+
+    tools: list[ToolRegistryEntry] = []
+    for tool_name in sorted(all_tool_names):
+        stats = tool_stats.get(tool_name, {"execution_count": 0, "last_executed_at": None})
+        tools.append(ToolRegistryEntry(
+            name=tool_name,
+            display_name=tool_name.replace("_", " ").title(),
+            used_by_agents=sorted(tool_to_agents[tool_name]),
+            execution_count=stats["execution_count"],
+            last_executed_at=stats["last_executed_at"],
+        ))
+
+    return RegistryResponse(agents=agents, tools=tools)
 
 
 @router.get("/steps", response_model=list[dict[str, Any]], status_code=status.HTTP_200_OK)

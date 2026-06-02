@@ -68,6 +68,19 @@ const NAV_ITEMS = [
       </svg>
     ),
   },
+  {
+    href: "/agents",
+    label: "Agents & Tools",
+    icon: (
+      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <rect x="4" y="4" width="6" height="6" rx="1" />
+        <rect x="14" y="4" width="6" height="6" rx="1" />
+        <rect x="4" y="14" width="6" height="6" rx="1" />
+        <rect x="14" y="14" width="6" height="6" rx="1" />
+        <path d="M7 10v4M17 10v4M10 7h4M10 17h4" />
+      </svg>
+    ),
+  },
 ];
 
 function formatSessionDate(dateStr: string): string {

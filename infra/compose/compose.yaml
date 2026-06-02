@@ -56,6 +56,7 @@ services:
       DATABASE_URL: postgresql+asyncpg://bdos:bdos_dev@db:5432/bdos
       APP_ENV: dev
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+      CORS_ALLOWED_ORIGINS: http://localhost:${WEB_PORT:-3002}
       CELERY_BROKER_URL: redis://redis:6379/0
       CELERY_RESULT_BACKEND: redis://redis:6379/0
       JOB_RUNNER_BACKEND: celery
