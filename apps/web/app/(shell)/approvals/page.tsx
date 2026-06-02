@@ -16,17 +16,17 @@ interface Approval {
 }
 
 const RISK_STYLES = {
-  low: "bg-green-100 text-green-700",
-  medium: "bg-yellow-100 text-yellow-700",
-  high: "bg-red-100 text-red-700",
+  low: "bg-green-100 text-green-700 dark:bg-green-500/15 dark:text-green-300",
+  medium: "bg-yellow-100 text-yellow-700 dark:bg-yellow-500/15 dark:text-yellow-300",
+  high: "bg-red-100 text-red-700 dark:bg-red-500/15 dark:text-red-300",
 };
 
 const STATUS_STYLES: Record<string, string> = {
-  pending: "bg-blue-100 text-blue-700",
-  approved: "bg-green-100 text-green-700",
-  rejected: "bg-red-100 text-red-700",
-  needs_revision: "bg-orange-100 text-orange-700",
-  expired: "bg-gray-100 text-gray-600",
+  pending: "bg-blue-100 text-blue-700 dark:bg-blue-500/15 dark:text-blue-300",
+  approved: "bg-green-100 text-green-700 dark:bg-green-500/15 dark:text-green-300",
+  rejected: "bg-red-100 text-red-700 dark:bg-red-500/15 dark:text-red-300",
+  needs_revision: "bg-orange-100 text-orange-700 dark:bg-orange-500/15 dark:text-orange-300",
+  expired: "bg-surface text-muted dark:bg-gray-100 dark:text-gray-600",
 };
 
 export default function ApprovalsPage() {
@@ -101,13 +101,13 @@ export default function ApprovalsPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <header className="bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
-        <h1 className="text-lg font-semibold text-gray-900">Approval Queue</h1>
+    <div className="min-h-screen bg-background">
+      <header className="bg-background border-b border-border px-6 py-4 flex items-center justify-between">
+        <h1 className="text-lg font-semibold text-foreground">Approval Queue</h1>
         <select
           value={statusFilter}
           onChange={(e) => setStatusFilter(e.target.value)}
-          className="text-sm border border-gray-300 rounded-lg px-3 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+          className="text-sm border border-border rounded-lg px-3 py-1.5 bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-blue-500"
         >
           <option value="pending">Pending</option>
           <option value="approved">Approved</option>
@@ -121,17 +121,17 @@ export default function ApprovalsPage() {
         {loading ? (
           <div className="space-y-4">
             {[1, 2, 3].map((i) => (
-              <div key={i} className="h-28 bg-gray-200 rounded-xl animate-pulse" />
+              <div key={i} className="h-28 bg-surface rounded-xl animate-pulse" />
             ))}
           </div>
         ) : approvals.length === 0 ? (
-          <div className="text-center py-16 text-gray-500">
+          <div className="text-center py-16 text-muted">
             <p>No {statusFilter} approvals.</p>
           </div>
         ) : (
           <ul className="space-y-4">
             {approvals.map((a) => (
-              <li key={a.id} className="bg-white rounded-xl border border-gray-200 p-5">
+              <li key={a.id} className="bg-background rounded-xl border border-border p-5">
                 <div className="flex items-start justify-between gap-4">
                   <div className="flex-1 min-w-0">
                     <div className="flex flex-wrap items-center gap-2 mb-2">
@@ -153,9 +153,9 @@ export default function ApprovalsPage() {
                       </Link>
                     </div>
                     {a.summary && (
-                      <p className="text-sm text-gray-700 mb-2">{a.summary}</p>
+                      <p className="text-sm text-foreground mb-2">{a.summary}</p>
                     )}
-                    <p className="text-xs text-gray-400">
+                    <p className="text-xs text-muted">
                       Created {new Date(a.created_at).toLocaleString()}
                       {a.expires_at && ` · Expires ${new Date(a.expires_at).toLocaleString()}`}
                     </p>
@@ -180,7 +180,7 @@ export default function ApprovalsPage() {
                       <button
                         onClick={() => setRevisionId(a.id)}
                         disabled={actionId === a.id}
-                        className="bg-orange-100 text-orange-700 px-4 py-1.5 rounded-lg text-sm font-medium hover:bg-orange-200 disabled:opacity-50"
+                        className="bg-orange-100 text-orange-700 dark:bg-orange-500/15 dark:text-orange-300 px-4 py-1.5 rounded-lg text-sm font-medium hover:bg-orange-200 dark:hover:bg-orange-500/25 disabled:opacity-50"
                       >
                         Revise
                       </button>
@@ -189,20 +189,20 @@ export default function ApprovalsPage() {
                 </div>
 
                 {revisionId === a.id && (
-                  <div className="mt-4 border-t border-gray-100 pt-4 space-y-3">
-                    <h4 className="text-sm font-medium text-gray-800">Request Revision</h4>
+                  <div className="mt-4 border-t border-border pt-4 space-y-3">
+                    <h4 className="text-sm font-medium text-foreground">Request Revision</h4>
                     <textarea
                       value={revisionReason}
                       onChange={(e) => setRevisionReason(e.target.value)}
                       placeholder="Reason for revision..."
                       rows={2}
-                      className="w-full resize-none text-sm border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full resize-none text-sm border border-border rounded-lg px-3 py-2 bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-blue-500"
                     />
                     <div className="space-y-2">
-                      <p className="text-xs font-medium text-gray-600">Weight Override (optional)</p>
+                      <p className="text-xs font-medium text-muted">Weight Override (optional)</p>
                       {["service_level", "inventory_cost", "stockout_risk", "working_capital"].map((kpi) => (
                         <div key={kpi} className="flex items-center gap-3">
-                          <label className="text-xs text-gray-600 w-36 capitalize">
+                          <label className="text-xs text-muted w-36 capitalize">
                             {kpi.replace(/_/g, " ")}
                           </label>
                           <input
@@ -213,7 +213,7 @@ export default function ApprovalsPage() {
                             value={weights[kpi] ?? ""}
                             onChange={(e) => setWeights((p) => ({ ...p, [kpi]: e.target.value }))}
                             placeholder="0.0 – 1.0"
-                            className="w-24 text-xs border border-gray-300 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                            className="w-24 text-xs border border-border rounded px-2 py-1 bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-blue-500"
                           />
                         </div>
                       ))}
@@ -228,7 +228,7 @@ export default function ApprovalsPage() {
                       </button>
                       <button
                         onClick={() => { setRevisionId(null); setRevisionReason(""); setWeights({}); }}
-                        className="text-sm text-gray-600 hover:text-gray-900 px-3 py-1.5"
+                        className="text-sm text-muted hover:text-foreground px-3 py-1.5"
                       >
                         Cancel
                       </button>

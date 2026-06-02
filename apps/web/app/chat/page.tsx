@@ -31,8 +31,8 @@ export default function ChatListPage(): React.JSX.Element {
 
   if (error) {
     return (
-      <div className="flex h-screen bg-[#0c0c14] items-center justify-center flex-col gap-3">
-        <p className="text-sm text-white/50">Failed to start session</p>
+      <div className="flex h-screen bg-background dark:bg-[#0c0c14] items-center justify-center flex-col gap-3">
+        <p className="text-sm text-muted dark:text-white/50">Failed to start session</p>
         <button
           onClick={start}
           className="text-xs px-3 py-1.5 rounded-md bg-indigo-600 text-white hover:bg-indigo-500"
@@ -44,8 +44,8 @@ export default function ChatListPage(): React.JSX.Element {
   }
 
   return (
-    <div className="flex h-screen bg-[#0c0c14] items-center justify-center">
-      <p className="text-sm text-white/30">Starting session…</p>
+    <div className="flex h-screen bg-background dark:bg-[#0c0c14] items-center justify-center">
+      <p className="text-sm text-muted dark:text-white/30">Starting session…</p>
     </div>
   );
 }

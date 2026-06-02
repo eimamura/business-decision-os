@@ -56,16 +56,16 @@ export default function KpiPage() {
   const llmByDate = aggregateLlmByDate(llmData);
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <header className="bg-white border-b border-gray-200 px-6 py-4">
-        <h1 className="text-lg font-semibold text-gray-900">KPI Dashboard</h1>
+    <div className="min-h-screen bg-background">
+      <header className="bg-background border-b border-border px-6 py-4">
+        <h1 className="text-lg font-semibold text-foreground">KPI Dashboard</h1>
       </header>
 
       <main className="max-w-6xl mx-auto px-6 py-8 space-y-8">
-        <div className="bg-white rounded-xl border border-gray-200 p-6">
-          <h2 className="text-base font-semibold text-gray-800 mb-4">Service Level Trend</h2>
+        <div className="bg-background rounded-xl border border-border p-6">
+          <h2 className="text-base font-semibold text-foreground mb-4">Service Level Trend</h2>
           {kpiLoading ? (
-            <div className="h-64 bg-gray-100 rounded-lg animate-pulse" />
+            <div className="h-64 bg-surface rounded-lg animate-pulse" />
           ) : kpiData.length === 0 ? (
             <PlaceholderChart label="Service Level" />
           ) : (
@@ -88,10 +88,10 @@ export default function KpiPage() {
             { key: "stockout_days", label: "Stockout Days", color: "#ef4444", format: (v: number) => `${v.toFixed(1)}d` },
             { key: "working_capital", label: "Working Capital", color: "#8b5cf6", format: (v: number) => `$${v.toFixed(0)}` },
           ].map(({ key, label, color, format }) => (
-            <div key={key} className="bg-white rounded-xl border border-gray-200 p-4">
-              <h3 className="text-sm font-semibold text-gray-700 mb-3">{label}</h3>
+            <div key={key} className="bg-background rounded-xl border border-border p-4">
+              <h3 className="text-sm font-semibold text-foreground mb-3">{label}</h3>
               {kpiLoading ? (
-                <div className="h-32 bg-gray-100 rounded animate-pulse" />
+                <div className="h-32 bg-surface rounded animate-pulse" />
               ) : kpiData.length === 0 ? (
                 <PlaceholderChart label={label} height={128} />
               ) : (
@@ -108,10 +108,10 @@ export default function KpiPage() {
           ))}
         </div>
 
-        <div className="bg-white rounded-xl border border-gray-200 p-6">
-          <h2 className="text-base font-semibold text-gray-800 mb-4">LLM Cost Trend</h2>
+        <div className="bg-background rounded-xl border border-border p-6">
+          <h2 className="text-base font-semibold text-foreground mb-4">LLM Cost Trend</h2>
           {llmLoading ? (
-            <div className="h-64 bg-gray-100 rounded-lg animate-pulse" />
+            <div className="h-64 bg-surface rounded-lg animate-pulse" />
           ) : llmByDate.length === 0 ? (
             <PlaceholderChart label="LLM Cost (USD)" />
           ) : (
@@ -147,7 +147,7 @@ export default function KpiPage() {
 function PlaceholderChart({ label, height = 256 }: { label: string; height?: number }) {
   return (
     <div
-      className="flex items-center justify-center bg-gray-50 rounded-lg border border-dashed border-gray-300 text-gray-400 text-sm"
+      className="flex items-center justify-center bg-surface rounded-lg border border-dashed border-border text-muted text-sm"
       style={{ height }}
     >
       {label} — no data yet

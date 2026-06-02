@@ -61,7 +61,7 @@ function agentBadgeClass(role: string): string {
     anomaly_detector: "bg-red-500/15 text-red-300",
     orchestrator: "bg-indigo-500/15 text-indigo-300",
   };
-  return map[role] ?? "bg-white/8 text-white/50";
+  return map[role] ?? "bg-surface dark:bg-white/8 text-muted dark:text-white/50";
 }
 
 export default function AgentsPage(): React.ReactElement {
@@ -92,13 +92,13 @@ export default function AgentsPage(): React.ReactElement {
   const totalCalls = data.tools.reduce((s, t) => s + t.execution_count, 0);
 
   return (
-    <div className="min-h-screen bg-[#070B14] text-white">
-      <header className="border-b border-white/8 px-6 py-4 flex items-center justify-between">
-        <h1 className="text-sm font-semibold text-white">Agents &amp; Tools</h1>
+    <div className="min-h-screen bg-background dark:bg-[#070B14] text-foreground dark:text-white">
+      <header className="border-b border-border dark:border-white/8 px-6 py-4 flex items-center justify-between">
+        <h1 className="text-sm font-semibold text-foreground dark:text-white">Agents &amp; Tools</h1>
         <button
           type="button"
           onClick={() => void load()}
-          className="flex items-center gap-1.5 text-xs text-white/40 hover:text-white/70 transition-colors"
+          className="flex items-center gap-1.5 text-xs text-muted dark:text-white/40 hover:text-foreground dark:hover:text-white/70 transition-colors"
         >
           <RefreshCw size={12} className={loading ? "animate-spin" : ""} />
           Refresh
@@ -114,9 +114,9 @@ export default function AgentsPage(): React.ReactElement {
             { label: "Total Agent Runs", value: totalRuns.toLocaleString() },
             { label: "Total Tool Calls", value: totalCalls.toLocaleString() },
           ].map(({ label, value }) => (
-            <div key={label} className="bg-[#0B1020] border border-white/6 rounded-xl px-4 py-3">
-              <p className="text-[10px] uppercase tracking-widest text-white/30 mb-1">{label}</p>
-              <p className="text-lg font-semibold text-white font-mono">{value}</p>
+            <div key={label} className="bg-surface dark:bg-[#0B1020] border border-border dark:border-white/6 rounded-xl px-4 py-3">
+              <p className="text-[10px] uppercase tracking-widest text-muted dark:text-white/30 mb-1">{label}</p>
+              <p className="text-lg font-semibold text-foreground dark:text-white font-mono">{value}</p>
             </div>
           ))}
         </div>
@@ -129,8 +129,8 @@ export default function AgentsPage(): React.ReactElement {
               onClick={() => setTab(t)}
               className={`px-4 py-1.5 rounded-md text-xs font-medium transition-colors ${
                 tab === t
-                  ? "bg-indigo-500/25 text-white"
-                  : "text-white/40 hover:text-white/70"
+                  ? "bg-indigo-500/25 text-foreground dark:text-white"
+                  : "text-muted dark:text-white/40 hover:text-foreground dark:hover:text-white/70"
               }`}
             >
               {t === "agents"
@@ -159,18 +159,18 @@ export default function AgentsPage(): React.ReactElement {
 function AgentsTable({ rows }: { rows: AgentEntry[] }): React.ReactElement {
   if (rows.length === 0) {
     return (
-      <div className="text-center py-20 text-white/25 text-sm">
+      <div className="text-center py-20 text-muted dark:text-white/25 text-sm">
         No agents registered yet.
       </div>
     );
   }
 
   return (
-    <div className="bg-[#0B1020] border border-white/6 rounded-xl overflow-hidden">
+    <div className="bg-surface dark:bg-[#0B1020] border border-border dark:border-white/6 rounded-xl overflow-hidden">
       <div className="overflow-x-auto">
         <table className="w-full text-xs">
           <thead>
-            <tr className="border-b border-white/6 text-white/30">
+            <tr className="border-b border-border dark:border-white/6 text-muted dark:text-white/30">
               <th className="text-left px-4 py-3 font-medium">Agent</th>
               <th className="text-left px-4 py-3 font-medium">Category</th>
               <th className="text-left px-4 py-3 font-medium">Tools</th>
@@ -188,16 +188,16 @@ function AgentsTable({ rows }: { rows: AgentEntry[] }): React.ReactElement {
                     {a.display_name}
                   </span>
                 </td>
-                <td className="px-4 py-3 text-white/40">{categoryLabel(a.category)}</td>
+                <td className="px-4 py-3 text-muted dark:text-white/40">{categoryLabel(a.category)}</td>
                 <td className="px-4 py-3">
                   <div className="flex flex-wrap gap-1">
                     {a.tools.length === 0 ? (
-                      <span className="text-white/20">—</span>
+                      <span className="text-muted dark:text-white/20">—</span>
                     ) : (
                       a.tools.map((t) => (
                         <span
                           key={t}
-                          className="inline-block px-1.5 py-0.5 rounded text-[10px] bg-white/8 text-white/45"
+                          className="inline-block px-1.5 py-0.5 rounded text-[10px] bg-surface dark:bg-white/8 text-muted dark:text-white/45"
                         >
                           {t.replace(/_/g, " ")}
                         </span>
@@ -207,12 +207,12 @@ function AgentsTable({ rows }: { rows: AgentEntry[] }): React.ReactElement {
                 </td>
                 <td className="px-4 py-3 text-right font-mono">
                   {a.execution_count > 0 ? (
-                    <span className="text-white/70">{a.execution_count.toLocaleString()}</span>
+                    <span className="text-foreground/70 dark:text-white/70">{a.execution_count.toLocaleString()}</span>
                   ) : (
-                    <span className="text-white/20">0</span>
+                    <span className="text-muted dark:text-white/20">0</span>
                   )}
                 </td>
-                <td className="px-4 py-3 text-right font-mono text-white/40 whitespace-nowrap">
+                <td className="px-4 py-3 text-right font-mono text-muted dark:text-white/40 whitespace-nowrap">
                   {fmtTime(a.last_executed_at)}
                 </td>
               </tr>
@@ -227,18 +227,18 @@ function AgentsTable({ rows }: { rows: AgentEntry[] }): React.ReactElement {
 function ToolsTable({ rows }: { rows: ToolEntry[] }): React.ReactElement {
   if (rows.length === 0) {
     return (
-      <div className="text-center py-20 text-white/25 text-sm">
+      <div className="text-center py-20 text-muted dark:text-white/25 text-sm">
         No tools registered yet.
       </div>
     );
   }
 
   return (
-    <div className="bg-[#0B1020] border border-white/6 rounded-xl overflow-hidden">
+    <div className="bg-surface dark:bg-[#0B1020] border border-border dark:border-white/6 rounded-xl overflow-hidden">
       <div className="overflow-x-auto">
         <table className="w-full text-xs">
           <thead>
-            <tr className="border-b border-white/6 text-white/30">
+            <tr className="border-b border-border dark:border-white/6 text-muted dark:text-white/30">
               <th className="text-left px-4 py-3 font-medium">Tool</th>
               <th className="text-left px-4 py-3 font-medium">Used By</th>
               <th className="text-right px-4 py-3 font-medium">Calls</th>
@@ -249,7 +249,7 @@ function ToolsTable({ rows }: { rows: ToolEntry[] }): React.ReactElement {
             {rows.map((t) => (
               <tr key={t.name} className="hover:bg-white/3 transition-colors">
                 <td className="px-4 py-3">
-                  <span className="inline-block px-2 py-0.5 rounded text-[10px] font-mono bg-white/8 text-white/70">
+                  <span className="inline-block px-2 py-0.5 rounded text-[10px] font-mono bg-surface dark:bg-white/8 text-foreground/70 dark:text-white/70">
                     {t.name}
                   </span>
                 </td>
@@ -267,12 +267,12 @@ function ToolsTable({ rows }: { rows: ToolEntry[] }): React.ReactElement {
                 </td>
                 <td className="px-4 py-3 text-right font-mono">
                   {t.execution_count > 0 ? (
-                    <span className="text-white/70">{t.execution_count.toLocaleString()}</span>
+                    <span className="text-foreground/70 dark:text-white/70">{t.execution_count.toLocaleString()}</span>
                   ) : (
-                    <span className="text-white/20">0</span>
+                    <span className="text-muted dark:text-white/20">0</span>
                   )}
                 </td>
-                <td className="px-4 py-3 text-right font-mono text-white/40 whitespace-nowrap">
+                <td className="px-4 py-3 text-right font-mono text-muted dark:text-white/40 whitespace-nowrap">
                   {fmtTime(t.last_executed_at)}
                 </td>
               </tr>

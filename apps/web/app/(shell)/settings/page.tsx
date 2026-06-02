@@ -145,20 +145,20 @@ export default function SettingsPage(): React.ReactElement {
   const currentDataset = groundTruth?.[activeTab];
 
   return (
-    <div className="min-h-screen bg-[#070B14] text-white">
+    <div className="min-h-screen bg-background dark:bg-[#070B14] text-foreground dark:text-white">
       {/* Header */}
-      <header className="border-b border-white/5 px-6 py-3 flex items-center gap-4">
-        <h1 className="text-sm font-semibold text-white/80 tracking-tight">Data Generation Studio</h1>
+      <header className="border-b border-border dark:border-white/5 px-6 py-3 flex items-center gap-4">
+        <h1 className="text-sm font-semibold text-foreground/80 dark:text-white/80 tracking-tight">Data Generation Studio</h1>
       </header>
 
       <main className="max-w-6xl mx-auto px-6 py-8 space-y-6">
 
         {/* Ground Truth Parameters */}
-        <section className="bg-[#0F1629] border border-white/8 rounded-xl overflow-hidden">
-          <div className="px-5 py-4 border-b border-white/5 flex items-center justify-between">
+        <section className="bg-surface dark:bg-[#0F1629] border border-border dark:border-white/8 rounded-xl overflow-hidden">
+          <div className="px-5 py-4 border-b border-border dark:border-white/5 flex items-center justify-between">
             <div>
-              <h2 className="text-sm font-semibold text-white">Ground Truth Parameters</h2>
-              <p className="text-[11px] text-white/35 mt-0.5">
+              <h2 className="text-sm font-semibold text-foreground dark:text-white">Ground Truth Parameters</h2>
+              <p className="text-[11px] text-muted dark:text-white/35 mt-0.5">
                 Edit parameters → Save → Generate to reflect changes in sample data
               </p>
             </div>
@@ -179,20 +179,20 @@ export default function SettingsPage(): React.ReactElement {
           </div>
 
           {/* Tabs */}
-          <div className="flex border-b border-white/5">
+          <div className="flex border-b border-border dark:border-white/5">
             {TABS.map(({ key, label }) => (
               <button
                 key={key}
                 onClick={() => setActiveTab(key)}
                 className={`px-5 py-2.5 text-xs font-medium transition-colors border-b-2 -mb-px ${
                   activeTab === key
-                    ? "border-indigo-400 text-white bg-indigo-500/10"
-                    : "border-transparent text-white/40 hover:text-white/70 hover:bg-white/3"
+                    ? "border-indigo-400 text-foreground dark:text-white bg-indigo-500/10"
+                    : "border-transparent text-muted dark:text-white/40 hover:text-foreground dark:hover:text-white/70 hover:bg-white/3"
                 }`}
               >
                 {label}
                 {groundTruth && (
-                  <span className="ml-1.5 text-[10px] text-white/25">
+                  <span className="ml-1.5 text-[10px] text-muted dark:text-white/25">
                     {groundTruth[key].rows.length}
                   </span>
                 )}
@@ -205,19 +205,19 @@ export default function SettingsPage(): React.ReactElement {
             {gtLoading ? (
               <div className="px-5 py-8 space-y-2">
                 {[1, 2, 3].map((i) => (
-                  <div key={i} className="h-8 bg-white/5 rounded animate-pulse" />
+                  <div key={i} className="h-8 bg-surface dark:bg-white/5 rounded animate-pulse" />
                 ))}
               </div>
             ) : !currentDataset ? (
-              <p className="px-5 py-6 text-xs text-white/30">No data</p>
+              <p className="px-5 py-6 text-xs text-muted dark:text-white/30">No data</p>
             ) : (
               <table className="min-w-full text-xs">
                 <thead>
-                  <tr className="border-b border-white/5">
+                  <tr className="border-b border-border dark:border-white/5">
                     {currentDataset.columns.map((col) => (
                       <th
                         key={col}
-                        className="px-3 py-2.5 text-left text-[10px] font-semibold uppercase tracking-widest text-white/30 whitespace-nowrap"
+                        className="px-3 py-2.5 text-left text-[10px] font-semibold uppercase tracking-widest text-muted dark:text-white/30 whitespace-nowrap"
                       >
                         {col}
                       </th>
@@ -233,7 +233,7 @@ export default function SettingsPage(): React.ReactElement {
                             type="text"
                             value={cell}
                             onChange={(e) => updateCell(activeTab, rowIdx, colIdx, e.target.value)}
-                            className="w-full min-w-[80px] bg-white/5 border border-white/10 rounded px-2 py-1 text-xs text-white placeholder-white/20 focus:border-indigo-500/50 focus:outline-none focus:bg-white/8 transition-colors"
+                            className="w-full min-w-[80px] bg-surface dark:bg-white/5 border border-border dark:border-white/10 rounded px-2 py-1 text-xs text-foreground dark:text-white placeholder-muted dark:placeholder-white/20 focus:border-indigo-500/50 focus:outline-none focus:bg-surface dark:focus:bg-white/8 transition-colors"
                           />
                         </td>
                       ))}
@@ -246,8 +246,8 @@ export default function SettingsPage(): React.ReactElement {
         </section>
 
         {/* Generation Config */}
-        <section className="bg-[#0F1629] border border-white/8 rounded-xl p-5">
-          <h2 className="text-sm font-semibold text-white mb-4">Generation Config</h2>
+        <section className="bg-surface dark:bg-[#0F1629] border border-border dark:border-white/8 rounded-xl p-5">
+          <h2 className="text-sm font-semibold text-foreground dark:text-white mb-4">Generation Config</h2>
           <form onSubmit={handleGenerate} className="space-y-4">
             <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
               {[
@@ -258,7 +258,7 @@ export default function SettingsPage(): React.ReactElement {
                 { id: "missing-rate", label: "Missing rate", value: sampleMissingRate, set: setSampleMissingRate, step: "0.01", min: "0", max: "0.25" },
               ].map(({ id, label, value, set, step, min, max }) => (
                 <div key={id}>
-                  <label htmlFor={id} className="block text-[10px] font-semibold uppercase tracking-widest text-white/30 mb-1.5">
+                  <label htmlFor={id} className="block text-[10px] font-semibold uppercase tracking-widest text-muted dark:text-white/30 mb-1.5">
                     {label}
                   </label>
                   <input
@@ -269,7 +269,7 @@ export default function SettingsPage(): React.ReactElement {
                     step={step}
                     min={min}
                     max={max}
-                    className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-xs text-white focus:border-indigo-500/50 focus:outline-none focus:bg-white/8 transition-colors"
+                    className="w-full bg-surface dark:bg-white/5 border border-border dark:border-white/10 rounded-lg px-3 py-2 text-xs text-foreground dark:text-white focus:border-indigo-500/50 focus:outline-none focus:bg-surface dark:focus:bg-white/8 transition-colors"
                   />
                 </div>
               ))}
@@ -307,27 +307,27 @@ export default function SettingsPage(): React.ReactElement {
         {/* Preview Results */}
         {sampleTables.length > 0 && (
           <section>
-            <h2 className="text-sm font-semibold text-white/60 mb-3 px-1">
+            <h2 className="text-sm font-semibold text-muted dark:text-white/60 mb-3 px-1">
               Generated Tables
-              <span className="ml-2 text-[10px] font-normal text-white/25">{sampleTables.length} tables</span>
+              <span className="ml-2 text-[10px] font-normal text-muted dark:text-white/25">{sampleTables.length} tables</span>
             </h2>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {sampleTables.map((table) => {
                 const columns = table.top_rows[0] ? Object.keys(table.top_rows[0]) : [];
                 return (
-                  <div key={table.table_name} className="bg-[#0F1629] border border-white/8 rounded-xl overflow-hidden">
-                    <div className="px-4 py-3 border-b border-white/5 flex items-center justify-between">
-                      <h3 className="text-xs font-semibold text-white">{table.table_name}</h3>
-                      <span className="text-[10px] font-medium text-white/35">
+                  <div key={table.table_name} className="bg-surface dark:bg-[#0F1629] border border-border dark:border-white/8 rounded-xl overflow-hidden">
+                    <div className="px-4 py-3 border-b border-border dark:border-white/5 flex items-center justify-between">
+                      <h3 className="text-xs font-semibold text-foreground dark:text-white">{table.table_name}</h3>
+                      <span className="text-[10px] font-medium text-muted dark:text-white/35">
                         {table.row_count.toLocaleString()} rows
                       </span>
                     </div>
                     <div className="overflow-x-auto">
                       <table className="min-w-full text-[11px]">
                         <thead>
-                          <tr className="border-b border-white/5">
+                          <tr className="border-b border-border dark:border-white/5">
                             {columns.map((col) => (
-                              <th key={col} className="px-3 py-2 text-left text-[10px] font-semibold uppercase tracking-widest text-white/25 whitespace-nowrap">
+                              <th key={col} className="px-3 py-2 text-left text-[10px] font-semibold uppercase tracking-widest text-muted dark:text-white/25 whitespace-nowrap">
                                 {col}
                               </th>
                             ))}
@@ -337,7 +337,7 @@ export default function SettingsPage(): React.ReactElement {
                           {table.top_rows.map((row, rowIndex) => (
                             <tr key={`${table.table_name}-${rowIndex}`} className="border-b border-white/3 last:border-b-0">
                               {columns.map((col) => (
-                                <td key={col} className="px-3 py-2 text-white/60 whitespace-nowrap max-w-[200px] truncate">
+                                <td key={col} className="px-3 py-2 text-muted dark:text-white/60 whitespace-nowrap max-w-[200px] truncate">
                                   {formatCell(row[col])}
                                 </td>
                               ))}

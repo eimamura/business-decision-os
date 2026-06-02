@@ -64,12 +64,12 @@ function formatDate(iso: string): string {
 
 function statusBadge(status: string): React.ReactElement {
   const colors: Record<string, string> = {
-    completed: "bg-emerald-100 text-emerald-700",
-    running: "bg-blue-100 text-blue-700",
-    pending: "bg-yellow-100 text-yellow-700",
-    failed: "bg-red-100 text-red-700",
+    completed: "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300",
+    running: "bg-blue-100 text-blue-700 dark:bg-blue-500/15 dark:text-blue-300",
+    pending: "bg-yellow-100 text-yellow-700 dark:bg-yellow-500/15 dark:text-yellow-300",
+    failed: "bg-red-100 text-red-700 dark:bg-red-500/15 dark:text-red-300",
   };
-  const cls = colors[status] ?? "bg-gray-100 text-gray-600";
+  const cls = colors[status] ?? "bg-surface text-muted";
   return (
     <span className={`inline-block px-2 py-0.5 rounded text-xs font-medium ${cls}`}>
       {status}
@@ -147,25 +147,25 @@ export default function JobsPage(): React.ReactElement {
   }, [tab, jobsInitialized, filesInitialized, loadJobs, loadFiles]);
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <header className="bg-white border-b border-gray-200 px-6 py-4 flex items-center gap-4">
+    <div className="min-h-screen bg-background">
+      <header className="bg-background border-b border-border px-6 py-4 flex items-center gap-4">
         <Link href="/chat" className="text-sm text-blue-600 hover:underline">
           ← Chat
         </Link>
-        <h1 className="text-lg font-semibold text-gray-900">Jobs</h1>
+        <h1 className="text-lg font-semibold text-foreground">Jobs</h1>
       </header>
 
       <main className="max-w-6xl mx-auto px-6 py-8">
         {/* Tabs */}
-        <div className="flex gap-1 mb-6 border-b border-gray-200">
+        <div className="flex gap-1 mb-6 border-b border-border">
           {(["jobs", "files"] as Tab[]).map((t) => (
             <button
               key={t}
               onClick={() => setTab(t)}
               className={`px-4 py-2 text-sm font-medium rounded-t-md transition-colors ${
                 tab === t
-                  ? "bg-white border border-b-white border-gray-200 text-gray-900 -mb-px"
-                  : "text-gray-500 hover:text-gray-700"
+                  ? "bg-background border border-b-background border-border text-foreground -mb-px"
+                  : "text-muted hover:text-foreground"
               }`}
               data-testid={`tab-${t}`}
             >
@@ -176,44 +176,44 @@ export default function JobsPage(): React.ReactElement {
 
         {/* Jobs tab */}
         {tab === "jobs" && (
-          <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+          <div className="bg-background rounded-xl border border-border overflow-hidden">
             {jobsLoading && jobs.length === 0 ? (
-              <div className="p-8 text-center text-sm text-gray-400 animate-pulse">
+              <div className="p-8 text-center text-sm text-muted animate-pulse">
                 Loading jobs...
               </div>
             ) : jobs.length === 0 ? (
-              <div className="p-8 text-center text-sm text-gray-400">No jobs yet</div>
+              <div className="p-8 text-center text-sm text-muted">No jobs yet</div>
             ) : (
               <table className="w-full text-sm">
-                <thead className="bg-gray-50 border-b border-gray-200">
+                <thead className="bg-surface border-b border-border">
                   <tr>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-muted uppercase tracking-wide">
                       ID
                     </th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-muted uppercase tracking-wide">
                       Type
                     </th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-muted uppercase tracking-wide">
                       Status
                     </th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-muted uppercase tracking-wide">
                       Created At
                     </th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-muted uppercase tracking-wide">
                       Files
                     </th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-100">
+                <tbody className="divide-y divide-border">
                   {jobs.map((job) => (
-                    <tr key={job.id} className="hover:bg-gray-50 transition-colors">
-                      <td className="px-4 py-3 font-mono text-xs text-gray-600" title={job.id}>
+                    <tr key={job.id} className="hover:bg-surface transition-colors">
+                      <td className="px-4 py-3 font-mono text-xs text-muted" title={job.id}>
                         {job.id.slice(0, 8)}…
                       </td>
-                      <td className="px-4 py-3 text-gray-700">{job.job_type}</td>
+                      <td className="px-4 py-3 text-foreground">{job.job_type}</td>
                       <td className="px-4 py-3">{statusBadge(job.status)}</td>
-                      <td className="px-4 py-3 text-gray-500">{formatDate(job.created_at)}</td>
-                      <td className="px-4 py-3 text-gray-500">
+                      <td className="px-4 py-3 text-muted">{formatDate(job.created_at)}</td>
+                      <td className="px-4 py-3 text-muted">
                         {job.generated_files.length}
                       </td>
                     </tr>
@@ -222,7 +222,7 @@ export default function JobsPage(): React.ReactElement {
               </table>
             )}
             {jobsCursor && (
-              <div className="px-4 py-3 border-t border-gray-100 text-center">
+              <div className="px-4 py-3 border-t border-border text-center">
                 <button
                   onClick={() => void loadJobs(jobsCursor)}
                   disabled={jobsLoading}
@@ -238,38 +238,38 @@ export default function JobsPage(): React.ReactElement {
 
         {/* Files tab */}
         {tab === "files" && (
-          <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+          <div className="bg-background rounded-xl border border-border overflow-hidden">
             {filesLoading && files.length === 0 ? (
-              <div className="p-8 text-center text-sm text-gray-400 animate-pulse">
+              <div className="p-8 text-center text-sm text-muted animate-pulse">
                 Loading files...
               </div>
             ) : files.length === 0 ? (
-              <div className="p-8 text-center text-sm text-gray-400">No files yet</div>
+              <div className="p-8 text-center text-sm text-muted">No files yet</div>
             ) : (
               <table className="w-full text-sm">
-                <thead className="bg-gray-50 border-b border-gray-200">
+                <thead className="bg-surface border-b border-border">
                   <tr>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-muted uppercase tracking-wide">
                       File Name
                     </th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-muted uppercase tracking-wide">
                       Size
                     </th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-muted uppercase tracking-wide">
                       MIME
                     </th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-muted uppercase tracking-wide">
                       Created At
                     </th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-muted uppercase tracking-wide">
                       Job
                     </th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-100">
+                <tbody className="divide-y divide-border">
                   {files.map((file) => (
-                    <tr key={file.id} className="hover:bg-gray-50 transition-colors">
-                      <td className="px-4 py-3 font-medium text-gray-800">
+                    <tr key={file.id} className="hover:bg-surface transition-colors">
+                      <td className="px-4 py-3 font-medium text-foreground">
                         {file.download_url ? (
                           <a
                             href={file.download_url}
@@ -283,14 +283,14 @@ export default function JobsPage(): React.ReactElement {
                           file.file_name
                         )}
                       </td>
-                      <td className="px-4 py-3 text-gray-500">
+                      <td className="px-4 py-3 text-muted">
                         {formatBytes(file.file_size_bytes)}
                       </td>
-                      <td className="px-4 py-3 text-gray-500 font-mono text-xs">
+                      <td className="px-4 py-3 text-muted font-mono text-xs">
                         {file.mime_type}
                       </td>
-                      <td className="px-4 py-3 text-gray-500">{formatDate(file.created_at)}</td>
-                      <td className="px-4 py-3 font-mono text-xs text-gray-500" title={file.job_id}>
+                      <td className="px-4 py-3 text-muted">{formatDate(file.created_at)}</td>
+                      <td className="px-4 py-3 font-mono text-xs text-muted" title={file.job_id}>
                         {file.job_id.slice(0, 8)}…
                       </td>
                     </tr>
@@ -299,7 +299,7 @@ export default function JobsPage(): React.ReactElement {
               </table>
             )}
             {filesCursor && (
-              <div className="px-4 py-3 border-t border-gray-100 text-center">
+              <div className="px-4 py-3 border-t border-border text-center">
                 <button
                   onClick={() => void loadFiles(filesCursor)}
                   disabled={filesLoading}
