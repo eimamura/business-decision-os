@@ -406,3 +406,392 @@ projects that improve correctness without changing public interfaces.
 - **Test:** Navigate from `/chat/<id>` to `/kpi` and back — the nav sidebar must
   remain visible throughout. Each nav item highlights correctly for its route.
   Playwright E2E: assert `<aside>` is present on `/kpi`, `/approvals`, and `/audit`.
+
+---
+
+## P4 — Job Execution & HITL Flow
+
+Goal: Close the gap between "agent proposes a job" and "job actually runs with human approval."
+End-to-end flow: user asks agent → agent dispatches job via tool → HITL pause with inline approve/reject card in chat → on approval the job executes → result + file links returned in chat → history visible in Jobs page.
+
+### Batch P4-B1
+
+#### T-030: Extend `jobs` table schema — **Done**
+- **File:** `apps/api/alembic/versions/0013_jobs_execution.py` (new migration)
+- **What:** Add columns to the existing `jobs` table:
+  - `params_json JSONB` — input parameters the executor will consume
+  - `result_json JSONB` — output written by the executor after completion
+  - `approval_id UUID REFERENCES approvals(id)` — the approval record that gates this job
+  - `error TEXT` — error message when status is `failed`
+  - `input_tokens INT`, `output_tokens INT`, `cost_usd NUMERIC(12,6)` — LLM cost attribution
+- **Test:** Migration runs up/down cleanly against the real DB.
+
+---
+
+### Batch P4-B2 (after T-030)
+
+#### T-031: Add write methods to `JobsRepository` — **Done**
+- **File:** `packages/persistence/jobs_repo.py`
+- **What:** Add:
+  - `create(session_id, job_type, params, approval_id) -> dict` — INSERT a new job row with `status="pending_approval"`
+  - `update_status(job_id, status, result=None, error=None) -> dict` — UPDATE status + result/error + sets `completed_at` when terminal
+  - `add_file(job_id, file_name, file_size_bytes, mime_type, download_url) -> dict` — INSERT into `job_files`
+  - `get_by_approval_id(approval_id) -> dict | None` — used by the approval webhook to find the associated job
+- **Test:** Unit tests (mock DB): `create` returns row with correct defaults; `update_status` with terminal status sets `completed_at`; `get_by_approval_id` returns `None` for unknown ID.
+
+---
+
+### Batch P4-B3 (after T-031 — T-032 and T-034 run in parallel)
+
+#### T-032: Implement `JobDispatchTool` — **Done**
+- **File:** `packages/tools/job_dispatch_tool.py` (new)
+- **What:**
+  - `safety_level = "hitl"` — `AgentRuntime` will intercept before `handle()` runs and raise `HITLPause`
+  - `input_schema`: `job_type: str`, `params: object`, `description: str` (human-readable summary for the approval card)
+  - `handle()`: calls `JobsRepository.create()`, returns `{"job_id": ..., "approval_id": ..., "status": "pending_approval"}`
+  - Ensure `HITLPause.tool_input` includes `job_id` and `description` so the chat UI can render a rich card
+  - Register in `packages/tools/__init__.py`
+- **Note:** `AgentRuntime` (runtime.py:251–281) already intercepts `safety_level == "hitl"` before calling `handle()`. The intercept must be updated to call `JobsRepository.create()` with the tool input **before** raising `HITLPause` so the job row exists when the approval is later processed.
+- **Test:** Unit: mock `JobsRepository`; calling `handle()` directly creates a job row and returns the expected dict. Unit: `AgentRuntime` with a `hitl` tool raises `HITLPause` and the `tool_input` contains `job_id`.
+
+#### T-034: Implement job executor — **Done**
+- **File:** `packages/agent/job_executor.py` (new)
+- **What:** `async def execute_job(job_id: UUID, sse_queue: Any | None = None) -> dict`
+  - Loads job row via `JobsRepository.get_job()`
+  - Routes by `job_type` to existing tools: `"simulate"` → `SimulationTool`, `"optimize"` → `OptimizerTool`, `"forecast"` → `ForecastTool`, `"train_forecast"` → `TrainForecastTool`
+  - On success: calls `JobsRepository.update_status(status="completed", result=...)` and `add_file()` for each output file
+  - On failure: calls `JobsRepository.update_status(status="failed", error=str(exc))`
+  - Pushes `job_completed` or `job_failed` SSE event if `sse_queue` is provided
+- **Test:** Unit: mock `JobsRepository` + tool; verify `update_status("completed")` called on success and `update_status("failed")` called on exception.
+
+---
+
+### Batch P4-B4 (after P4-B3 — T-033, T-035, T-037 run in parallel)
+
+#### T-033: Register `job_dispatch` in `_ROLE_TOOL_ALLOWLIST` — **Done**
+- **File:** `packages/tools/base.py`
+- **What:** Add `"job_dispatch"` to the allowlist for `"orchestrator"` and `"simulation_optimizer"` roles.
+- **Depends on:** T-032 (tool name must exist)
+- **Test:** `ToolRegistry.list_for_role("orchestrator")` includes `job_dispatch`; `list_for_role("data_engineer")` does not.
+
+#### T-035: Wire approval decision → job execution — **Done**
+- **Files:** `apps/api/routers/approvals.py`, `packages/persistence/jobs_repo.py`
+- **What:** In `POST /approvals/{id}/decision`, after updating the approval record:
+  - `approved` → call `JobsRepository.get_by_approval_id(approval_id)` to find the associated job; if found, call `execute_job(job_id, sse_queue)` as a background task
+  - `rejected` → call `JobsRepository.update_status(job_id, "cancelled")` if job exists
+  - `needs_revision` → leave job in `pending_approval`; no execution
+- **Depends on:** T-032, T-034
+- **Test:** Integration: create approval + job row; POST `approved` decision; verify job status transitions to `completed`.
+
+#### T-037: HITL job-approval card in chat UI — **Done**
+- **Files:** `apps/web/components/JobApprovalCard.tsx` (new), `apps/web/app/chat/[sessionId]/page.tsx` (or `MessageBubble.tsx`)
+- **What:** When the chat receives an SSE `awaiting_approval` event where `tool_input` contains `job_type` and `description`:
+  - Render `<JobApprovalCard>` inline in the chat message list showing: job type badge, description, params summary
+  - Two buttons: **Approve** and **Reject** — each `POST /api/v1/approvals/{approval_id}/decision`
+  - On click: button enters loading state; on response, card updates to `Approved ✓` or `Rejected ✗` (non-interactive)
+  - If SSE `job_completed` arrives while card is visible, append file links below the card
+- **Depends on:** T-032 (needs `job_id` + `description` in SSE payload)
+- **Test:** Render `<JobApprovalCard>` with mock approval_id; click Approve → fetch called with `{"decision": "approved"}`; card shows approved state after response.
+
+---
+
+### Batch P4-B5 (after P4-B4 — T-036, T-038, T-039 run in parallel)
+
+#### T-036: Post-execution SSE event + chat reply with file links — **Done**
+- **Files:** `packages/agent/job_executor.py`, `packages/agent/orchestrator/result_builder.py`
+- **What:**
+  - Executor pushes `{"type": "job_completed", "job_id": ..., "files": [{"file_name": ..., "download_url": ...}]}` SSE event on success
+  - Extend `result_builder.py`: when `SessionResponse` is built after a HITL resume, include job result summary and file links in `reply` text (e.g. `"Simulation complete. 3 files generated: [report.csv](...)"`)
+- **Depends on:** T-034, T-035
+- **Test:** Unit: `build_response()` with a job result containing files produces a reply string with at least one download URL.
+
+#### T-038: Jobs page — sort order, session link, approval status, result panel — **Done**
+- **File:** `apps/web/app/(shell)/jobs/page.tsx`
+- **What:**
+  - Sort jobs by `created_at DESC` (update `JobsRepository.list_jobs` ORDER BY)
+  - Add columns: **Session** (link to `/chat/<session_id>` when present), **Approval** (badge: pending / approved / rejected / — )
+  - Expandable row / side drawer: show `result_json` summary and generated files inline with download links
+  - Status filter dropdown: All / pending_approval / running / completed / failed / cancelled
+  - Update `GET /api/v1/jobs` to accept `?status=<value>` filter
+- **Depends on:** T-030, T-034 (result_json column must exist; executor must populate it)
+- **Test:** Filter `?status=completed` returns only completed jobs. Row expansion shows `generated_files` for a job that has them.
+
+#### T-039: Tests — Job execution & HITL flow — **Done**
+- **Files:** `tests/unit/test_job_dispatch_tool.py`, `tests/unit/test_job_executor.py`, `tests/integration/test_job_hitl_flow.py`, `tests/e2e/test_job_approval.py`
+- **What:**
+  - Unit: `JobDispatchTool.handle()` creates job row with correct `job_type` and `params_json`
+  - Unit: `execute_job()` routes by `job_type`, calls correct tool, updates status
+  - Integration: full HITL sequence — dispatch tool call → `HITLPause` raised → `POST /approvals/{id}/decision approved` → job status `completed` → `job_files` row present
+  - Playwright E2E (`@pytest.mark.e2e`): send chat message → `JobApprovalCard` renders → click Approve → Jobs page shows job as `completed` with file link
+- **Depends on:** T-030–T-038
+
+---
+
+## P5 — Test Infrastructure & Cost Reduction
+
+Goal: Eliminate accidental real LLM API calls from the unit tier, add vcrpy cassette
+infrastructure so integration tests can record once and replay at zero cost, enable
+cheap Haiku override for CI, and expose cache-hit metrics so prompt-caching
+effectiveness (T-008) is measurable.
+
+### Batch P5-B1 (all tasks independent — run in parallel)
+
+#### T-040: Add vcrpy cassette infrastructure for integration-tier LLM calls — **Done**
+- **Files:** `pyproject.toml` (add `vcrpy` to test deps), `tests/integration/conftest.py`
+  (new or extend), `tests/cassettes/` (committed directory, not gitignored)
+- **What:**
+  - Add `vcrpy` to `[project.optional-dependencies] test` in root `pyproject.toml`
+  - Add a `vcr_config` pytest fixture in `tests/integration/conftest.py` that configures:
+    - Cassette storage: `tests/cassettes/`
+    - Request matching: URI + method + body hash
+    - Filter headers: scrub `Authorization` / `x-api-key` so cassettes contain no secrets
+  - Document in `docs/TESTING.md`: add `@pytest.mark.vcr` to any integration test that
+    calls the real Anthropic API; cassettes are committed (no credentials after scrubbing)
+- **Test:** An integration test decorated with `@pytest.mark.vcr` passes on first run
+  (records cassette) and on a subsequent run with `--vcr-record=none` (replays, no
+  network traffic).
+
+#### T-041: Add `TEST_MODEL` env var override to `create_llm_client()` — **Done**
+- **File:** `packages/agent/llm/__init__.py` — `create_llm_client()`, `.env.example`
+- **What:** Read `TEST_MODEL` env var at `create_llm_client()` call site; when set,
+  pass it as `model=` to `ClaudeClient` instead of `DEFAULT_MODEL`. This lets CI
+  use `claude-haiku-4-5-20251001` (≈10× cheaper than Sonnet) without touching
+  production configuration. No changes to the `LLMClient` Protocol.
+  Add to `.env.example`:
+  ```
+  # Set to claude-haiku-4-5-20251001 to cut integration test costs ~10×
+  # TEST_MODEL=claude-haiku-4-5-20251001
+  ```
+- **Test:** Unit: `create_llm_client()` with `TEST_MODEL=claude-haiku-4-5-20251001`
+  env var set returns a `ClaudeClient` whose `_model` attribute equals the Haiku
+  model ID.
+
+#### T-042: Expose cache-hit aggregates in `get_session_totals()` — **Done**
+- **File:** `packages/persistence/llm_usage_repo.py`
+- **What:** The `llm_usage` table already stores `cache_read_tokens` and
+  `cache_write_tokens` (T-009). `get_session_totals()` currently returns only
+  `input_tokens`, `output_tokens`, `total_cost_usd`. Extend the SQL query to also
+  return `cache_read_tokens`, `cache_write_tokens`, and a derived `cache_hit_rate`
+  (computed as `cache_read / (input + cache_read)`, clamped to `0.0` when the
+  denominator is zero). This makes T-008 prompt-caching effectiveness measurable.
+- **Test:** Unit: mock pool returns known token counts; verify `cache_hit_rate`
+  computed correctly. Edge case: all zeros → `cache_hit_rate == 0.0` (no
+  division-by-zero).
+
+#### T-043: Enforce zero-network rule in `tests/unit/` conftest — **Done**
+- **File:** `tests/unit/conftest.py` (new)
+- **What:** Add an autouse fixture that monkeypatches
+  `anthropic.AsyncAnthropic.messages.create` and `httpx.AsyncClient.send` to
+  raise `AssertionError("unit tests must not make real network calls — use
+  StubClaudeClient or a mock")`. Scope is `tests/unit/` only; integration and
+  E2E tiers are unaffected.
+  - Audit all existing `tests/unit/` files to confirm none currently call the real
+    API; fix any that do by injecting `StubClaudeClient`.
+- **Test:** A synthetic test that calls `anthropic.AsyncAnthropic.messages.create`
+  raises `AssertionError`; other unit tests using `StubClaudeClient` pass without
+  change.
+
+---
+
+### Batch P5-B2 (after P5-B1 — T-044 and T-045 run in parallel)
+
+#### T-044: Implement HITL integration tests — **Not Started**
+- **Files:**
+  - `tests/integration/test_hitl_integration.py` — fill the 3 existing scaffold stubs
+  - `tests/integration/test_job_hitl_flow.py` (new) — job-level dispatch → approve →
+    execute sequence
+- **Context:** `test_hitl_integration.py` has 3 `pass`-body tests promised by T-026.
+  `test_job_hitl_flow.py` was listed as a T-039 deliverable but never created.
+  Both use `httpx.AsyncClient` against a live API server (`localhost:8000`), same
+  pattern as `tests/e2e/test_chat_flow.py`.
+- **What:**
+  - `test_hitl_integration.py` — implement the 3 scaffold tests:
+    1. `test_hitl_session_transitions_to_awaiting_approval`: POST `/api/v1/decisions`
+       with a prompt that triggers a hitl tool; poll `GET /api/v1/sessions/{id}`
+       until status is `awaiting_approval`.
+    2. `test_hitl_approve_transitions_to_completed`: call `POST
+       /api/v1/approvals/{id}/decision` with `{"decision": "approved"}`; verify
+       session status reaches `completed`.
+    3. `test_hitl_reject_transitions_to_failed`: same flow with `"rejected"`;
+       verify session produces a fallback reply.
+  - `test_job_hitl_flow.py` — new file, 2 tests:
+    1. `test_job_dispatch_creates_pending_job`: trigger `job_dispatch` tool via
+       the decisions endpoint; verify a job row exists with `status=pending_approval`.
+    2. `test_job_approve_executes_and_completes`: approve the job; verify job
+       transitions to `completed` and `job_files` row is present.
+- **Depends on:** P5-B1 (T-043 must pass; network guard confirms unit tier is clean)
+- **Test:** All 5 tests pass with `docker compose up -d` + `uvicorn` running.
+  Auto-skip when `localhost:8000` is unreachable.
+
+#### T-045: Add Playwright E2E spec for job approval card — **Not Started**
+- **File:** `tests/e2e/playwright/job_approval.spec.ts` (new)
+- **Context:** `@playwright/test` is already in `apps/web/package.json`. The existing
+  `tests/e2e/playwright/chat_flow.spec.ts` establishes the pattern (TypeScript, page
+  object locators, `data-testid` attributes). T-039 promised this test but it was never
+  created.
+- **What:** Add a Playwright spec covering the full job approval flow:
+  1. Navigate to `/chat/<session_id>`; send a message that triggers a `job_dispatch` tool
+  2. Assert `<JobApprovalCard>` renders in the chat (locator: `[data-testid="job-approval-card"]`)
+  3. Click **Approve** button (`[data-testid="approve-btn"]`); assert card transitions to
+     approved state (`[data-testid="approval-status"]` text contains `Approved`)
+  4. Navigate to `/jobs`; assert the job row shows status `completed` and at least one
+     file link is present
+  - Also add a reject scenario (click **Reject** → card shows `Rejected`)
+  - Add required `data-testid` attributes to `JobApprovalCard.tsx` if missing
+- **Depends on:** T-044 (HITL integration must pass first to confirm backend is correct),
+  T-037 (JobApprovalCard must exist — it does, from P4)
+- **Test:** `npx playwright test job_approval.spec.ts` passes with both Next.js dev server
+  and API server running.
+
+---
+
+## P6 — Chat UI Stability
+
+Goal: Fix 10 concrete bugs and fragility points identified in the chat UI code review.
+No public API changes — all fixes are in `apps/web/`.
+
+### Batch P6-B1 (all independent — run in parallel)
+
+Six trivial-to-medium fixes with no dependencies on each other or on B2/B3.
+
+#### T-046: Fix SSE buffer split from `\n` to `\n\n` — **Not Started**
+- **File:** `apps/web/lib/api.ts` — `streamSession()` (line ~170)
+- **Root cause:** `buffer.split("\n")` splits on every newline; the SSE standard uses
+  `\n\n` (double newline) as the event boundary. Multi-line `data:` fields are
+  silently truncated.
+- **What:** Replace the line-splitting loop with a proper SSE parser:
+  1. Split `buffer` on `\n\n` to get complete event blocks
+  2. Within each block, collect all `data:` lines and join them before JSON.parse
+  3. Keep the final incomplete block in `buffer` (same as today)
+- **Test:** Unit (Vitest): feed a `ReadableStream` with a multi-line `data:` event
+  split across two chunks; assert the parsed payload is complete and correct.
+
+#### T-047: Fix `creating` flag never reset on successful session creation — **Not Started**
+- **File:** `apps/web/app/chat/layout.tsx` — `onNewSession` (line ~27)
+- **Root cause:** `setCreating(true)` is called but `setCreating(false)` is only
+  called in the `catch` branch. When `router.push` succeeds and App Router keeps the
+  layout mounted, the New Session button stays disabled forever.
+- **What:**
+  ```ts
+  // Before router.push:
+  setCreating(false);
+  router.push(`/chat/${data.session_id}`);
+  ```
+- **Test:** Vitest + React Testing Library: mock `createSession` to resolve; assert
+  `creating` is `false` after `onNewSession` completes.
+
+#### T-048: Add `isLoadingMessages` to eliminate empty-state flash — **Not Started**
+- **Files:** `apps/web/app/chat/ChatStateContext.tsx`, `apps/web/app/chat/[sessionId]/page.tsx`
+- **Root cause:** `SessionState` has no loading flag. Between mount and `loadMessages`
+  completing, `messages.length === 0` is true, causing the empty-state UI to flash
+  briefly on every session navigation.
+- **What:**
+  - Add `isLoadingMessages: boolean` to `SessionState` (default `true`)
+  - Set to `true` at the start of `loadMessages()`, `false` on completion (success or error)
+  - In `page.tsx`: when `isLoadingMessages` is `true`, render a skeleton (3 grey
+    placeholder bars) instead of the "What do you want to analyze today?" header
+- **Test:** Vitest: `loadMessages` sets `isLoadingMessages: true` before fetch and
+  `false` after; page renders skeleton while loading, messages after.
+
+#### T-049: Strengthen optimistic-delete rollback and surface errors — **Not Started**
+- **File:** `apps/web/app/chat/layout.tsx` — `onDelete`, `onDeleteAll`
+- **Root cause:** Both functions do `setSessions(prev => prev.filter(...))` before the
+  API call. On failure, `fetchSessions().then(setSessions).catch(() => undefined)` is
+  the only recovery — if that also fails (full network outage), the UI shows an empty
+  session list with no feedback.
+- **What:**
+  - Snapshot the previous sessions before the optimistic update
+  - On API failure, restore from snapshot immediately (no secondary fetch required)
+  - Surface a brief inline error: add `deleteError: string | null` to
+    `SessionsContext` and render it as a small error banner in `ChatSidebar`
+- **Test:** Mock `deleteSession` to return `false`; assert session list is restored to
+  the pre-delete snapshot and the error message is visible.
+
+#### T-050: Remove redundant `fetchSession` call on chat page mount — **Not Started**
+- **File:** `apps/web/app/chat/[sessionId]/page.tsx` — `useEffect` (line ~40)
+- **Root cause:** `fetchSession(sessionId)` is called on every session mount solely to
+  redirect on 404. `loadMessages()` already fetches from the same session; a 404 there
+  returns `[]`. Two parallel GET calls to the same session endpoint fire on every navigation.
+- **What:** Remove the `fetchSession` call. Instead, check the response status inside
+  `loadMessages()` (or a thin wrapper): if the messages endpoint returns 404, call
+  `router.replace("/chat")`. Alternatively, let `ChatStateContext.loadMessages` accept
+  a `on404` callback.
+- **Test:** Navigate to a non-existent session ID; assert redirect to `/chat` without
+  a second fetch to `/api/v1/sessions/{id}`.
+
+#### T-051: Classify SSE errors by type for user-facing messages — **Not Started**
+- **File:** `apps/web/app/chat/ChatStateContext.tsx` — `sendMessage` catch block (line ~245)
+- **Root cause:** All errors map to the same string:
+  `"Error contacting the API. Please check the backend is running."`
+  Network failures, 5xx errors, and timeouts are indistinguishable.
+- **What:** Distinguish error categories in the catch block:
+  - `TypeError` with message `"Failed to fetch"` → `"Network error — check your connection."`
+  - `Error` where `status` is 5xx → `"Server error (500). The backend may be overloaded."`
+  - `AbortError` → already handled (no message shown)
+  - Fallback → keep current generic message
+  - Expose `errorCode` field on the assistant `ChatMessage` for future Playwright
+    assertions
+- **Test:** Vitest: mock `postMessage` to throw `TypeError("Failed to fetch")`; assert
+  assistant message content equals the network error string.
+
+---
+
+### Batch P6-B2 (independent of B1 — run in parallel with B1)
+
+#### T-052: Memoize `onTitleGenerated` and fix `useEffect` exhaustive-deps — **Not Started**
+- **File:** `apps/web/app/chat/[sessionId]/page.tsx`
+- **Root cause (a):** `onTitleGenerated` at line ~31 is an inline arrow function — new
+  reference every render. `useChat` includes it in `sendMessage`'s `useCallback` deps,
+  so `sendMessage` is recreated on every render, defeating memoization.
+- **Root cause (b):** `useEffect` at line ~48 lists `[sessionId]` as deps but not
+  `loadMessages`, violating `react-hooks/exhaustive-deps`. This causes ESLint warnings
+  and risks stale-closure bugs if `loadMessages` ever changes identity.
+- **What:**
+  - Wrap the `onTitleGenerated` callback in `useCallback` with `[sessionId, setSessions]`
+    deps
+  - Add `loadMessages` to the `useEffect` deps array (it is stable via `useCallback`
+    in `ChatStateContext`, so this is safe)
+- **Test:** Vitest: confirm `sendMessage` reference is stable across a parent re-render
+  when `sessions` state changes but `sessionId` does not.
+
+---
+
+### Batch P6-B3 (after T-046 — T-053 and T-054 run in parallel)
+
+Both tasks require the SSE parser to be correct (T-046) before implementing on top of it.
+
+#### T-053: Fix `postMessage` → `streamSession` event-loss window — **Not Started**
+- **File:** `apps/web/app/chat/ChatStateContext.tsx` — `sendMessage` (lines ~121–128)
+- **Root cause:** `postMessage` completes first, then `streamSession` is called. If the
+  backend starts emitting SSE events in the few milliseconds between those two calls,
+  the client misses them. In practice the backend buffers events, but it is a fragile
+  ordering assumption.
+- **What:** Open the SSE stream **before** POSTing the message:
+  1. Call `streamSession(sessionId, controller.signal)` to obtain the async iterator
+  2. Then `await postMessage(sessionId, text)`
+  3. Iterate over events as before
+  This ensures the stream reader is established before any events are emitted.
+  Confirm with the backend that `GET /stream` blocks until a message is posted (current
+  behaviour); document this assumption with a one-line comment.
+- **Depends on:** T-046 (SSE buffer must be correct)
+- **Test:** Vitest: mock `streamSession` to return a pre-loaded async iterator; assert
+  `postMessage` is called after the iterator is obtained.
+
+#### T-054: SSE auto-reconnect with exponential backoff — **Not Started**
+- **File:** `apps/web/lib/api.ts` — `streamSession()` and/or `ChatStateContext.tsx` —
+  `sendMessage`
+- **Root cause:** When the SSE stream ends without a `done` event (network drop,
+  backend restart), the `for await` loop exits silently. The assistant message is
+  unfrozen by the `finally` block (`isStreaming: false`) but no reply is ever shown;
+  the session is stuck.
+- **What:** In `sendMessage`, after the `for await` loop exits without a `done` event,
+  attempt reconnection with exponential backoff (500 ms → 1 s → 2 s → 4 s, max 3
+  retries). On each retry, call `streamSession` again and resume event processing.
+  If all retries fail, set the assistant message to the classified error string from T-051.
+  Use the existing `abortMap` `AbortController` to cancel retries when the user navigates
+  away or sends a new message.
+- **Depends on:** T-046 (SSE buffer), T-051 (error classification for the final failure
+  message)
+- **Test:** Vitest: mock `streamSession` to return one partial event then close without
+  `done`; assert the hook retries up to 3 times; on all retries failing, assert error
+  message is set on the assistant bubble.

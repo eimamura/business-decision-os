@@ -49,9 +49,11 @@ class LlmUsageRepository:
             row = await conn.fetchrow(
                 """
                 SELECT
-                    COALESCE(SUM(lu.input_tokens), 0)::int   AS input_tokens,
-                    COALESCE(SUM(lu.output_tokens), 0)::int  AS output_tokens,
-                    COALESCE(SUM(lu.total_cost_usd), 0.0)    AS total_cost_usd
+                    COALESCE(SUM(lu.input_tokens), 0)::int        AS input_tokens,
+                    COALESCE(SUM(lu.output_tokens), 0)::int       AS output_tokens,
+                    COALESCE(SUM(lu.total_cost_usd), 0.0)         AS total_cost_usd,
+                    COALESCE(SUM(lu.cache_read_tokens), 0)::int   AS cache_read_tokens,
+                    COALESCE(SUM(lu.cache_write_tokens), 0)::int  AS cache_write_tokens
                 FROM llm_usage lu
                 JOIN agent_steps ast ON ast.id = lu.agent_step_id
                 WHERE ast.session_id = $1
@@ -59,9 +61,24 @@ class LlmUsageRepository:
                 uuid.UUID(session_id),
             )
         if row is None:
-            return {"input_tokens": 0, "output_tokens": 0, "total_cost_usd": 0.0}
+            return {
+                "input_tokens": 0,
+                "output_tokens": 0,
+                "total_cost_usd": 0.0,
+                "cache_read_tokens": 0,
+                "cache_write_tokens": 0,
+                "cache_hit_rate": 0.0,
+            }
+        cache_read = row["cache_read_tokens"]
+        cache_write = row["cache_write_tokens"]
+        input_tok = row["input_tokens"]
+        denom = input_tok + cache_read
+        cache_hit_rate = cache_read / denom if denom > 0 else 0.0
         return {
-            "input_tokens": row["input_tokens"],
+            "input_tokens": input_tok,
             "output_tokens": row["output_tokens"],
             "total_cost_usd": float(row["total_cost_usd"]),
+            "cache_read_tokens": cache_read,
+            "cache_write_tokens": cache_write,
+            "cache_hit_rate": cache_hit_rate,
         }

@@ -433,7 +433,8 @@ def create_llm_client(usage_writer: UsageWriter | None = None) -> ClaudeClient:
     api_key = os.environ.get("ANTHROPIC_API_KEY", "")
     if not api_key:
         raise RuntimeError("ANTHROPIC_API_KEY is not set — add it to .env")
-    return ClaudeClient(api_key=api_key, usage_writer=usage_writer)
+    model = os.environ.get("TEST_MODEL") or ClaudeClient.DEFAULT_MODEL
+    return ClaudeClient(api_key=api_key, model=model, usage_writer=usage_writer)
 
 
 class BudgetedClaudeClient:
