@@ -14,29 +14,14 @@ Orchestrator execution state. Written only by bdos-orchestrator.
 | P4 — Job Execution & HITL Flow (T-030 – T-039) | 2026-06-02 |
 | P5 — Test Infrastructure & Cost Reduction (T-040 – T-045) | 2026-06-02 |
 | P6 — Chat UI Stability (T-046 – T-054) | 2026-06-02 |
+| P7 — CI Quality & Memory Loop Validation (T-055 – T-058) | 2026-06-02 |
+| P8 — Mock Mode for Cost-Free UI Testing (T-059 – T-062) | 2026-06-02 |
 
 ---
 
 ## Active Phase
 
-**P7 — CI Quality & Memory Loop Validation** (defined 2026-06-02)
-
-Goal: Restore CI to green (2 stale unit test failures from P4), add TypeScript type check
-to the CI pipeline, and validate the Memory Loop end-to-end with a VCR-cassette backed
-integration test.
-
-| Batch | Tasks | Status |
-|---|---|---|
-| P7-B1 | T-055, T-056, T-057 | Not Started |
-| P7-B2 | T-058 | Not Started |
-
-Dependency order:
-```
-T-055 ─┐
-T-056 ─┤  (all independent — run in parallel)
-T-057 ─┘
-  └──────────────→ T-058  (after P7-B1 — requires Docker + cassette)
-```
+None. All planned phases complete as of 2026-06-02.
 
 ---
 
@@ -96,11 +81,11 @@ None.
 
 ## Last Completed Batch
 
-P4 Batch 5 complete (2026-06-02): T-036, T-038, T-039 Done. All P4 tasks complete.
+P8 Batch 2 complete (2026-06-02): T-061, T-062 Done. All P8 tasks complete.
 
 ## Last Validation
 
-2026-06-02: uv run pytest tests/unit/ (excl. 2 pre-existing failures) → 457 passed. npx tsc --noEmit -p apps/web/tsconfig.json → exit 0. All P5–P6 tasks complete.
+2026-06-02: uv run pytest tests/unit/ → 472 passed. All P7–P8 tasks complete. CI now includes TypeScript type check and production build steps.
 
 ## Blockers
 

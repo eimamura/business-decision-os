@@ -809,7 +809,7 @@ P7-B2 tasks depend on P7-B1 (CI must be green before adding integration tests).
 
 ### Batch P7-B1 (all independent — run in parallel)
 
-#### T-055: Fix stale assertion in `test_inprocess_run_train_forecast_no_db_raises` — **Not Started**
+#### T-055: Fix stale assertion in `test_inprocess_run_train_forecast_no_db_raises` — **Done**
 - **File:** `tests/unit/test_job_runner.py` (lines ~59–65)
 - **Root cause:** Test was authored when `_run_train_forecast` was unimplemented; it expected
   `NotImplementedError | ModuleNotFoundError`. T-034 implemented train_forecast with a DB
@@ -820,7 +820,7 @@ P7-B2 tasks depend on P7-B1 (CI must be green before adding integration tests).
   `predicted_units` list. This makes the test describe what the implementation actually does.
 - **Test:** CI green; `uv run pytest tests/unit/test_job_runner.py -v` passes.
 
-#### T-056: Fix stale assertion in `test_list_for_role_orchestrator_returns_empty` — **Not Started**
+#### T-056: Fix stale assertion in `test_list_for_role_orchestrator_returns_empty` — **Done**
 - **File:** `tests/unit/test_tool_isolation.py` (lines ~609–612)
 - **Root cause:** T-033 registered `job_dispatch` in `_ROLE_TOOL_ALLOWLIST["orchestrator"]`.
   The test still asserts `tools == []`.
@@ -830,7 +830,7 @@ P7-B2 tasks depend on P7-B1 (CI must be green before adding integration tests).
   ```
 - **Test:** CI green; `uv run pytest tests/unit/test_tool_isolation.py::test_list_for_role_orchestrator_returns_empty -v` passes.
 
-#### T-057: Add TypeScript type check to CI — **Not Started**
+#### T-057: Add TypeScript type check to CI — **Done**
 - **File:** `.github/workflows/lint-test.yml` — `node-lint` job
 - **Root cause:** The Node CI job runs only `npm ci`. TypeScript regressions (e.g., from
   T-046–T-054) are invisible in CI.
@@ -845,7 +845,7 @@ P7-B2 tasks depend on P7-B1 (CI must be green before adding integration tests).
 
 ### Batch P7-B2 (after P7-B1 — requires Docker Compose + cassette)
 
-#### T-058: Memory Loop integration test with VCR cassette — **Not Started**
+#### T-058: Memory Loop integration test with VCR cassette — **Done**
 - **File:** `tests/integration/test_memory_loop.py` (new)
 - **Pre-condition:** `PgVectorMemoryStore` is already wired in `apps/api/state.py`
   (`_build_memory_store()` returns real store when `DATABASE_URL` is set). The
