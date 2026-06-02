@@ -6,6 +6,12 @@ import logging
 from typing import Any
 from uuid import UUID
 
+from packages.agent.orchestrator.clarification import (
+    build_clarification_event,
+    clarification_exhausted,
+    needs_clarification,
+)
+from packages.agent.orchestrator.hitl import HITLPause
 from packages.agent.orchestrator.models import (
     AgentRoute,
     SessionGoal,
@@ -15,7 +21,7 @@ from packages.agent.orchestrator.models import (
 )
 from packages.agent.orchestrator.parsing import _iso_now, _json_obj, json_safe
 from packages.agent.orchestrator.prompts import INTENT_SYSTEM, ROUTER_SYSTEM
-from packages.agent.orchestrator.roles import VALID_AGENT_ROLES
+from packages.agent.orchestrator.routing import validate_route
 from packages.agent.orchestrator.runtime import (
     _run_agents_in_order,
     _synthesize_response,
@@ -137,15 +143,7 @@ class SessionOrchestrator:
         return route
 
     def _validate_route(self, route: AgentRoute) -> None:
-        if route.mode == "direct_chat" and route.agents:
-            raise ValueError("direct_chat route must not include agents")
-        if route.mode == "single_agent" and len(route.agents) != 1:
-            raise ValueError("single_agent route requires exactly one agent")
-        if route.mode == "sequential_agents" and len(route.agents) < 1:
-            raise ValueError("sequential_agents route requires at least one agent")
-        unknown = [agent for agent in route.agents if agent not in VALID_AGENT_ROLES]
-        if unknown:
-            raise ValueError(f"unknown agent role(s): {', '.join(unknown)}")
+        validate_route(route)
 
     async def run(self, session_id: UUID, query: SessionUserQuery) -> SessionResponse:
         if isinstance(query, SessionGoal):
@@ -163,6 +161,27 @@ class SessionOrchestrator:
 
         try:
             intent = await self.classify_intent(query, session_id)
+
+            clarification_round: int = query.metadata.get("clarification_round", 0)
+            if needs_clarification(intent.category, intent.goal_text):
+                if not clarification_exhausted(clarification_round):
+                    event = build_clarification_event(session_id, clarification_round + 1)
+                    await self._push(event)
+                    self._schedule_status_update(session_id, "completed")
+                    return SessionResponse(
+                        mode="direct_chat",
+                        reply=event["message"],
+                        intent=intent,
+                        route=AgentRoute(
+                            mode="direct_chat",
+                            agents=[],
+                            requires_planning=False,
+                            requires_dag=False,
+                            rationale="clarification",
+                        ),
+                    )
+                # round limit reached — fall through to direct_chat execution
+
             route = await self.select_execution_mode(query, intent, session_id)
             if route.mode == "direct_chat":
                 result = await run_direct_chat(self, session_id, query, intent, route)
@@ -178,6 +197,31 @@ class SessionOrchestrator:
                 result = await run_dag_execution(self, session_id, query, intent, route)
             else:
                 raise ValueError(f"unknown execution mode: {route.mode}")
+        except HITLPause as exc:
+            self._schedule_status_update(session_id, "awaiting_approval")
+            await self._push({
+                "type": "session_paused",
+                "session_id": str(session_id),
+                "approval_id": exc.approval_id,
+                "tool_name": exc.tool_name,
+                "timestamp": _iso_now(),
+            })
+            return SessionResponse(
+                mode="direct_chat",
+                reply=(
+                    f"Action '{exc.tool_name}' requires manager approval before execution. "
+                    f"Approval ID: {exc.approval_id}"
+                ),
+                intent=intent,
+                route=AgentRoute(
+                    mode="direct_chat",
+                    agents=[],
+                    requires_planning=False,
+                    requires_dag=False,
+                    rationale="hitl_pause",
+                ),
+                requires_approval=True,
+            )
         except Exception as exc:
             self._schedule_status_update(session_id, "failed")
             await self._push({

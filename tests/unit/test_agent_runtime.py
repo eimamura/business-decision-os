@@ -78,6 +78,9 @@ class _FakeToolRegistry:
     def list_for_role(self, role: str) -> list[Any]:
         return self._tools
 
+    def filter_for_user_role(self, user_role: str, tools: list[Any]) -> list[Any]:
+        return tools
+
     def get(self, name: str) -> Any | None:
         for t in self._tools:
             if t.name == name:

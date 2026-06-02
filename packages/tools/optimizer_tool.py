@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal
 
 from packages.optimization import OptimizationContext, OptimizationInput, ReplenishmentOptimizer
 from packages.tools.base import ToolContext, ToolResult
@@ -10,6 +10,7 @@ class OptimizerTool:
     name = "optimize_replenishment"
     description = "Enumerate MOQ multiples and return top 3 candidates by total supply chain cost"
     requires_approval = False
+    safety_level: Literal["read_only", "write", "hitl"] = "write"
     input_schema: dict[str, Any] = {
         "type": "object",
         "properties": {

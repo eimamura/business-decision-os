@@ -132,7 +132,7 @@ projects that improve correctness without changing public interfaces.
 
 ## P1 — Critical Design Gaps (continued)
 
-### T-012: Add `authorize_user` with DB-backed role lookup
+### T-012: Add `authorize_user` with DB-backed role lookup — **Done**
 - **Files:** `packages/persistence/users_repo.py` (replace existing stub), `apps/api/` (dependency or middleware)
 - **Pre-condition:** `packages/persistence/users_repo.py` already exists but is a smart stub that
   returns `"analyst"` for all users — this violates the AGENTS.md smart-stub prohibition. It must
@@ -151,7 +151,7 @@ projects that improve correctness without changing public interfaces.
 
 ## P2 — Architecture Improvements (continued)
 
-### T-018: Classify tools as `read_only` / `write` / `hitl` in ToolRegistry
+### T-018: Classify tools as `read_only` / `write` / `hitl` in ToolRegistry — **Done**
 - **File:** `packages/tools/base.py`
 - **What:** Add `safety_level: Literal["read_only", "write", "hitl"]` to the `Tool`
   protocol (complements existing `requires_approval: bool`). Add `list_read_only()`
@@ -161,7 +161,8 @@ projects that improve correctness without changing public interfaces.
 - **Test:** Each registered tool has the expected `safety_level`; `list_hitl_tools()`
   returns only HITL tools.
 
-### T-013: Implement 2-layer role × intent tool access control
+### T-013: Implement 2-layer role × intent tool access control — **Done**
+- **Status:** Done
 - **Files:** `packages/tools/base.py`, `packages/agent/runtime.py`
 - **What:** Add a user-role axis to tool filtering alongside the existing agent-role axis.
   - Layer 1 (user role): `analyst` → read-only tools only; `manager` → includes HITL tools; `admin` → unrestricted
@@ -171,7 +172,7 @@ projects that improve correctness without changing public interfaces.
 - **Depends on:** T-012, T-018 (Layer 1 filtering uses `safety_level` defined in T-018)
 - **Test:** Each user role returns the expected intersection of tools from `list_for_role`.
 
-### T-014: Add approval idempotency guard
+### T-014: Add approval idempotency guard — **Done**
 - **Files:** `packages/persistence/approvals_repo.py`, `packages/agent/orchestrator/decision.py`
 - **Pre-condition:** `ApprovalsRepository` at `packages/persistence/approvals_repo.py` currently stubs
   all methods with `NotImplementedError("Phase 1 — DB required")`. The repository must have functional
@@ -185,7 +186,7 @@ projects that improve correctness without changing public interfaces.
 - **Test:** Two attempts to create an approval for the same session — second call returns
   the existing record without a new INSERT.
 
-### T-015: Refactor routing into pure functions
+### T-015: Refactor routing into pure functions — **Done**
 - **Files:** `packages/agent/orchestrator/routing.py` (new), `packages/agent/orchestrator/session_orchestrator.py`
 - **What:** Extract the post-LLM routing decision logic from `select_execution_mode()`
   into pure functions in a new `routing.py` module:
@@ -195,7 +196,7 @@ projects that improve correctness without changing public interfaces.
   - The LLM call itself stays in `session_orchestrator.py`; only the branching logic moves
 - **Test:** Unit tests for `route_after_intent` with no LLM dependency.
 
-### T-016: Adopt IntentRegistry pattern
+### T-016: Adopt IntentRegistry pattern — **Done**
 - **Files:** `packages/agent/orchestrator/intent_registry.py` (new),
   `packages/agent/orchestrator/prompts.py`, `packages/agent/runtime.py`
 - **What:** Introduce `IntentConfig` dataclass centralizing per-intent settings:
@@ -216,7 +217,7 @@ projects that improve correctness without changing public interfaces.
   Pattern reference: `~/projects/agentic-system-mvp/apps/api/shared/intent_registry.py`
 - **Test:** `get_intent_config(category)` returns correct `max_tool_calls` for each intent.
 
-### T-017: Add `result_builder` response structuring
+### T-017: Add `result_builder` response structuring — **Done**
 - **Files:** `packages/agent/orchestrator/result_builder.py` (new),
   `packages/agent/orchestrator/decision.py`
 - **What:** Extract response assembly from `_build_decision_response()` into a
@@ -226,7 +227,7 @@ projects that improve correctness without changing public interfaces.
 - **Test:** `build_response(intent, candidates, risk_level)` returns expected
   structure without LLM calls.
 
-### T-019: Add `ask_clarification` flow for unknown intents
+### T-019: Add `ask_clarification` flow for unknown intents — **Done**
 - **Files:** `packages/agent/orchestrator/clarification.py` (new),
   `packages/agent/orchestrator/session_orchestrator.py`
 - **What:** When intent classification yields `"chat"` with no clear goal, generate
@@ -317,7 +318,7 @@ projects that improve correctness without changing public interfaces.
 
 ## P1 — HITL Integration (depends on T-005, T-013, T-014, T-018, T-019)
 
-### T-026: HITL end-to-end flow
+### T-026: HITL end-to-end flow — **Done**
 - **Files:** `packages/agent/orchestrator/session_orchestrator.py`,
   `packages/agent/orchestrator/decision.py`, `apps/api/` (approvals router),
   `apps/web/app/approvals/` (UI)

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal
 
 from packages.persistence.audit_log_repo import compute_hash
 from packages.tools.base import ToolContext, ToolResult
@@ -12,6 +12,7 @@ class AuditLogTool:
     name = "write_audit_log"
     description = "Write a tamper-evident audit log entry"
     requires_approval = False
+    safety_level: Literal["read_only", "write", "hitl"] = "write"
     input_schema: dict[str, Any] = {
         "type": "object",
         "properties": {

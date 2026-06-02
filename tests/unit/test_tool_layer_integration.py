@@ -42,7 +42,8 @@ class QueryFlowStubClaudeClient(StubClaudeClient):
         if "intent classifier" in system:
             if "Good morning" in payload:
                 return _response(
-                    '{"category":"chat","confidence":0.99,"rationale":"Greeting","goal_text":null}'
+                    '{"category":"chat","confidence":0.99,"rationale":"Greeting",'
+                    '"goal_text":"general greeting"}'
                 )
             return _response(
                 '{"category":"decision_support","confidence":0.9,'

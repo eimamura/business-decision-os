@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal
 
 from packages.persistence.catalog_repo import get_table_schema
 from packages.tools.base import ToolContext, ToolResult
@@ -11,6 +11,7 @@ class TableSchemaReaderTool:
     name = "table_schema_reader"
     description = "Read column names and types for an operational table"
     requires_approval = False
+    safety_level: Literal["read_only", "write", "hitl"] = "read_only"
     input_schema: dict[str, Any] = {
         "type": "object",
         "properties": {

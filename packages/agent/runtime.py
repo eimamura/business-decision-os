@@ -133,7 +133,12 @@ class AgentRuntime:
         _log.info("AgentRuntime %s: verify_findings status=%s", self.role, status)
         return status
 
-    async def run(self, task: "SpecialistTask", ctx: "ToolContext") -> "SpecialistResult":
+    async def run(
+        self,
+        task: "SpecialistTask",
+        ctx: "ToolContext",
+        max_iterations: int | None = None,
+    ) -> "SpecialistResult":
         from packages.agent.llm import LLMMessage, LLMToolSpec
         from packages.agent.orchestrator import SpecialistResult
         from packages.tools.schema_context import get_schema_context
@@ -167,8 +172,12 @@ class AgentRuntime:
             },
         ]
 
+        agent_role_tools = self._tool_registry.list_for_role(self.role)
+        user_filtered_tools = self._tool_registry.filter_for_user_role(
+            ctx.user_role, agent_role_tools
+        )
         tool_objects = [
-            t for t in self._tool_registry.list_for_role(self.role)
+            t for t in user_filtered_tools
             if t.name in set(task.allowed_tools or [])
         ]
         llm_tools = [
@@ -185,10 +194,12 @@ class AgentRuntime:
 
         _verify_findings_done = False
 
+        _iteration_limit = max_iterations if max_iterations is not None else _MAX_ITERATIONS
+
         async def _run_tool_loop(messages: list[LLMMessage]) -> list[LLMMessage]:
             nonlocal last_response, _total_input_tokens, _total_output_tokens, _total_cost_usd
 
-            for _ in range(_MAX_ITERATIONS):
+            for _ in range(_iteration_limit):
                 _log.info(
                     "Specialist %s calling LLM (model=%s)",
                     self.role,
@@ -232,6 +243,39 @@ class AgentRuntime:
                     if tool is not None:
                         tool_call_id = call["id"]
                         tool_input = call.get("input", {})
+
+                        # HITL intercept: pause execution and request human approval
+                        if getattr(tool, "safety_level", None) == "hitl":
+                            from uuid import uuid4 as _uuid4
+
+                            from packages.agent.orchestrator.hitl import HITLPause
+                            from packages.persistence.approvals_repo import ApprovalsRepository
+
+                            _repo = ApprovalsRepository()
+                            try:
+                                created = await _repo.create({
+                                    "session_id": str(ctx.session_id),
+                                    "status": "pending",
+                                    "actor": ctx.actor,
+                                    "reason": f"HITL tool: {call['name']}",
+                                })
+                                _approval_id = str(created.get("id", _uuid4()))
+                            except Exception:
+                                _approval_id = str(_uuid4())
+                            await self._push({
+                                "type": "awaiting_approval",
+                                "session_id": str(ctx.session_id),
+                                "approval_id": _approval_id,
+                                "tool_name": call["name"],
+                                "tool_input": tool_input,
+                                "timestamp": datetime.now(timezone.utc).isoformat(),
+                            })
+                            raise HITLPause(
+                                approval_id=_approval_id,
+                                tool_name=call["name"],
+                                tool_input=tool_input,
+                            )
+
                         tool_t0 = time.monotonic()
                         await self._push({
                             "type": "tool_started",

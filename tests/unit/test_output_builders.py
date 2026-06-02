@@ -65,6 +65,9 @@ class _FakeToolRegistry:
     def list_for_role(self, role: str) -> list[Any]:
         return []
 
+    def filter_for_user_role(self, user_role: str, tools: list[Any]) -> list[Any]:
+        return tools
+
     def get(self, name: str) -> Any | None:
         return None
 
@@ -289,6 +292,9 @@ async def test_simulation_optimizer_agent_returns_candidates() -> None:
     class _OptimizeToolRegistry:
         def list_for_role(self, role: str) -> list[Any]:
             return [_OptimizeTool()]
+
+        def filter_for_user_role(self, user_role: str, tools: list[Any]) -> list[Any]:
+            return tools
 
         def get(self, name: str) -> Any | None:
             if name == "optimize_replenishment":

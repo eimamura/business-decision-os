@@ -3,7 +3,7 @@ from __future__ import annotations
 import hashlib
 import logging
 import time
-from typing import Any
+from typing import Any, Literal
 
 from packages.agent.context_sanitizer import sanitize_sql_results
 from packages.agent.llm import LLMClient, LLMMessage
@@ -131,6 +131,7 @@ class NlQueryTool:
         "Generates and executes a read-only SQL query."
     )
     requires_approval = False
+    safety_level: Literal["read_only", "write", "hitl"] = "read_only"
     input_schema: dict[str, Any] = {
         "type": "object",
         "properties": {"question": {"type": "string"}},

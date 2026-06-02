@@ -95,6 +95,7 @@ class EvaluatorTool:
     name = "evaluate_candidates"
     description = "Score each candidate plan against all 8 KPIs independently"
     requires_approval = False
+    safety_level: Literal["read_only", "write", "hitl"] = "read_only"
     input_schema: dict[str, Any] = {
         "type": "object",
         "properties": {

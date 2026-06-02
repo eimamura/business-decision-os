@@ -199,11 +199,17 @@ def test_post_decision_200_for_approver(api_client: TestClient) -> None:
 
 
 def test_post_approval_creates_201(api_client: TestClient) -> None:
-    response = api_client.post(
-        "/api/v1/approvals",
-        json={"session_id": str(uuid4())},
-        headers={"X-Dev-User": "dev-user"},
-    )
+    from unittest.mock import AsyncMock, patch
+    session_id = str(uuid4())
+    mock_record: dict = {"id": str(uuid4()), "session_id": session_id, "status": "pending", "actor": "dev-user"}
+    with patch("apps.api.routers.approvals._approvals_repo") as mock_repo:
+        mock_repo.create = AsyncMock(return_value=mock_record)
+        mock_repo.create.__aenter__ = AsyncMock(return_value=mock_record)
+        response = api_client.post(
+            "/api/v1/approvals",
+            json={"session_id": session_id},
+            headers={"X-Dev-User": "dev-user"},
+        )
     assert response.status_code == 201
 
 

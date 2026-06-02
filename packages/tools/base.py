@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Protocol
+from typing import Any, Literal, Protocol
 from uuid import UUID
 
 from pydantic import BaseModel
@@ -35,6 +35,7 @@ class ToolContext(BaseModel):
     specialist_role: SpecialistRole
     actor: str
     correlation_id: UUID
+    user_role: str = "analyst"
 
 
 class ToolResult(BaseModel):
@@ -48,6 +49,7 @@ class Tool(Protocol):
     input_schema: dict[str, Any]
     output_schema: dict[str, Any]
     requires_approval: bool
+    safety_level: Literal["read_only", "write", "hitl"]
 
     async def handle(self, input: dict[str, Any], ctx: ToolContext) -> ToolResult: ...
 
@@ -69,3 +71,24 @@ class ToolRegistry:
         if not allowed:
             return []
         return [t for name, t in self._tools.items() if name in allowed]
+
+    def filter_for_user_role(self, user_role: str, tools: list[Tool]) -> list[Tool]:
+        """Layer 1: filter tools by the human user's role.
+
+        - ``"analyst"``  → read_only only
+        - ``"manager"``  → read_only + hitl
+        - ``"admin"``    → all tools (no filter)
+        - anything else  → same as ``"analyst"`` (safe default)
+        """
+        if user_role == "admin":
+            return list(tools)
+        if user_role == "manager":
+            return [t for t in tools if t.safety_level in ("read_only", "hitl")]
+        # "analyst" and any unknown role
+        return [t for t in tools if t.safety_level == "read_only"]
+
+    def list_read_only(self) -> list[Tool]:
+        return [t for t in self._tools.values() if t.safety_level == "read_only"]
+
+    def list_hitl_tools(self) -> list[Tool]:
+        return [t for t in self._tools.values() if t.safety_level == "hitl"]

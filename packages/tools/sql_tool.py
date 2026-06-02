@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal
 
 from packages.agent.context_sanitizer import sanitize_sql_results
 from packages.persistence import execute_read_query
@@ -12,6 +12,7 @@ class SqlQueryTool:
     name = "sql_query"
     description = "Execute read-only SQL against operational tables"
     requires_approval = False
+    safety_level: Literal["read_only", "write", "hitl"] = "read_only"
     input_schema: dict[str, Any] = {
         "type": "object",
         "properties": {

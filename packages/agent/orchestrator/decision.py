@@ -15,6 +15,7 @@ from packages.agent.orchestrator.models import (
     SpecialistResult,
 )
 from packages.agent.orchestrator.parsing import _iso_now
+from packages.agent.orchestrator.result_builder import build_response
 from packages.knowledge.kpi import (
     KPI_SERVICE_LEVEL,
     KPI_TOTAL_SUPPLY_CHAIN_COST,
@@ -171,11 +172,6 @@ async def _build_decision_response(
     requires_approval = needs_approval(risk_level)
     await _write_decision_memory(orchestrator, session_id, goal, weights, weight_source, risk_level)
 
-    reply = (
-        f"Selected candidate {primary.id} for: {goal.text}\n\n"
-        f"Primary action: {primary.action}\n"
-        f"Risk level: {risk_level}"
-    )
     await orchestrator._push({
         "type": "response_ready",
         "mode": route.mode,
@@ -184,9 +180,29 @@ async def _build_decision_response(
         "timestamp": _iso_now(),
     })
     if requires_approval:
+        from packages.persistence.approvals_repo import ApprovalsRepository
+        _repo = ApprovalsRepository()
+        try:
+            existing = await _repo.get_pending_approval_for_session(session_id)
+        except Exception:
+            existing = None
+
+        if existing is None:
+            try:
+                created = await _repo.create({
+                    "session_id": session_id,
+                    "status": "pending",
+                    "actor": None,
+                })
+                approval_id_val: str = str(created.get("id", uuid4()))
+            except Exception:
+                approval_id_val = str(uuid4())
+        else:
+            approval_id_val = str(existing.get("id", uuid4()))
+
         await orchestrator._push({
             "type": "approval_requested",
-            "approval_id": str(uuid4()),
+            "approval_id": approval_id_val,
             "expires_at": (datetime.now(timezone.utc) + timedelta(days=1)).isoformat(),
             "risk_level": risk_level,
             "timestamp": _iso_now(),
@@ -201,17 +217,15 @@ async def _build_decision_response(
     orchestrator._schedule_status_update(
         session_id, "awaiting_approval" if requires_approval else "completed"
     )
-    return SessionResponse(
-        mode=route.mode,
-        reply=reply,
+    return build_response(
         intent=intent,
         route=route,
-        agent_results=agent_results,
         primary=primary,
         alternatives=alternatives,
         tradeoff=tradeoff,
         risk_level=risk_level,
         requires_approval=requires_approval,
+        agent_results=agent_results,
     )
 
 

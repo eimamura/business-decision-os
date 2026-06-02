@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal
 
 from packages.persistence.catalog_repo import list_tables_with_counts
 from packages.tools.base import ToolContext, ToolResult
@@ -11,6 +11,7 @@ class DataCatalogSearchTool:
     name = "data_catalog_search"
     description = "List available operational tables and their row counts"
     requires_approval = False
+    safety_level: Literal["read_only", "write", "hitl"] = "read_only"
     input_schema: dict[str, Any] = {
         "type": "object",
         "properties": {

@@ -92,9 +92,12 @@ async def test_audit_log_hash_chain_write_raises():
 
 
 @pytest.mark.asyncio
-async def test_approvals_repo_raises():
+async def test_approvals_repo_raises(monkeypatch: pytest.MonkeyPatch) -> None:
+    import packages.persistence.db as _db
+    monkeypatch.delenv("DATABASE_URL", raising=False)
+    _db._pool = None
     repo = ApprovalsRepository()
-    with pytest.raises(NotImplementedError):
+    with pytest.raises(RuntimeError, match="DATABASE_URL not set"):
         await repo.get(__import__("uuid").uuid4())
 
 

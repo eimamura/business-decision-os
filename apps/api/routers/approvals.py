@@ -70,7 +70,7 @@ async def post_decision(
 
     _valid: set[str] = {"pending", "approved", "rejected", "needs_revision", "expired"}
     raw_status = record.get("status", "pending") if isinstance(record, dict) else "pending"
-    current_status: ApprovalStatus = raw_status if raw_status in _valid else "pending"  # type: ignore[assignment]
+    current_status: ApprovalStatus = raw_status if raw_status in _valid else "pending"
     try:
         ApprovalTransition(from_status=current_status, to_status=body.decision)
     except ValueError as exc:
@@ -89,6 +89,25 @@ async def post_decision(
             status_code=200,
             content={"approval_id": str(approval_id), "status": body.decision},
         )
+
+    if body.decision == "approved" and isinstance(updated, dict):
+        session_id_str = str(updated.get("session_id", ""))
+        if session_id_str:
+            try:
+                from packages.persistence.sessions_repo import DecisionSessionRepository
+                await DecisionSessionRepository().update_status(session_id_str, "completed")
+            except Exception:
+                pass  # non-blocking: session status is best-effort here
+
+    elif body.decision == "rejected" and isinstance(updated, dict):
+        session_id_str = str(updated.get("session_id", ""))
+        if session_id_str:
+            try:
+                from packages.persistence.sessions_repo import DecisionSessionRepository
+                await DecisionSessionRepository().update_status(session_id_str, "failed")
+            except Exception:
+                pass
+
     return JSONResponse(status_code=200, content=updated)
 
 

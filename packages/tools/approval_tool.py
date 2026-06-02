@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
-from typing import Any
+from typing import Any, Literal
 from uuid import uuid4
 
 from packages.tools.base import ToolContext, ToolResult
@@ -13,6 +13,7 @@ class ApprovalTool:
     name = "request_approval"
     description = "Request human approval for a proposed action"
     requires_approval = True
+    safety_level: Literal["read_only", "write", "hitl"] = "hitl"
     input_schema: dict[str, Any] = {
         "type": "object",
         "properties": {
