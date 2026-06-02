@@ -23,6 +23,7 @@ from apps.api.routers import (  # noqa: E402
     audit,
     decisions,
     health,
+    jobs,
     kpi,
     notifications,
     policies,
@@ -107,6 +108,7 @@ async def debug_info() -> dict[str, object]:
 app.include_router(health.router)
 app.include_router(admin.router)
 app.include_router(sessions.router)
+app.include_router(jobs.router)
 app.include_router(decisions.router)
 app.include_router(recommendations.router)
 app.include_router(approvals.router)

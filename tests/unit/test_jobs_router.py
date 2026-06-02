@@ -1,0 +1,260 @@
+"""Unit tests for the jobs router (T-025).
+
+All repository calls are replaced with AsyncMock so no real DB is needed.
+"""
+
+from __future__ import annotations
+
+from datetime import datetime, timezone
+from unittest.mock import AsyncMock, patch
+from uuid import UUID, uuid4
+
+import pytest
+from httpx import ASGITransport, AsyncClient
+
+from apps.api.main import app
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+_NOW = datetime(2026, 6, 2, 12, 0, 0, tzinfo=timezone.utc)
+
+
+def _make_job(
+    job_id: UUID | None = None,
+    session_id: UUID | None = None,
+    status: str = "completed",
+    job_type: str = "forecast",
+) -> dict:
+    return {
+        "id": job_id or uuid4(),
+        "session_id": session_id or uuid4(),
+        "status": status,
+        "job_type": job_type,
+        "created_at": _NOW,
+        "completed_at": _NOW,
+    }
+
+
+def _make_file(job_id: UUID, file_id: UUID | None = None) -> dict:
+    return {
+        "id": file_id or uuid4(),
+        "job_id": job_id,
+        "file_name": "report.csv",
+        "file_size_bytes": 1024,
+        "mime_type": "text/csv",
+        "download_url": "https://example.com/report.csv",
+        "created_at": _NOW,
+    }
+
+
+# ---------------------------------------------------------------------------
+# GET /api/v1/jobs — list jobs
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_list_jobs_returns_items_and_no_cursor_when_under_limit() -> None:
+    job = _make_job()
+    file = _make_file(job["id"])
+
+    with (
+        patch(
+            "apps.api.routers.jobs._jobs_repo.list_jobs",
+            new_callable=AsyncMock,
+            return_value=[job],
+        ),
+        patch(
+            "apps.api.routers.jobs._jobs_repo.list_files",
+            new_callable=AsyncMock,
+            return_value=[file],
+        ),
+    ):
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test"
+        ) as client:
+            resp = await client.get("/api/v1/jobs?limit=20")
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert len(data["items"]) == 1
+    assert data["next_cursor"] is None
+
+
+@pytest.mark.asyncio
+async def test_list_jobs_returns_cursor_when_page_is_full() -> None:
+    """When the page is exactly *limit* items long, next_cursor equals the last item id."""
+    limit = 2
+    jobs = [_make_job() for _ in range(limit)]
+
+    with (
+        patch(
+            "apps.api.routers.jobs._jobs_repo.list_jobs",
+            new_callable=AsyncMock,
+            return_value=jobs,
+        ),
+        patch(
+            "apps.api.routers.jobs._jobs_repo.list_files",
+            new_callable=AsyncMock,
+            return_value=[],
+        ),
+    ):
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test"
+        ) as client:
+            resp = await client.get(f"/api/v1/jobs?limit={limit}")
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["next_cursor"] == str(jobs[-1]["id"])
+
+
+@pytest.mark.asyncio
+async def test_list_jobs_second_page_cursor_is_last_item_of_first_page() -> None:
+    """Verify that the cursor returned on page 1 equals the id of the last item."""
+    limit = 3
+    jobs = [_make_job() for _ in range(limit)]
+
+    with (
+        patch(
+            "apps.api.routers.jobs._jobs_repo.list_jobs",
+            new_callable=AsyncMock,
+            return_value=jobs,
+        ),
+        patch(
+            "apps.api.routers.jobs._jobs_repo.list_files",
+            new_callable=AsyncMock,
+            return_value=[],
+        ),
+    ):
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test"
+        ) as client:
+            resp = await client.get(f"/api/v1/jobs?limit={limit}")
+
+    data = resp.json()
+    assert data["next_cursor"] == str(jobs[2]["id"])
+
+
+# ---------------------------------------------------------------------------
+# GET /api/v1/jobs/{job_id} — single job
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_get_job_returns_job_with_files() -> None:
+    job = _make_job()
+    file = _make_file(job["id"])
+
+    with (
+        patch(
+            "apps.api.routers.jobs._jobs_repo.get_job",
+            new_callable=AsyncMock,
+            return_value=job,
+        ),
+        patch(
+            "apps.api.routers.jobs._jobs_repo.list_files",
+            new_callable=AsyncMock,
+            return_value=[file],
+        ),
+    ):
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test"
+        ) as client:
+            resp = await client.get(f"/api/v1/jobs/{job['id']}")
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["id"] == str(job["id"])
+    assert len(data["generated_files"]) == 1
+    assert data["generated_files"][0]["file_name"] == "report.csv"
+
+
+@pytest.mark.asyncio
+async def test_get_job_404_on_unknown_id() -> None:
+    missing_id = uuid4()
+
+    with patch(
+        "apps.api.routers.jobs._jobs_repo.get_job",
+        new_callable=AsyncMock,
+        return_value=None,
+    ):
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test"
+        ) as client:
+            resp = await client.get(f"/api/v1/jobs/{missing_id}")
+
+    assert resp.status_code == 404
+    assert "not found" in resp.json()["detail"].lower()
+
+
+# ---------------------------------------------------------------------------
+# GET /api/v1/files — flat file list
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_list_files_all_files_linked_to_valid_job_ids() -> None:
+    job_ids = [uuid4(), uuid4()]
+    files = [
+        _make_file(job_ids[0]),
+        _make_file(job_ids[0]),
+        _make_file(job_ids[1]),
+    ]
+
+    with patch(
+        "apps.api.routers.jobs._jobs_repo.list_all_files",
+        new_callable=AsyncMock,
+        return_value=files,
+    ):
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test"
+        ) as client:
+            resp = await client.get("/api/v1/files?limit=20")
+
+    assert resp.status_code == 200
+    data = resp.json()
+    returned_job_ids = {item["job_id"] for item in data["items"]}
+    assert returned_job_ids == {str(jid) for jid in job_ids}
+
+
+@pytest.mark.asyncio
+async def test_list_files_returns_no_cursor_when_under_limit() -> None:
+    job_id = uuid4()
+    files = [_make_file(job_id)]
+
+    with patch(
+        "apps.api.routers.jobs._jobs_repo.list_all_files",
+        new_callable=AsyncMock,
+        return_value=files,
+    ):
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test"
+        ) as client:
+            resp = await client.get("/api/v1/files?limit=20")
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["next_cursor"] is None
+
+
+@pytest.mark.asyncio
+async def test_list_files_returns_cursor_when_page_is_full() -> None:
+    limit = 2
+    job_id = uuid4()
+    files = [_make_file(job_id) for _ in range(limit)]
+
+    with patch(
+        "apps.api.routers.jobs._jobs_repo.list_all_files",
+        new_callable=AsyncMock,
+        return_value=files,
+    ):
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test"
+        ) as client:
+            resp = await client.get(f"/api/v1/files?limit={limit}")
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["next_cursor"] == str(files[-1]["id"])
