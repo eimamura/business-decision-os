@@ -12,10 +12,21 @@ from opentelemetry.sdk.trace.export import BatchSpanProcessor
 
 def configure_logging() -> None:
     import logging
+
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s %(levelname)s %(name)s %(message)s",
     )
+
+    is_development = os.environ.get("ENV", "production").lower() == "development"
+
+    # Choose renderer based on environment: human-readable in dev, JSON in all other envs
+    renderer: structlog.types.Processor = (
+        structlog.dev.ConsoleRenderer()
+        if is_development
+        else structlog.processors.JSONRenderer()
+    )
+
     structlog.configure(
         processors=[
             structlog.stdlib.filter_by_level,
@@ -26,7 +37,7 @@ def configure_logging() -> None:
             structlog.processors.StackInfoRenderer(),
             structlog.processors.format_exc_info,
             structlog.processors.UnicodeDecoder(),
-            structlog.processors.JSONRenderer(),
+            renderer,
         ],
         wrapper_class=structlog.stdlib.BoundLogger,
         context_class=dict,

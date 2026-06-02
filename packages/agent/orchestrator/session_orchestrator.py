@@ -2,9 +2,10 @@ from __future__ import annotations
 
 import asyncio
 import json
-import logging
 from typing import Any
 from uuid import UUID
+
+import structlog
 
 from packages.agent.orchestrator.clarification import (
     build_clarification_event,
@@ -31,7 +32,7 @@ from packages.agent.orchestrator.runtime import (
 )
 from packages.persistence.sessions_repo import DecisionSessionRepository
 
-_log = logging.getLogger(__name__)
+_log = structlog.get_logger(__name__)
 
 
 class SessionOrchestrator:
@@ -69,7 +70,10 @@ class SessionOrchestrator:
                 await DecisionSessionRepository().update_status(str(session_id), status)
             except Exception as exc:
                 _log.warning(
-                    "session status update to %r failed for %s: %s", status, session_id, exc
+                    "session status update failed",
+                    target_status=status,
+                    session_id=str(session_id),
+                    error=str(exc),
                 )
 
         asyncio.create_task(_persist())

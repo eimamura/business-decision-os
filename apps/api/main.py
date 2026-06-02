@@ -35,7 +35,18 @@ from apps.api.routers import (  # noqa: E402
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     from packages.tools.schema_context import load_schema_context
+
     await load_schema_context()
+
+    # MLflow tracing is optional: only activated when MLFLOW_TRACKING_URI is set.
+    # Missing URI is the approved silent-skip case for this codebase (optional observability).
+    mlflow_uri = os.environ.get("MLFLOW_TRACKING_URI")
+    if mlflow_uri:
+        from apps.api.tracing import setup_mlflow_tracing
+
+        experiment_name = os.environ.get("MLFLOW_EXPERIMENT_NAME", "business-decision-os")
+        setup_mlflow_tracing(mlflow_uri, experiment_name)
+
     yield
 
 

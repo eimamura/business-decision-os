@@ -1,18 +1,19 @@
 from __future__ import annotations
 
 import json
-import logging
 import re
 import time
 from datetime import datetime, timezone
 from decimal import Decimal
 from typing import TYPE_CHECKING, Any, Callable
 
+import structlog
+
 if TYPE_CHECKING:
     from packages.agent.orchestrator import SpecialistResult, SpecialistTask
     from packages.tools.base import ToolContext
 
-_log = logging.getLogger(__name__)
+_log = structlog.get_logger(__name__)
 
 _MAX_ITERATIONS = 10
 
@@ -112,7 +113,7 @@ class AgentRuntime:
             LLMMessage(role="user", content=verifier_content),
         ]
 
-        _log.info("AgentRuntime %s: running verify_findings", self.role)
+        _log.info("running verify_findings", agent_role=self.role)
         try:
             response = await self._llm_client.complete(
                 messages=verifier_messages,
@@ -124,13 +125,13 @@ class AgentRuntime:
             )
         except Exception:
             _log.exception(
-                "AgentRuntime %s: verify_findings LLM call failed; defaulting to pass",
-                self.role,
+                "verify_findings LLM call failed; defaulting to pass",
+                agent_role=self.role,
             )
             return "pass"
 
         status = _parse_verifier_status(response.text)
-        _log.info("AgentRuntime %s: verify_findings status=%s", self.role, status)
+        _log.info("verify_findings complete", agent_role=self.role, verify_status=status)
         return status
 
     async def run(
@@ -201,9 +202,9 @@ class AgentRuntime:
 
             for _ in range(_iteration_limit):
                 _log.info(
-                    "Specialist %s calling LLM (model=%s)",
-                    self.role,
-                    getattr(self._llm_client, "_model", "?"),
+                    "specialist calling LLM",
+                    agent_role=self.role,
+                    model=getattr(self._llm_client, "_model", "?"),
                 )
                 response = await self._llm_client.complete(
                     messages=messages,
@@ -217,8 +218,11 @@ class AgentRuntime:
                 _total_output_tokens += response.usage.output_tokens
                 _total_cost_usd += response.usage.total_cost_usd
                 _log.info(
-                    "Specialist %s LLM response: finish_reason=%s tool_calls=%d model=%s",
-                    self.role, response.finish_reason, len(response.tool_calls), response.model,
+                    "specialist LLM response received",
+                    agent_role=self.role,
+                    finish_reason=response.finish_reason,
+                    tool_call_count=len(response.tool_calls),
+                    model=response.model,
                 )
 
                 if not response.tool_calls or response.finish_reason == "stop":
@@ -345,8 +349,8 @@ class AgentRuntime:
         if verify_status == "needs_revision" and not _verify_findings_done:
             _verify_findings_done = True
             _log.info(
-                "AgentRuntime %s: verify_findings=needs_revision; retrying tool loop once",
-                self.role,
+                "verify_findings=needs_revision; retrying tool loop once",
+                agent_role=self.role,
             )
             # Re-append a user message asking the agent to revise
             messages.append(
