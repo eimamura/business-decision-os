@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import os
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
@@ -32,9 +33,27 @@ from apps.api.routers import (  # noqa: E402
 )
 
 
+class _HealthCheckFilter(logging.Filter):
+    """Drop uvicorn access-log records for health-check endpoints.
+
+    Only active in development (``ENV=development``).  Prevents repeated
+    ``GET /health`` lines from drowning out real application logs during
+    local development while leaving production logs untouched.
+    """
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        msg = record.getMessage()
+        if "GET /health" in msg or "GET /api/v1/health" in msg:
+            return False
+        return True
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     from packages.tools.schema_context import load_schema_context
+
+    if os.environ.get("ENV") == "development":
+        logging.getLogger("uvicorn.access").addFilter(_HealthCheckFilter())
 
     await load_schema_context()
 
