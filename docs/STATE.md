@@ -11,12 +11,15 @@ Orchestrator execution state. Written only by bdos-orchestrator.
 | Domain Integrity (T-001 – T-011) | 2026-06-02 |
 | Access Control & HITL Foundation (T-012 – T-019, T-026) | 2026-06-02 |
 | P3 — Observability & UX (T-020 – T-025, T-027 – T-029) | 2026-06-02 |
+| P4 — Job Execution & HITL Flow (T-030 – T-039) | 2026-06-02 |
+| P5 — Test Infrastructure & Cost Reduction (T-040 – T-045) | 2026-06-02 |
+| P6 — Chat UI Stability (T-046 – T-054) | 2026-06-02 |
 
 ---
 
 ## Active Phase
 
-None. P3 — Observability & UX phase complete (2026-06-02).
+None — all planned phases complete.
 
 ---
 
@@ -76,11 +79,11 @@ None.
 
 ## Last Completed Batch
 
-P3 Batch 2 complete (2026-06-02): T-025, T-028, T-029 Done. All P3 tasks complete.
+P4 Batch 5 complete (2026-06-02): T-036, T-038, T-039 Done. All P4 tasks complete.
 
 ## Last Validation
 
-2026-06-02: make lint → exit 0, make typecheck → 136 files no issues, uv run pytest tests/unit/ → 430 passed exit 0.
+2026-06-02: uv run pytest tests/unit/ (excl. 2 pre-existing failures) → 457 passed. npx tsc --noEmit -p apps/web/tsconfig.json → exit 0. All P5–P6 tasks complete.
 
 ## Blockers
 

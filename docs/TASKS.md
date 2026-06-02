@@ -595,7 +595,7 @@ effectiveness (T-008) is measurable.
 
 ### Batch P5-B2 (after P5-B1 — T-044 and T-045 run in parallel)
 
-#### T-044: Implement HITL integration tests — **Not Started**
+#### T-044: Implement HITL integration tests — **Done**
 - **Files:**
   - `tests/integration/test_hitl_integration.py` — fill the 3 existing scaffold stubs
   - `tests/integration/test_job_hitl_flow.py` (new) — job-level dispatch → approve →
@@ -623,7 +623,7 @@ effectiveness (T-008) is measurable.
 - **Test:** All 5 tests pass with `docker compose up -d` + `uvicorn` running.
   Auto-skip when `localhost:8000` is unreachable.
 
-#### T-045: Add Playwright E2E spec for job approval card — **Not Started**
+#### T-045: Add Playwright E2E spec for job approval card — **Done**
 - **File:** `tests/e2e/playwright/job_approval.spec.ts` (new)
 - **Context:** `@playwright/test` is already in `apps/web/package.json`. The existing
   `tests/e2e/playwright/chat_flow.spec.ts` establishes the pattern (TypeScript, page
@@ -654,7 +654,7 @@ No public API changes — all fixes are in `apps/web/`.
 
 Six trivial-to-medium fixes with no dependencies on each other or on B2/B3.
 
-#### T-046: Fix SSE buffer split from `\n` to `\n\n` — **Not Started**
+#### T-046: Fix SSE buffer split from `\n` to `\n\n` — **Done**
 - **File:** `apps/web/lib/api.ts` — `streamSession()` (line ~170)
 - **Root cause:** `buffer.split("\n")` splits on every newline; the SSE standard uses
   `\n\n` (double newline) as the event boundary. Multi-line `data:` fields are
@@ -666,7 +666,7 @@ Six trivial-to-medium fixes with no dependencies on each other or on B2/B3.
 - **Test:** Unit (Vitest): feed a `ReadableStream` with a multi-line `data:` event
   split across two chunks; assert the parsed payload is complete and correct.
 
-#### T-047: Fix `creating` flag never reset on successful session creation — **Not Started**
+#### T-047: Fix `creating` flag never reset on successful session creation — **Done**
 - **File:** `apps/web/app/chat/layout.tsx` — `onNewSession` (line ~27)
 - **Root cause:** `setCreating(true)` is called but `setCreating(false)` is only
   called in the `catch` branch. When `router.push` succeeds and App Router keeps the
@@ -680,7 +680,7 @@ Six trivial-to-medium fixes with no dependencies on each other or on B2/B3.
 - **Test:** Vitest + React Testing Library: mock `createSession` to resolve; assert
   `creating` is `false` after `onNewSession` completes.
 
-#### T-048: Add `isLoadingMessages` to eliminate empty-state flash — **Not Started**
+#### T-048: Add `isLoadingMessages` to eliminate empty-state flash — **Done**
 - **Files:** `apps/web/app/chat/ChatStateContext.tsx`, `apps/web/app/chat/[sessionId]/page.tsx`
 - **Root cause:** `SessionState` has no loading flag. Between mount and `loadMessages`
   completing, `messages.length === 0` is true, causing the empty-state UI to flash
@@ -693,7 +693,7 @@ Six trivial-to-medium fixes with no dependencies on each other or on B2/B3.
 - **Test:** Vitest: `loadMessages` sets `isLoadingMessages: true` before fetch and
   `false` after; page renders skeleton while loading, messages after.
 
-#### T-049: Strengthen optimistic-delete rollback and surface errors — **Not Started**
+#### T-049: Strengthen optimistic-delete rollback and surface errors — **Done**
 - **File:** `apps/web/app/chat/layout.tsx` — `onDelete`, `onDeleteAll`
 - **Root cause:** Both functions do `setSessions(prev => prev.filter(...))` before the
   API call. On failure, `fetchSessions().then(setSessions).catch(() => undefined)` is
@@ -707,7 +707,7 @@ Six trivial-to-medium fixes with no dependencies on each other or on B2/B3.
 - **Test:** Mock `deleteSession` to return `false`; assert session list is restored to
   the pre-delete snapshot and the error message is visible.
 
-#### T-050: Remove redundant `fetchSession` call on chat page mount — **Not Started**
+#### T-050: Remove redundant `fetchSession` call on chat page mount — **Done**
 - **File:** `apps/web/app/chat/[sessionId]/page.tsx` — `useEffect` (line ~40)
 - **Root cause:** `fetchSession(sessionId)` is called on every session mount solely to
   redirect on 404. `loadMessages()` already fetches from the same session; a 404 there
@@ -719,7 +719,7 @@ Six trivial-to-medium fixes with no dependencies on each other or on B2/B3.
 - **Test:** Navigate to a non-existent session ID; assert redirect to `/chat` without
   a second fetch to `/api/v1/sessions/{id}`.
 
-#### T-051: Classify SSE errors by type for user-facing messages — **Not Started**
+#### T-051: Classify SSE errors by type for user-facing messages — **Done**
 - **File:** `apps/web/app/chat/ChatStateContext.tsx` — `sendMessage` catch block (line ~245)
 - **Root cause:** All errors map to the same string:
   `"Error contacting the API. Please check the backend is running."`
@@ -738,7 +738,7 @@ Six trivial-to-medium fixes with no dependencies on each other or on B2/B3.
 
 ### Batch P6-B2 (independent of B1 — run in parallel with B1)
 
-#### T-052: Memoize `onTitleGenerated` and fix `useEffect` exhaustive-deps — **Not Started**
+#### T-052: Memoize `onTitleGenerated` and fix `useEffect` exhaustive-deps — **Done**
 - **File:** `apps/web/app/chat/[sessionId]/page.tsx`
 - **Root cause (a):** `onTitleGenerated` at line ~31 is an inline arrow function — new
   reference every render. `useChat` includes it in `sendMessage`'s `useCallback` deps,
