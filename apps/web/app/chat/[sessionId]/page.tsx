@@ -9,8 +9,8 @@ import MessageBubble from "@/components/MessageBubble";
 import { useChat } from "@/hooks/useChat";
 import ChatSidebar from "@/components/ChatSidebar";
 import ToolScenarioBar from "@/components/ToolScenarioBar";
-import { fetchSessions, fetchSession, createSession, deleteSession } from "@/lib/api";
-import type { Session } from "@/types/chat";
+import { fetchSession } from "@/lib/api";
+import { useSessionsContext } from "@/app/chat/SessionsContext";
 
 interface ChatPageProps {
   params: { sessionId: string };
@@ -19,8 +19,7 @@ interface ChatPageProps {
 export default function ChatPage({ params }: ChatPageProps) {
   const { sessionId } = params;
   const router = useRouter();
-  const [sessions, setSessions] = useState<Session[]>([]);
-  const [creating, setCreating] = useState(false);
+  const { sessions, setSessions, creating, onNewSession, onDelete } = useSessionsContext();
   const [input, setInput] = useState("");
   const [showActivity, setShowActivity] = useState(true);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -43,10 +42,6 @@ export default function ChatPage({ params }: ChatPageProps) {
       })
       .catch(() => undefined);
 
-    fetchSessions()
-      .then(setSessions)
-      .catch(() => setSessions([]));
-
     loadMessages();
   }, [sessionId]);
 
@@ -65,25 +60,10 @@ export default function ChatPage({ params }: ChatPageProps) {
     return () => window.removeEventListener("keydown", handleKey);
   }, []);
 
-  async function handleDelete(deletedId: string) {
-    setSessions((prev) => prev.filter((s) => s.session_id !== deletedId));
-    const ok = await deleteSession(deletedId);
-    if (!ok) {
-      fetchSessions().then(setSessions).catch(() => undefined);
-      return;
-    }
+  async function handleDelete(deletedId: string): Promise<void> {
+    await onDelete(deletedId);
     if (deletedId === sessionId) {
       router.push("/chat");
-    }
-  }
-
-  async function handleNewSession() {
-    setCreating(true);
-    try {
-      const data = await createSession("New decision session");
-      router.push(`/chat/${data.session_id}`);
-    } catch {
-      setCreating(false);
     }
   }
 
@@ -99,10 +79,11 @@ export default function ChatPage({ params }: ChatPageProps) {
 
   return (
     <div className="flex h-screen bg-background dark:bg-[#070B14] overflow-hidden">
+      {/* ChatSidebar includes both nav links and sessions list. NavSidebar is NOT rendered here to avoid double sidebars. */}
       <ChatSidebar
         sessions={sessions}
         activeSessionId={sessionId}
-        onNewSession={handleNewSession}
+        onNewSession={onNewSession}
         creating={creating}
         onDelete={handleDelete}
       />
@@ -181,7 +162,7 @@ export default function ChatPage({ params }: ChatPageProps) {
                   onKeyDown={(e) => {
                     if (e.key === "Enter" && !e.shiftKey) {
                       e.preventDefault();
-                      handleSend();
+                      void handleSend();
                     }
                   }}
                   placeholder="Ask about forecast, inventory, OTIF, demand changes, or recommended actions..."
@@ -213,7 +194,7 @@ export default function ChatPage({ params }: ChatPageProps) {
                       <Mic size={15} />
                     </button>
                     <button
-                      onClick={handleSend}
+                      onClick={() => void handleSend()}
                       disabled={isSending || !input.trim()}
                       className="flex items-center gap-1.5 bg-indigo-600 text-white px-3 py-1.5 rounded-lg text-sm font-medium hover:bg-indigo-500 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
                     >
