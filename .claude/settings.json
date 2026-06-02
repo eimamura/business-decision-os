@@ -71,7 +71,15 @@
       "Bash(docker compose config*)",
       "Bash(docker exec *)",
       "Bash(docker image *)",
-      "Read(//tmp/**)"
+      "Read(//tmp/**)",
+      "Bash(git status)",
+      "Bash(git diff *)",
+      "Bash(git log *)",
+      "Bash(make test)",
+      "Bash(make lint)",
+      "Bash(make typecheck)",
+      "Bash(curl -s http://localhost:8002/healthz)",
+      "Bash(curl -s http://localhost:8002/readyz)"
     ],
     "deny": [
       "Bash(find * -delete *)",
