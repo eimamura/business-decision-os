@@ -8,7 +8,7 @@ Own the test suite, vcrpy cassettes, and code review. Assert schema conformance 
 
 - Write and maintain unit, integration, and E2E tests
 - Assert schema conformance for all stubbed components
-- Manage vcrpy cassettes in `data/fixtures/cassettes/`
+- Manage vcrpy cassettes in `tests/cassettes/`
 - Review code submitted by App Builder and Infra/DevOps
 - Verify phase completion before Orchestrator marks it Done
 
@@ -31,7 +31,7 @@ Own the test suite, vcrpy cassettes, and code review. Assert schema conformance 
 ## Outputs
 
 - Test files under `tests/unit/`, `tests/integration/`, `tests/e2e/`
-- vcrpy cassettes under `data/fixtures/cassettes/`
+- vcrpy cassettes under `tests/cassettes/`
 - Scenario fixtures under `data/fixtures/scenarios/`
 - Code review findings (actionable, severity-labeled)
 - Phase completion sign-off (or list of blocking issues)
@@ -90,8 +90,14 @@ Required assertions per stub:
 | Simulation Tool | `SimulationOutput` shape: `kpi_scores: list[KpiScore]`, `horizon_days` |
 | Optimization Tool | `OptimizationOutput` shape: `candidates: list[Candidate]`, `len(candidates) >= 3` |
 | MemoryStore.search | Returns `[]` (empty list, correct type) |
+| ScenarioStubClaudeClient | `complete()` returns `LLMResponse`; `text` is JSON with shape determined by system prompt keywords: intent/category → `{"category", "confidence", "rationale", "goal_text"}`; route/primary_role → `{"mode", "primary_role", "rationale"}`; verify/findings → `{"status", "rationale"}`; default → plain string. Do NOT assert specific field values. |
 
 ## Per-Phase Test Focus
+
+> **Numbering note:** The "Phase" column below uses the 0–9 domain capability deployment scale
+> (future capability milestones). This is distinct from the `P0`–`P8` implementation priority
+> labels used in `docs/TASKS.md` (which track completed work batches). Do not conflate them:
+> a test task filed under `P7` in TASKS.md does not correspond to "Phase 7" in this table.
 
 | Phase | Test/Review Work |
 |---|---|
@@ -145,13 +151,14 @@ After App Builder or Infra/DevOps commits:
 - [ ] `audit_log` hash chain integrity intact
 - [ ] No hardcoded secrets
 - [ ] `temperature=0` in all LLM call sites
+- [ ] Unit tests make no real network or API calls (enforced by `tests/unit/conftest.py` autouse network guard; any new unit test bypassing it via monkeypatching must be explicitly justified)
 
 ## Cassette Discipline
 
-- Cassettes live in `data/fixtures/cassettes/` and are committed
+- Cassettes live in `tests/cassettes/` and are committed
 - Never delete a cassette to force a live call in a normal test run
 - Re-record trigger: Test/Review decides when a cassette is stale. A cassette is stale when: (a) the LLM prompt template changed, or (b) a Pydantic schema used in the recorded interaction changed
-- Re-record command: `RECORD_MODE=new_episodes uv run pytest <specific_test>`
+- Re-record command: `VCR_RECORD=new uv run pytest tests/integration/test_your_module.py::test_your_function -v`
 - Before committing a re-recorded cassette: review the diff — must contain no secrets, no raw DB rows, no PII. Post the diff summary in the docs/TASKS.md comment for the relevant task
 - Orchestrator does not approve individual cassette re-records; Test/Review owns this autonomously unless the diff reveals unexpected behavioral changes, in which case escalate to Orchestrator
 
