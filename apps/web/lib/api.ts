@@ -42,6 +42,16 @@ export async function deleteSession(sessionId: string): Promise<boolean> {
   return res.ok;
 }
 
+export async function deleteAllSessions(): Promise<number> {
+  const res = await fetch(`${API_BASE}/api/v1/admin/sessions`, {
+    method: "DELETE",
+    headers: DEV_HEADERS,
+  });
+  if (!res.ok) throw new Error(`deleteAllSessions: ${res.status}`);
+  const data = await res.json() as { deleted: number };
+  return data.deleted;
+}
+
 export async function fetchMessages(sessionId: string): Promise<ChatMessage[]> {
   const res = await fetch(`${API_BASE}/api/v1/sessions/${sessionId}/messages`, {
     headers: DEV_HEADERS,

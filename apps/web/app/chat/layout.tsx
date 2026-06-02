@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import type { ReactNode } from "react";
 import SessionsContext from "./SessionsContext";
-import { fetchSessions, createSession, deleteSession } from "@/lib/api";
+import { fetchSessions, createSession, deleteSession, deleteAllSessions } from "@/lib/api";
 import type { Session } from "@/types/chat";
 
 interface ChatLayoutProps {
@@ -41,8 +41,18 @@ export default function ChatLayout({ children }: ChatLayoutProps): React.ReactEl
     // Navigation after delete is handled by the page itself (it knows the active sessionId)
   }, []);
 
+  const onDeleteAll = useCallback(async (): Promise<void> => {
+    setSessions([]);
+    try {
+      await deleteAllSessions();
+    } catch {
+      fetchSessions().then(setSessions).catch(() => undefined);
+    }
+    router.push("/chat");
+  }, [router]);
+
   return (
-    <SessionsContext.Provider value={{ sessions, setSessions, creating, onNewSession, onDelete }}>
+    <SessionsContext.Provider value={{ sessions, setSessions, creating, onNewSession, onDelete, onDeleteAll }}>
       {children}
     </SessionsContext.Provider>
   );

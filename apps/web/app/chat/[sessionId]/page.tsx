@@ -19,7 +19,7 @@ interface ChatPageProps {
 export default function ChatPage({ params }: ChatPageProps) {
   const { sessionId } = params;
   const router = useRouter();
-  const { sessions, setSessions, creating, onNewSession, onDelete } = useSessionsContext();
+  const { sessions, setSessions, creating, onNewSession, onDelete, onDeleteAll } = useSessionsContext();
   const [input, setInput] = useState("");
   const [showActivity, setShowActivity] = useState(true);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -86,6 +86,7 @@ export default function ChatPage({ params }: ChatPageProps) {
         onNewSession={onNewSession}
         creating={creating}
         onDelete={handleDelete}
+        onDeleteAll={onDeleteAll}
       />
 
       <div className="flex-1 flex flex-col min-w-0">

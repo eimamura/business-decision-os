@@ -12,6 +12,7 @@ interface ChatSidebarProps {
   onNewSession: () => void;
   creating: boolean;
   onDelete: (sessionId: string) => void;
+  onDeleteAll?: () => void;
 }
 
 const NAV_ITEMS = [
@@ -116,9 +117,11 @@ export default function ChatSidebar({
   onNewSession,
   creating,
   onDelete,
+  onDeleteAll,
 }: ChatSidebarProps) {
   const pathname = usePathname();
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
+  const [confirmClearAll, setConfirmClearAll] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const profileRef = useRef<HTMLDivElement>(null);
 
@@ -177,17 +180,39 @@ export default function ChatSidebar({
       <div className="px-3 pt-2 border-t border-border dark:border-white/5">
         <div className="flex items-center justify-between px-1 mb-1.5">
           <p className="text-[10px] font-semibold uppercase tracking-widest text-muted dark:text-white/25">Sessions</p>
-          <button
-            onClick={onNewSession}
-            disabled={creating}
-            title="New Session"
-            className="flex items-center gap-1 text-[10px] text-indigo-500 dark:text-indigo-400/70 hover:text-indigo-600 dark:hover:text-indigo-300 disabled:opacity-40 transition-colors"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M12 5v14M5 12h14" />
-            </svg>
-            {creating ? "..." : "New"}
-          </button>
+          <div className="flex items-center gap-2">
+            {onDeleteAll && sessions.length > 0 && (
+              confirmClearAll ? (
+                <button
+                  onClick={() => { setConfirmClearAll(false); onDeleteAll(); }}
+                  title="Confirm clear all"
+                  className="text-[10px] text-red-500 dark:text-red-400 hover:text-red-600 dark:hover:text-red-300 transition-colors"
+                >
+                  Sure?
+                </button>
+              ) : (
+                <button
+                  onClick={() => setConfirmClearAll(true)}
+                  onBlur={() => setConfirmClearAll(false)}
+                  title="Clear all sessions"
+                  className="text-[10px] text-muted dark:text-white/25 hover:text-red-500 dark:hover:text-red-400 transition-colors"
+                >
+                  Clear all
+                </button>
+              )
+            )}
+            <button
+              onClick={onNewSession}
+              disabled={creating}
+              title="New Session"
+              className="flex items-center gap-1 text-[10px] text-indigo-500 dark:text-indigo-400/70 hover:text-indigo-600 dark:hover:text-indigo-300 disabled:opacity-40 transition-colors"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M12 5v14M5 12h14" />
+              </svg>
+              {creating ? "..." : "New"}
+            </button>
+          </div>
         </div>
       </div>
 

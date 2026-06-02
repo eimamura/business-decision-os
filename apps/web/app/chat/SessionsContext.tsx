@@ -9,6 +9,7 @@ export interface SessionsContextValue {
   creating: boolean;
   onNewSession: () => Promise<void>;
   onDelete: (sessionId: string) => Promise<void>;
+  onDeleteAll: () => Promise<void>;
 }
 
 const SessionsContext = createContext<SessionsContextValue | null>(null);
