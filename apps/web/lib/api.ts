@@ -166,20 +166,24 @@ export async function* streamSession(
       if (done) break;
       buffer += decoder.decode(value, { stream: true });
 
-      const lines = buffer.split("\n");
-      buffer = lines.pop() ?? "";
+      const blocks = buffer.split("\n\n");
+      buffer = blocks.pop() ?? "";
 
-      for (const line of lines) {
-        if (line.startsWith("data: ")) {
-          const data = line.slice(6).trim();
-          if (!data) continue;
-          try {
-            const parsed: unknown = JSON.parse(data);
-            const event = SseEventSchema.safeParse(parsed);
-            yield event.success ? event.data : invalidSseEvent();
-          } catch {
-            // skip malformed lines
-          }
+      for (const block of blocks) {
+        if (!block.trim()) continue;
+        // Collect all data: lines from this block and join them
+        const dataLines = block
+          .split("\n")
+          .filter((line) => line.startsWith("data: "))
+          .map((line) => line.slice(6));
+        if (dataLines.length === 0) continue;
+        const data = dataLines.join("");
+        try {
+          const parsed: unknown = JSON.parse(data);
+          const event = SseEventSchema.safeParse(parsed);
+          yield event.success ? event.data : invalidSseEvent();
+        } catch {
+          // skip malformed blocks
         }
       }
     }

@@ -9,7 +9,7 @@ import MessageBubble from "@/components/MessageBubble";
 import { useChat } from "@/hooks/useChat";
 import ChatSidebar from "@/components/ChatSidebar";
 import ToolScenarioBar from "@/components/ToolScenarioBar";
-import { fetchSession } from "@/lib/api";
+import ToolScenarioModal from "@/components/ToolScenarioModal";
 import { useSessionsContext } from "@/app/chat/SessionsContext";
 
 interface ChatPageProps {
@@ -22,28 +22,28 @@ export default function ChatPage({ params }: ChatPageProps) {
   const { sessions, setSessions, creating, onNewSession, onDelete, onDeleteAll } = useSessionsContext();
   const [input, setInput] = useState("");
   const [showActivity, setShowActivity] = useState(true);
+  const [scenarioModalOpen, setScenarioModalOpen] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  const { messages, isSending, usage, loadMessages, sendMessage, submitFeedback } = useChat(
-    sessionId,
-    (title) => {
+  const onTitleGenerated = useCallback(
+    (title: string) => {
       setSessions((prev) =>
         prev.map((s) => (s.session_id === sessionId ? { ...s, title } : s)),
       );
     },
+    [sessionId, setSessions],
+  );
+
+  const { messages, isSending, usage, isLoadingMessages, loadMessages, sendMessage, submitFeedback } = useChat(
+    sessionId,
+    onTitleGenerated,
   );
 
   const activeSession = sessions.find((s) => s.session_id === sessionId);
 
   useEffect(() => {
-    fetchSession(sessionId)
-      .then((session) => {
-        if (session === null) router.replace("/chat");
-      })
-      .catch(() => undefined);
-
-    loadMessages();
-  }, [sessionId]);
+    void loadMessages();
+  }, [sessionId, loadMessages]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -75,7 +75,14 @@ export default function ChatPage({ params }: ChatPageProps) {
     await sendMessage(text);
   }, [input, isSending, sendMessage]);
 
-  const isEmpty = messages.length === 0;
+  const handleScenarioApply = useCallback(async (prompt: string) => {
+    if (isSending) return;
+    setInput("");
+    setShowActivity(true);
+    await sendMessage(prompt);
+  }, [isSending, sendMessage]);
+
+  const isEmpty = !isLoadingMessages && messages.length === 0;
 
   return (
     <div className="flex h-screen bg-background dark:bg-[#070B14] overflow-hidden">
@@ -116,7 +123,17 @@ export default function ChatPage({ params }: ChatPageProps) {
         <main className="flex-1 flex min-h-0">
           <div className="flex-1 flex flex-col min-w-0">
             <div className="flex-1 overflow-y-auto px-6 py-5 min-h-0 custom-scrollbar">
-              {isEmpty ? (
+              {isLoadingMessages ? (
+                <div className="flex flex-col gap-4 pt-4">
+                  {[1, 2, 3].map((i) => (
+                    <div
+                      key={i}
+                      className="h-4 rounded bg-border dark:bg-white/8 animate-pulse"
+                      style={{ width: `${60 + i * 10}%` }}
+                    />
+                  ))}
+                </div>
+              ) : isEmpty ? (
                 <div className="flex flex-col h-full gap-6">
                   {/* Empty state header */}
                   <div className="flex items-start justify-between pt-2">
@@ -155,7 +172,10 @@ export default function ChatPage({ params }: ChatPageProps) {
               {/* Composer panel */}
               <div className="rounded-2xl bg-background dark:bg-gradient-to-b dark:from-white/[0.04] dark:to-[#070B14] border border-border dark:border-white/10 focus-within:border-indigo-500/40 focus-within:ring-1 focus-within:ring-indigo-500/15 transition-all">
                 {/* Tool scenario chips for demo / reproducibility */}
-                <ToolScenarioBar onSelect={(prompt) => setInput(prompt)} />
+                <ToolScenarioBar
+                  onSelect={(prompt) => setInput(prompt)}
+                  onOpenModal={() => setScenarioModalOpen(true)}
+                />
                 {/* Top row: textarea */}
                 <textarea
                   value={input}
@@ -221,6 +241,12 @@ export default function ChatPage({ params }: ChatPageProps) {
           )}
         </main>
       </div>
+
+      <ToolScenarioModal
+        open={scenarioModalOpen}
+        onClose={() => setScenarioModalOpen(false)}
+        onApply={(prompt) => void handleScenarioApply(prompt)}
+      />
     </div>
   );
 }

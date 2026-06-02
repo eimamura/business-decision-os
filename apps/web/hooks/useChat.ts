@@ -1,7 +1,7 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
-import { fetchMessages, fetchSessionUsage, postMessage, setFeedback, streamSession, updateSessionTitle } from "@/lib/api";
+import { useCallback } from "react";
+import { useChatStateContext } from "@/app/chat/ChatStateContext";
 import type { ChatMessage, SessionUsage } from "@/types/chat";
 
 export function useChat(
@@ -11,141 +11,42 @@ export function useChat(
   messages: ChatMessage[];
   isSending: boolean;
   usage: SessionUsage;
+  isLoadingMessages: boolean;
   loadMessages: () => Promise<void>;
   sendMessage: (text: string) => Promise<void>;
   submitFeedback: (messageId: string, feedback: 1 | -1) => Promise<void>;
 } {
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [isSending, setIsSending] = useState(false);
-  const [usage, setUsage] = useState<SessionUsage>({ inputTokens: 0, outputTokens: 0, costUsd: 0 });
-  const abortRef = useRef<AbortController | null>(null);
-  const titleSetRef = useRef(false);
+  const {
+    getSessionState,
+    loadMessages: ctxLoadMessages,
+    sendMessage: ctxSendMessage,
+    submitFeedback: ctxSubmitFeedback,
+  } = useChatStateContext();
 
-  const loadMessages = useCallback(async () => {
-    const fetched = await fetchMessages(sessionId);
-    setMessages(fetched);
-    if (fetched.length > 0) titleSetRef.current = true;
-  }, [sessionId]);
+  const state = getSessionState(sessionId);
 
-  const sendMessage = useCallback(async (text: string) => {
-    if (!text.trim() || isSending) return;
+  const loadMessages = useCallback(
+    () => ctxLoadMessages(sessionId),
+    [ctxLoadMessages, sessionId],
+  );
 
-    const userMsg: ChatMessage = {
-      id: crypto.randomUUID(),
-      role: "user",
-      content: text,
-      created_at: new Date().toISOString(),
-    };
+  const sendMessage = useCallback(
+    (text: string) => ctxSendMessage(sessionId, text, onTitleGenerated),
+    [ctxSendMessage, sessionId, onTitleGenerated],
+  );
 
-    const assistantId = crypto.randomUUID();
-    const assistantMsg: ChatMessage = {
-      id: assistantId,
-      role: "assistant",
-      content: "",
-      isStreaming: true,
-      created_at: new Date().toISOString(),
-    };
+  const submitFeedback = useCallback(
+    (messageId: string, feedback: 1 | -1) => ctxSubmitFeedback(sessionId, messageId, feedback),
+    [ctxSubmitFeedback, sessionId],
+  );
 
-    setMessages((prev) => [...prev, userMsg, assistantMsg]);
-    setIsSending(true);
-
-    try {
-      await postMessage(sessionId, text);
-
-      abortRef.current?.abort();
-      const controller = new AbortController();
-      abortRef.current = controller;
-
-      for await (const event of streamSession(sessionId, controller.signal)) {
-        if (event.type === "done") {
-          setMessages((prev) =>
-            prev.map((m) =>
-              m.id === assistantId
-                ? {
-                    ...m,
-                    content: event.reply ?? m.content,
-                    isStreaming: false,
-                  }
-                : m,
-            ),
-          );
-          fetchSessionUsage(sessionId).then(setUsage).catch(() => undefined);
-          if (!titleSetRef.current && onTitleGenerated) {
-            titleSetRef.current = true;
-            const titleText = text.slice(0, 60).trim();
-            updateSessionTitle(sessionId, titleText)
-              .then(() => onTitleGenerated(titleText))
-              .catch(() => undefined);
-          }
-          break;
-        }
-
-        if (
-          event.type === "tool_completed" &&
-          (event.tool_name === "sql_query" || event.tool_name === "nl_query") &&
-          event.executed_query
-        ) {
-          const sqlMsg: ChatMessage = {
-            id: crypto.randomUUID(),
-            role: "tool",
-            content: "",
-            toolName: event.tool_name,
-            sql: event.executed_query,
-            created_at: new Date().toISOString(),
-          };
-          setMessages((prev) => {
-            const idx = prev.findIndex((m) => m.id === assistantId);
-            if (idx === -1) return [...prev, sqlMsg];
-            return [...prev.slice(0, idx), sqlMsg, ...prev.slice(idx)];
-          });
-        }
-
-        if (event.type === "error") {
-          setMessages((prev) =>
-            prev.map((m) =>
-              m.id === assistantId
-                ? {
-                    ...m,
-                    content: event.message ?? "An error occurred during processing.",
-                    isError: true,
-                    isStreaming: false,
-                  }
-                : m,
-            ),
-          );
-          break;
-        }
-      }
-    } catch (err: unknown) {
-      if (err instanceof Error && err.name === "AbortError") return;
-      setMessages((prev) =>
-        prev.map((m) =>
-          m.id === assistantId
-            ? {
-                ...m,
-                content: "Error contacting the API. Please check the backend is running.",
-                isError: true,
-                isStreaming: false,
-              }
-            : m,
-        ),
-      );
-    } finally {
-      setIsSending(false);
-      setMessages((prev) =>
-        prev.map((m) =>
-          m.id === assistantId ? { ...m, isStreaming: false } : m,
-        ),
-      );
-    }
-  }, [sessionId, isSending]);
-
-  const submitFeedback = useCallback(async (messageId: string, feedback: 1 | -1) => {
-    setMessages((prev) =>
-      prev.map((m) => (m.messageId === messageId ? { ...m, feedback } : m)),
-    );
-    await setFeedback(sessionId, messageId, feedback);
-  }, [sessionId]);
-
-  return { messages, isSending, usage, loadMessages, sendMessage, submitFeedback };
+  return {
+    messages: state.messages,
+    isSending: state.isSending,
+    usage: state.usage,
+    isLoadingMessages: state.isLoadingMessages,
+    loadMessages,
+    sendMessage,
+    submitFeedback,
+  };
 }

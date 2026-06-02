@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { User, Trash2, ChevronUp, ChevronDown, Database, Settings } from "lucide-react";
 import { useState, useEffect, useRef } from "react";
 import type { Session } from "@/types/chat";
+import { useSessionsContext } from "@/app/chat/SessionsContext";
 
 interface ChatSidebarProps {
   sessions: Session[];
@@ -124,6 +125,7 @@ export default function ChatSidebar({
   const [confirmClearAll, setConfirmClearAll] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const profileRef = useRef<HTMLDivElement>(null);
+  const { deleteError } = useSessionsContext();
 
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
@@ -215,6 +217,12 @@ export default function ChatSidebar({
           </div>
         </div>
       </div>
+
+      {deleteError && (
+        <div className="mx-2 mb-2 px-3 py-2 text-xs text-red-400 dark:text-red-300 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800/30 rounded-md">
+          {deleteError}
+        </div>
+      )}
 
       <div className="flex-1 overflow-y-auto pb-2">
         {sessions.length === 0 && (
