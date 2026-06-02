@@ -250,6 +250,7 @@ class AgentRuntime:
 
                         # HITL intercept: pause execution and request human approval
                         if getattr(tool, "safety_level", None) == "hitl":
+                            from uuid import UUID as _UUID
                             from uuid import uuid4 as _uuid4
 
                             from packages.agent.orchestrator.hitl import HITLPause
@@ -266,12 +267,32 @@ class AgentRuntime:
                                 _approval_id = str(created.get("id", _uuid4()))
                             except Exception:
                                 _approval_id = str(_uuid4())
+
+                            _job_id: str | None = None
+                            _job_description: str = ""
+                            if call["name"] == "job_dispatch":
+                                from packages.persistence.jobs_repo import JobsRepository as _JobsRepo
+                                _jr = _JobsRepo()
+                                try:
+                                    _job = await _jr.create(
+                                        session_id=ctx.session_id,
+                                        job_type=tool_input.get("job_type", "unknown"),
+                                        params=tool_input.get("params", {}),
+                                        approval_id=_UUID(_approval_id),
+                                    )
+                                    _job_id = str(_job["id"])
+                                except Exception:
+                                    pass
+                                _job_description = tool_input.get("description", "")
+
                             await self._push({
                                 "type": "awaiting_approval",
                                 "session_id": str(ctx.session_id),
                                 "approval_id": _approval_id,
                                 "tool_name": call["name"],
                                 "tool_input": tool_input,
+                                "job_id": _job_id,
+                                "description": _job_description,
                                 "timestamp": datetime.now(timezone.utc).isoformat(),
                             })
                             raise HITLPause(

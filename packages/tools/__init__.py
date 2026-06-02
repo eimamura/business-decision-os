@@ -11,6 +11,7 @@ from packages.tools.data_catalog_search_tool import DataCatalogSearchTool
 from packages.tools.data_quality_checker_tool import DataQualityCheckerTool
 from packages.tools.evaluator_tool import EvaluatorTool
 from packages.tools.forecast_tool import ForecastTool
+from packages.tools.job_dispatch_tool import JobDispatchTool
 from packages.tools.nl_query_tool import NlQueryTool
 from packages.tools.optimizer_tool import OptimizerTool
 from packages.tools.simulation_tool import SimulationTool
@@ -29,6 +30,7 @@ __all__ = [
     "DataQualityCheckerTool",
     "EvaluatorTool",
     "ForecastTool",
+    "JobDispatchTool",
     "NlQueryTool",
     "OptimizerTool",
     "SimulationTool",
@@ -57,4 +59,5 @@ def create_tool_registry(
     registry.register(DataCatalogSearchTool())
     registry.register(TableSchemaReaderTool())
     registry.register(DataQualityCheckerTool())
+    registry.register(JobDispatchTool())
     return registry

@@ -240,6 +240,44 @@ class SessionOrchestrator:
         return result
 
     async def resume(self, session_id: UUID, approval_id: UUID) -> SessionResponse:
+        from packages.agent.orchestrator.result_builder import build_job_result_reply
+        from packages.persistence.jobs_repo import JobsRepository
+
+        try:
+            repo = JobsRepository()
+            job = await repo.get_by_approval_id(approval_id)
+            if job is not None and job.get("status") == "completed":
+                result = job.get("result_json") or {}
+                if isinstance(result, str):
+                    import json
+                    result = json.loads(result)
+                files = await repo.list_files(job["id"])
+                reply = build_job_result_reply(
+                    job_type=job["job_type"],
+                    result=result,
+                    files=files,
+                )
+                self._schedule_status_update(session_id, "completed")
+                return SessionResponse(
+                    mode="direct_chat",
+                    reply=reply,
+                    intent=SessionIntent(
+                        category="job_resume",
+                        confidence=1.0,
+                        rationale="job_resume",
+                        goal_text=None,
+                    ),
+                    route=AgentRoute(
+                        mode="direct_chat",
+                        agents=[],
+                        requires_planning=False,
+                        requires_dag=False,
+                        rationale="job_resume",
+                    ),
+                )
+        except Exception:
+            pass  # fall through to generic resume
+
         query = SessionUserQuery(
             text="Resume the approved decision.",
             metadata={"approval_id": str(approval_id)},

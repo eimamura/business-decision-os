@@ -101,6 +101,39 @@ export const AutoExecutedEventSchema = z.object({
   timestamp: z.string(),
 });
 
+export const AwaitingApprovalEventSchema = z.object({
+  type: z.literal("awaiting_approval"),
+  session_id: z.string(),
+  approval_id: z.string(),
+  tool_name: z.string(),
+  tool_input: z.record(z.unknown()),
+  job_id: z.string().nullable().optional(),
+  description: z.string(),
+  timestamp: z.string(),
+});
+
+export const JobCompletedEventSchema = z.object({
+  type: z.literal("job_completed"),
+  job_id: z.string(),
+  job_type: z.string(),
+  file_count: z.number().int(),
+  files: z.array(
+    z.object({
+      file_name: z.string(),
+      download_url: z.string(),
+    }),
+  ),
+  timestamp: z.string(),
+});
+
+export const JobFailedEventSchema = z.object({
+  type: z.literal("job_failed"),
+  job_id: z.string(),
+  job_type: z.string(),
+  error: z.string(),
+  timestamp: z.string(),
+});
+
 export const ErrorEventSchema = z.object({
   type: z.literal("error"),
   code: z.string(),
@@ -128,6 +161,9 @@ export const SseEventSchema = z.discriminatedUnion("type", [
   ResponseReadyEventSchema,
   ApprovalRequestedEventSchema,
   AutoExecutedEventSchema,
+  AwaitingApprovalEventSchema,
+  JobCompletedEventSchema,
+  JobFailedEventSchema,
   ErrorEventSchema,
   DoneEventSchema,
 ]);

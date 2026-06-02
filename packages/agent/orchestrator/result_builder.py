@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Any
+
 from packages.agent.orchestrator.models import (
     AgentRoute,
     SessionIntent,
@@ -41,3 +43,37 @@ def build_response(
         risk_level=risk_level,  # type: ignore[arg-type]
         requires_approval=requires_approval,
     )
+
+
+def build_job_result_reply(
+    job_type: str,
+    result: dict[str, Any] | None,
+    files: list[dict[str, Any]],
+) -> str:
+    """Build a chat reply string for a completed job.
+
+    Includes a one-line summary of the result and markdown links for each file.
+    """
+    summary_lines: list[str] = [f"Job `{job_type}` completed."]
+
+    if result:
+        # Include up to 3 top-level scalar fields from result as key: value
+        shown = 0
+        for k, v in result.items():
+            if shown >= 3:
+                break
+            if isinstance(v, (str, int, float, bool)):
+                summary_lines.append(f"- {k}: {v}")
+                shown += 1
+
+    if files:
+        summary_lines.append(f"\n{len(files)} file(s) generated:")
+        for f in files:
+            name = f.get("file_name", "file")
+            url = f.get("download_url", "")
+            if url:
+                summary_lines.append(f"- [{name}]({url})")
+            else:
+                summary_lines.append(f"- {name}")
+
+    return "\n".join(summary_lines)

@@ -8,12 +8,12 @@ from pydantic import BaseModel
 from packages.agent.base import SpecialistRole
 
 _ROLE_TOOL_ALLOWLIST: dict[str, list[str]] = {
-    "orchestrator": [],
+    "orchestrator": ["job_dispatch"],
     "data_engineer": [
         "sql_query", "nl_query", "data_catalog_search",
         "table_schema_reader", "data_quality_checker",
     ],
-    "simulation_optimizer": ["simulate_inventory", "optimize_replenishment"],
+    "simulation_optimizer": ["simulate_inventory", "optimize_replenishment", "job_dispatch"],
     "evaluator": ["evaluate_candidates", "write_audit_log"],
     "anomaly_detector": [
         "sql_query", "nl_query", "data_catalog_search",

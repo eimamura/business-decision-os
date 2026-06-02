@@ -119,6 +119,34 @@ class ApprovalRequestedEvent(BaseModel):
     timestamp: str
 
 
+class AwaitingApprovalEvent(BaseModel):
+    type: Literal["awaiting_approval"] = "awaiting_approval"
+    session_id: str
+    approval_id: str
+    tool_name: str
+    tool_input: dict[str, Any]
+    job_id: str | None = None
+    description: str
+    timestamp: str
+
+
+class JobCompletedEvent(BaseModel):
+    type: Literal["job_completed"] = "job_completed"
+    job_id: str
+    job_type: str
+    file_count: int
+    files: list[dict[str, Any]]
+    timestamp: str
+
+
+class JobFailedEvent(BaseModel):
+    type: Literal["job_failed"] = "job_failed"
+    job_id: str
+    job_type: str
+    error: str
+    timestamp: str
+
+
 class ErrorEvent(BaseModel):
     type: Literal["error"] = "error"
     step_id: str | None = None
@@ -150,6 +178,9 @@ SseEvent = Annotated[
         ResponseReadyEvent,
         ApprovalRequestedEvent,
         AutoExecutedEvent,
+        AwaitingApprovalEvent,
+        JobCompletedEvent,
+        JobFailedEvent,
         ErrorEvent,
         DoneEvent,
     ],

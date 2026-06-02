@@ -99,6 +99,24 @@ async def post_decision(
             except Exception:
                 pass  # non-blocking: session status is best-effort here
 
+        # Trigger job execution if this approval is linked to a job
+        try:
+            from packages.persistence.jobs_repo import JobsRepository as _JobsRepo
+            from packages.agent.job_executor import execute_job as _execute_job
+            import asyncio as _asyncio
+            _jr = _JobsRepo()
+            _job = await _jr.get_by_approval_id(approval_id)
+            if _job is not None:
+                _job_id_val = _job.get("id")
+                if _job_id_val is not None:
+                    _asyncio.create_task(
+                        _execute_job(
+                            UUID(_job_id_val) if not isinstance(_job_id_val, UUID) else _job_id_val
+                        )
+                    )
+        except Exception:
+            pass  # non-blocking: job dispatch failure must not fail the approval response
+
     elif body.decision == "rejected" and isinstance(updated, dict):
         session_id_str = str(updated.get("session_id", ""))
         if session_id_str:
@@ -107,6 +125,21 @@ async def post_decision(
                 await DecisionSessionRepository().update_status(session_id_str, "failed")
             except Exception:
                 pass
+
+        # Cancel linked job if this approval is rejected
+        try:
+            from packages.persistence.jobs_repo import JobsRepository as _JobsRepo
+            _jr = _JobsRepo()
+            _job = await _jr.get_by_approval_id(approval_id)
+            if _job is not None:
+                _job_id_val = _job.get("id")
+                if _job_id_val is not None:
+                    await _jr.update_status(
+                        UUID(_job_id_val) if not isinstance(_job_id_val, UUID) else _job_id_val,
+                        "cancelled",
+                    )
+        except Exception:
+            pass  # non-blocking: job cancellation failure must not fail the approval response
 
     return JSONResponse(status_code=200, content=updated)
 

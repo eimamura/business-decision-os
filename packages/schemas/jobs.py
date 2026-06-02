@@ -23,6 +23,8 @@ class JobResponse(BaseModel):
     job_type: str
     created_at: datetime
     completed_at: datetime | None
+    approval_id: UUID | None = None
+    result_json: dict[str, object] | None = None
     generated_files: list[JobFileResponse] = []
 
 

@@ -19,6 +19,19 @@ _jobs_repo = JobsRepository()
 
 
 def _to_job_response(job: dict[str, Any], files: list[dict[str, Any]]) -> JobResponse:
+    raw_result = job.get("result_json")
+    result_json: dict[str, object] | None = None
+    if isinstance(raw_result, dict):
+        result_json = raw_result
+    elif isinstance(raw_result, str):
+        import json as _json
+
+        try:
+            parsed = _json.loads(raw_result)
+            result_json = parsed if isinstance(parsed, dict) else None
+        except ValueError:
+            result_json = None
+
     return JobResponse(
         id=job["id"],
         session_id=job.get("session_id"),
@@ -26,6 +39,8 @@ def _to_job_response(job: dict[str, Any], files: list[dict[str, Any]]) -> JobRes
         job_type=job["job_type"],
         created_at=job["created_at"],
         completed_at=job.get("completed_at"),
+        approval_id=job.get("approval_id"),
+        result_json=result_json,
         generated_files=[JobFileResponse(**f) for f in files],
     )
 
@@ -50,10 +65,11 @@ def _to_file_response(f: dict[str, Any]) -> JobFileResponse:
 async def list_jobs(
     cursor: UUID | None = Query(default=None),
     limit: int = Query(default=20, ge=1, le=100),
+    job_status: str | None = Query(default=None, alias="status"),
 ) -> JobListResponse:
     """Return a cursor-paginated list of jobs with their generated files."""
     try:
-        rows = await _jobs_repo.list_jobs(cursor=cursor, limit=limit)
+        rows = await _jobs_repo.list_jobs(cursor=cursor, limit=limit, status=job_status)
     except RuntimeError as exc:
         if "DATABASE_URL" in str(exc):
             return JobListResponse(items=[], next_cursor=None)
