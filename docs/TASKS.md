@@ -863,36 +863,20 @@ P7-B2 tasks depend on P7-B1 (CI must be green before adding integration tests).
 - **Depends on:** P7-B1 (CI must be green before adding new integration coverage)
 - **Test:** This IS the test. Proves the full Memory Loop: write → embed → retrieve → influence.
 
-## P7 — Mock Mode for Cost-Free UI Testing
+## P8 — Mock Mode for Cost-Free UI Testing
 
 Goal: Introduce a `MOCK_LLM=true` env var that replaces the real Anthropic client with a
 schema-conforming stub, exposes mock status through the API, and renders a clear visual indicator
 in the UI. Developers can exercise the full UI/UX flow — chat, HITL approvals, job dispatch —
 without incurring any LLM API cost.
 
-### Batch P7-B1 (T-055 and T-058 independent — run in parallel)
+### Batch P8-B1 (T-059 and T-060 independent — run in parallel)
 
-#### T-055: Add `MOCK_LLM` env var to `create_llm_client()` — **Not Started**
-- **File:** `packages/agent/llm/__init__.py`, `.env.example`
-- **What:**
-  - In `create_llm_client()`: check `os.environ.get("MOCK_LLM", "").lower() == "true"` first.
-    When true, skip the `ANTHROPIC_API_KEY` check and return `ScenarioStubClaudeClient` (T-058).
-    When false (default), existing behaviour unchanged.
-  - Add to `.env.example`:
-    ```
-    # Set to true to disable real LLM calls — enables cost-free UI testing
-    # MOCK_LLM=true
-    ```
-  - Note: `MOCK_LLM=true` is an explicit opt-in, not a silent fallback.
-    The AGENTS.md prohibition applies to missing-config degradation, not intentional test overrides.
-- **Test:** Unit: `create_llm_client()` with `MOCK_LLM=true` returns `ScenarioStubClaudeClient`
-  without raising. `create_llm_client()` with `MOCK_LLM` unset still requires `ANTHROPIC_API_KEY`.
-
-#### T-058: Upgrade `StubClaudeClient` to `ScenarioStubClaudeClient` — **Not Started**
+#### T-059: Upgrade `StubClaudeClient` to `ScenarioStubClaudeClient` — **Done**
 - **File:** `packages/agent/llm/__init__.py`
 - **What:** Add `ScenarioStubClaudeClient` (keep `StubClaudeClient` as an alias for
-  backward compatibility with existing unit tests). `complete()` inspects the system message
-  content to detect the orchestrator call type and return a schema-conforming JSON stub:
+  backward compatibility with existing unit tests). `complete()` inspects system message
+  content to detect the orchestrator call type and return schema-conforming JSON:
   - System prompt contains `"category"` or `"intent"` → `SessionIntent`-shaped JSON:
     `{"category": "lookup", "confidence": 0.95, "rationale": "Mock mode", "goal_text": "<last user message>"}`
   - System prompt contains `"route"` or `"primary_role"` → `AgentRoute`-shaped JSON:
@@ -905,11 +889,28 @@ without incurring any LLM API cost.
 - **Test:** Unit per pattern: correct JSON returned for each detected system prompt type.
   Default case: `complete()` returns readable text; `stream()` yields one `text_delta` event.
 
+#### T-060: Add `MOCK_LLM` env var to `create_llm_client()` — **Done**
+- **File:** `packages/agent/llm/__init__.py`, `.env.example`
+- **What:**
+  - In `create_llm_client()`: check `os.environ.get("MOCK_LLM", "").lower() == "true"` first.
+    When true, skip the `ANTHROPIC_API_KEY` check and return `ScenarioStubClaudeClient` (T-059).
+    When false (default), existing behaviour unchanged.
+  - Add to `.env.example`:
+    ```
+    # Set to true to disable real LLM calls — enables cost-free UI testing
+    # MOCK_LLM=true
+    ```
+  - Note: `MOCK_LLM=true` is an explicit opt-in, not a silent fallback.
+    The AGENTS.md prohibition applies to missing-config degradation, not intentional test overrides.
+- **Depends on:** T-059 (`ScenarioStubClaudeClient` must exist)
+- **Test:** Unit: `create_llm_client()` with `MOCK_LLM=true` returns `ScenarioStubClaudeClient`
+  without raising. `create_llm_client()` with `MOCK_LLM` unset still requires `ANTHROPIC_API_KEY`.
+
 ---
 
-### Batch P7-B2 (after P7-B1 — T-056 and T-057 run in parallel)
+### Batch P8-B2 (after P8-B1 — T-061 and T-062 run in parallel)
 
-#### T-056: Add `GET /api/v1/status` endpoint — **Not Started**
+#### T-061: Add `GET /api/v1/status` endpoint — **Not Started**
 - **File:** `apps/api/routers/health.py` (extend existing health router)
 - **What:** Add `GET /api/v1/status` returning:
   ```json
@@ -919,10 +920,11 @@ without incurring any LLM API cost.
   - `environment` = `os.environ.get("ENV", "production")`
   - `version` = constant or read from package metadata
   - Add `response_model` Pydantic schema `AppStatus` to `health.py`.
+- **Depends on:** T-060 (`MOCK_LLM` env var must be wired before endpoint exposes it)
 - **Test:** Unit: endpoint returns `mock_mode: true` when `MOCK_LLM=true`; `false` otherwise.
   Both cases return HTTP 200.
 
-#### T-057: Add mock mode banner to UI — **Not Started**
+#### T-062: Add mock mode banner to UI — **Not Started**
 - **Files:** `apps/web/components/MockModeBanner.tsx` (new),
   `apps/web/app/layout.tsx` (root layout — add `<MockModeBanner />`)
 - **What:**
@@ -933,6 +935,6 @@ without incurring any LLM API cost.
   - Mount `<MockModeBanner />` in the root `app/layout.tsx` so it appears on every page.
   - No user toggle — mock mode is server-side only (controlled by `MOCK_LLM` env var).
   - Style: `position: sticky; top: 0; z-index: 50` amber/yellow Tailwind bar with an info icon.
-- **Depends on:** T-056 (`/api/v1/status` must exist)
+- **Depends on:** T-061 (`/api/v1/status` must exist)
 - **Test:** Vitest + React Testing Library: mock `fetch` to return `{ mock_mode: true }`;
   assert banner text visible. `mock_mode: false` → banner not rendered.

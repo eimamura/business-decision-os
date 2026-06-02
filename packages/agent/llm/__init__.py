@@ -201,6 +201,109 @@ class StubClaudeClient:
         return [[0.0] * 1536 for _ in texts]
 
 
+class ScenarioStubClaudeClient:
+    """Schema-conforming stub for cost-free UI and integration testing.
+
+    Inspects system message content to detect the orchestrator call type and
+    returns schema-conforming JSON responses.  Use this client when MOCK_LLM=true.
+    """
+
+    _model = "scenario-stub-v1"
+
+    def _collect_system_text(self, messages: list[LLMMessage]) -> str:
+        parts: list[str] = []
+        for msg in messages:
+            if msg.role != "system":
+                continue
+            if msg.content_blocks:
+                for block in msg.content_blocks:
+                    if isinstance(block, dict) and block.get("type") == "text":
+                        text = block.get("text", "")
+                        if text:
+                            parts.append(text)
+            elif msg.content:
+                parts.append(msg.content)
+        return " ".join(parts).lower()
+
+    async def complete(
+        self,
+        messages: list[LLMMessage],
+        tools: list[LLMToolSpec] | None = None,
+        temperature: float = 0.0,
+        max_tokens: int = 4096,
+        prompt_cache: bool = True,
+        agent_step_id: UUID | None = None,
+        specialist_role: str | None = None,
+    ) -> LLMResponse:
+        import json
+
+        system_text = self._collect_system_text(messages)
+
+        if "category" in system_text or "intent" in system_text:
+            response_text = json.dumps({
+                "category": "lookup",
+                "confidence": 0.95,
+                "rationale": "Mock mode",
+                "goal_text": "mock goal",
+            })
+        elif "route" in system_text or "primary_role" in system_text:
+            response_text = json.dumps({
+                "mode": "single_agent",
+                "primary_role": "data_engineer",
+                "rationale": "Mock stub",
+            })
+        elif "verify" in system_text or "findings" in system_text:
+            response_text = json.dumps({
+                "status": "pass",
+                "rationale": "Mock mode — no verification performed",
+            })
+        else:
+            response_text = "Mock mode response — no LLM cost incurred."
+
+        usage = LLMUsage(
+            input_tokens=0,
+            output_tokens=0,
+            cache_read_tokens=0,
+            cache_write_tokens=0,
+            total_cost_usd=Decimal("0"),
+        )
+        return LLMResponse(
+            text=response_text,
+            tool_calls=[],
+            finish_reason="stop",
+            usage=usage,
+            model=self._model,
+            request_id=str(uuid4()),
+            latency_ms=0,
+        )
+
+    async def stream(
+        self,
+        messages: list[LLMMessage],
+        tools: list[LLMToolSpec] | None = None,
+        temperature: float = 0.0,
+        max_tokens: int = 4096,
+        prompt_cache: bool = True,
+        agent_step_id: UUID | None = None,
+        specialist_role: str | None = None,
+    ) -> AsyncIterator[LLMStreamEvent]:
+        async def _gen() -> AsyncIterator[LLMStreamEvent]:
+            yield LLMStreamEvent(
+                event="text_delta",
+                data="Mock mode response — no LLM cost incurred.",
+            )
+
+        return _gen()
+
+    async def embed(
+        self,
+        texts: list[str],
+        model: str = "text-embedding-3-small",
+        agent_step_id: UUID | None = None,
+    ) -> list[list[float]]:
+        return [[0.0] * 1536 for _ in texts]
+
+
 class ClaudeClient:
     DEFAULT_MODEL = "claude-sonnet-4-6"
 
@@ -429,7 +532,11 @@ class ClaudeClient:
         return [[0.0] * 1536 for _ in texts]
 
 
-def create_llm_client(usage_writer: UsageWriter | None = None) -> ClaudeClient:
+def create_llm_client(
+    usage_writer: UsageWriter | None = None,
+) -> ClaudeClient | ScenarioStubClaudeClient:
+    if os.environ.get("MOCK_LLM", "").lower() == "true":
+        return ScenarioStubClaudeClient()
     api_key = os.environ.get("ANTHROPIC_API_KEY", "")
     if not api_key:
         raise RuntimeError("ANTHROPIC_API_KEY is not set — add it to .env")
