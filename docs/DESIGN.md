@@ -439,8 +439,8 @@ An interface change that is not backed by an ADR will be rejected at code review
 
 ## Phase Progression
 
-Implementation follows the phase order in `docs/MIGRATION_PLAN.md`.
-Do not begin Phase N+1 work while Phase N checkpoint is unverified.
+Historical migration plan is archived at `docs/archive/v2/MIGRATION_PLAN.md`.
+New phases are defined in `docs/TASKS.md`.
 
 | Phase | Goal |
 |---|---|

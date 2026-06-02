@@ -114,5 +114,5 @@ These apply everywhere, regardless of layer:
 - Internal naming conventions within a file (style guide concern)
 - Number of files or classes within a layer (implementation detail)
 - Test structure (see TESTING.md)
-- Migration order (see MIGRATION_PLAN.md)
-- Which decisions are deferred (see DEFERRED.md)
+- Migration order (see archive/v2/MIGRATION_PLAN.md — archived)
+- Which decisions are deferred (see archive/v2/DEFERRED.md — archived)
