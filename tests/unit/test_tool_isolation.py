@@ -609,7 +609,7 @@ def test_list_for_role_simulation_optimizer():
 def test_list_for_role_orchestrator_returns_empty():
     registry = create_tool_registry()
     tools = registry.list_for_role("orchestrator")
-    assert tools == []
+    assert [t.name for t in tools] == ["job_dispatch"]
 
 
 # ===== T-1003/T-1040: Orchestrator + MemoryStore =====

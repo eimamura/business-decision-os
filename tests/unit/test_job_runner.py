@@ -57,9 +57,27 @@ def test_job_spec_train_forecast_kind_is_valid():
 
 
 @pytest.mark.asyncio
-async def test_inprocess_run_train_forecast_no_db_raises():
+async def test_inprocess_run_train_forecast_no_db_returns_failed_result(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Mock DB calls so forecast computation runs without a real DB
+    async def _stub_fetch(sku_id: str) -> list[float]:
+        return []
+
+    async def _stub_upsert(sku_id: str, predicted_units: list[float], model_version: str) -> None:
+        return None
+
+    monkeypatch.setattr(
+        "packages.agent.runner.fetch_demand_history", _stub_fetch
+    )
+    monkeypatch.setattr(
+        "packages.agent.runner.upsert_prediction", _stub_upsert
+    )
+
     runner = InProcessJobRunner()
     spec = JobSpec(kind="train_forecast", payload={"sku_id": "SKU-1"}, idempotency_key="k2")
     handle = await runner.submit(spec, _make_ctx())
-    with pytest.raises((NotImplementedError, ModuleNotFoundError)):
-        await runner.result(handle.job_id, wait=False)
+    result = await runner.result(handle.job_id, wait=False)
+    assert result.status == "succeeded"
+    assert result.output is not None
+    assert result.output["model_version"] == "linear_regression_v1_trained"

@@ -25,3 +25,5 @@ jobs:
         with:
           node-version: '20'
       - run: npm ci
+      - run: cd apps/web && npx tsc --noEmit
+      - run: cd apps/web && npm run build
