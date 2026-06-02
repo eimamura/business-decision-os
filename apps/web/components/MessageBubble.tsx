@@ -1,9 +1,11 @@
 "use client";
 
+import { useState } from "react";
 import dynamic from "next/dynamic";
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeSanitize from "rehype-sanitize";
+import { ClipboardIcon, CheckIcon } from "lucide-react";
 import type { ChatMessage } from "@/types/chat";
 import AnalysisCard, { isAnalysisCard } from "./analysis/AnalysisCard";
 import FeedbackBar from "./FeedbackBar";
@@ -127,6 +129,16 @@ function AssistantMarkdown({ content }: { content: string }) {
 
 function SqlQueryBubble({ message }: { message: ChatMessage }) {
   const label = message.toolName === "nl_query" ? "NL → SQL" : "SQL Query";
+  const [copyState, setCopyState] = useState<"idle" | "copied">("idle");
+
+  function handleCopy(): void {
+    if (!message.sql) return;
+    navigator.clipboard.writeText(message.sql).then(() => {
+      setCopyState("copied");
+      setTimeout(() => setCopyState("idle"), 2000);
+    });
+  }
+
   return (
     <div className="flex justify-start">
       <div className="w-7 h-7 rounded-full bg-[#0c0c14] flex items-center justify-center mr-3 mt-1 shrink-0 border border-emerald-900/40">
@@ -138,6 +150,21 @@ function SqlQueryBubble({ message }: { message: ChatMessage }) {
             <span className="text-xs font-mono font-bold text-emerald-500 uppercase tracking-wider">
               {label}
             </span>
+            {message.sql && (
+              <button
+                type="button"
+                onClick={handleCopy}
+                className="ml-auto p-1 rounded text-emerald-500/60 hover:text-emerald-400 hover:bg-emerald-900/30 transition-colors"
+                aria-label={copyState === "copied" ? "Copied!" : "Copy SQL"}
+                title={copyState === "copied" ? "Copied!" : "Copy SQL"}
+              >
+                {copyState === "copied" ? (
+                  <CheckIcon className="h-4 w-4" />
+                ) : (
+                  <ClipboardIcon className="h-4 w-4" />
+                )}
+              </button>
+            )}
           </div>
           {message.sql && (
             <DynamicSyntaxHighlighter language="sql">
