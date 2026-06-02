@@ -169,7 +169,9 @@ def generate_inventory(
                 })
 
 
-def generate_supply(skus: list[CsvRow], suppliers: list[CsvRow], rng: random.Random, out_dir: Path) -> None:
+def generate_supply(
+    skus: list[CsvRow], suppliers: list[CsvRow], rng: random.Random, out_dir: Path
+) -> None:
     fields = ["sku_id", "supplier_id", "order_date", "expected_arrival", "quantity", "status"]
     base_order_date = date(2026, 4, 1)
     supplier_by_type = {s["sku_type"]: s for s in suppliers}

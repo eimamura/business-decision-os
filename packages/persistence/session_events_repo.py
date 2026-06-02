@@ -50,8 +50,16 @@ class SessionEventRepository:
         return [
             {
                 "event_type": row["event_type"],
-                "payload": json.loads(row["payload"]) if isinstance(row["payload"], str) else dict(row["payload"]),
-                "created_at": row["created_at"].isoformat() if hasattr(row["created_at"], "isoformat") else str(row["created_at"]),
+                "payload": (
+                    json.loads(row["payload"])
+                    if isinstance(row["payload"], str)
+                    else dict(row["payload"])
+                ),
+                "created_at": (
+                    row["created_at"].isoformat()
+                    if hasattr(row["created_at"], "isoformat")
+                    else str(row["created_at"])
+                ),
             }
             for row in rows
         ]

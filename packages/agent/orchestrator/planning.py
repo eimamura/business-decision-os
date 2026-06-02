@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 from typing import Any
 from uuid import UUID
@@ -188,13 +189,14 @@ async def run_dag_execution(
         ]
         if not ready:
             raise ValueError(f"DAG has unresolvable dependencies: {list(remaining)}")
-        for node in ready:
+
+        async def _run_node(node: Any) -> tuple[str, SpecialistResult]:
             context_payload = {
                 "query": query.text,
                 "intent": intent.model_dump(),
                 "dependency_results": {dep: completed[dep].output for dep in node.deps},
             }
-            completed[node.id] = await _run_agent(
+            result = await _run_agent(
                 orchestrator,
                 session_id,
                 node.agent_role,
@@ -202,5 +204,10 @@ async def run_dag_execution(
                 context_payload,
                 node.tools,
             )
-            del remaining[node.id]
+            return node.id, result
+
+        results = await asyncio.gather(*[_run_node(node) for node in ready])
+        for node_id, result in results:
+            completed[node_id] = result
+            del remaining[node_id]
     return await _synthesize_response(orchestrator, session_id, query, intent, route, completed)

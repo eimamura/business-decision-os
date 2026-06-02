@@ -97,7 +97,7 @@ class RegistryResponse(BaseModel):
 @router.get("/registry", response_model=RegistryResponse, status_code=status.HTTP_200_OK)
 async def get_registry() -> RegistryResponse:
     """All agents and tools with execution counts and last-run timestamps."""
-    from packages.agent.orchestrator.roles import CROSS_DOMAIN_AGENT_CLASSES, DOMAIN_AGENT_ROLES
+    from packages.agent.orchestrator.roles import CROSS_DOMAIN_AGENT_CLASSES
     from packages.tools.base import _ROLE_TOOL_ALLOWLIST
 
     try:
@@ -137,14 +137,18 @@ async def get_registry() -> RegistryResponse:
     agent_stats: dict[str, dict[str, Any]] = {
         r["specialist_role"]: {
             "execution_count": r["execution_count"],
-            "last_executed_at": r["last_executed_at"].isoformat() if r["last_executed_at"] else None,
+            "last_executed_at": (
+                r["last_executed_at"].isoformat() if r["last_executed_at"] else None
+            ),
         }
         for r in agent_rows
     }
     tool_stats: dict[str, dict[str, Any]] = {
         r["tool_name"]: {
             "execution_count": r["execution_count"],
-            "last_executed_at": r["last_executed_at"].isoformat() if r["last_executed_at"] else None,
+            "last_executed_at": (
+                r["last_executed_at"].isoformat() if r["last_executed_at"] else None
+            ),
         }
         for r in tool_rows
     }
@@ -169,8 +173,8 @@ async def get_registry() -> RegistryResponse:
         ))
 
     all_tool_names: set[str] = set()
-    for tools in _ROLE_TOOL_ALLOWLIST.values():
-        all_tool_names.update(tools)
+    for _role_tools in _ROLE_TOOL_ALLOWLIST.values():
+        all_tool_names.update(_role_tools)
 
     tool_to_agents: dict[str, list[str]] = {t: [] for t in all_tool_names}
     for role, allowed_tools in _ROLE_TOOL_ALLOWLIST.items():

@@ -61,7 +61,10 @@ def test_compute_hash_changes_with_payload():
 # ---------------------------------------------------------------------------
 
 @pytest.mark.asyncio
-async def test_sessions_repo_raises():
+async def test_sessions_repo_raises(monkeypatch: pytest.MonkeyPatch) -> None:
+    import packages.persistence.db as _db
+    monkeypatch.delenv("DATABASE_URL", raising=False)
+    _db._pool = None  # reset stale pool so get_pool re-checks env
     repo = DecisionSessionRepository()
     with pytest.raises(RuntimeError, match="DATABASE_URL not set"):
         await repo.get(str(__import__("uuid").uuid4()))
@@ -103,7 +106,10 @@ async def test_recommendations_repo_raises():
 
 
 @pytest.mark.asyncio
-async def test_llm_usage_repo_raises():
+async def test_llm_usage_repo_raises(monkeypatch: pytest.MonkeyPatch) -> None:
+    import packages.persistence.db as _db
+    monkeypatch.delenv("DATABASE_URL", raising=False)
+    _db._pool = None
     repo = LlmUsageRepository()
     with pytest.raises(RuntimeError, match="DATABASE_URL not set"):
         await repo.get_session_totals(str(__import__("uuid").uuid4()))

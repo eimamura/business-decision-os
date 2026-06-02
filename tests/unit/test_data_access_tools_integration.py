@@ -5,8 +5,14 @@ Without Docker these tests will fail with ConnectionRefusedError, which is expec
 """
 from __future__ import annotations
 
-import pytest
+import os
 from uuid import uuid4
+
+import pytest
+
+_needs_db = pytest.mark.skipif(
+    not os.environ.get("DATABASE_URL"), reason="requires DATABASE_URL"
+)
 
 from packages.tools.base import ToolContext
 from packages.tools.data_catalog_search_tool import DataCatalogSearchTool
@@ -44,6 +50,7 @@ async def reset_db_pool():
 
 # ===== DataCatalogSearchTool =====
 
+@_needs_db
 async def test_data_catalog_search_returns_row_counts():
     tool = DataCatalogSearchTool()
     result = await tool.handle({}, _ctx())
@@ -55,6 +62,7 @@ async def test_data_catalog_search_returns_row_counts():
 
 # ===== TableSchemaReaderTool =====
 
+@_needs_db
 async def test_table_schema_reader_sku_master_schema():
     tool = TableSchemaReaderTool()
     result = await tool.handle({"table_name": "sku_master"}, _ctx())
@@ -69,6 +77,7 @@ async def test_table_schema_reader_sku_master_schema():
 
 # ===== DataQualityCheckerTool =====
 
+@_needs_db
 async def test_data_quality_checker_dynamic_sql_executes():
     tool = DataQualityCheckerTool()
     result = await tool.handle({"table_name": "inventory_snapshot"}, _ctx())

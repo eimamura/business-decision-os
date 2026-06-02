@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, Literal, Protocol
 
-from packages.agent.runtime import AgentRuntime
+from packages.agent.runtime import AgentRuntime, OutputBuilder
 
 if TYPE_CHECKING:
     from packages.agent.orchestrator import SpecialistResult, SpecialistTask
@@ -40,6 +40,7 @@ class AgentBasedSpecialist:
         tool_registry: Any,
         sse_queue: Any = None,
         system_prompt: str | None = None,
+        output_builder: OutputBuilder | None = None,
     ) -> None:
         self.name = name
         self.role = role
@@ -50,6 +51,7 @@ class AgentBasedSpecialist:
             tool_registry=tool_registry,
             sse_queue=sse_queue,
             system_prompt=system_prompt,
+            output_builder=output_builder,
         )
 
     async def run(self, task: SpecialistTask, ctx: ToolContext) -> SpecialistResult:

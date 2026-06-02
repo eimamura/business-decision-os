@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import asyncio
 import json
+import logging
 from typing import Any
 from uuid import UUID
 
@@ -21,6 +23,9 @@ from packages.agent.orchestrator.runtime import (
     run_direct_chat,
     run_planned_execution,
 )
+from packages.persistence.sessions_repo import DecisionSessionRepository
+
+_log = logging.getLogger(__name__)
 
 
 class SessionOrchestrator:
@@ -37,7 +42,6 @@ class SessionOrchestrator:
         self._memory_store = memory_store
         self._sse_queue = sse_queue
         self._event_persister = event_persister
-        self._sessions: dict[UUID, dict[str, Any]] = {}
 
     async def _push(self, event: dict[str, Any]) -> None:
         safe = json_safe(event)
@@ -50,6 +54,19 @@ class SessionOrchestrator:
         if query.conversation_context:
             return f"[Conversation context: {query.conversation_context}]\n\n{query.text}"
         return query.text
+
+    def _schedule_status_update(self, session_id: UUID, status: str) -> None:
+        """Fire-and-forget DB status update; logs a warning on failure."""
+
+        async def _persist() -> None:
+            try:
+                await DecisionSessionRepository().update_status(str(session_id), status)
+            except Exception as exc:
+                _log.warning(
+                    "session status update to %r failed for %s: %s", status, session_id, exc
+                )
+
+        asyncio.create_task(_persist())
 
     async def classify_intent(self, query: SessionUserQuery, session_id: UUID) -> SessionIntent:
         from packages.agent.llm import LLMMessage
@@ -137,7 +154,7 @@ class SessionOrchestrator:
                 weight_override_json=query.weight_override_json,
             )
 
-        self._sessions[session_id] = {"status": "active"}
+        self._schedule_status_update(session_id, "active")
         await self._push({
             "type": "query_received",
             "session_id": str(session_id),
@@ -148,20 +165,21 @@ class SessionOrchestrator:
             intent = await self.classify_intent(query, session_id)
             route = await self.select_execution_mode(query, intent, session_id)
             if route.mode == "direct_chat":
-                return await run_direct_chat(self, session_id, query, intent, route)
-            if route.mode == "single_agent":
+                result = await run_direct_chat(self, session_id, query, intent, route)
+            elif route.mode == "single_agent":
                 results = await _run_agents_in_order(self, session_id, query, route.agents, intent)
-                return await _synthesize_response(self, session_id, query, intent, route, results)
-            if route.mode == "sequential_agents":
+                result = await _synthesize_response(self, session_id, query, intent, route, results)
+            elif route.mode == "sequential_agents":
                 results = await _run_agents_in_order(self, session_id, query, route.agents, intent)
-                return await _synthesize_response(self, session_id, query, intent, route, results)
-            if route.mode == "planned_execution":
-                return await run_planned_execution(self, session_id, query, intent, route)
-            if route.mode == "dag_execution":
-                return await run_dag_execution(self, session_id, query, intent, route)
-            raise ValueError(f"unknown execution mode: {route.mode}")
+                result = await _synthesize_response(self, session_id, query, intent, route, results)
+            elif route.mode == "planned_execution":
+                result = await run_planned_execution(self, session_id, query, intent, route)
+            elif route.mode == "dag_execution":
+                result = await run_dag_execution(self, session_id, query, intent, route)
+            else:
+                raise ValueError(f"unknown execution mode: {route.mode}")
         except Exception as exc:
-            self._sessions[session_id]["status"] = "failed"
+            self._schedule_status_update(session_id, "failed")
             await self._push({
                 "type": "error",
                 "code": "orchestration_failed",
@@ -170,6 +188,8 @@ class SessionOrchestrator:
                 "timestamp": _iso_now(),
             })
             raise
+        self._schedule_status_update(session_id, "completed")
+        return result
 
     async def resume(self, session_id: UUID, approval_id: UUID) -> SessionResponse:
         query = SessionUserQuery(

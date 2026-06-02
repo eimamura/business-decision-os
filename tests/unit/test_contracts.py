@@ -12,7 +12,7 @@ from httpx import ASGITransport
 import apps.api.routers.decisions as decision_router
 import apps.api.routers.sessions as session_router
 from apps.api.main import app
-from apps.api.state import sessions, sse_queues
+from apps.api.state import Broadcaster, broadcasters, sessions
 from packages.agent.llm import create_llm_client
 from packages.agent.orchestrator import (
     AgentRoute,
@@ -74,10 +74,16 @@ def test_contract_audit_log_repo_has_no_delete_method() -> None:
 
 async def test_contract_sse_stream_terminates_with_done_event(client: httpx.AsyncClient) -> None:
     sid = "contract-sse-test"
-    queue: asyncio.Queue[dict[str, Any]] = asyncio.Queue()
-    await queue.put({"type": "done", "reply": "ok", "session_id": sid})
+    broadcaster = Broadcaster()
     sessions[sid] = {"session_id": sid, "status": "active", "goal": "", "messages": []}
-    sse_queues[sid] = queue
+    broadcasters[sid] = broadcaster
+
+    async def _inject() -> None:
+        while not broadcaster._subs:  # wait for stream subscriber to attach
+            await asyncio.sleep(0.005)
+        await broadcaster.put({"type": "done", "reply": "ok", "session_id": sid})
+
+    asyncio.create_task(_inject())
 
     events: list[dict[str, Any]] = []
     try:
@@ -91,7 +97,7 @@ async def test_contract_sse_stream_terminates_with_done_event(client: httpx.Asyn
                     break
     finally:
         sessions.pop(sid, None)
-        sse_queues.pop(sid, None)
+        broadcasters.pop(sid, None)
 
     assert len(events) > 0
     assert events[-1]["type"] == "done"
@@ -127,6 +133,8 @@ async def test_contract_session_message_uses_user_query_and_streams_new_taxonomy
         async def run(self, session_id: UUID, query: SessionUserQuery) -> SessionResponse:
             captured["session_id"] = session_id
             captured["query"] = query
+            while not self.queue._subs:  # wait for stream subscriber to attach
+                await asyncio.sleep(0.005)
             for event_type in EXPECTED_SESSION_STREAM_EVENTS[:-1]:
                 await self.queue.put({"type": event_type})
             intent = SessionIntent(
@@ -183,13 +191,18 @@ async def test_contract_session_message_error_still_terminates_with_done(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     class FailingOrchestrator:
+        def __init__(self, queue: asyncio.Queue[dict[str, Any]]) -> None:
+            self.queue = queue
+
         async def run(self, session_id: UUID, query: SessionUserQuery) -> SessionResponse:
+            while not self.queue._subs:  # wait for stream subscriber to attach
+                await asyncio.sleep(0.005)
             raise RuntimeError("stub failure")
 
     def stub_get_orchestrator(
         queue: asyncio.Queue[dict[str, Any]],
     ) -> FailingOrchestrator:
-        return FailingOrchestrator()
+        return FailingOrchestrator(queue)
 
     async def allow_request(user_id: str) -> None:
         return None
@@ -229,6 +242,7 @@ async def test_contract_decisions_streams_new_taxonomy_and_done_reply(
         async def run(self, session_id: UUID, query: SessionUserQuery) -> SessionResponse:
             captured["session_id"] = session_id
             captured["query"] = query
+            await asyncio.sleep(0.05)  # yield so stream subscriber can attach
             for event_type in EXPECTED_SESSION_STREAM_EVENTS[:-1]:
                 await self.queue.put({"type": event_type})
             intent = SessionIntent(

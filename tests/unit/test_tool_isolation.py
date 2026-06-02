@@ -48,9 +48,20 @@ def _ctx() -> ToolContext:
     )
 
 
+def _extract_system_text(messages: list) -> str:
+    """Read system text from plain content or content_blocks (T-008 3-block caching)."""
+    if not messages:
+        return ""
+    msg = messages[0]
+    if not msg.content and getattr(msg, "content_blocks", None):
+        blocks = msg.content_blocks or []
+        return blocks[0].get("text", "") if blocks else ""
+    return msg.content or ""
+
+
 class PlanningStubClaudeClient(StubClaudeClient):
     async def complete(self, messages, **kwargs) -> LLMResponse:
-        system = messages[0].content if messages else ""
+        system = _extract_system_text(messages)
         if "intent classifier" in system:
             return LLMResponse(
                 text=(
@@ -90,6 +101,35 @@ class PlanningStubClaudeClient(StubClaudeClient):
                 tool_calls=[],
                 finish_reason="stop",
                 usage=LLMUsage(input_tokens=0, output_tokens=0, total_cost_usd=Decimal("0")),
+                model="stub",
+                request_id=str(uuid4()),
+                latency_ms=0,
+            )
+        # Specialist agent: simulation_optimizer (content_blocks after T-008)
+        if "simulation and optimization specialist" in system:
+            if any(getattr(m, "role", "") == "tool" for m in messages):
+                return LLMResponse(
+                    text="Candidates generated.",
+                    tool_calls=[],
+                    finish_reason="stop",
+                    usage=LLMUsage(
+                        input_tokens=0, output_tokens=0, total_cost_usd=Decimal("0")
+                    ),
+                    model="stub",
+                    request_id=str(uuid4()),
+                    latency_ms=0,
+                )
+            return LLMResponse(
+                text="",
+                tool_calls=[{
+                    "id": "call_opt_1",
+                    "name": "optimize_replenishment",
+                    "input": {"sku_id": "SKU001", "moq": 100.0, "horizon_days": 90},
+                }],
+                finish_reason="tool_use",
+                usage=LLMUsage(
+                    input_tokens=0, output_tokens=0, total_cost_usd=Decimal("0")
+                ),
                 model="stub",
                 request_id=str(uuid4()),
                 latency_ms=0,
@@ -186,7 +226,12 @@ def test_resolve_weights_session_goal_override():
 
 # ===== T-1007: DataCatalogSearchTool =====
 
-async def test_data_catalog_search_no_db_returns_all_tables():
+async def test_data_catalog_search_no_db_returns_all_tables(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import packages.persistence.db as _db
+    monkeypatch.delenv("DATABASE_URL", raising=False)
+    _db._pool = None
     tool = DataCatalogSearchTool()
     result = await tool.handle({}, _ctx())
     assert result.output["count"] == len(ALLOWED_READ_TABLES)
@@ -209,7 +254,12 @@ async def test_table_schema_reader_rejects_non_allowlist_table():
     assert "error" in result.output
 
 
-async def test_table_schema_reader_no_db_fallback():
+async def test_table_schema_reader_no_db_fallback(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import packages.persistence.db as _db
+    monkeypatch.delenv("DATABASE_URL", raising=False)
+    _db._pool = None
     tool = TableSchemaReaderTool()
     result = await tool.handle({"table_name": "sku_master"}, _ctx())
     assert "error" not in result.output
@@ -225,7 +275,12 @@ async def test_data_quality_checker_rejects_non_allowlist_table():
     assert "error" in result.output
 
 
-async def test_data_quality_checker_no_db_fallback():
+async def test_data_quality_checker_no_db_fallback(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import packages.persistence.db as _db
+    monkeypatch.delenv("DATABASE_URL", raising=False)
+    _db._pool = None
     tool = DataQualityCheckerTool()
     result = await tool.handle({"table_name": "inventory_snapshot"}, _ctx())
     assert "error" not in result.output
@@ -272,7 +327,10 @@ def test_sql_guardrail_rejects_unsafe_sql(sql: str):
 
 
 @pytest.mark.asyncio
-async def test_sql_tool_no_db_returns_empty():
+async def test_sql_tool_no_db_returns_empty(monkeypatch: pytest.MonkeyPatch) -> None:
+    import packages.persistence.db as _db
+    monkeypatch.delenv("DATABASE_URL", raising=False)
+    _db._pool = None
     tool = SqlQueryTool()
     result = await tool.handle({"query": "SELECT * FROM sku_master"}, _ctx())
     assert result.output["row_count"] == 0

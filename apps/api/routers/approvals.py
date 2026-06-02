@@ -56,7 +56,7 @@ async def post_decision(
     body: DecisionBody,
     x_dev_user: str | None = Header(default=None),
 ) -> JSONResponse:
-    if not can_execute(action="approve_recommendation", actor=x_dev_user):
+    if not await can_execute(action="approve_recommendation", actor=x_dev_user):
         raise HTTPException(
             status_code=403, detail="Insufficient role — approver or admin required"
         )

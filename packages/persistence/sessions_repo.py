@@ -131,6 +131,15 @@ class DecisionSessionRepository:
                 title,
             )
 
+    async def update_status(self, session_id: str, status: str) -> None:
+        pool = await get_pool()
+        async with pool.acquire() as conn:
+            await conn.execute(
+                "UPDATE decision_sessions SET status = $2, updated_at = now() WHERE id = $1",
+                uuid.UUID(session_id),
+                status,
+            )
+
     async def set_message_feedback(
         self, message_id: str, feedback: int, session_id: str
     ) -> bool:

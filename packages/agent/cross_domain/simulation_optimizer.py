@@ -11,6 +11,14 @@ _SYSTEM_PROMPT = (
 )
 
 
+def _simulation_optimizer_output_builder(
+    tool_results: dict[str, Any], response: Any
+) -> dict[str, Any]:
+    if "optimize_replenishment" in tool_results:
+        return {"candidates": tool_results["optimize_replenishment"].get("candidates", [])}
+    return {"text": response.text if response else ""}
+
+
 class SimulationOptimizerAgent(AgentBasedSpecialist):
     def __init__(
         self,
@@ -25,4 +33,5 @@ class SimulationOptimizerAgent(AgentBasedSpecialist):
             tool_registry=tool_registry,
             sse_queue=sse_queue,
             system_prompt=_SYSTEM_PROMPT,
+            output_builder=_simulation_optimizer_output_builder,
         )

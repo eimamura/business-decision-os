@@ -11,7 +11,9 @@ from packages.persistence.db import get_pool
 _log = logging.getLogger(__name__)
 
 
-async def make_step(session_id: str, step_type: str, specialist_role: str = "orchestrator") -> uuid.UUID | None:
+async def make_step(
+    session_id: str, step_type: str, specialist_role: str = "orchestrator"
+) -> uuid.UUID | None:
     """Create an agent_steps row for any LLM call. Returns the step UUID, or None on failure."""
     step_id = uuid.uuid4()
     try:

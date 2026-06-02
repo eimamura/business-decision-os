@@ -246,19 +246,41 @@ class ClaudeClient:
         return result
 
     def _extract_system(self, messages: list[LLMMessage], prompt_cache: bool) -> Any:
-        system_parts = [msg.content for msg in messages if msg.role == "system"]
-        if not system_parts:
+        system_msgs = [msg for msg in messages if msg.role == "system"]
+        if not system_msgs:
             return None
-        system_text = "\n\n".join(system_parts)
-        if prompt_cache:
-            return [
-                {
-                    "type": "text",
-                    "text": system_text,
-                    "cache_control": {"type": "ephemeral"},
-                }
-            ]
-        return system_text
+
+        # If any system message carries explicit content_blocks, forward them directly.
+        # This supports the 3-block prompt-caching pattern (T-008) where cache_control
+        # is already embedded in each block.
+        all_blocks: list[dict[str, Any]] = []
+        for msg in system_msgs:
+            if msg.content_blocks:
+                # Filter out empty text blocks to avoid empty-string API errors
+                all_blocks.extend(
+                    b for b in msg.content_blocks
+                    if not (b.get("type") == "text" and not b.get("text", "").strip())
+                )
+            elif msg.content:
+                block: dict[str, Any] = {"type": "text", "text": msg.content}
+                if prompt_cache:
+                    block["cache_control"] = {"type": "ephemeral"}
+                all_blocks.append(block)
+
+        if not all_blocks:
+            return None
+
+        # If there is only a single plain-text block with no cache_control and
+        # prompt_cache is False, return a simple string for backwards compatibility.
+        if (
+            len(all_blocks) == 1
+            and all_blocks[0].get("type") == "text"
+            and "cache_control" not in all_blocks[0]
+            and not prompt_cache
+        ):
+            return all_blocks[0]["text"]
+
+        return all_blocks
 
     def _to_anthropic_tools(self, tools: list[LLMToolSpec]) -> list[dict[str, Any]]:
         return [

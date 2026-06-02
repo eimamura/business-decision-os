@@ -4,10 +4,9 @@ import asyncio
 import logging
 import os
 from asyncio import Queue
+from collections.abc import Callable
 from typing import Any
 from uuid import UUID
-
-from collections.abc import Callable
 
 from packages.agent.llm import ClaudeClient, LLMUsage
 from packages.agent.orchestrator import SessionOrchestrator

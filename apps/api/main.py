@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
 from dotenv import load_dotenv
@@ -30,8 +31,9 @@ from apps.api.routers import (  # noqa: E402
     settings,
 )
 
+
 @asynccontextmanager
-async def lifespan(app: FastAPI):
+async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     from packages.tools.schema_context import load_schema_context
     await load_schema_context()
     yield

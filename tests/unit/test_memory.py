@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import math
+from unittest.mock import patch
 from uuid import uuid4
 
 import pytest
@@ -10,7 +10,7 @@ from packages.memory import (
     MemoryQuery,
     PgVectorMemoryStore,
     StubMemoryStore,
-    _make_embedding,
+    _get_embedding,
 )
 
 
@@ -26,7 +26,7 @@ def _make_memory() -> Memory:
 
 
 @pytest.mark.asyncio
-async def test_stub_write_and_get():
+async def test_stub_write_and_get() -> None:
     store = StubMemoryStore()
     mem = _make_memory()
     returned_id = await store.write(mem)
@@ -37,7 +37,7 @@ async def test_stub_write_and_get():
 
 
 @pytest.mark.asyncio
-async def test_stub_search_returns_empty():
+async def test_stub_search_returns_empty() -> None:
     store = StubMemoryStore()
     mem = _make_memory()
     await store.write(mem)
@@ -46,36 +46,47 @@ async def test_stub_search_returns_empty():
 
 
 @pytest.mark.asyncio
-async def test_stub_get_missing_returns_none():
+async def test_stub_get_missing_returns_none() -> None:
     store = StubMemoryStore()
     result = await store.get(uuid4())
     assert result is None
 
 
-def test_make_embedding_length():
-    vec = _make_embedding("hello world")
-    assert len(vec) == 1536
+async def test_get_embedding_raises_when_api_key_missing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    with pytest.raises(RuntimeError, match="OPENAI_API_KEY"):
+        await _get_embedding("some text")
 
 
-def test_make_embedding_unit_length():
-    vec = _make_embedding("some text for embedding")
-    magnitude = math.sqrt(sum(v * v for v in vec))
-    assert abs(magnitude - 1.0) < 1e-5
+async def test_get_embedding_calls_openai_api(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    fake_embedding = [0.1] * 1536
+    with patch("packages.memory.openai.AsyncOpenAI") as mock_client_cls:
+        mock_client = mock_client_cls.return_value
+        mock_client.embeddings.create.return_value.__class__ = type(
+            "EmbeddingResponse",
+            (),
+            {"data": [type("Embedding", (), {"embedding": fake_embedding})()]},
+        )
+
+        async def _async_create(*args: object, **kwargs: object) -> object:
+            return type(
+                "EmbeddingResponse",
+                (),
+                {"data": [type("Embedding", (), {"embedding": fake_embedding})()]},
+            )()
+
+        mock_client.embeddings.create = _async_create
+        result = await _get_embedding("hello world")
+    assert result == fake_embedding
+    assert len(result) == 1536
 
 
-def test_make_embedding_deterministic():
-    vec1 = _make_embedding("deterministic test")
-    vec2 = _make_embedding("deterministic test")
-    assert vec1 == vec2
-
-
-def test_make_embedding_different_texts_differ():
-    vec1 = _make_embedding("text one")
-    vec2 = _make_embedding("text two")
-    assert vec1 != vec2
-
-
-def test_pgvector_memory_store_instantiation():
+def test_pgvector_memory_store_instantiation() -> None:
     store = PgVectorMemoryStore("postgresql://user:pass@localhost/db")
     assert store._database_url == "postgresql://user:pass@localhost/db"
     assert store._pool is None

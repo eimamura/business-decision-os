@@ -205,7 +205,6 @@ async def run_direct_chat(
     await orchestrator._push(
         {"type": "response_ready", "mode": route.mode, "timestamp": _iso_now()}
     )
-    orchestrator._sessions[session_id]["status"] = "completed"
     return SessionResponse(mode=route.mode, reply=response.text, intent=intent, route=route)
 
 

@@ -10,7 +10,7 @@ projects that improve correctness without changing public interfaces.
 
 ## P0 — Prohibited Violation (fix before any other work)
 
-### T-001: Remove stub candidate fallback in `_rank_candidates`
+### T-001: Remove stub candidate fallback in `_rank_candidates` — **Done**
 - **File:** `packages/agent/orchestrator/decision.py`
 - **What:** Delete the `else` branch (~lines 106–116) that synthesizes 3 fake candidates
   when `simulation_optimizer` returns nothing. Replace with an explicit error or an
@@ -23,7 +23,7 @@ projects that improve correctness without changing public interfaces.
 
 ## P1 — Critical Design Gaps
 
-### T-002: Fix DAG parallel execution
+### T-002: Fix DAG parallel execution — **Done**
 - **File:** `packages/agent/orchestrator/planning.py` — `run_dag_execution()`
 - **What:** Replace sequential `for node in ready: await _run_agent(...)` with
   `await asyncio.gather(*[_run_agent(...) for node in ready])`.
@@ -31,16 +31,22 @@ projects that improve correctness without changing public interfaces.
 - **Test:** Unit test with a mock `_run_agent` confirming that two dependency-free
   nodes are launched concurrently.
 
-### T-003: Replace fake embeddings with real embedding API
+### T-003: Replace fake embeddings with real embedding API — **Done**
 - **File:** `packages/memory/__init__.py`
 - **What:** Delete `_make_embedding()`. Replace with a real embedding call
   (Anthropic or OpenAI). Requires an ADR before changing `MemoryStore`
   public interface (embedding dimension changes from 192 to 1536/3072).
 - **ADR required:** Yes — embedding model selection + MemoryStore interface impact.
+- **ADR written:** `docs/ADR/2026-06-02-embedding-model.md` — OpenAI `text-embedding-3-small` selected.
+- **Implementation done:** `_make_embedding()` deleted; `_get_embedding()` added using OpenAI SDK;
+  `PgVectorMemoryStore.write()` and `.search()` updated; `openai>=1.0.0` added to `packages/memory/pyproject.toml`;
+  migration `0010_memories_vector_1536.py` created as named checkpoint.
+- **Pending:** Integration test (Test/Review owned) — write a Memory, search with semantically similar query,
+  confirm similarity > 0.7.
 - **Test:** Integration test: write a Memory, search with a semantically similar query,
   confirm similarity > 0.7.
 
-### T-004: Strengthen Guardrail risk classification
+### T-004: Strengthen Guardrail risk classification — **Done**
 - **File:** `packages/tools/guardrail.py`
 - **What:**
   - `classify_risk()`: incorporate multiple KPI dimensions beyond `service_level`
@@ -51,20 +57,20 @@ projects that improve correctness without changing public interfaces.
 - **Test:** Parametrize unit tests over KPI combinations; test that DB-backed role
   lookup returns correct role for known users.
 
-### T-005: Persist session state to database
+### T-005: Persist session state to database — **Done**
 - **Files:** `packages/agent/orchestrator/session_orchestrator.py`,
-  `packages/persistence/` (new or existing repository)
+  `packages/persistence/sessions_repo.py`
 - **What:** Replace `self._sessions: dict[UUID, dict] = {}` with DB writes.
   Status transitions: `active` → `awaiting_approval` / `completed` / `failed`.
   Use an existing or new sessions repository in `packages/persistence/`.
-- **Test:** Integration test: create session, simulate process restart, verify
-  session status is readable from DB.
+- **Test:** Unit tests in `tests/unit/test_session_orchestrator_persistence.py`
+  verify status transitions with a mocked repository.
 
 ---
 
 ## P2 — Architecture Improvements (no public interface changes)
 
-### T-006: Extract domain logic from `_role_aware_output_builder`
+### T-006: Extract domain logic from `_role_aware_output_builder` — **Done**
 - **File:** `packages/agent/runtime.py`
 - **What:** Remove the `if role == "simulation_optimizer"` / `if role == "data_engineer"`
   branches from `AgentRuntime`. Each specialist class should pass a custom
@@ -73,7 +79,7 @@ projects that improve correctness without changing public interfaces.
 - **Test:** Unit test that `AgentRuntime` with default builder produces `{"text": ...}`,
   and `SimulationOptimizerAgent` produces `{"candidates": [...]}`.
 
-### T-007: Add `verify_findings` step to agent loop
+### T-007: Add `verify_findings` step to agent loop — **Done**
 - **File:** `packages/agent/runtime.py` — `AgentRuntime.run()`
 - **What:** After the tool loop exits, make one additional LLM call with a verifier
   prompt. Check that conclusions are grounded in tool results (not fabricated).
@@ -82,7 +88,7 @@ projects that improve correctness without changing public interfaces.
 - **Test:** Unit test with mock LLM returning `needs_revision`; confirm loop retries
   once then produces a final result.
 
-### T-008: Adopt 3-block prompt caching in AgentRuntime
+### T-008: Adopt 3-block prompt caching in AgentRuntime — **Done**
 - **File:** `packages/agent/runtime.py` — `AgentRuntime.run()`
 - **What:** Split the system message into 3 content blocks:
   (1) static base prompt — `cache_control: ephemeral`,
@@ -92,7 +98,7 @@ projects that improve correctness without changing public interfaces.
 - **Test:** Unit test confirming the system `LLMMessage` has `content_blocks` with
   3 elements and correct `cache_control` values on the first call.
 
-### T-009: Persist LLM usage to `llm_usage` table
+### T-009: Persist LLM usage to `llm_usage` table — **Done**
 - **Files:** `packages/agent/runtime.py`, `packages/persistence/` (new repo)
 - **What:** After each `_llm_client.complete()` call in `AgentRuntime`, write
   `(session_id, specialist_role, model, input_tokens, output_tokens, cost_usd, called_at)`
@@ -104,7 +110,7 @@ projects that improve correctness without changing public interfaces.
 
 ## P3 — Domain Depth
 
-### T-010: Differentiate domain agent tool allowlists and system prompts
+### T-010: Differentiate domain agent tool allowlists and system prompts — **Done**
 - **Files:** `packages/agent/domain/*.py`, `packages/tools/base.py`
 - **What:** Expand `_ROLE_TOOL_ALLOWLIST` for each domain agent beyond
   `["sql_query", "nl_query"]` to include domain-appropriate analytical tools
@@ -115,7 +121,7 @@ projects that improve correctness without changing public interfaces.
 - **Test:** Unit test per domain confirming `list_for_role(role)` returns
   the expected tool set.
 
-### T-011: Add tool DB integration test tier
+### T-011: Add tool DB integration test tier — **Done**
 - **File:** `tests/integration/test_tools_real_db.py` (new)
 - **What:** Call each tool directly against the real DB with no LLM.
   Confirm correct column names and parameterized queries execute without error.

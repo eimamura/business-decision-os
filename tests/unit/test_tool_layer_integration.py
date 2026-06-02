@@ -25,9 +25,19 @@ def _response(text: str) -> LLMResponse:
     )
 
 
+def _extract_system(messages: list) -> str:
+    """Read system text from either plain content or content_blocks (after T-008)."""
+    if not messages:
+        return ""
+    msg = messages[0]
+    if not msg.content and msg.content_blocks:
+        return msg.content_blocks[0].get("text", "") if msg.content_blocks else ""
+    return msg.content or ""
+
+
 class QueryFlowStubClaudeClient(StubClaudeClient):
     async def complete(self, messages, **kwargs) -> LLMResponse:
-        system = messages[0].content if messages else ""
+        system = _extract_system(messages)
         payload = messages[-1].content if messages else ""
         if "intent classifier" in system:
             if "Good morning" in payload:
@@ -76,6 +86,27 @@ class QueryFlowStubClaudeClient(StubClaudeClient):
                 '"tools":["sql_query"]},'
                 '{"id":"sim","agent_role":"simulation_optimizer","deps":["data"],'
                 '"instruction":"Create candidates","tools":["optimize_replenishment"]}]'
+            )
+        # Specialist agents use content_blocks (T-008); detect by block 0 text
+        if "simulation and optimization specialist" in system:
+            # Second call: tool result already present — return final text
+            if any(getattr(m, "role", "") == "tool" for m in messages):
+                return _response("Optimization complete.")
+            # First call: invoke optimize_replenishment tool
+            return LLMResponse(
+                text="",
+                tool_calls=[{
+                    "id": "call_opt_1",
+                    "name": "optimize_replenishment",
+                    "input": {"sku_id": "SKU001", "moq": 100.0, "horizon_days": 90},
+                }],
+                finish_reason="tool_use",
+                usage=LLMUsage(
+                    input_tokens=0, output_tokens=0, total_cost_usd=Decimal("0")
+                ),
+                model="stub",
+                request_id=str(uuid4()),
+                latency_ms=0,
             )
         if "helpful supply chain decision assistant" in system:
             return _response("Good morning! How can I help?")

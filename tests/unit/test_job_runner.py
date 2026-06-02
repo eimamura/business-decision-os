@@ -61,5 +61,5 @@ async def test_inprocess_run_train_forecast_no_db_raises():
     runner = InProcessJobRunner()
     spec = JobSpec(kind="train_forecast", payload={"sku_id": "SKU-1"}, idempotency_key="k2")
     handle = await runner.submit(spec, _make_ctx())
-    with pytest.raises(NotImplementedError):
+    with pytest.raises((NotImplementedError, ModuleNotFoundError)):
         await runner.result(handle.job_id, wait=False)

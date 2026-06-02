@@ -11,7 +11,13 @@ from fastapi import APIRouter, HTTPException, Request, status
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
-from apps.api.state import Broadcaster, broadcasters, get_orchestrator, make_event_persister, sessions
+from apps.api.state import (
+    Broadcaster,
+    broadcasters,
+    get_orchestrator,
+    make_event_persister,
+    sessions,
+)
 from packages.agent.history import compress_history
 from packages.agent.orchestrator import SessionResponse, SessionUserQuery
 from packages.agent.rate_limiter import RateLimitExceeded, check_rate_limit
@@ -126,7 +132,10 @@ async def delete_session(session_id: str) -> None:
 async def update_session_title(session_id: str, body: UpdateTitleRequest) -> None:
     title = body.title[:60].strip()
     if not title:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="title must not be empty")
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="title must not be empty",
+        )
     if session_id in sessions:
         sessions[session_id]["title"] = title
     try:

@@ -1,13 +1,12 @@
 from __future__ import annotations
 
-import hashlib
 import json
-import math
-import struct
+import os
 from datetime import datetime, timezone
 from typing import Any, Literal, Protocol
 from uuid import UUID, uuid4
 
+import openai
 from pydantic import BaseModel, Field
 
 
@@ -35,16 +34,20 @@ class MemoryStore(Protocol):
     async def get(self, id: UUID) -> Memory | None: ...
 
 
-def _make_embedding(text: str) -> list[float]:
-    vec: list[float] = []
-    seed = text.encode()
-    for i in range(192):
-        h = hashlib.sha256(seed + i.to_bytes(2, "big")).digest()
-        for j in range(0, 32, 4):
-            val = struct.unpack_from(">f", h, j)[0]
-            vec.append(0.0 if not math.isfinite(val) else val)
-    mag = math.sqrt(sum(v * v for v in vec)) or 1.0
-    return [v / mag for v in vec]
+async def _get_embedding(text: str) -> list[float]:
+    api_key = os.environ.get("OPENAI_API_KEY")
+    if not api_key:
+        raise RuntimeError(
+            "OPENAI_API_KEY environment variable is not set. "
+            "Set it to use PgVectorMemoryStore."
+        )
+    client = openai.AsyncOpenAI(api_key=api_key)
+    response = await client.embeddings.create(
+        model="text-embedding-3-small",
+        input=text,
+    )
+    embedding: list[float] = response.data[0].embedding
+    return embedding
 
 
 class PgVectorMemoryStore:
@@ -62,7 +65,9 @@ class PgVectorMemoryStore:
     async def write(self, memory: Memory) -> UUID:
         pool = await self._get_pool()
         embedding = (
-            memory.embedding if memory.embedding is not None else _make_embedding(memory.content)
+            memory.embedding
+            if memory.embedding is not None
+            else await _get_embedding(memory.content)
         )
         embedding_str = "[" + ",".join(str(v) for v in embedding) + "]"
         record_id = memory.id if memory.id else uuid4()
@@ -94,7 +99,7 @@ class PgVectorMemoryStore:
     async def search(self, query: MemoryQuery) -> list[tuple[Memory, float]]:
         pool = await self._get_pool()
         query_text = query.query_text or ""
-        query_embedding = _make_embedding(query_text)
+        query_embedding = await _get_embedding(query_text)
         embedding_str = "[" + ",".join(str(v) for v in query_embedding) + "]"
 
         conditions: list[str] = []

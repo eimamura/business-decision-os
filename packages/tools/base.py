@@ -9,13 +9,19 @@ from packages.agent.base import SpecialistRole
 
 _ROLE_TOOL_ALLOWLIST: dict[str, list[str]] = {
     "orchestrator": [],
-    "data_engineer": ["sql_query", "nl_query", "data_catalog_search", "table_schema_reader", "data_quality_checker"],
+    "data_engineer": [
+        "sql_query", "nl_query", "data_catalog_search",
+        "table_schema_reader", "data_quality_checker",
+    ],
     "simulation_optimizer": ["simulate_inventory", "optimize_replenishment"],
     "evaluator": ["evaluate_candidates", "write_audit_log"],
-    "anomaly_detector": ["sql_query", "nl_query", "data_catalog_search", "table_schema_reader", "data_quality_checker"],
+    "anomaly_detector": [
+        "sql_query", "nl_query", "data_catalog_search",
+        "table_schema_reader", "data_quality_checker",
+    ],
     "demand": ["sql_query", "nl_query", "forecast", "train_forecast"],
-    "inventory": ["sql_query", "nl_query"],
-    "replenishment": ["sql_query", "nl_query"],
+    "inventory": ["sql_query", "nl_query", "simulate_inventory"],
+    "replenishment": ["sql_query", "nl_query", "simulate_inventory", "optimize_replenishment"],
     "procurement": ["sql_query", "nl_query"],
     "supplier": ["sql_query", "nl_query"],
     "production": ["sql_query", "nl_query"],

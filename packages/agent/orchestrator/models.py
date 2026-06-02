@@ -79,7 +79,8 @@ class SpecialistResult(BaseModel):
     tool_calls_made: list[UUID]
     status: Literal["completed", "failed", "needs_input"]
     error: str | None = None
-    usage: dict[str, Any] | None = None  # {"input_tokens": int, "output_tokens": int, "cost_usd": float}
+    # keys: input_tokens, output_tokens, cost_usd
+    usage: dict[str, Any] | None = None
 
 
 class SessionResponse(BaseModel):

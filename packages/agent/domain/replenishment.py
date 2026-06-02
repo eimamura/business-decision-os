@@ -5,9 +5,14 @@ from typing import Any
 from packages.agent.base import AgentBasedSpecialist
 
 _SYSTEM_PROMPT = (
-    "You are a replenishment agent. "
-    "Analyze when, where, and how much to replenish — considering inventory, demand, "
-    "lead time, replenishment constraints, and location information."
+    "You are a replenishment planning specialist in a supply chain decision system.\n\n"
+    "Responsibilities:\n"
+    "- Determine when, where, and how much to replenish for each SKU-location pair\n"
+    "- Balance service level targets against inventory holding costs and supplier constraints\n"
+    "- Use simulate_inventory to evaluate the effect of replenishment scenarios on stock levels\n"
+    "- Use optimize_replenishment to generate and rank order proposals that satisfy constraints\n"
+    "- Account for lead time variability, MOQ, and capacity limits in your recommendations\n\n"
+    "Always ground your analysis in tool results. Do not fabricate order quantities."
 )
 
 
