@@ -123,21 +123,21 @@ export default function ChatSidebar({
   }, [profileOpen]);
 
   return (
-    <aside className="w-60 shrink-0 bg-[#0B1020] flex flex-col border-r border-white/5">
+    <aside className="w-60 shrink-0 bg-surface dark:bg-[#0B1020] flex flex-col border-r border-border dark:border-white/5">
       {/* Brand */}
-      <div className="px-4 py-4 border-b border-white/8">
+      <div className="px-4 py-4 border-b border-border dark:border-white/8">
         <Link
           href="/chat"
-          className="text-sm font-semibold text-white tracking-tight hover:text-indigo-300 transition-colors"
+          className="text-sm font-semibold text-foreground dark:text-white tracking-tight hover:text-indigo-600 dark:hover:text-indigo-300 transition-colors"
         >
           Decision OS
         </Link>
-        <p className="text-xs text-white/50 mt-0.5 tracking-wide uppercase">Supply Chain Intelligence</p>
+        <p className="text-xs text-muted dark:text-white/50 mt-0.5 tracking-wide uppercase">Supply Chain Intelligence</p>
       </div>
 
       {/* Main Navigation */}
       <div className="px-3 pt-3 pb-2">
-        <p className="px-1 mb-1.5 text-[10px] font-semibold uppercase tracking-widest text-white/25">
+        <p className="px-1 mb-1.5 text-[10px] font-semibold uppercase tracking-widest text-muted dark:text-white/25">
           Main
         </p>
         <nav className="space-y-0.5">
@@ -149,11 +149,11 @@ export default function ChatSidebar({
                 href={href}
                 className={`flex items-center gap-2.5 px-2.5 py-1.5 rounded-md text-xs transition-colors ${
                   isActive
-                    ? "bg-indigo-500/15 text-white font-medium"
-                    : "text-white/45 hover:text-white/75 hover:bg-white/5"
+                    ? "bg-indigo-100 dark:bg-indigo-500/15 text-indigo-700 dark:text-white font-medium"
+                    : "text-muted dark:text-white/45 hover:text-foreground dark:hover:text-white/75 hover:bg-surface dark:hover:bg-white/5"
                 }`}
               >
-                <span className={isActive ? "text-indigo-400" : "text-white/30"}>{icon}</span>
+                <span className={isActive ? "text-indigo-500 dark:text-indigo-400" : "text-muted dark:text-white/30"}>{icon}</span>
                 {label}
               </Link>
             );
@@ -162,26 +162,26 @@ export default function ChatSidebar({
       </div>
 
       {/* Sessions */}
-      <div className="px-3 pt-2 border-t border-white/5">
+      <div className="px-3 pt-2 border-t border-border dark:border-white/5">
         <div className="flex items-center justify-between px-1 mb-1.5">
-          <p className="text-[10px] font-semibold uppercase tracking-widest text-white/25">Sessions</p>
+          <p className="text-[10px] font-semibold uppercase tracking-widest text-muted dark:text-white/25">Sessions</p>
           <button
             onClick={onNewSession}
             disabled={creating}
             title="New Session"
-            className="flex items-center gap-1 text-[10px] text-indigo-400/70 hover:text-indigo-300 disabled:opacity-40 transition-colors"
+            className="flex items-center gap-1 text-[10px] text-indigo-500 dark:text-indigo-400/70 hover:text-indigo-600 dark:hover:text-indigo-300 disabled:opacity-40 transition-colors"
           >
             <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
               <path d="M12 5v14M5 12h14" />
             </svg>
-            {creating ? "…" : "New"}
+            {creating ? "..." : "New"}
           </button>
         </div>
       </div>
 
       <div className="flex-1 overflow-y-auto pb-2">
         {sessions.length === 0 && (
-          <p className="px-4 py-3 text-xs text-white/30">No sessions yet</p>
+          <p className="px-4 py-3 text-xs text-muted dark:text-white/30">No sessions yet</p>
         )}
         {sessions.map((s) => {
           const isActive = s.session_id === activeSessionId;
@@ -198,12 +198,12 @@ export default function ChatSidebar({
                 href={`/chat/${s.session_id}`}
                 className={`block px-3 py-2.5 pr-7 text-xs rounded-md transition-colors ${
                   isActive
-                    ? "bg-indigo-500/15 text-white"
-                    : "text-white/45 hover:bg-white/5 hover:text-white/75"
+                    ? "bg-indigo-100 dark:bg-indigo-500/15 text-indigo-700 dark:text-white"
+                    : "text-muted dark:text-white/45 hover:bg-surface dark:hover:bg-white/5 hover:text-foreground dark:hover:text-white/75"
                 }`}
               >
                 {isActive && (
-                  <span className="absolute left-1 top-0 bottom-0 w-0.5 bg-indigo-400 rounded-r" />
+                  <span className="absolute left-1 top-0 bottom-0 w-0.5 bg-indigo-500 dark:bg-indigo-400 rounded-r" />
                 )}
                 <span
                   className="block font-medium leading-snug line-clamp-2"
@@ -211,7 +211,7 @@ export default function ChatSidebar({
                 >
                   {s.title ?? s.goal ?? "New Session"}
                 </span>
-                <span className="text-[10px] text-white/30 mt-0.5 block">
+                <span className="text-[10px] text-muted dark:text-white/30 mt-0.5 block">
                   {formatSessionDate(s.created_at)}
                 </span>
               </Link>
@@ -226,7 +226,7 @@ export default function ChatSidebar({
                   }}
                   aria-label="Confirm delete"
                   title="Click to confirm delete"
-                  className="absolute right-1.5 top-3 px-1 py-0.5 text-red-400 hover:text-red-300 transition-colors"
+                  className="absolute right-1.5 top-3 px-1 py-0.5 text-red-500 dark:text-red-400 hover:text-red-600 dark:hover:text-red-300 transition-colors"
                 >
                   <Trash2 size={13} />
                 </button>
@@ -240,9 +240,9 @@ export default function ChatSidebar({
                   }}
                   aria-label="Delete session"
                   title="Delete session"
-                  className="absolute right-1.5 top-3 opacity-0 group-hover/item:opacity-100 px-1 py-0.5 text-white/30 hover:text-white/60 transition-all text-[11px] font-bold tracking-tight"
+                  className="absolute right-1.5 top-3 opacity-0 group-hover/item:opacity-100 px-1 py-0.5 text-muted dark:text-white/30 hover:text-foreground dark:hover:text-white/60 transition-all text-[11px] font-bold tracking-tight"
                 >
-                  ···
+                  ...
                 </button>
               )}
             </div>
@@ -251,41 +251,41 @@ export default function ChatSidebar({
       </div>
 
       {/* User area */}
-      <div ref={profileRef} className="border-t border-white/8 px-3 py-3 shrink-0 relative">
+      <div ref={profileRef} className="border-t border-border dark:border-white/8 px-3 py-3 shrink-0 relative">
         {profileOpen && (
-          <div className="absolute bottom-full left-2 right-2 mb-1 bg-[#0F1629] border border-white/10 rounded-lg shadow-xl overflow-hidden">
+          <div className="absolute bottom-full left-2 right-2 mb-1 bg-background dark:bg-[#0F1629] border border-border dark:border-white/10 rounded-lg shadow-xl overflow-hidden">
             <Link
               href="/settings"
               onClick={() => setProfileOpen(false)}
-              className="flex items-center gap-2.5 px-3 py-2.5 text-xs text-white/60 hover:text-white hover:bg-white/5 transition-colors"
+              className="flex items-center gap-2.5 px-3 py-2.5 text-xs text-muted dark:text-white/60 hover:text-foreground dark:hover:text-white hover:bg-surface dark:hover:bg-white/5 transition-colors"
             >
-              <Database size={13} className="text-indigo-400 shrink-0" />
+              <Database size={13} className="text-indigo-500 dark:text-indigo-400 shrink-0" />
               Data Generation
             </Link>
             <Link
               href="/settings"
               onClick={() => setProfileOpen(false)}
-              className="flex items-center gap-2.5 px-3 py-2.5 text-xs text-white/60 hover:text-white hover:bg-white/5 transition-colors"
+              className="flex items-center gap-2.5 px-3 py-2.5 text-xs text-muted dark:text-white/60 hover:text-foreground dark:hover:text-white hover:bg-surface dark:hover:bg-white/5 transition-colors"
             >
-              <Settings size={13} className="text-white/40 shrink-0" />
+              <Settings size={13} className="text-muted dark:text-white/40 shrink-0" />
               Settings
             </Link>
           </div>
         )}
         <button
           onClick={() => setProfileOpen((prev) => !prev)}
-          className="w-full flex items-center gap-2.5 px-1 rounded-md hover:bg-white/5 transition-colors py-0.5"
+          className="w-full flex items-center gap-2.5 px-1 rounded-md hover:bg-surface dark:hover:bg-white/5 transition-colors py-0.5"
         >
-          <div className="w-7 h-7 rounded-full bg-indigo-600/40 border border-indigo-500/30 flex items-center justify-center shrink-0">
-            <User size={14} className="text-indigo-300" />
+          <div className="w-7 h-7 rounded-full bg-indigo-100 dark:bg-indigo-600/40 border border-indigo-300 dark:border-indigo-500/30 flex items-center justify-center shrink-0">
+            <User size={14} className="text-indigo-500 dark:text-indigo-300" />
           </div>
           <div className="min-w-0 flex-1 text-left">
-            <p className="text-xs font-medium text-white/70 truncate">User</p>
-            <p className="text-[10px] text-white/35 truncate">Supply Chain Analyst</p>
+            <p className="text-xs font-medium text-foreground dark:text-white/70 truncate">User</p>
+            <p className="text-[10px] text-muted dark:text-white/35 truncate">Supply Chain Analyst</p>
           </div>
           {profileOpen
-            ? <ChevronUp size={12} className="text-white/30 shrink-0" />
-            : <ChevronDown size={12} className="text-white/30 shrink-0" />
+            ? <ChevronUp size={12} className="text-muted dark:text-white/30 shrink-0" />
+            : <ChevronDown size={12} className="text-muted dark:text-white/30 shrink-0" />
           }
         </button>
       </div>
