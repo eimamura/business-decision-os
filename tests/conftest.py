@@ -1,9 +1,28 @@
 """Root conftest for Business Decision OS test suite."""
 from __future__ import annotations
 
+import socket
 from collections.abc import AsyncGenerator
 
 import pytest
+
+
+def _api_is_up() -> bool:
+    try:
+        with socket.create_connection(("localhost", 8000), timeout=1):
+            return True
+    except OSError:
+        return False
+
+
+def pytest_collection_modifyitems(items: list) -> None:
+    """Auto-skip @pytest.mark.e2e tests when localhost:8000 is not reachable."""
+    if _api_is_up():
+        return
+    skip = pytest.mark.skip(reason="API server not running on localhost:8000")
+    for item in items:
+        if "e2e" in item.nodeid or item.get_closest_marker("e2e") is not None:
+            item.add_marker(skip)
 
 
 @pytest.fixture(autouse=True)
