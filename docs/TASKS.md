@@ -133,17 +133,33 @@ projects that improve correctness without changing public interfaces.
 ## P1 — Critical Design Gaps (continued)
 
 ### T-012: Add `authorize_user` with DB-backed role lookup
-- **Files:** `packages/persistence/` (new `users` repository), `apps/api/` (dependency or middleware)
+- **Files:** `packages/persistence/users_repo.py` (replace existing stub), `apps/api/` (dependency or middleware)
+- **Pre-condition:** `packages/persistence/users_repo.py` already exists but is a smart stub that
+  returns `"analyst"` for all users — this violates the AGENTS.md smart-stub prohibition. It must
+  be replaced with a real DB-backed implementation.
 - **What:**
-  - New `users` table: `(user_id, role: "analyst"|"manager"|"admin", created_at)`
-  - `UserRepository.get_role(user_id) -> str` in `packages/persistence/`
-  - Resolve user role at API request entry and inject into `ToolContext`
+  - New `users` table: `(user_id, role: "analyst"|"manager"|"admin", created_at)` — add migration `0011_users.py`
+  - Replace `UserRepository.get_role()` stub body with a real asyncpg query against the `users` table
+  - Resolve user role at API request entry and inject as `user_role: str` into `ToolContext`
   - Existing `DevUserMiddleware` stays for dev mode; production uses DB lookup
+- **Interface note:** Adding `user_role` to `ToolContext` is used by `Tool.handle()` — all tool
+  implementations receive it via context. Ensure `user_role` has a default (`"analyst"`) so existing
+  tools remain compatible without changes.
 - **Test:** Unit test: known user ID → correct role returned. Unknown ID → default `"analyst"`.
 
 ---
 
 ## P2 — Architecture Improvements (continued)
+
+### T-018: Classify tools as `read_only` / `write` / `hitl` in ToolRegistry
+- **File:** `packages/tools/base.py`
+- **What:** Add `safety_level: Literal["read_only", "write", "hitl"]` to the `Tool`
+  protocol (complements existing `requires_approval: bool`). Add `list_read_only()`
+  and `list_hitl_tools()` methods to `ToolRegistry`.
+  Pattern reference: `~/projects/agentic-system-mvp/apps/api/shared/types.py::HITL_TOOLS, READ_ONLY_TOOLS`
+- **ADR required:** `Tool` public interface change.
+- **Test:** Each registered tool has the expected `safety_level`; `list_hitl_tools()`
+  returns only HITL tools.
 
 ### T-013: Implement 2-layer role × intent tool access control
 - **Files:** `packages/tools/base.py`, `packages/agent/runtime.py`
@@ -152,14 +168,20 @@ projects that improve correctness without changing public interfaces.
   - Layer 2 (agent role): existing `_ROLE_TOOL_ALLOWLIST` per specialist
   - Effective tools = intersection of both layers
   - `AgentRuntime.run()` reads user role from `ToolContext` and applies Layer 1 filter
-- **Depends on:** T-012
+- **Depends on:** T-012, T-018 (Layer 1 filtering uses `safety_level` defined in T-018)
 - **Test:** Each user role returns the expected intersection of tools from `list_for_role`.
 
 ### T-014: Add approval idempotency guard
-- **Files:** `packages/persistence/` (approvals repository), `packages/agent/orchestrator/decision.py`
-- **What:** Before creating an approval request, call `get_pending_approval_for_session(session_id)`.
-  If a pending record exists, reuse it instead of inserting a duplicate.
+- **Files:** `packages/persistence/approvals_repo.py`, `packages/agent/orchestrator/decision.py`
+- **Pre-condition:** `ApprovalsRepository` at `packages/persistence/approvals_repo.py` currently stubs
+  all methods with `NotImplementedError("Phase 1 — DB required")`. The repository must have functional
+  `create()`, `get()`, and `list()` implementations before idempotency can be layered on top.
+  Implement these as part of this task using the existing `approvals` table from migration `0001_initial.py`.
+- **What:** Add `get_pending_approval_for_session(session_id) -> Approval | None` to `ApprovalsRepository`.
+  Before creating an approval request in `decision.py`, call this method. If a pending record exists,
+  reuse it instead of inserting a duplicate.
   Pattern reference: `~/projects/lang-graph-agent-mvp/app/services/approval_service.py::get_pending_approval_for_thread()`
+- **Depends on:** T-005 (session persistence — session_id reliably stored before approval records reference it)
 - **Test:** Two attempts to create an approval for the same session — second call returns
   the existing record without a new INSERT.
 
@@ -204,16 +226,6 @@ projects that improve correctness without changing public interfaces.
 - **Test:** `build_response(intent, candidates, risk_level)` returns expected
   structure without LLM calls.
 
-### T-018: Classify tools as `read_only` / `write` / `hitl` in ToolRegistry
-- **File:** `packages/tools/base.py`
-- **What:** Add `safety_level: Literal["read_only", "write", "hitl"]` to the `Tool`
-  protocol (complements existing `requires_approval: bool`). Add `list_read_only()`
-  and `list_hitl_tools()` methods to `ToolRegistry`.
-  Pattern reference: `~/projects/agentic-system-mvp/apps/api/shared/types.py::HITL_TOOLS, READ_ONLY_TOOLS`
-- **ADR required:** `Tool` public interface change.
-- **Test:** Each registered tool has the expected `safety_level`; `list_hitl_tools()`
-  returns only HITL tools.
-
 ### T-019: Add `ask_clarification` flow for unknown intents
 - **Files:** `packages/agent/orchestrator/clarification.py` (new),
   `packages/agent/orchestrator/session_orchestrator.py`
@@ -222,8 +234,9 @@ projects that improve correctness without changing public interfaces.
   request, enrich `conversation_context` with the Q&A pair and re-classify. Cap at
   2 clarification rounds; fall back to `direct_chat` on the third unknown.
   Pattern reference: `~/projects/agentic-system-mvp/apps/api/agent/nodes/clarification.py`
-  Full execution-pause HITL requires T-005 to be complete first.
-- **Depends on:** T-005 (for true execution pause)
+  T-026 (HITL) reuses this same clarification mechanism for full pause/resume — implement
+  T-019 first so T-026 can extend it rather than duplicate it.
+- **Depends on:** T-005 (session persistence — T-005 is Done; documented for clarity)
 - **Test:** Unknown intent → `clarification_required` SSE fires. Third consecutive
   unknown → falls through to `direct_chat`.
 
@@ -252,6 +265,10 @@ projects that improve correctness without changing public interfaces.
   `mlflow.langchain.autolog(log_traces=True)`. Read `MLFLOW_TRACKING_URI` from env;
   skip silently (do not raise) when unset.
   Pattern reference: `~/projects/agentic-system-mvp/apps/api/app/tracing.py`
+- **Silent-skip rationale:** MLflow is an optional observability service, not a required
+  dependency. Silently skipping when `MLFLOW_TRACKING_URI` is absent is intentional and
+  does not violate the AGENTS.md "raise RuntimeError for missing config" rule, which applies
+  to required env vars only (API keys, database URL, etc.).
 - **Test:** App starts without error when `MLFLOW_TRACKING_URI` is set; also starts
   cleanly when the variable is absent.
 
@@ -277,8 +294,12 @@ projects that improve correctness without changing public interfaces.
   other routes still log normally.
 
 ### T-025: Job list — pagination, generated files, and file-centric view
-- **Files:** `apps/web/app/jobs/` (page, components), `apps/api/` (jobs router)
+- **Files:** `apps/web/app/jobs/` (page, components), `apps/api/routers/jobs.py` (new)
+- **Pre-condition:** No `GET /api/v1/jobs` endpoint or `jobs` router exists in `apps/api/routers/`.
+  The router and a `jobs` table (or reuse of the Celery task metadata) must be created as part of
+  this task. Also requires a new `job_files` table — add migration `0012_job_files.py`.
 - **What:**
+  - **Jobs router:** Create `apps/api/routers/jobs.py` with `GET /api/v1/jobs` and `GET /api/v1/jobs/{id}`
   - **Pagination:** Add cursor-based pagination to the `GET /api/v1/jobs` endpoint
     (`?cursor=<job_id>&limit=20`). Render a paginated table in the UI.
   - **Files per job:** Expose `generated_files` list on each job response (file name,
@@ -286,7 +307,7 @@ projects that improve correctness without changing public interfaces.
   - **File-centric view:** Add a "Files" tab/toggle on the jobs page that lists all
     generated files across jobs. Each row shows file name, size, created-at, and a
     link back to the source job. Implement as a separate `GET /api/v1/files` endpoint
-    backed by a `job_files` table (or equivalent).
+    backed by the `job_files` table.
 - **ADR required:** Only if a new public API resource (`/files`) is added — decide
   whether it warrants a separate router or lives under `/jobs/:id/files`.
 - **Test:** Pagination: second page starts after the last item of the first. Files view:
@@ -294,14 +315,15 @@ projects that improve correctness without changing public interfaces.
 
 ---
 
-## P1 — HITL Integration (depends on T-005, T-013, T-014, T-018)
+## P1 — HITL Integration (depends on T-005, T-013, T-014, T-018, T-019)
 
 ### T-026: HITL end-to-end flow
 - **Files:** `packages/agent/orchestrator/session_orchestrator.py`,
   `packages/agent/orchestrator/decision.py`, `apps/api/` (approvals router),
   `apps/web/app/approvals/` (UI)
 - **Depends on:** T-005 (session persistence), T-013 (tool access layers),
-  T-014 (approval idempotency), T-018 (tool safety levels)
+  T-014 (approval idempotency), T-018 (tool safety levels), T-019 (clarification
+  mechanism — T-026 extends the same pause/resume flow rather than duplicating it)
 - **What:** Wire the full HITL pause-and-resume loop:
   1. When a `hitl`-classified tool is about to execute, the agent emits
      `awaiting_approval` SSE event and pauses execution (session status → `awaiting_approval`).
