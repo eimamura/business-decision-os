@@ -795,3 +795,144 @@ Both tasks require the SSE parser to be correct (T-046) before implementing on t
 - **Test:** Vitest: mock `streamSession` to return one partial event then close without
   `done`; assert the hook retries up to 3 times; on all retries failing, assert error
   message is set on the assistant bubble.
+
+---
+
+## P7 — CI Quality & Memory Loop Validation
+
+Goal: Restore CI to green (2 stale unit test assertions introduced by P4 implementation),
+harden the pipeline with TypeScript type-checking, and validate the Memory Loop
+end-to-end so prompt-cached memory retrieval is proven correct and zero-cost to replay.
+
+All P7-B1 tasks are independent and can run in parallel.
+P7-B2 tasks depend on P7-B1 (CI must be green before adding integration tests).
+
+### Batch P7-B1 (all independent — run in parallel)
+
+#### T-055: Fix stale assertion in `test_inprocess_run_train_forecast_no_db_raises` — **Not Started**
+- **File:** `tests/unit/test_job_runner.py` (lines ~59–65)
+- **Root cause:** Test was authored when `_run_train_forecast` was unimplemented; it expected
+  `NotImplementedError | ModuleNotFoundError`. T-034 implemented train_forecast with a DB
+  fallback path (`history = []` → constant prediction at `mean_val = 0.0`) — no exception
+  is raised in a unit test because no DB is required for the fallback path.
+- **What:** Replace the `pytest.raises` block. Assert instead that calling `runner.result()`
+  returns a `JobResult` with `status == "completed"` and the payload contains a
+  `predicted_units` list. This makes the test describe what the implementation actually does.
+- **Test:** CI green; `uv run pytest tests/unit/test_job_runner.py -v` passes.
+
+#### T-056: Fix stale assertion in `test_list_for_role_orchestrator_returns_empty` — **Not Started**
+- **File:** `tests/unit/test_tool_isolation.py` (lines ~609–612)
+- **Root cause:** T-033 registered `job_dispatch` in `_ROLE_TOOL_ALLOWLIST["orchestrator"]`.
+  The test still asserts `tools == []`.
+- **What:** Update the assertion to:
+  ```python
+  assert [t.name for t in tools] == ["job_dispatch"]
+  ```
+- **Test:** CI green; `uv run pytest tests/unit/test_tool_isolation.py::test_list_for_role_orchestrator_returns_empty -v` passes.
+
+#### T-057: Add TypeScript type check to CI — **Not Started**
+- **File:** `.github/workflows/lint-test.yml` — `node-lint` job
+- **Root cause:** The Node CI job runs only `npm ci`. TypeScript regressions (e.g., from
+  T-046–T-054) are invisible in CI.
+- **What:** Extend the `node-lint` job with two additional steps after `npm ci`:
+  1. `cd apps/web && npx tsc --noEmit` — full type check
+  2. `cd apps/web && npm run build` — production build (catches import errors not caught by tsc)
+  Keep the job name `node-lint`; no new job needed.
+- **Test:** A deliberate type error in `apps/web/` breaks the CI job; the current codebase
+  passes both steps.
+
+---
+
+### Batch P7-B2 (after P7-B1 — requires Docker Compose + cassette)
+
+#### T-058: Memory Loop integration test with VCR cassette — **Not Started**
+- **File:** `tests/integration/test_memory_loop.py` (new)
+- **Pre-condition:** `PgVectorMemoryStore` is already wired in `apps/api/state.py`
+  (`_build_memory_store()` returns real store when `DATABASE_URL` is set). The
+  round-trip (write → embed → search → retrieve) has never been tested end-to-end.
+- **What:** Integration test (`@pytest.mark.vcr`, real DB):
+  1. Instantiate `PgVectorMemoryStore` against the real DB (via `DATABASE_URL`)
+  2. Write a `Memory` with `type="decision"`, `content="reduce safety stock for SKU-001"`
+  3. Call `store.search(MemoryQuery(query_text="safety stock reduction", k=1))`
+  4. Assert `len(results) == 1` and `similarity > 0.7`
+  5. Also call `_resolve_weights_with_memory(mock_orchestrator, goal)` with a
+     semantically similar goal; assert `weight_source == "memory"` (memory path taken)
+  - Decorate with `@pytest.mark.vcr` (records cassette on first run; replays for free)
+  - Guard: `@pytest.mark.skipif(not os.environ.get("DATABASE_URL"), reason="requires DB")`
+  - The VCR cassette scrubs the `Authorization` header (OpenAI key) before commit
+- **Depends on:** P7-B1 (CI must be green before adding new integration coverage)
+- **Test:** This IS the test. Proves the full Memory Loop: write → embed → retrieve → influence.
+
+## P7 — Mock Mode for Cost-Free UI Testing
+
+Goal: Introduce a `MOCK_LLM=true` env var that replaces the real Anthropic client with a
+schema-conforming stub, exposes mock status through the API, and renders a clear visual indicator
+in the UI. Developers can exercise the full UI/UX flow — chat, HITL approvals, job dispatch —
+without incurring any LLM API cost.
+
+### Batch P7-B1 (T-055 and T-058 independent — run in parallel)
+
+#### T-055: Add `MOCK_LLM` env var to `create_llm_client()` — **Not Started**
+- **File:** `packages/agent/llm/__init__.py`, `.env.example`
+- **What:**
+  - In `create_llm_client()`: check `os.environ.get("MOCK_LLM", "").lower() == "true"` first.
+    When true, skip the `ANTHROPIC_API_KEY` check and return `ScenarioStubClaudeClient` (T-058).
+    When false (default), existing behaviour unchanged.
+  - Add to `.env.example`:
+    ```
+    # Set to true to disable real LLM calls — enables cost-free UI testing
+    # MOCK_LLM=true
+    ```
+  - Note: `MOCK_LLM=true` is an explicit opt-in, not a silent fallback.
+    The AGENTS.md prohibition applies to missing-config degradation, not intentional test overrides.
+- **Test:** Unit: `create_llm_client()` with `MOCK_LLM=true` returns `ScenarioStubClaudeClient`
+  without raising. `create_llm_client()` with `MOCK_LLM` unset still requires `ANTHROPIC_API_KEY`.
+
+#### T-058: Upgrade `StubClaudeClient` to `ScenarioStubClaudeClient` — **Not Started**
+- **File:** `packages/agent/llm/__init__.py`
+- **What:** Add `ScenarioStubClaudeClient` (keep `StubClaudeClient` as an alias for
+  backward compatibility with existing unit tests). `complete()` inspects the system message
+  content to detect the orchestrator call type and return a schema-conforming JSON stub:
+  - System prompt contains `"category"` or `"intent"` → `SessionIntent`-shaped JSON:
+    `{"category": "lookup", "confidence": 0.95, "rationale": "Mock mode", "goal_text": "<last user message>"}`
+  - System prompt contains `"route"` or `"primary_role"` → `AgentRoute`-shaped JSON:
+    `{"mode": "single_agent", "primary_role": "data_engineer", "rationale": "Mock stub"}`
+  - System prompt contains `"verify"` or `"findings"` → verification JSON:
+    `{"status": "pass", "rationale": "Mock mode — no verification performed"}`
+  - All other calls → return a plain text mock response so streaming works correctly.
+  - `stream()` yields a `text_delta` event with `"Mock mode response — no LLM cost incurred."`.
+  - `embed()` returns zero-vectors (unchanged from existing stub).
+- **Test:** Unit per pattern: correct JSON returned for each detected system prompt type.
+  Default case: `complete()` returns readable text; `stream()` yields one `text_delta` event.
+
+---
+
+### Batch P7-B2 (after P7-B1 — T-056 and T-057 run in parallel)
+
+#### T-056: Add `GET /api/v1/status` endpoint — **Not Started**
+- **File:** `apps/api/routers/health.py` (extend existing health router)
+- **What:** Add `GET /api/v1/status` returning:
+  ```json
+  { "mock_mode": true, "version": "0.1.0", "environment": "development" }
+  ```
+  - `mock_mode` = `os.environ.get("MOCK_LLM", "").lower() == "true"`
+  - `environment` = `os.environ.get("ENV", "production")`
+  - `version` = constant or read from package metadata
+  - Add `response_model` Pydantic schema `AppStatus` to `health.py`.
+- **Test:** Unit: endpoint returns `mock_mode: true` when `MOCK_LLM=true`; `false` otherwise.
+  Both cases return HTTP 200.
+
+#### T-057: Add mock mode banner to UI — **Not Started**
+- **Files:** `apps/web/components/MockModeBanner.tsx` (new),
+  `apps/web/app/layout.tsx` (root layout — add `<MockModeBanner />`)
+- **What:**
+  - `MockModeBanner` is a Client Component that fetches `GET /api/v1/status` once on mount.
+    If `mock_mode: true`, renders a fixed amber top bar:
+    `"Mock Mode Active — LLM calls are stubbed. No API cost is incurred."`
+    If `mock_mode: false`, renders nothing.
+  - Mount `<MockModeBanner />` in the root `app/layout.tsx` so it appears on every page.
+  - No user toggle — mock mode is server-side only (controlled by `MOCK_LLM` env var).
+  - Style: `position: sticky; top: 0; z-index: 50` amber/yellow Tailwind bar with an info icon.
+- **Depends on:** T-056 (`/api/v1/status` must exist)
+- **Test:** Vitest + React Testing Library: mock `fetch` to return `{ mock_mode: true }`;
+  assert banner text visible. `mock_mode: false` → banner not rendered.

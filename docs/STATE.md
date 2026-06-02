@@ -19,7 +19,24 @@ Orchestrator execution state. Written only by bdos-orchestrator.
 
 ## Active Phase
 
-None — all planned phases complete.
+**P7 — CI Quality & Memory Loop Validation** (defined 2026-06-02)
+
+Goal: Restore CI to green (2 stale unit test failures from P4), add TypeScript type check
+to the CI pipeline, and validate the Memory Loop end-to-end with a VCR-cassette backed
+integration test.
+
+| Batch | Tasks | Status |
+|---|---|---|
+| P7-B1 | T-055, T-056, T-057 | Not Started |
+| P7-B2 | T-058 | Not Started |
+
+Dependency order:
+```
+T-055 ─┐
+T-056 ─┤  (all independent — run in parallel)
+T-057 ─┘
+  └──────────────→ T-058  (after P7-B1 — requires Docker + cassette)
+```
 
 ---
 
