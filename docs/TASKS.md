@@ -760,7 +760,7 @@ Six trivial-to-medium fixes with no dependencies on each other or on B2/B3.
 
 Both tasks require the SSE parser to be correct (T-046) before implementing on top of it.
 
-#### T-053: Fix `postMessage` → `streamSession` event-loss window — **Not Started**
+#### T-053: Fix `postMessage` → `streamSession` event-loss window — **Done**
 - **File:** `apps/web/app/chat/ChatStateContext.tsx` — `sendMessage` (lines ~121–128)
 - **Root cause:** `postMessage` completes first, then `streamSession` is called. If the
   backend starts emitting SSE events in the few milliseconds between those two calls,
@@ -777,7 +777,7 @@ Both tasks require the SSE parser to be correct (T-046) before implementing on t
 - **Test:** Vitest: mock `streamSession` to return a pre-loaded async iterator; assert
   `postMessage` is called after the iterator is obtained.
 
-#### T-054: SSE auto-reconnect with exponential backoff — **Not Started**
+#### T-054: SSE auto-reconnect with exponential backoff — **Done**
 - **File:** `apps/web/lib/api.ts` — `streamSession()` and/or `ChatStateContext.tsx` —
   `sendMessage`
 - **Root cause:** When the SSE stream ends without a `done` event (network drop,

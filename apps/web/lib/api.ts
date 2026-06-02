@@ -146,50 +146,61 @@ export async function updateSessionTitle(sessionId: string, title: string): Prom
   if (!res.ok) throw new Error(`updateSessionTitle: ${res.status}`);
 }
 
-export async function* streamSession(
+// streamSession eagerly opens the HTTP connection (by awaiting the fetch) before
+// returning the async generator. This ensures the stream reader is registered
+// before any events are emitted — safe to call before postMessage.
+// The backend's GET /stream blocks until a message is posted, so this ordering
+// is correct: open stream → post message → iterate events.
+export async function streamSession(
   sessionId: string,
   signal?: AbortSignal,
-): AsyncGenerator<SseEvent> {
+): Promise<AsyncGenerator<SseEvent>> {
   const res = await fetch(`${API_BASE}/api/v1/sessions/${sessionId}/stream`, {
     headers: DEV_HEADERS,
     signal,
   });
-  if (!res.ok || !res.body) return;
+  if (!res.ok || !res.body) {
+    return (async function* empty(): AsyncGenerator<SseEvent> {})();
+  }
 
   const reader = res.body.getReader();
   const decoder = new TextDecoder();
   let buffer = "";
 
-  try {
-    while (true) {
-      const { value, done } = await reader.read();
-      if (done) break;
-      buffer += decoder.decode(value, { stream: true });
+  async function* generate(): AsyncGenerator<SseEvent> {
+    try {
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
 
-      const blocks = buffer.split("\n\n");
-      buffer = blocks.pop() ?? "";
+        const blocks = buffer.split("\n\n");
+        buffer = blocks.pop() ?? "";
 
-      for (const block of blocks) {
-        if (!block.trim()) continue;
-        // Collect all data: lines from this block and join them
-        const dataLines = block
-          .split("\n")
-          .filter((line) => line.startsWith("data: "))
-          .map((line) => line.slice(6));
-        if (dataLines.length === 0) continue;
-        const data = dataLines.join("");
-        try {
-          const parsed: unknown = JSON.parse(data);
-          const event = SseEventSchema.safeParse(parsed);
-          yield event.success ? event.data : invalidSseEvent();
-        } catch {
-          // skip malformed blocks
+        for (const block of blocks) {
+          if (!block.trim()) continue;
+          // Collect all data: lines from this block and join them
+          const dataLines = block
+            .split("\n")
+            .filter((line) => line.startsWith("data: "))
+            .map((line) => line.slice(6));
+          if (dataLines.length === 0) continue;
+          const data = dataLines.join("");
+          try {
+            const parsed: unknown = JSON.parse(data);
+            const event = SseEventSchema.safeParse(parsed);
+            yield event.success ? event.data : invalidSseEvent();
+          } catch {
+            // skip malformed blocks
+          }
         }
       }
+    } finally {
+      reader.cancel();
     }
-  } finally {
-    reader.cancel();
   }
+
+  return generate();
 }
 
 export async function fetchSessionUsage(sessionId: string): Promise<SessionUsage> {

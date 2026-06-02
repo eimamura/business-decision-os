@@ -10,7 +10,7 @@ import {
   streamSession,
   updateSessionTitle,
 } from "@/lib/api";
-import type { ChatMessage, SessionUsage } from "@/types/chat";
+import type { ChatMessage, SessionUsage, SseEvent } from "@/types/chat";
 
 interface SessionState {
   messages: ChatMessage[];
@@ -126,120 +126,177 @@ export function ChatStateProvider({ children }: { children: ReactNode }): React.
       }));
 
       try {
-        await postMessage(sessionId, text);
-
         abortMap.current[sessionId]?.abort();
         const controller = new AbortController();
         abortMap.current[sessionId] = controller;
 
-        for await (const event of streamSession(sessionId, controller.signal)) {
-          if (event.type === "done") {
-            updateSession(sessionId, (prev) => ({
-              ...prev,
-              messages: prev.messages.map((m) =>
-                m.id === assistantId
-                  ? { ...m, content: event.reply ?? m.content, isStreaming: false }
-                  : m,
-              ),
-            }));
-            fetchSessionUsage(sessionId)
-              .then((usage) => updateSession(sessionId, (prev) => ({ ...prev, usage })))
-              .catch(() => undefined);
-            if (!titleSetRef.current[sessionId] && onTitleGenerated) {
-              titleSetRef.current[sessionId] = true;
-              const titleText = text.slice(0, 60).trim();
-              updateSessionTitle(sessionId, titleText)
-                .then(() => onTitleGenerated(titleText))
-                .catch(() => undefined);
+        // Open SSE stream before posting — ensures no events are missed in the
+        // gap between postMessage returning and the stream reader being established.
+        // The backend's GET /stream blocks until a message is posted; this ordering is safe.
+        const initialStream = await streamSession(sessionId, controller.signal);
+
+        await postMessage(sessionId, text);
+
+        // Stream with auto-reconnect and exponential backoff (T-054).
+        // Retries up to 3 times on unexpected stream close (no `done` event).
+        // Delays: 500ms, 1s, 2s. Honours the AbortController for navigation/new-message.
+        const MAX_RETRIES = 3;
+        let attempt = 0;
+        let receivedDone = false;
+
+        while (attempt <= MAX_RETRIES && !receivedDone) {
+          if (attempt > 0) {
+            const delay = Math.min(500 * Math.pow(2, attempt - 1), 4000);
+            await new Promise<void>((resolve) => setTimeout(resolve, delay));
+            if (controller.signal.aborted) return;
+          }
+
+          let stream: AsyncGenerator<SseEvent>;
+          if (attempt === 0) {
+            stream = initialStream;
+          } else {
+            try {
+              stream = await streamSession(sessionId, controller.signal);
+            } catch {
+              attempt++;
+              continue;
             }
-            break;
           }
 
-          if (
-            event.type === "tool_completed" &&
-            (event.tool_name === "sql_query" || event.tool_name === "nl_query") &&
-            event.executed_query
-          ) {
-            const sqlMsg: ChatMessage = {
-              id: crypto.randomUUID(),
-              role: "tool",
-              content: "",
-              toolName: event.tool_name,
-              sql: event.executed_query,
-              created_at: new Date().toISOString(),
-            };
-            updateSession(sessionId, (prev) => {
-              const idx = prev.messages.findIndex((m) => m.id === assistantId);
-              const msgs =
-                idx === -1
-                  ? [...prev.messages, sqlMsg]
-                  : [...prev.messages.slice(0, idx), sqlMsg, ...prev.messages.slice(idx)];
-              return { ...prev, messages: msgs };
-            });
+          for await (const event of stream) {
+            if (event.type === "done") {
+              receivedDone = true;
+              updateSession(sessionId, (prev) => ({
+                ...prev,
+                messages: prev.messages.map((m) =>
+                  m.id === assistantId
+                    ? { ...m, content: event.reply ?? m.content, isStreaming: false }
+                    : m,
+                ),
+              }));
+              fetchSessionUsage(sessionId)
+                .then((usage) => updateSession(sessionId, (prev) => ({ ...prev, usage })))
+                .catch(() => undefined);
+              if (!titleSetRef.current[sessionId] && onTitleGenerated) {
+                titleSetRef.current[sessionId] = true;
+                const titleText = text.slice(0, 60).trim();
+                updateSessionTitle(sessionId, titleText)
+                  .then(() => onTitleGenerated(titleText))
+                  .catch(() => undefined);
+              }
+              break;
+            }
+
+            if (
+              event.type === "tool_completed" &&
+              (event.tool_name === "sql_query" || event.tool_name === "nl_query") &&
+              event.executed_query
+            ) {
+              const sqlMsg: ChatMessage = {
+                id: crypto.randomUUID(),
+                role: "tool",
+                content: "",
+                toolName: event.tool_name,
+                sql: event.executed_query,
+                created_at: new Date().toISOString(),
+              };
+              updateSession(sessionId, (prev) => {
+                const idx = prev.messages.findIndex((m) => m.id === assistantId);
+                const msgs =
+                  idx === -1
+                    ? [...prev.messages, sqlMsg]
+                    : [...prev.messages.slice(0, idx), sqlMsg, ...prev.messages.slice(idx)];
+                return { ...prev, messages: msgs };
+              });
+            }
+
+            if (event.type === "awaiting_approval" && event.tool_name === "job_dispatch") {
+              const toolInput = event.tool_input as {
+                job_type?: string;
+                params?: Record<string, unknown>;
+                description?: string;
+              };
+              const approvalMsg: ChatMessage = {
+                id: crypto.randomUUID(),
+                role: "job_approval",
+                content: "",
+                approvalId: event.approval_id,
+                jobId: event.job_id ?? null,
+                jobType: toolInput.job_type ?? "unknown",
+                jobDescription: event.description,
+                jobParams: toolInput.params ?? {},
+                created_at: new Date().toISOString(),
+              };
+              updateSession(sessionId, (prev) => {
+                const idx = prev.messages.findIndex((m) => m.id === assistantId);
+                const msgs =
+                  idx === -1
+                    ? [...prev.messages, approvalMsg]
+                    : [
+                        ...prev.messages.slice(0, idx),
+                        approvalMsg,
+                        ...prev.messages.slice(idx),
+                      ];
+                return { ...prev, messages: msgs };
+              });
+            }
+
+            if (event.type === "job_completed" && event.files.length > 0) {
+              const filesMsg: ChatMessage = {
+                id: crypto.randomUUID(),
+                role: "job_files",
+                content: "",
+                jobId: event.job_id,
+                jobFiles: event.files,
+                created_at: new Date().toISOString(),
+              };
+              updateSession(sessionId, (prev) => ({
+                ...prev,
+                messages: [...prev.messages, filesMsg],
+              }));
+            }
+
+            if (event.type === "error") {
+              updateSession(sessionId, (prev) => ({
+                ...prev,
+                messages: prev.messages.map((m) =>
+                  m.id === assistantId
+                    ? {
+                        ...m,
+                        content: event.message ?? "An error occurred during processing.",
+                        isError: true,
+                        isStreaming: false,
+                      }
+                    : m,
+                ),
+              }));
+              // Treat a server-side error event as terminal — do not retry.
+              receivedDone = true;
+              break;
+            }
           }
 
-          if (event.type === "awaiting_approval" && event.tool_name === "job_dispatch") {
-            const toolInput = event.tool_input as {
-              job_type?: string;
-              params?: Record<string, unknown>;
-              description?: string;
-            };
-            const approvalMsg: ChatMessage = {
-              id: crypto.randomUUID(),
-              role: "job_approval",
-              content: "",
-              approvalId: event.approval_id,
-              jobId: event.job_id ?? null,
-              jobType: toolInput.job_type ?? "unknown",
-              jobDescription: event.description,
-              jobParams: toolInput.params ?? {},
-              created_at: new Date().toISOString(),
-            };
-            updateSession(sessionId, (prev) => {
-              const idx = prev.messages.findIndex((m) => m.id === assistantId);
-              const msgs =
-                idx === -1
-                  ? [...prev.messages, approvalMsg]
-                  : [
-                      ...prev.messages.slice(0, idx),
-                      approvalMsg,
-                      ...prev.messages.slice(idx),
-                    ];
-              return { ...prev, messages: msgs };
-            });
+          if (!receivedDone) {
+            attempt++;
           }
+        }
 
-          if (event.type === "job_completed" && event.files.length > 0) {
-            const filesMsg: ChatMessage = {
-              id: crypto.randomUUID(),
-              role: "job_files",
-              content: "",
-              jobId: event.job_id,
-              jobFiles: event.files,
-              created_at: new Date().toISOString(),
-            };
-            updateSession(sessionId, (prev) => ({
-              ...prev,
-              messages: [...prev.messages, filesMsg],
-            }));
-          }
-
-          if (event.type === "error") {
-            updateSession(sessionId, (prev) => ({
-              ...prev,
-              messages: prev.messages.map((m) =>
-                m.id === assistantId
-                  ? {
-                      ...m,
-                      content: event.message ?? "An error occurred during processing.",
-                      isError: true,
-                      isStreaming: false,
-                    }
-                  : m,
-              ),
-            }));
-            break;
-          }
+        if (!receivedDone) {
+          // All retries exhausted — stream closed without a done/error event.
+          updateSession(sessionId, (prev) => ({
+            ...prev,
+            messages: prev.messages.map((m) =>
+              m.id === assistantId
+                ? {
+                    ...m,
+                    content: "Network error — check your connection.",
+                    isError: true,
+                    isStreaming: false,
+                    errorCode: "network_error" as const,
+                  }
+                : m,
+            ),
+          }));
         }
       } catch (err: unknown) {
         if (err instanceof Error && err.name === "AbortError") return;
