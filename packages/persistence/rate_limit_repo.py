@@ -8,8 +8,8 @@ from packages.persistence.db import get_pool
 
 logger = logging.getLogger(__name__)
 
-PER_USER_LIMIT = int(os.environ.get("RATE_LIMIT_PER_USER_PER_MIN", "10"))
-GLOBAL_LIMIT = int(os.environ.get("RATE_LIMIT_GLOBAL_PER_MIN", "100"))
+PER_USER_LIMIT = int(os.environ.get("RATE_LIMIT_PER_USER_PER_MIN") or "10")
+GLOBAL_LIMIT = int(os.environ.get("RATE_LIMIT_GLOBAL_PER_MIN") or "100")
 
 
 class RateLimitExceeded(Exception):

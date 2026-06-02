@@ -910,7 +910,7 @@ without incurring any LLM API cost.
 
 ### Batch P8-B2 (after P8-B1 — T-061 and T-062 run in parallel)
 
-#### T-061: Add `GET /api/v1/status` endpoint — **Not Started**
+#### T-061: Add `GET /api/v1/status` endpoint — **Done**
 - **File:** `apps/api/routers/health.py` (extend existing health router)
 - **What:** Add `GET /api/v1/status` returning:
   ```json
@@ -924,7 +924,7 @@ without incurring any LLM API cost.
 - **Test:** Unit: endpoint returns `mock_mode: true` when `MOCK_LLM=true`; `false` otherwise.
   Both cases return HTTP 200.
 
-#### T-062: Add mock mode banner to UI — **Not Started**
+#### T-062: Add mock mode banner to UI — **Done**
 - **Files:** `apps/web/components/MockModeBanner.tsx` (new),
   `apps/web/app/layout.tsx` (root layout — add `<MockModeBanner />`)
 - **What:**
