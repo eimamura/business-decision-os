@@ -10,12 +10,13 @@ Orchestrator execution state. Written only by bdos-orchestrator.
 |---|---|
 | Domain Integrity (T-001 – T-011) | 2026-06-02 |
 | Access Control & HITL Foundation (T-012 – T-019, T-026) | 2026-06-02 |
+| P3 — Observability & UX (T-020 – T-025, T-027 – T-029) | 2026-06-02 |
 
 ---
 
 ## Active Phase
 
-None. Access Control & HITL Foundation phase complete.
+None. P3 — Observability & UX phase complete (2026-06-02).
 
 ---
 
@@ -75,11 +76,11 @@ None.
 
 ## Last Completed Batch
 
-Batch 4 complete (2026-06-02): T-026 Done. All 9 phase tasks complete.
+P3 Batch 2 complete (2026-06-02): T-025, T-028, T-029 Done. All P3 tasks complete.
 
 ## Last Validation
 
-2026-06-02: make lint → exit 0, make typecheck → 131 files no issues, make test → 411 passed 31 skipped exit 0.
+2026-06-02: make lint → exit 0, make typecheck → 136 files no issues, uv run pytest tests/unit/ → 430 passed exit 0.
 
 ## Blockers
 

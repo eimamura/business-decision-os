@@ -245,7 +245,7 @@ projects that improve correctness without changing public interfaces.
 
 ## P3 — Domain Depth (continued)
 
-### T-020: Add prompt integration test tier
+### T-020: Add prompt integration test tier — **Done**
 - **File:** `tests/integration/test_prompts_mock_llm.py` (new)
 - **What:** Run 5–10 representative prompts with a mock LLM and real DB. Confirm
   intent classification, routing, and tool execution behave as expected without
@@ -253,14 +253,14 @@ projects that improve correctness without changing public interfaces.
   Pattern reference: `~/projects/agentic-system-mvp/apps/api/tests/integration/test_prompts_mock_llm.py`
 - **Test:** This IS the test. Mock LLM, real DB, zero API cost.
 
-### T-021: Adopt structlog for structured logging
+### T-021: Adopt structlog for structured logging — **Done**
 - **Files:** `packages/agent/runtime.py`, `packages/agent/orchestrator/*.py`, `apps/api/`
 - **What:** Replace `logging.getLogger(__name__)` with `structlog.get_logger()`.
   Bind `session_id`, `agent_role`, and `tool_name` as structured fields. Configure
   JSON output so logs are consumable by external observability platforms.
 - **Test:** Captured stdout log output is valid JSON with the expected fields present.
 
-### T-022: Integrate MLflow tracing
+### T-022: Integrate MLflow tracing — **Done**
 - **File:** `apps/api/app/tracing.py` (new), `apps/api/app/main.py`
 - **What:** Add `setup_mlflow_tracing(tracking_uri, experiment_name)` that calls
   `mlflow.langchain.autolog(log_traces=True)`. Read `MLFLOW_TRACKING_URI` from env;
@@ -277,7 +277,7 @@ projects that improve correctness without changing public interfaces.
 
 ## P3 — UX / Developer Experience
 
-### T-023: Light mode support
+### T-023: Light mode support — **Done**
 - **File:** `apps/web/` (Tailwind config, layout, global CSS)
 - **What:** Add light/dark mode toggle to the web UI. Use Tailwind's `dark:` variant
   strategy (`class` mode). Persist preference to `localStorage`. Default to system
@@ -285,7 +285,7 @@ projects that improve correctness without changing public interfaces.
   color values outside the design token layer.
 - **Test:** Toggle switches `<html class="dark">` on/off; preference survives page reload.
 
-### T-024: Suppress health-check logs in local development
+### T-024: Suppress health-check logs in local development — **Done**
 - **File:** `apps/api/app/main.py` (or middleware layer)
 - **What:** Add a logging filter that drops access log entries for `GET /health` and
   `GET /api/v1/health` at `INFO` level when `ENV=development`. This prevents the
@@ -294,7 +294,7 @@ projects that improve correctness without changing public interfaces.
 - **Test:** In dev mode, repeated `GET /health` calls produce no access log lines;
   other routes still log normally.
 
-### T-025: Job list — pagination, generated files, and file-centric view
+### T-025: Job list — pagination, generated files, and file-centric view — **Done**
 - **Files:** `apps/web/app/jobs/` (page, components), `apps/api/routers/jobs.py` (new)
 - **Pre-condition:** No `GET /api/v1/jobs` endpoint or `jobs` router exists in `apps/api/routers/`.
   The router and a `jobs` table (or reuse of the Celery task metadata) must be created as part of
@@ -344,7 +344,7 @@ projects that improve correctness without changing public interfaces.
 
 ## P3 — UX / Developer Experience (continued)
 
-### T-027: Add copy-to-clipboard button to SQL query bubbles in chat UI
+### T-027: Add copy-to-clipboard button to SQL query bubbles in chat UI — **Done**
 - **File:** `apps/web/components/MessageBubble.tsx` — `SqlQueryBubble`
 - **What:** Inside `SqlQueryBubble` (line ~128), add a copy button in the header row
   alongside the existing label (`NL → SQL` / `SQL Query`). On click, write `message.sql`
@@ -357,7 +357,7 @@ projects that improve correctness without changing public interfaces.
 - **Test:** Click copy button → `navigator.clipboard.writeText` called with the SQL string.
   Use `userEvent` + mocked clipboard API in a unit test.
 
-### T-028: Fix session list flicker when navigating between sessions
+### T-028: Fix session list flicker when navigating between sessions — **Done**
 - **Files:** `apps/web/app/chat/[sessionId]/page.tsx`,
   `apps/web/app/chat/layout.tsx` (new)
 - **Root cause:** `sessions` state is declared inside `[sessionId]/page.tsx` and
@@ -380,7 +380,7 @@ projects that improve correctness without changing public interfaces.
   Playwright E2E test: click two sessions in sequence, assert the sidebar item
   count stays constant throughout.
 
-### T-029: Persist left navigation sidebar across all pages
+### T-029: Persist left navigation sidebar across all pages — **Done**
 - **Files:**
   - `apps/web/app/(shell)/layout.tsx` (new — route group layout)
   - `apps/web/components/NavSidebar.tsx` (new — nav-only sidebar)
