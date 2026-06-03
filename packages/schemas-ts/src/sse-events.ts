@@ -112,6 +112,22 @@ export const AwaitingApprovalEventSchema = z.object({
   timestamp: z.string(),
 });
 
+export const ClarificationRequiredEventSchema = z.object({
+  type: z.literal("clarification_required"),
+  session_id: z.string(),
+  round: z.number().int(),
+  message: z.string(),
+  timestamp: z.string(),
+});
+
+export const SessionPausedEventSchema = z.object({
+  type: z.literal("session_paused"),
+  session_id: z.string(),
+  approval_id: z.string(),
+  tool_name: z.string(),
+  timestamp: z.string(),
+});
+
 export const JobCompletedEventSchema = z.object({
   type: z.literal("job_completed"),
   job_id: z.string(),
@@ -162,6 +178,8 @@ export const SseEventSchema = z.discriminatedUnion("type", [
   ApprovalRequestedEventSchema,
   AutoExecutedEventSchema,
   AwaitingApprovalEventSchema,
+  ClarificationRequiredEventSchema,
+  SessionPausedEventSchema,
   JobCompletedEventSchema,
   JobFailedEventSchema,
   ErrorEventSchema,

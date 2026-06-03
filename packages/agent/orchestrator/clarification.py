@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from typing import Any
 from uuid import UUID
 
@@ -22,6 +23,7 @@ def build_clarification_event(session_id: UUID, round_number: int) -> dict[str, 
             "For example: what supply chain area are you asking about, "
             "and what decision or analysis do you need?"
         ),
+        "timestamp": datetime.now(timezone.utc).isoformat(),
     }
 
 

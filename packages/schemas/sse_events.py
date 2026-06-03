@@ -130,6 +130,22 @@ class AwaitingApprovalEvent(BaseModel):
     timestamp: str
 
 
+class ClarificationRequiredEvent(BaseModel):
+    type: Literal["clarification_required"] = "clarification_required"
+    session_id: str
+    round: int
+    message: str
+    timestamp: str
+
+
+class SessionPausedEvent(BaseModel):
+    type: Literal["session_paused"] = "session_paused"
+    session_id: str
+    approval_id: str
+    tool_name: str
+    timestamp: str
+
+
 class JobCompletedEvent(BaseModel):
     type: Literal["job_completed"] = "job_completed"
     job_id: str
@@ -179,6 +195,8 @@ SseEvent = Annotated[
         ApprovalRequestedEvent,
         AutoExecutedEvent,
         AwaitingApprovalEvent,
+        ClarificationRequiredEvent,
+        SessionPausedEvent,
         JobCompletedEvent,
         JobFailedEvent,
         ErrorEvent,
