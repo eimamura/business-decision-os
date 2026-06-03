@@ -25,7 +25,8 @@ import { vi } from "vitest";
 // Stub out the entire ChatStateContext module so we can inject our own value.
 vi.mock("@/app/chat/ChatStateContext", () => {
   const React = require("react");
-  const Context = React.createContext<unknown>(null);
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-call
+  const Context = (React.createContext as (v: unknown) => unknown)(null);
   return {
     // useChatStateContext will be overridden per-test by controlling the context
     // value via the wrapper; here we just expose a hook that reads from context.

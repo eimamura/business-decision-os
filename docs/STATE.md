@@ -24,6 +24,9 @@ Orchestrator execution state. Written only by bdos-orchestrator.
 | P14 — Agent Node Cards (T-100 – T-108) | 2026-06-03 |
 | P15 — Text Streaming / text_delta SSE (T-109 – T-116) | 2026-06-03 |
 | P16 — Backward Compat Removal (T-117 – T-119) | 2026-06-03 |
+| P17 — Orchestrator Cost Reduction (T-120 – T-123) | 2026-06-03 |
+| P18 — Tool Scenario Coverage (T-124) | 2026-06-03 |
+| P19 — SSE Consumer Consolidation (T-125 – T-127) | 2026-06-03 |
 
 ---
 
@@ -89,7 +92,7 @@ None.
 
 ## Last Completed Batch
 
-P16 (2026-06-03): T-117–T-119 Done. Tool.requires_approval removed from Protocol + 14 tools + 10 tests. SessionState.clarification_round removed. 525 unit tests pass, 11 skipped. typecheck + lint exit 0.
+P19 (2026-06-03): T-125–T-127 Done. eventsToSteps() moved to apps/web/lib/sse-steps.ts; ChatStateContext extended with processingSteps/sessionStartedAt/sessionEndedAt; AgentActivityPanel EventSource removed; EvidenceSources adapted to AgentStep[]; 56 Vitest pass, 533 pytest pass, typecheck + lint exit 0.
 
 ## Previous Completed Batch
 
@@ -97,7 +100,7 @@ P14 Batch 3 (2026-06-03): T-106–T-108 Done. useAgentProgress.test.ts (5 tests)
 
 ## Last Validation
 
-2026-06-03: P16 backward compat removal. uv run pytest tests/unit/ -q → 525 passed, 11 skipped. make typecheck → 0 issues in 139 files. make lint → all checks passed.
+2026-06-03: P19 SSE consumer consolidation. cd apps/web && npx vitest run → 56 passed (8 files). uv run pytest tests/unit/ -q → 533 passed, 11 skipped. npx tsc --noEmit -p apps/web/tsconfig.json → exit 0. make lint → all checks passed.
 
 ## Blockers
 

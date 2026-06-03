@@ -43,7 +43,7 @@ _log = structlog.get_logger(__name__)
 
 class OrchestratorState(TypedDict):
     session_id: str
-    query: SessionUserQuery
+    query: dict[str, Any]  # SessionUserQuery.model_dump() — primitives only for safe checkpoint serialization
     intent: SessionIntent | None
     route: AgentRoute | None
     result: SessionResponse | None
@@ -189,7 +189,7 @@ class SessionOrchestrator:
         if sse_queue is not None:
             self._sse_queue = sse_queue
         try:
-            intent = await self.classify_intent(state["query"], session_id)
+            intent = await self.classify_intent(SessionUserQuery.model_validate(state["query"]), session_id)
         finally:
             self._sse_queue = original_queue
         return {"intent": intent}
@@ -203,7 +203,7 @@ class SessionOrchestrator:
             return {}
 
         session_id = UUID(state["session_id"])
-        query = state["query"]
+        query = SessionUserQuery.model_validate(state["query"])
         sse_queue = (config.get("configurable") or {}).get("sse_queue")
 
         from packages.agent.llm import LLMMessage
@@ -278,7 +278,7 @@ class SessionOrchestrator:
         intent = state["intent"]
         assert intent is not None
 
-        query = state["query"]
+        query = SessionUserQuery.model_validate(state["query"])
         # Inject ask_user answer into conversation_context if present
         if state.get("ask_user_answer"):
             query = SessionUserQuery(
@@ -311,7 +311,7 @@ class SessionOrchestrator:
         if sse_queue is not None:
             self._sse_queue = sse_queue
         try:
-            result = await run_direct_chat(self, session_id, state["query"], intent, route)
+            result = await run_direct_chat(self, session_id, SessionUserQuery.model_validate(state["query"]), intent, route)
             self._schedule_status_update(session_id, "completed")
         finally:
             self._sse_queue = original_queue
@@ -331,11 +331,12 @@ class SessionOrchestrator:
         if sse_queue is not None:
             self._sse_queue = sse_queue
         try:
+            _query = SessionUserQuery.model_validate(state["query"])
             results = await _run_agents_in_order(
-                self, session_id, state["query"], route.agents, intent
+                self, session_id, _query, route.agents, intent
             )
             result = await _synthesize_response(
-                self, session_id, state["query"], intent, route, results
+                self, session_id, _query, intent, route, results
             )
         finally:
             self._sse_queue = original_queue
@@ -355,7 +356,7 @@ class SessionOrchestrator:
         if sse_queue is not None:
             self._sse_queue = sse_queue
         try:
-            result = await run_planned_execution(self, session_id, state["query"], intent, route)
+            result = await run_planned_execution(self, session_id, SessionUserQuery.model_validate(state["query"]), intent, route)
             self._schedule_status_update(session_id, "completed")
         finally:
             self._sse_queue = original_queue
@@ -376,7 +377,7 @@ class SessionOrchestrator:
         if sse_queue is not None:
             self._sse_queue = sse_queue
         try:
-            result = await run_dag_execution(self, session_id, state["query"], intent, route)
+            result = await run_dag_execution(self, session_id, SessionUserQuery.model_validate(state["query"]), intent, route)
             self._schedule_status_update(session_id, "completed")
         finally:
             self._sse_queue = original_queue
@@ -509,7 +510,7 @@ class SessionOrchestrator:
 
         initial_state: OrchestratorState = {
             "session_id": str(session_id),
-            "query": query,
+            "query": query.model_dump(),
             "intent": None,
             "route": None,
             "result": None,

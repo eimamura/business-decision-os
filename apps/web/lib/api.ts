@@ -118,6 +118,15 @@ export async function postMessage(sessionId: string, content: string): Promise<v
   if (!res.ok) throw new Error(`postMessage: ${res.status}`);
 }
 
+export async function postAskUserAnswer(sessionId: string, answer: string): Promise<void> {
+  const res = await fetch(`${API_BASE}/api/v1/sessions/${sessionId}/answer`, {
+    method: "POST",
+    headers: DEV_HEADERS,
+    body: JSON.stringify({ answer }),
+  });
+  if (!res.ok) throw new Error(`postAskUserAnswer: ${res.status}`);
+}
+
 export async function setFeedback(
   sessionId: string,
   messageId: string,

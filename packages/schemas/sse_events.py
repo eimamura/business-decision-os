@@ -200,6 +200,15 @@ class DoneEvent(BaseModel):
     timestamp: str
 
 
+class AwaitingInputEvent(BaseModel):
+    """Emitted when the graph is paused at wait_for_answer (ask_user interrupt).
+    Signals the SSE stream to terminate cleanly without a reply."""
+    type: Literal["awaiting_input"] = "awaiting_input"
+    session_id: UUID
+    ask_user_id: str
+    timestamp: str
+
+
 SseEvent = Annotated[
     Union[
         QueryReceivedEvent,
@@ -224,6 +233,7 @@ SseEvent = Annotated[
         ErrorEvent,
         TextDeltaEvent,
         DoneEvent,
+        AwaitingInputEvent,
     ],
     Field(discriminator="type"),
 ]

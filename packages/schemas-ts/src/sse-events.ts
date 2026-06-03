@@ -197,6 +197,13 @@ export const DoneEventSchema = z.object({
   timestamp: z.string(),
 });
 
+export const AwaitingInputEventSchema = z.object({
+  type: z.literal("awaiting_input"),
+  session_id: z.string(),
+  ask_user_id: z.string(),
+  timestamp: z.string(),
+});
+
 export const SseEventSchema = z.discriminatedUnion("type", [
   QueryReceivedEventSchema,
   IntentClassifiedEventSchema,
@@ -220,6 +227,7 @@ export const SseEventSchema = z.discriminatedUnion("type", [
   ErrorEventSchema,
   TextDeltaEventSchema,
   DoneEventSchema,
+  AwaitingInputEventSchema,
 ]);
 
 export type SseEvent = z.infer<typeof SseEventSchema>;

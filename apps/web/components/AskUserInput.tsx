@@ -1,22 +1,21 @@
 "use client";
 
 import { useState } from "react";
-import { submitAskUserAnswer } from "@/features/sessions/api";
 
 export interface AskUserInputProps {
   sessionId: string;
   askUserId: string;
   question: string;
   suggestions: readonly string[];
-  onAnswered: (result: unknown) => void;
+  onSubmit: (answer: string) => Promise<void>;
 }
 
 export function AskUserInput({
-  sessionId,
+  sessionId: _sessionId,
   askUserId: _askUserId,
   question,
   suggestions,
-  onAnswered,
+  onSubmit,
 }: AskUserInputProps): React.ReactElement {
   const [inputValue, setInputValue] = useState("");
   const [submitted, setSubmitted] = useState(false);
@@ -31,14 +30,11 @@ export function AskUserInput({
     const answer = inputValue.trim();
     if (!answer || isSubmitting) return;
     setIsSubmitting(true);
-    try {
-      const result = await submitAskUserAnswer(sessionId, answer);
-      setSubmittedAnswer(answer);
-      setSubmitted(true);
-      onAnswered(result);
-    } finally {
-      setIsSubmitting(false);
-    }
+    // Show submitted state immediately (optimistic); streaming continues in context
+    setSubmittedAnswer(answer);
+    setSubmitted(true);
+    setIsSubmitting(false);
+    void onSubmit(answer);
   };
 
   if (submitted) {

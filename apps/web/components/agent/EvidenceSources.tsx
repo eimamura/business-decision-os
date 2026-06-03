@@ -1,6 +1,6 @@
 "use client";
 
-import type { SseEvent } from "@/types/chat";
+import type { AgentStep } from "@/types/workspace";
 
 interface DataSource {
   name: string;
@@ -15,22 +15,8 @@ const DEFAULT_SOURCES: readonly DataSource[] = [
   { name: "Supplier Lead Time", freshness: "Latest available", status: "Used" },
 ] as const;
 
-const TOOL_LABELS: Record<string, string> = {
-  sql_query: "SQL Query",
-  nl_query: "Natural Language Query",
-  forecast: "Demand Forecast",
-  simulate_inventory: "Inventory Simulation",
-  optimize_replenishment: "Replenishment Optimizer",
-  evaluate_candidates: "Candidate Evaluator",
-  write_audit_log: "Audit Log",
-};
-
-function toolLabel(name: string): string {
-  return TOOL_LABELS[name] ?? name;
-}
-
 interface EvidenceSourcesProps {
-  events: SseEvent[];
+  steps: AgentStep[];
 }
 
 function DatabaseIcon(): React.ReactElement {
@@ -73,20 +59,24 @@ function SourceRow({ name, freshness, status }: DataSource): React.ReactElement 
   );
 }
 
-export default function EvidenceSources({ events }: EvidenceSourcesProps): React.ReactElement {
+export default function EvidenceSources({ steps }: EvidenceSourcesProps): React.ReactElement {
+  // Collect unique completed tool steps by label
   const usedTools: Map<string, string> = new Map();
-  for (const ev of events) {
-    if (ev.type === "tool_completed" && ev.status !== "error") {
-      usedTools.set(ev.tool_name, toolLabel(ev.tool_name));
+  for (const step of steps) {
+    const isToolStep =
+      (step.id.startsWith("tool:") || step.id.startsWith("tdone:")) &&
+      step.status === "completed";
+    if (isToolStep) {
+      usedTools.set(step.label, "Retrieved");
     }
   }
 
   const sources: readonly DataSource[] =
     usedTools.size === 0
       ? DEFAULT_SOURCES
-      : Array.from(usedTools.entries()).map(([id, label]) => ({
+      : Array.from(usedTools.entries()).map(([label, freshness]) => ({
           name: label,
-          freshness: id,
+          freshness,
           status: "Used",
         }));
 

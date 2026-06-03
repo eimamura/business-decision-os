@@ -35,7 +35,7 @@ export default function ChatPage({ params }: ChatPageProps) {
     [sessionId, setSessions],
   );
 
-  const { messages, isSending, usage, isLoadingMessages, loadMessages, sendMessage, submitFeedback, appendAssistantReply } = useChat(
+  const { messages, isSending, usage, isLoadingMessages, loadMessages, sendMessage, sendAskUserAnswer, submitFeedback, appendAssistantReply } = useChat(
     sessionId,
     onTitleGenerated,
   );
@@ -168,7 +168,7 @@ export default function ChatPage({ params }: ChatPageProps) {
                       message={msg}
                       sessionId={sessionId}
                       onFeedback={submitFeedback}
-                      onAskUserAnswered={appendAssistantReply}
+                      onAskUserAnswered={sendAskUserAnswer}
                     />
                   ))}
                   <ExecutionProgressPanel sessionId={sessionId} />
@@ -245,7 +245,7 @@ export default function ChatPage({ params }: ChatPageProps) {
 
           {showActivity && (
             <div className="w-80 shrink-0 border-l border-border dark:border-white/8 bg-surface dark:bg-[#0B1020] overflow-hidden flex flex-col custom-scrollbar">
-              <AgentActivityPanel sessionId={sessionId} usage={usage} />
+              <AgentActivityPanel sessionId={sessionId} />
             </div>
           )}
         </main>

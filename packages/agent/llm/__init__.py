@@ -9,6 +9,24 @@ from uuid import UUID, uuid4
 
 from pydantic import BaseModel
 
+_ORCHESTRATOR_ROLES: frozenset[str] = frozenset({"orchestrator"})
+
+_MODEL_PRICING: dict[str, tuple[Decimal, Decimal, Decimal, Decimal]] = {
+    "claude-sonnet-4-6": (
+        Decimal("0.000003"),
+        Decimal("0.000015"),
+        Decimal("0.0000003"),
+        Decimal("0.00000375"),
+    ),
+    "claude-haiku-4-5": (
+        Decimal("0.0000008"),
+        Decimal("0.000004"),
+        Decimal("0.00000008"),
+        Decimal("0.000001"),
+    ),
+}
+_DEFAULT_PRICING = _MODEL_PRICING["claude-sonnet-4-6"]
+
 
 class BudgetSoftLimitWarning(Warning):
     pass
@@ -323,6 +341,9 @@ class ClaudeClient:
     ) -> None:
         resolved_key = api_key or os.environ.get("ANTHROPIC_API_KEY", "")
         self._model = model
+        self._orchestrator_model: str = (
+            os.environ.get("ORCHESTRATOR_MODEL") or "claude-haiku-4-5-20251001"
+        )
         self._usage_writer: UsageWriter = usage_writer or _noop_usage_writer
         self._client = self._build_client(resolved_key)
 
@@ -403,13 +424,22 @@ class ClaudeClient:
             for t in tools
         ]
 
-    def _compute_cost(self, usage: Any) -> Decimal:
-        input_cost = Decimal(str(usage.input_tokens)) * Decimal("0.000003")
-        output_cost = Decimal(str(usage.output_tokens)) * Decimal("0.000015")
+    def _compute_cost(self, usage: Any, model_name: str) -> Decimal:
+        # Longest-prefix match against _MODEL_PRICING keys
+        pricing = _DEFAULT_PRICING
+        best_len = 0
+        for key, rates in _MODEL_PRICING.items():
+            if model_name.startswith(key) and len(key) > best_len:
+                pricing = rates
+                best_len = len(key)
+
+        input_rate, output_rate, cache_read_rate, cache_write_rate = pricing
         cache_read_raw = getattr(usage, "cache_read_input_tokens", 0) or 0
         cache_write_raw = getattr(usage, "cache_creation_input_tokens", 0) or 0
-        cache_read_cost = Decimal(str(cache_read_raw)) * Decimal("0.0000003")
-        cache_write_cost = Decimal(str(cache_write_raw)) * Decimal("0.00000375")
+        input_cost = Decimal(str(usage.input_tokens)) * input_rate
+        output_cost = Decimal(str(usage.output_tokens)) * output_rate
+        cache_read_cost = Decimal(str(cache_read_raw)) * cache_read_rate
+        cache_write_cost = Decimal(str(cache_write_raw)) * cache_write_rate
         return input_cost + output_cost + cache_read_cost + cache_write_cost
 
     async def complete(
@@ -424,10 +454,15 @@ class ClaudeClient:
     ) -> LLMResponse:
         import anthropic
 
+        model = (
+            self._orchestrator_model
+            if specialist_role in _ORCHESTRATOR_ROLES
+            else self._model
+        )
         system = self._extract_system(messages, prompt_cache)
         ant_messages = self._to_anthropic_messages(messages)
         kwargs: dict[str, Any] = {
-            "model": self._model,
+            "model": model,
             "max_tokens": max_tokens,
             "temperature": temperature,
             "messages": ant_messages,
@@ -447,7 +482,7 @@ class ClaudeClient:
                 total_cost_usd=Decimal("0"),
             )
             await self._usage_writer(
-                None, agent_step_id, specialist_role, "anthropic", self._model, usage_zero
+                None, agent_step_id, specialist_role, "anthropic", model, usage_zero
             )
             raise exc
 
@@ -462,10 +497,10 @@ class ClaudeClient:
             output_tokens=raw_usage.output_tokens,
             cache_read_tokens=cache_read,
             cache_write_tokens=cache_write,
-            total_cost_usd=self._compute_cost(raw_usage),
+            total_cost_usd=self._compute_cost(raw_usage, model_name=model),
         )
         await self._usage_writer(
-            None, agent_step_id, specialist_role, "anthropic", self._model, llm_usage
+            None, agent_step_id, specialist_role, "anthropic", model, llm_usage
         )
 
         text_parts = []
@@ -509,10 +544,15 @@ class ClaudeClient:
         agent_step_id: UUID | None = None,
         specialist_role: str | None = None,
     ) -> AsyncIterator[LLMStreamEvent]:
+        model = (
+            self._orchestrator_model
+            if specialist_role in _ORCHESTRATOR_ROLES
+            else self._model
+        )
         system = self._extract_system(messages, prompt_cache)
         ant_messages = self._to_anthropic_messages(messages)
         kwargs: dict[str, Any] = {
-            "model": self._model,
+            "model": model,
             "max_tokens": max_tokens,
             "temperature": temperature,
             "messages": ant_messages,

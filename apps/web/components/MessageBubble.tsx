@@ -52,7 +52,7 @@ interface MessageBubbleProps {
   message: ChatMessage;
   sessionId?: string;
   onFeedback?: (messageId: string, feedback: 1 | -1) => void;
-  onAskUserAnswered?: (reply: string) => void;
+  onAskUserAnswered?: (answer: string) => Promise<void>;
 }
 
 const markdownComponents: Components = {
@@ -186,14 +186,52 @@ function SqlQueryBubble({ message }: { message: ChatMessage }) {
   );
 }
 
+function UserMessageBubble({ message }: { message: ChatMessage }) {
+  const [copyState, setCopyState] = useState<"idle" | "copied">("idle");
+
+  function handleCopy(): void {
+    navigator.clipboard.writeText(message.content ?? "").then(() => {
+      setCopyState("copied");
+      setTimeout(() => setCopyState("idle"), 2000);
+    });
+  }
+
+  return (
+    <div className="flex justify-end group">
+      <div className="max-w-[78%] flex flex-col items-end">
+        <div className="flex items-start gap-1.5">
+          <button
+            type="button"
+            onClick={handleCopy}
+            className="self-center opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded text-indigo-300/60 hover:text-indigo-200 hover:bg-indigo-900/30"
+            aria-label={copyState === "copied" ? "Copied!" : "Copy message"}
+            title={copyState === "copied" ? "Copied!" : "Copy message"}
+          >
+            {copyState === "copied" ? (
+              <CheckIcon className="h-3.5 w-3.5" />
+            ) : (
+              <ClipboardIcon className="h-3.5 w-3.5" />
+            )}
+          </button>
+          <div className="rounded-2xl px-4 py-2.5 text-sm bg-indigo-600 text-white rounded-tr-sm">
+            <p className="leading-relaxed whitespace-pre-wrap">{message.content}</p>
+          </div>
+        </div>
+        {message.created_at && (
+          <p className="text-xs mt-1 text-indigo-300">
+            {new Date(message.created_at).toLocaleTimeString()}
+          </p>
+        )}
+      </div>
+      <div className="w-7 h-7 rounded-full bg-indigo-100 flex items-center justify-center ml-3 mt-1 shrink-0">
+        <span className="text-xs text-indigo-600 font-medium">U</span>
+      </div>
+    </div>
+  );
+}
+
 export default function MessageBubble({ message, sessionId, onFeedback, onAskUserAnswered }: MessageBubbleProps): React.JSX.Element {
   if (message.role === "ask_user") {
-    const onAnswered = (result: unknown): void => {
-      const reply = (result as { reply?: string } | undefined)?.reply;
-      if (reply && onAskUserAnswered) {
-        onAskUserAnswered(reply);
-      }
-    };
     return (
       <div className="flex justify-start">
         <div className="w-7 h-7 rounded-full bg-[#0c0c14] flex items-center justify-center mr-3 mt-1 shrink-0 border border-indigo-900/40">
@@ -205,7 +243,7 @@ export default function MessageBubble({ message, sessionId, onFeedback, onAskUse
             askUserId={message.askUserId ?? ""}
             question={message.askUserQuestion ?? ""}
             suggestions={message.askUserSuggestions ?? []}
-            onAnswered={onAnswered}
+            onSubmit={onAskUserAnswered ?? (async () => undefined)}
           />
         </div>
       </div>
@@ -281,26 +319,8 @@ export default function MessageBubble({ message, sessionId, onFeedback, onAskUse
     );
   }
 
-  const isUser = message.role === "user";
-
-  if (isUser) {
-    return (
-      <div className="flex justify-end">
-        <div className="max-w-[78%] flex flex-col items-end">
-          <div className="rounded-2xl px-4 py-2.5 text-sm bg-indigo-600 text-white rounded-tr-sm">
-            <p className="leading-relaxed whitespace-pre-wrap">{message.content}</p>
-          </div>
-          {message.created_at && (
-            <p className="text-xs mt-1 text-indigo-300">
-              {new Date(message.created_at).toLocaleTimeString()}
-            </p>
-          )}
-        </div>
-        <div className="w-7 h-7 rounded-full bg-indigo-100 flex items-center justify-center ml-3 mt-1 shrink-0">
-          <span className="text-xs text-indigo-600 font-medium">U</span>
-        </div>
-      </div>
-    );
+  if (message.role === "user") {
+    return <UserMessageBubble message={message} />;
   }
 
   return (

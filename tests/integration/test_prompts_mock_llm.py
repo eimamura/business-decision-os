@@ -23,9 +23,10 @@ from uuid import UUID, uuid4
 
 import pytest
 
-from packages.agent.llm import LLMMessage, LLMResponse, LLMUsage
+from packages.agent.llm import LLMMessage, LLMResponse, LLMStreamEvent, LLMUsage
 from packages.agent.orchestrator import (
     SessionOrchestrator,
+    SessionResponse,
     SessionUserQuery,
 )
 from packages.agent.orchestrator.models import AgentRoute
@@ -107,6 +108,19 @@ class _ScriptedLLMClient:
         if self._queue:
             return self._queue.pop(0)
         return _stop("fallback")
+
+    async def stream(
+        self,
+        messages: list[LLMMessage],
+        tools: Any = None,
+        **kwargs: Any,
+    ) -> Any:
+        response = await self.complete(messages, tools=tools, **kwargs)
+
+        async def _gen() -> Any:
+            yield LLMStreamEvent(event="text_delta", data=response.text)
+
+        return _gen()
 
 
 # ---------------------------------------------------------------------------
@@ -203,7 +217,7 @@ def _route_json(
         f'{{"mode":"{mode}","agents":{agents_part},'
         f'"requires_planning":{str(requires_planning).lower()},'
         f'"requires_dag":{str(requires_dag).lower()},'
-        '"rationale":"mock"}}'
+        '"rationale":"mock"}'
     )
 
 
@@ -662,3 +676,250 @@ async def test_approval_idempotency_second_create_returns_existing_record() -> N
     assert reused_id == str(existing_approval_id)
     # The fetchrow was called once; create() was never called because found != None
     mock_conn.fetchrow.assert_awaited_once()
+
+
+# ---------------------------------------------------------------------------
+# Shared client for AskUser scenarios (11, 12)
+# ---------------------------------------------------------------------------
+
+
+class _AskUserLLMClient:
+    """LLM client that returns needs_input=true for analytical queries.
+
+    Mirrors _AskUserYesLLMClient in tests/unit/test_ask_user_interrupt.py but
+    is defined locally to avoid cross-test-file imports.  Includes stream() so
+    run_direct_chat (T-111) and _synthesize_response (T-112) work correctly.
+    """
+
+    _model = "stub"
+
+    async def complete(
+        self,
+        messages: list[LLMMessage],
+        tools: Any = None,
+        temperature: float = 0.0,
+        max_tokens: int = 4096,
+        prompt_cache: bool = True,
+        agent_step_id: Any = None,
+        specialist_role: Any = None,
+    ) -> LLMResponse:
+        system = messages[0].content if messages else ""
+        if "information-gathering" in system:
+            return _stop(
+                '{"needs_input": true,'
+                ' "question": "What date range should I analyze?",'
+                ' "suggestions": ["Last 30 days", "Q1 2025", "Last 12 months"]}'
+            )
+        if "intent classifier" in system:
+            return _stop(_intent_json("domain_analysis", goal_text="analyze inventory"))
+        if "router inside SessionOrchestrator" in system:
+            return _stop(
+                '{"mode":"direct_chat","agents":[],'
+                '"requires_planning":false,"requires_dag":false,"rationale":"mock"}'
+            )
+        return _stop("Analysis complete for the requested period.")
+
+    async def stream(self, messages: list[LLMMessage], tools: Any = None, **kwargs: Any) -> Any:
+        response = await self.complete(messages, tools=tools, **kwargs)
+
+        async def _gen() -> Any:
+            yield LLMStreamEvent(event="text_delta", data=response.text)
+
+        return _gen()
+
+
+# ---------------------------------------------------------------------------
+# Scenario 11: AskUser — analytical intent pauses graph (HITL section)
+# ---------------------------------------------------------------------------
+
+
+async def test_ask_user_analytical_intent_emits_event_and_raises_graph_interrupt() -> None:
+    """When intent is analytical and a critical parameter is missing,
+    _node_prepare_ask_user fires ask_user_required SSE and the graph raises
+    GraphInterrupt at wait_for_answer.
+
+    No real DB needed — uses MemorySaver (default when DATABASE_URL is absent).
+    """
+    from unittest.mock import AsyncMock, MagicMock, patch
+
+    from langgraph.errors import GraphInterrupt
+
+    sse_queue: asyncio.Queue[dict[str, Any]] = asyncio.Queue()
+    orchestrator = SessionOrchestrator(
+        llm_client=_AskUserLLMClient(),
+        tool_registry=create_tool_registry(),
+        memory_store=StubMemoryStore(),
+        sse_queue=sse_queue,
+    )
+    session_id = uuid4()
+    query = SessionUserQuery(text="Analyze inventory levels for the past month")
+
+    mock_repo = MagicMock()
+    mock_repo.update_status = AsyncMock()
+
+    with patch(
+        "packages.agent.orchestrator.session_orchestrator.DecisionSessionRepository",
+        return_value=mock_repo,
+    ):
+        with pytest.raises(GraphInterrupt):
+            await orchestrator.run(session_id, query)
+        await asyncio.sleep(0)
+
+    events: list[dict[str, Any]] = []
+    while not sse_queue.empty():
+        events.append(sse_queue.get_nowait())
+
+    event_types = [e.get("type") for e in events]
+    assert "ask_user_required" in event_types, f"ask_user_required missing; got: {event_types}"
+
+    ask_event = next(e for e in events if e.get("type") == "ask_user_required")
+    assert ask_event["question"] == "What date range should I analyze?"
+    assert isinstance(ask_event.get("suggestions"), list)
+    assert ask_event.get("ask_user_id") is not None
+
+
+# ---------------------------------------------------------------------------
+# Scenario 12: AskUser resume — answer_ask_user() returns analysis (HITL section)
+# ---------------------------------------------------------------------------
+
+
+async def test_ask_user_resume_via_answer_returns_session_response() -> None:
+    """After graph pauses at wait_for_answer, calling answer_ask_user() resumes it
+    and returns a complete SessionResponse with rationale != 'ask_user'.
+
+    No real DB needed — uses MemorySaver.
+    """
+    from unittest.mock import AsyncMock, MagicMock, patch
+
+    from langgraph.errors import GraphInterrupt
+
+    orchestrator = SessionOrchestrator(
+        llm_client=_AskUserLLMClient(),
+        tool_registry=create_tool_registry(),
+        memory_store=StubMemoryStore(),
+    )
+    session_id = uuid4()
+    query = SessionUserQuery(text="Analyze inventory levels for the past month")
+
+    mock_repo = MagicMock()
+    mock_repo.update_status = AsyncMock()
+
+    with patch(
+        "packages.agent.orchestrator.session_orchestrator.DecisionSessionRepository",
+        return_value=mock_repo,
+    ):
+        with pytest.raises(GraphInterrupt):
+            await orchestrator.run(session_id, query)
+        await asyncio.sleep(0)
+
+        response = await orchestrator.answer_ask_user(session_id, "Q1 2025")
+        await asyncio.sleep(0)
+
+    assert isinstance(response, SessionResponse)
+    assert response.route.rationale != "ask_user"
+    assert response.reply  # non-empty reply from run_direct_chat
+
+
+# ---------------------------------------------------------------------------
+# Scenario 13: admin user role — unrestricted tool access
+# ---------------------------------------------------------------------------
+
+
+async def test_admin_user_role_includes_all_tool_safety_levels() -> None:
+    """ToolRegistry.filter_for_user_role('admin') must include read_only, write,
+    and hitl tools — no safety-level filtering is applied for admin users."""
+    registry = ToolRegistry()
+
+    class _RO:
+        name = "ro_tool"
+        description = "read-only"
+        input_schema: dict[str, Any] = {}
+        output_schema: dict[str, Any] = {}
+        safety_level = "read_only"
+
+        async def handle(self, input: dict[str, Any], ctx: Any) -> ToolResult:
+            return ToolResult(output={}, audit_payload={})
+
+    class _Write:
+        name = "write_tool"
+        description = "write"
+        input_schema: dict[str, Any] = {}
+        output_schema: dict[str, Any] = {}
+        safety_level = "write"
+
+        async def handle(self, input: dict[str, Any], ctx: Any) -> ToolResult:
+            return ToolResult(output={}, audit_payload={})
+
+    class _Hitl:
+        name = "hitl_tool"
+        description = "hitl"
+        input_schema: dict[str, Any] = {}
+        output_schema: dict[str, Any] = {}
+        safety_level = "hitl"
+
+        async def handle(self, input: dict[str, Any], ctx: Any) -> ToolResult:
+            return ToolResult(output={}, audit_payload={})
+
+    registry.register(_RO())
+    registry.register(_Write())
+    registry.register(_Hitl())
+
+    all_tools = list(registry._tools.values())
+    admin_tools = registry.filter_for_user_role("admin", all_tools)
+    names = {t.name for t in admin_tools}
+
+    assert "ro_tool" in names
+    assert "write_tool" in names
+    assert "hitl_tool" in names
+
+
+# ---------------------------------------------------------------------------
+# Scenario 14: sql_query tool — invoked when LLM requests it
+# ---------------------------------------------------------------------------
+
+
+@_SKIP_NO_DB
+async def test_sql_query_tool_invoked() -> None:
+    """When LLM requests 'sql_query' tool, SqlQueryTool handle() must be called.
+
+    Complements Scenarios 1–4 which cover forecast, simulate_inventory,
+    optimize_replenishment, and nl_query.
+    """
+    recorder = _InvocationRecorder()
+    sql_tool = _make_recording_tool("sql_query", "read_only", recorder)
+
+    sql_input = {"query": "SELECT * FROM inventory_items WHERE sku_id = 'SKU-001' LIMIT 10"}
+
+    llm = _ScriptedLLMClient([
+        _stop(text=_intent_json("lookup", goal_text="raw inventory rows for SKU-001")),
+        _stop(text=_route_json("single_agent", ["data_engineer"])),
+        _tool_call_response("sql_query", sql_input),
+        _stop("verify pass"),
+        _stop("Query returned 10 rows."),
+        _stop("verify pass"),
+    ])
+
+    registry = _make_registry_with_tool(sql_tool)
+    orchestrator = _make_orchestrator(llm, registry)
+    session_id = uuid4()
+    query = SessionUserQuery(text="Show raw inventory rows for SKU-001")
+
+    mock_repo = _mock_session_repo()
+    mock_steps = _mock_agent_steps_repo()
+
+    with (
+        patch(
+            "packages.agent.orchestrator.session_orchestrator.DecisionSessionRepository",
+            return_value=mock_repo,
+        ),
+        patch(
+            "packages.persistence.agent_steps_repo.AgentStepsRepository",
+            return_value=mock_steps,
+        ),
+        patch("packages.persistence.agent_steps_repo.get_pool", new=AsyncMock()),
+    ):
+        response = await orchestrator.run(session_id, query)
+        await asyncio.sleep(0)
+
+    invoked_names = [name for name, _ in recorder.calls]
+    assert "sql_query" in invoked_names

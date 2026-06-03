@@ -2964,3 +2964,227 @@ T-117 (remove requires_approval) ──┐
 T-118 (remove clarification_round) ─┴──→ T-119 (verify)
 (T-117 and T-118 can run in parallel)
 ```
+
+---
+
+## P17 — Orchestrator Cost Reduction (T-120 – T-123)
+
+**Goal:** Reduce per-request LLM cost by routing orchestrator-role calls (intent
+classification, routing, ask_user) to a cheaper model (`claude-haiku-4-5-20251001`
+by default) while keeping specialist calls on Sonnet. Strengthen the router prompt
+to avoid unnecessarily expensive execution modes.
+
+No ADR required — `LLMClient` Protocol signature is unchanged; `ClaudeClient`
+uses the already-passed `specialist_role` parameter to select the model internally.
+
+### Batch 1 — Code changes (App Builder)
+
+#### T-120: Per-role model dispatch in `ClaudeClient` — Done
+- **File:** `packages/agent/llm/__init__.py`
+- **What:**
+  - Add module-level constant `_ORCHESTRATOR_ROLES: frozenset[str] = frozenset({"orchestrator"})`.
+  - In `ClaudeClient.__init__`, read `self._orchestrator_model = os.environ.get("ORCHESTRATOR_MODEL", "claude-haiku-4-5-20251001")`.
+  - In `complete()` and `stream()`, select model before building `kwargs`:
+    `model = self._orchestrator_model if specialist_role in _ORCHESTRATOR_ROLES else self._model`
+  - Use `model` (not `self._model`) as `kwargs["model"]`.
+- **Constraint:** Do NOT change the `LLMClient` Protocol in `__init__.py`.
+
+#### T-121: Model-aware `_compute_cost` — Done
+- **File:** `packages/agent/llm/__init__.py`
+- **What:**
+  - Add module-level `_MODEL_PRICING: dict[str, tuple[Decimal, Decimal, Decimal, Decimal]]`
+    mapping model name prefixes to `(input_per_tok, output_per_tok, cache_read_per_tok, cache_write_per_tok)`.
+    Include entries for `claude-sonnet-4-6` (current hardcoded rates) and
+    `claude-haiku-4-5` (approx. $0.0000008 / $0.000004 / $0.00000008 / $0.000001).
+  - Change `_compute_cost(self, usage: Any)` signature to
+    `_compute_cost(self, usage: Any, model_name: str) -> Decimal`.
+  - Look up pricing by longest prefix match; fall back to Sonnet rates if unknown.
+  - Update the two call sites in `complete()` to pass the selected `model` name.
+- **Depends on:** T-120 (model name is set there)
+
+#### T-122: ROUTER_SYSTEM prompt — cost bias — Done
+- **File:** `packages/agent/orchestrator/prompts.py`
+- **What:** Append to `ROUTER_SYSTEM`:
+  - Prefer `direct_chat` for greetings, chitchat, and simple factual lookups.
+  - Prefer `single_agent` or `sequential_agents` over `planned_execution` /
+    `dag_execution` unless the task clearly requires 3+ distinct steps with
+    uncertain sequencing or branching dependencies.
+  - `planned_execution` and `dag_execution` incur significantly higher cost;
+    choose them only when the added structure provides clear value.
+
+### Batch 2 — Tests (Test/Review)
+
+#### T-123: Unit tests for model dispatch and cost — Done
+- **File:** `tests/unit/test_llm_client_model_dispatch.py`
+- **What:**
+  - `test_orchestrator_role_uses_haiku`: mock `self._client.messages.create`; call
+    `complete(..., specialist_role="orchestrator")`; assert `kwargs["model"]` is
+    `claude-haiku-4-5-20251001` (or whatever `ORCHESTRATOR_MODEL` is set to).
+  - `test_specialist_role_uses_sonnet`: same setup, `specialist_role="data_engineer"`;
+    assert `kwargs["model"]` is `claude-sonnet-4-6`.
+  - `test_compute_cost_haiku_cheaper`: call `_compute_cost` with identical token
+    counts but Haiku vs Sonnet model name; assert Haiku cost < Sonnet cost.
+- **Depends on:** T-120, T-121 Done
+
+### Full Dependency DAG
+
+```
+T-120 (model dispatch) ──→ T-121 (cost table) ──┐
+T-122 (prompt bias, independent)                 ├──→ T-123 (tests)
+```
+
+---
+
+## P18 — Tool Scenario Coverage (T-124)
+
+**Goal:** Extend `tests/integration/test_prompts_mock_llm.py` with AskUser HITL scenarios
+and additional coverage for admin role access and the `sql_query` tool.
+
+### T-124: Add AskUser HITL + supplemental tool scenarios — **Done**
+
+- **File:** `tests/integration/test_prompts_mock_llm.py`
+- **Depends on:** T-092 (`prepare_ask_user` / `wait_for_answer` nodes exist),
+  T-093 (`answer_ask_user()` implemented), T-120 (model dispatch in place for CI)
+- **What:**
+
+  **`_AskUserLLMClient`** — new LLM client class with both `complete()` and `stream()`.
+  Detects call type by system prompt keyword (`"information-gathering"`, `"intent classifier"`,
+  `"router inside SessionOrchestrator"`) and returns schema-conforming responses.
+  Includes `stream()` so `run_direct_chat` (T-111) and `_synthesize_response` (T-112) work
+  without raising `AttributeError`.
+
+  **`stream()` on `_ScriptedLLMClient`** — added to the existing scripted client so the
+  Scenarios 1–4 and 14 synthesis path works correctly when run in the Docker integration
+  environment (T-111/T-112 made synthesis stream-based).
+
+  **Scenario 11 — AskUser pause (HITL section):**
+  - `test_ask_user_analytical_intent_emits_event_and_raises_graph_interrupt`
+  - No DB required (MemorySaver); patches `DecisionSessionRepository` only.
+  - Asserts: `GraphInterrupt` raised; `ask_user_required` SSE in queue with correct
+    `question`, `suggestions` list, and `ask_user_id`.
+
+  **Scenario 12 — AskUser resume (HITL section):**
+  - `test_ask_user_resume_via_answer_returns_session_response`
+  - No DB required; same `_AskUserLLMClient`.
+  - Asserts: `answer_ask_user(session_id, "Q1 2025")` returns `SessionResponse`;
+    `route.rationale != "ask_user"`; `reply` non-empty.
+
+  **Scenario 13 — admin user role:**
+  - `test_admin_user_role_includes_all_tool_safety_levels`
+  - No DB required; pure `ToolRegistry` assertion.
+  - Asserts: `filter_for_user_role("admin", all_tools)` includes read_only, write, and hitl tools.
+
+  **Scenario 14 — sql_query tool invocation:**
+  - `test_sql_query_tool_invoked` (`@_SKIP_NO_DB`)
+  - Complements Scenarios 1–4 which cover forecast, simulate_inventory,
+    optimize_replenishment, and nl_query.
+  - Asserts: `sql_query` tool handle() called when LLM requests it.
+
+- **Test:** `uv run pytest tests/integration/test_prompts_mock_llm.py -v -k "scenario_11 or ask_user or admin_role or sql_query"` exits 0 (Scenarios 11/12/13 run without DB; 14 requires DB).
+
+---
+
+## P19 — SSE Consumer Consolidation (Design Improvement on P14)
+
+**Problem:** `AgentActivityPanel` opens its own `EventSource` to `/api/v1/sessions/{id}/stream`
+and calls `fetchSessionEvents()` for history, while `ChatStateContext` also consumes the same
+stream during `sendMessage`. The same SSE events (`agent_started`, `agent_completed`,
+`execution_mode_selected`, etc.) are processed independently in two places.
+
+**Consequences:** two open connections per session, duplicate deduplication logic (`seenKeysRef`),
+and two separate state shapes for the same underlying data.
+
+**Fix:** single SSE consumer in `ChatStateContext`; `AgentActivityPanel` becomes a pure display
+component that reads `processingSteps` from context.
+
+**No ADR required** — no public interface changes (frontend internal restructuring only).
+
+---
+
+### Batch 1 — Extend ChatStateContext with processingSteps (Agent: App Builder)
+
+#### T-125: Add `processingSteps` state to `ChatStateContext` — Done
+
+- **Files:** `apps/web/app/chat/ChatStateContext.tsx`, `apps/web/types/workspace.ts` (or `chat.ts`)
+- **What:**
+  1. Move `eventsToSteps()` (currently in `AgentActivityPanel.tsx`) and its helpers
+     (`toolStepLabel`, `StepIcon` is UI-only — leave it) to a new file
+     `apps/web/lib/sse-steps.ts` as a pure function.
+  2. Add three fields to `SessionState` in `ChatStateContext`:
+     - `processingSteps: AgentStep[]`
+     - `sessionStartedAt: string | null`
+     - `sessionEndedAt: string | null`
+  3. Initialize all three to `[]` / `null` in the default session state.
+  4. Reset all three at the start of `sendMessage` (before opening the stream).
+  5. In the `sendMessage` SSE event loop, process the following events and call the
+     shared `eventsToSteps` incrementally (or accumulate events and recompute):
+     - `query_received` → set `sessionStartedAt`
+     - `intent_classified`, `execution_mode_selected`, `plan_created`,
+       `agent_started`, `agent_completed`, `tool_started`, `tool_completed`,
+       `response_ready` → push/update steps
+     - `response_ready` or `done` → set `sessionEndedAt`
+  6. In `loadMessages()`: after fetching historical messages, call `fetchSessionEvents(sessionId)`
+     and run `eventsToSteps()` over the result to hydrate `processingSteps`,
+     `sessionStartedAt`, and `sessionEndedAt` for sessions that have already completed.
+  7. Export `processingSteps`, `sessionStartedAt`, `sessionEndedAt` from `getSessionState()`.
+- **Depends on:** none
+
+---
+
+### Batch 2 — Refactor AgentActivityPanel (Agent: App Builder)
+
+#### T-126: Remove EventSource from `AgentActivityPanel`; read from `ChatStateContext` — Done
+
+- **File:** `apps/web/components/agent/AgentActivityPanel.tsx`
+- **Depends on:** T-125 Done
+- **What:**
+  1. Remove `useState<SseEvent[]>`, `useEffect` that opens `EventSource`, `connect()`,
+     `lastEventIdRef`, `seenKeysRef`, `esRef`, and the `fetchSessionEvents()` call.
+  2. Remove `parseSseEvent()` and `eventKey()` (now unused in this file).
+  3. Remove `eventsToSteps()` (moved to `apps/web/lib/sse-steps.ts`).
+  4. Read from `useChatStateContext()`:
+     ```ts
+     const { getSessionState } = useChatStateContext();
+     const { processingSteps, sessionStartedAt, sessionEndedAt, isSending } = getSessionState(sessionId);
+     ```
+  5. Replace `connected` state with `isSending` for the live indicator.
+  6. Pass `processingSteps` directly to the rendering loop (currently `steps`).
+  7. All UI rendering (`StepIcon`, the step list, the Evidence tab, token usage footer)
+     remains unchanged.
+  8. Remove `usage` prop from the component — read `usage` from `getSessionState()` instead,
+     to avoid threading it through `page.tsx`.
+- **Note:** `EvidenceSources` subcomponent currently reads `events: SseEvent[]`. It must be
+  updated to accept `processingSteps: AgentStep[]` or its own filtered subset. Evaluate
+  during implementation and adjust without changing the displayed content.
+
+---
+
+### Batch 3 — Tests (Agent: Test/Review)
+
+#### T-127: Update tests for consolidated SSE consumer — Done
+
+- **Files:**
+  - `apps/web/app/chat/__tests__/ChatStateContext.*.test.tsx` — add cases for
+    `processingSteps`, `sessionStartedAt`, `sessionEndedAt` state transitions
+  - `apps/web/components/__tests__/AgentActivityPanel.test.tsx` (if it exists) — remove
+    EventSource mocks; verify rendering from props/context
+- **Depends on:** T-125, T-126 Done
+- **What:**
+  1. `ChatStateContext` tests: mock the SSE stream to emit `intent_classified`,
+     `execution_mode_selected`, `agent_started`, `agent_completed`, `response_ready`.
+     Assert that `processingSteps` grows correctly and `sessionStartedAt`/`sessionEndedAt`
+     are set.
+  2. `ChatStateContext` tests: mock `fetchSessionEvents` in `loadMessages()` path;
+     assert that `processingSteps` is populated from historical events.
+  3. `AgentActivityPanel` tests: render with a `ChatStateContext` mock providing
+     `processingSteps`; assert step labels, status badges, and timestamps render correctly.
+     No `EventSource` mock needed.
+- **Test command:** `npx vitest run --reporter=verbose apps/web/` exits 0
+
+---
+
+### Dependency Graph (P19)
+
+```
+T-125 (extend ChatStateContext) ──→ T-126 (refactor AgentActivityPanel) ──→ T-127 (tests)
+```

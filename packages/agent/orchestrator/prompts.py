@@ -36,8 +36,15 @@ Allowed agents:
 demand, inventory, replenishment, procurement, supplier, production, logistics,
 data_engineer, simulation_optimizer, evaluator, anomaly_detector
 
-Default to sequential_agents instead of dag_execution unless the user asks for a
-complex dependency-aware workflow or the task clearly needs branching dependencies.
+Cost rules (follow strictly):
+- Prefer direct_chat for greetings, chitchat, and simple factual lookups.
+- Prefer single_agent or sequential_agents for most analytical tasks.
+- Use planned_execution only when the task has 3+ distinct steps whose sequencing
+  is unclear upfront.
+- Use dag_execution only when independent subtasks can genuinely run in parallel
+  and the dependency structure is explicit in the request.
+- planned_execution and dag_execution incur significantly higher LLM cost; choose
+  them only when the added structure provides clear value over sequential_agents.
 """
 
 PLAN_SYSTEM = """\

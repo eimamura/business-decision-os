@@ -100,6 +100,56 @@ const CATEGORIES: Category[] = [
     ],
   },
   {
+    id: "ask-user",
+    label: "Ask User (HITL)",
+    icon: "◑",
+    scenarios: [
+      {
+        id: "au-vague-inventory",
+        title: "Vague Inventory Request",
+        description:
+          "Maximally underspecified — agent will ask for SKU, period, and location before proceeding",
+        prompt: "Analyze inventory",
+      },
+      {
+        id: "au-forecast-no-target",
+        title: "Forecast Without Target",
+        description:
+          "Intent is clear but product and horizon are both missing — expect the agent to ask what to forecast",
+        prompt: "Run a demand forecast",
+      },
+      {
+        id: "au-warehouse-given",
+        title: "Warehouse Specified, SKU Missing",
+        description:
+          "Location is provided but the target product is absent — one focused question expected",
+        prompt: "Forecast demand for DC West next quarter",
+      },
+      {
+        id: "au-sku-no-period",
+        title: "SKU Known, Period Missing",
+        description:
+          "Product is identified but the analysis window is open — agent likely asks for a date range",
+        prompt: "Check stockout risk for SKU-001",
+      },
+      {
+        id: "au-mostly-specified",
+        title: "Mostly Specified",
+        description:
+          "SKU and quarter are provided — agent may proceed or ask for a service-level threshold",
+        prompt: "Optimize replenishment for SKU-001 for Q3 2025",
+      },
+      {
+        id: "au-fully-specified",
+        title: "Fully Specified (No Question Expected)",
+        description:
+          "All critical parameters included — agent should skip AskUser and run the analysis directly",
+        prompt:
+          "Analyze inventory for SKU-001 at DC West for the past 30 days and compare with the previous month",
+      },
+    ],
+  },
+  {
     id: "jobs",
     label: "Job Dispatch (HITL)",
     icon: "◎",

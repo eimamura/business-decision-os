@@ -14,6 +14,7 @@ export function useChat(
   isLoadingMessages: boolean;
   loadMessages: () => Promise<void>;
   sendMessage: (text: string) => Promise<void>;
+  sendAskUserAnswer: (answer: string) => Promise<void>;
   submitFeedback: (messageId: string, feedback: 1 | -1) => Promise<void>;
   appendAssistantReply: (reply: string) => void;
 } {
@@ -21,6 +22,7 @@ export function useChat(
     getSessionState,
     loadMessages: ctxLoadMessages,
     sendMessage: ctxSendMessage,
+    sendAskUserAnswer: ctxSendAskUserAnswer,
     submitFeedback: ctxSubmitFeedback,
     appendAssistantReply: ctxAppendReply,
   } = useChatStateContext();
@@ -35,6 +37,11 @@ export function useChat(
   const sendMessage = useCallback(
     (text: string) => ctxSendMessage(sessionId, text, onTitleGenerated),
     [ctxSendMessage, sessionId, onTitleGenerated],
+  );
+
+  const sendAskUserAnswer = useCallback(
+    (answer: string) => ctxSendAskUserAnswer(sessionId, answer),
+    [ctxSendAskUserAnswer, sessionId],
   );
 
   const submitFeedback = useCallback(
@@ -54,6 +61,7 @@ export function useChat(
     isLoadingMessages: state.isLoadingMessages,
     loadMessages,
     sendMessage,
+    sendAskUserAnswer,
     submitFeedback,
     appendAssistantReply,
   };

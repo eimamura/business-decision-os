@@ -5,14 +5,18 @@ import type { ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   fetchMessages,
+  fetchSessionEvents,
   fetchSessionUsage,
+  postAskUserAnswer,
   postMessage,
   setFeedback,
   streamSession,
   updateSessionTitle,
 } from "@/lib/api";
 import { queryKeys } from "@/lib/queryKeys";
+import { eventsToSteps } from "@/lib/sse-steps";
 import type { AgentNodeState, AgentNodeToolCall, ChatMessage, SessionUsage, SseEvent } from "@/types/chat";
+import type { AgentStep } from "@/types/workspace";
 
 interface SessionState {
   messages: ChatMessage[];
@@ -21,6 +25,9 @@ interface SessionState {
   isLoadingMessages: boolean;
   agentNodes: AgentNodeState[];
   executionMode?: string;
+  processingSteps: AgentStep[];
+  sessionStartedAt: string | null;
+  sessionEndedAt: string | null;
 }
 
 const DEFAULT_USAGE: SessionUsage = { inputTokens: 0, outputTokens: 0, costUsd: 0 };
@@ -32,6 +39,9 @@ const DEFAULT_STATE: SessionState = {
   isLoadingMessages: true,
   agentNodes: [],
   executionMode: undefined,
+  processingSteps: [],
+  sessionStartedAt: null,
+  sessionEndedAt: null,
 };
 
 interface ChatStateContextValue {
@@ -42,6 +52,7 @@ interface ChatStateContextValue {
     text: string,
     onTitleGenerated?: (title: string) => void,
   ) => Promise<void>;
+  sendAskUserAnswer: (sessionId: string, answer: string) => Promise<void>;
   submitFeedback: (sessionId: string, messageId: string, feedback: 1 | -1) => Promise<void>;
   appendAssistantReply: (sessionId: string, reply: string) => void;
 }
@@ -99,6 +110,33 @@ export function ChatStateProvider({ children }: { children: ReactNode }): React.
       } catch {
         updateSession(sessionId, (prev) => ({ ...prev, isLoadingMessages: false }));
       }
+      fetchSessionEvents(sessionId)
+        .then((historical) => {
+          const steps = eventsToSteps(historical);
+          const startedEvt = historical.find((e) => e.type === "query_received") as
+            | Record<string, unknown>
+            | undefined;
+          const startedAt =
+            startedEvt !== undefined && typeof startedEvt["timestamp"] === "string"
+              ? startedEvt["timestamp"]
+              : null;
+          const endedEvt = [...historical]
+            .reverse()
+            .find((e) => e.type === "response_ready" || e.type === "done") as
+            | Record<string, unknown>
+            | undefined;
+          const endedAt =
+            endedEvt !== undefined && typeof endedEvt["timestamp"] === "string"
+              ? endedEvt["timestamp"]
+              : null;
+          updateSession(sessionId, (prev) => ({
+            ...prev,
+            processingSteps: steps,
+            sessionStartedAt: startedAt,
+            sessionEndedAt: endedAt,
+          }));
+        })
+        .catch(() => undefined);
     },
     [updateSession],
   );
@@ -133,7 +171,18 @@ export function ChatStateProvider({ children }: { children: ReactNode }): React.
         ...prev,
         messages: [...prev.messages, userMsg, assistantMsg],
         isSending: true,
+        processingSteps: [],
+        sessionStartedAt: null,
+        sessionEndedAt: null,
       }));
+
+      if (!titleSetRef.current[sessionId] && onTitleGenerated) {
+        titleSetRef.current[sessionId] = true;
+        const titleText = text.slice(0, 60).trim();
+        updateSessionTitle(sessionId, titleText)
+          .then(() => onTitleGenerated(titleText))
+          .catch(() => undefined);
+      }
 
       try {
         abortMap.current[sessionId]?.abort();
@@ -153,6 +202,7 @@ export function ChatStateProvider({ children }: { children: ReactNode }): React.
         const MAX_RETRIES = 3;
         let attempt = 0;
         let receivedDone = false;
+        const seenEvents: SseEvent[] = [];
 
         while (attempt <= MAX_RETRIES && !receivedDone) {
           if (attempt > 0) {
@@ -186,6 +236,45 @@ export function ChatStateProvider({ children }: { children: ReactNode }): React.
               }));
             }
 
+            if (
+              event.type === "query_received" ||
+              event.type === "intent_classified" ||
+              event.type === "execution_mode_selected" ||
+              event.type === "plan_created" ||
+              event.type === "agent_started" ||
+              event.type === "agent_completed" ||
+              event.type === "tool_started" ||
+              event.type === "tool_completed" ||
+              event.type === "response_ready" ||
+              event.type === "done"
+            ) {
+              seenEvents.push(event);
+              const steps = eventsToSteps(seenEvents);
+              const startedAt =
+                seenEvents.find((e) => e.type === "query_received") as
+                  | Record<string, unknown>
+                  | undefined;
+              const sessionStartedAt =
+                startedAt !== undefined && typeof startedAt["timestamp"] === "string"
+                  ? startedAt["timestamp"]
+                  : null;
+              const endedEvt = [...seenEvents]
+                .reverse()
+                .find((e) => e.type === "response_ready" || e.type === "done") as
+                | Record<string, unknown>
+                | undefined;
+              const sessionEndedAt =
+                endedEvt !== undefined && typeof endedEvt["timestamp"] === "string"
+                  ? endedEvt["timestamp"]
+                  : null;
+              updateSession(sessionId, (prev) => ({
+                ...prev,
+                processingSteps: steps,
+                sessionStartedAt,
+                sessionEndedAt,
+              }));
+            }
+
             if (event.type === "done") {
               const didStream = hasStreamedRef.current[sessionId] ?? false;
               receivedDone = true;
@@ -207,13 +296,6 @@ export function ChatStateProvider({ children }: { children: ReactNode }): React.
               fetchSessionUsage(sessionId)
                 .then((usage) => updateSession(sessionId, (prev) => ({ ...prev, usage })))
                 .catch(() => undefined);
-              if (!titleSetRef.current[sessionId] && onTitleGenerated) {
-                titleSetRef.current[sessionId] = true;
-                const titleText = text.slice(0, 60).trim();
-                updateSessionTitle(sessionId, titleText)
-                  .then(() => onTitleGenerated(titleText))
-                  .catch(() => undefined);
-              }
               void queryClient.invalidateQueries({ queryKey: queryKeys.sessions.all });
               hasStreamedRef.current[sessionId] = false;
               break;
@@ -387,6 +469,17 @@ export function ChatStateProvider({ children }: { children: ReactNode }): React.
               });
             }
 
+            if (event.type === "awaiting_input") {
+              // Graph is paused at wait_for_answer — remove the empty assistant
+              // placeholder since the ask_user card is the visible response.
+              receivedDone = true;
+              updateSession(sessionId, (prev) => ({
+                ...prev,
+                messages: prev.messages.filter((m) => m.id !== assistantId),
+              }));
+              break;
+            }
+
             if (event.type === "error") {
               updateSession(sessionId, (prev) => ({
                 ...prev,
@@ -487,6 +580,228 @@ export function ChatStateProvider({ children }: { children: ReactNode }): React.
     [updateSession],
   );
 
+  const sendAskUserAnswer = useCallback(
+    async (sessionId: string, answer: string): Promise<void> => {
+      if (isSendingRef.current[sessionId]) return;
+      isSendingRef.current[sessionId] = true;
+      hasStreamedRef.current[sessionId] = false;
+
+      const assistantId = crypto.randomUUID();
+      const assistantMsg: ChatMessage = {
+        id: assistantId,
+        role: "assistant",
+        content: "",
+        isStreaming: true,
+        created_at: new Date().toISOString(),
+      };
+
+      updateSession(sessionId, (prev) => ({
+        ...prev,
+        messages: [...prev.messages, assistantMsg],
+        isSending: true,
+        processingSteps: [],
+        sessionStartedAt: null,
+        sessionEndedAt: null,
+      }));
+
+      try {
+        abortMap.current[sessionId]?.abort();
+        const controller = new AbortController();
+        abortMap.current[sessionId] = controller;
+
+        const initialStream = await streamSession(sessionId, controller.signal);
+        await postAskUserAnswer(sessionId, answer);
+
+        const MAX_RETRIES = 3;
+        let attempt = 0;
+        let receivedDone = false;
+        const seenEvents: SseEvent[] = [];
+
+        while (attempt <= MAX_RETRIES && !receivedDone) {
+          if (attempt > 0) {
+            const delay = Math.min(500 * Math.pow(2, attempt - 1), 4000);
+            await new Promise<void>((resolve) => setTimeout(resolve, delay));
+            if (controller.signal.aborted) return;
+          }
+
+          let stream: AsyncGenerator<SseEvent>;
+          if (attempt === 0) {
+            stream = initialStream;
+          } else {
+            try {
+              stream = await streamSession(sessionId, controller.signal);
+            } catch {
+              attempt++;
+              continue;
+            }
+          }
+
+          for await (const event of stream) {
+            if (event.type === "text_delta") {
+              hasStreamedRef.current[sessionId] = true;
+              updateSession(sessionId, (prev) => ({
+                ...prev,
+                messages: prev.messages.map((m) =>
+                  m.id === assistantId
+                    ? { ...m, content: (m.content ?? "") + event.delta, isStreaming: true }
+                    : m,
+                ),
+              }));
+            }
+
+            if (
+              event.type === "query_received" ||
+              event.type === "intent_classified" ||
+              event.type === "execution_mode_selected" ||
+              event.type === "plan_created" ||
+              event.type === "agent_started" ||
+              event.type === "agent_completed" ||
+              event.type === "tool_started" ||
+              event.type === "tool_completed" ||
+              event.type === "response_ready" ||
+              event.type === "done"
+            ) {
+              seenEvents.push(event);
+              const steps = eventsToSteps(seenEvents);
+              const startedAt = seenEvents.find((e) => e.type === "query_received") as Record<string, unknown> | undefined;
+              const sessionStartedAt = startedAt !== undefined && typeof startedAt["timestamp"] === "string" ? startedAt["timestamp"] : null;
+              const endedEvt = [...seenEvents].reverse().find((e) => e.type === "response_ready" || e.type === "done") as Record<string, unknown> | undefined;
+              const sessionEndedAt = endedEvt !== undefined && typeof endedEvt["timestamp"] === "string" ? endedEvt["timestamp"] : null;
+              updateSession(sessionId, (prev) => ({ ...prev, processingSteps: steps, sessionStartedAt, sessionEndedAt }));
+            }
+
+            if (event.type === "done") {
+              const didStream = hasStreamedRef.current[sessionId] ?? false;
+              receivedDone = true;
+              updateSession(sessionId, (prev) => ({
+                ...prev,
+                messages: prev.messages.map((m) =>
+                  m.id === assistantId
+                    ? { ...m, content: didStream ? m.content : (event.reply ?? m.content), isStreaming: false }
+                    : m,
+                ),
+                isSending: false,
+                agentNodes: [],
+                executionMode: undefined,
+              }));
+              fetchSessionUsage(sessionId)
+                .then((usage) => updateSession(sessionId, (prev) => ({ ...prev, usage })))
+                .catch(() => undefined);
+              hasStreamedRef.current[sessionId] = false;
+              break;
+            }
+
+            if (event.type === "execution_mode_selected") {
+              updateSession(sessionId, (prev) => ({ ...prev, executionMode: event.mode }));
+            }
+
+            if (event.type === "agent_started") {
+              const node: AgentNodeState = {
+                taskId: `${event.agent_name}:${event.started_at}`,
+                agentName: event.agent_name,
+                agentRole: event.agent_role,
+                status: "running",
+                startedAt: event.started_at,
+                inputSummary: event.input_summary ?? undefined,
+                toolCalls: [],
+              };
+              updateSession(sessionId, (prev) => ({ ...prev, agentNodes: [...prev.agentNodes, node] }));
+            }
+
+            if (event.type === "agent_completed") {
+              updateSession(sessionId, (prev) => ({
+                ...prev,
+                agentNodes: prev.agentNodes.map((n) =>
+                  n.agentName === event.agent_name && n.status === "running"
+                    ? { ...n, status: "completed" as const, durationMs: event.duration_ms, outputSummary: event.output_summary ?? undefined }
+                    : n,
+                ),
+              }));
+            }
+
+            if (event.type === "tool_started") {
+              const toolCall: AgentNodeToolCall = {
+                toolCallId: event.tool_call_id,
+                toolName: event.tool_name,
+                status: "running",
+              };
+              updateSession(sessionId, (prev) => ({
+                ...prev,
+                agentNodes: prev.agentNodes.map((n) =>
+                  n.agentRole === event.agent_role && n.status === "running"
+                    ? { ...n, toolCalls: [...n.toolCalls, toolCall] }
+                    : n,
+                ),
+              }));
+            }
+
+            if (event.type === "tool_completed") {
+              updateSession(sessionId, (prev) => ({
+                ...prev,
+                agentNodes: prev.agentNodes.map((n) => ({
+                  ...n,
+                  toolCalls: n.toolCalls.map((t) =>
+                    t.toolCallId === event.tool_call_id
+                      ? { ...t, status: (event.status === "error" ? "error" : "completed") as "error" | "completed", durationMs: event.duration_ms }
+                      : t,
+                  ),
+                })),
+              }));
+            }
+
+            if (event.type === "error") {
+              updateSession(sessionId, (prev) => ({
+                ...prev,
+                messages: prev.messages.map((m) =>
+                  m.id === assistantId
+                    ? { ...m, content: event.message ?? "An error occurred during processing.", isError: true, isStreaming: false }
+                    : m,
+                ),
+              }));
+              receivedDone = true;
+              break;
+            }
+          }
+
+          if (!receivedDone) {
+            attempt++;
+          }
+        }
+
+        if (!receivedDone) {
+          updateSession(sessionId, (prev) => ({
+            ...prev,
+            messages: prev.messages.map((m) =>
+              m.id === assistantId
+                ? { ...m, content: "Network error — check your connection.", isError: true, isStreaming: false, errorCode: "network_error" as const }
+                : m,
+            ),
+          }));
+        }
+      } catch (err: unknown) {
+        if (err instanceof Error && err.name === "AbortError") return;
+        updateSession(sessionId, (prev) => ({
+          ...prev,
+          messages: prev.messages.map((m) =>
+            m.id === assistantId
+              ? { ...m, content: "Error contacting the API. Please check the backend is running.", isError: true, isStreaming: false, errorCode: "unknown_error" as const }
+              : m,
+          ),
+        }));
+      } finally {
+        isSendingRef.current[sessionId] = false;
+        updateSession(sessionId, (prev) => ({
+          ...prev,
+          isSending: false,
+          messages: prev.messages.map((m) =>
+            m.id === assistantId ? { ...m, isStreaming: false } : m,
+          ),
+        }));
+      }
+    },
+    [updateSession],
+  );
+
   const appendAssistantReply = useCallback(
     (sessionId: string, reply: string): void => {
       const msg: ChatMessage = {
@@ -505,7 +820,7 @@ export function ChatStateProvider({ children }: { children: ReactNode }): React.
 
   return (
     <ChatStateContext.Provider
-      value={{ getSessionState, loadMessages, sendMessage, submitFeedback, appendAssistantReply }}
+      value={{ getSessionState, loadMessages, sendMessage, sendAskUserAnswer, submitFeedback, appendAssistantReply }}
     >
       {children}
     </ChatStateContext.Provider>

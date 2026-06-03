@@ -311,9 +311,28 @@ async def post_message(
     orchestrator._event_persister = make_event_persister(session_id)
 
     async def _run_and_signal() -> None:
+        from langgraph.errors import GraphInterrupt
+
         response: SessionResponse | None = None
+        ask_user_id: str | None = None
+        interrupted = False
         try:
             response = await orchestrator.run(UUID(session_id), query)
+        except GraphInterrupt as exc:
+            # Graph paused at wait_for_answer — ask_user_required SSE already sent.
+            interrupted = True
+            # Extract ask_user_id from interrupt payload so we can echo it in awaiting_input.
+            try:
+                payload = exc.args[0]
+                if isinstance(payload, (list, tuple)) and payload:
+                    first = payload[0]
+                    ask_user_id = (
+                        first.value.get("ask_user_id")
+                        if hasattr(first, "value") and isinstance(first.value, dict)
+                        else None
+                    )
+            except Exception:
+                pass
         except Exception as exc:
             _log.exception("Orchestrator failed for session %s: %s", session_id, exc)
             await queue.put({
@@ -324,26 +343,35 @@ async def post_message(
                 "timestamp": _iso_now(),
             })
         finally:
-            reply = response.reply if response else (
-                "Processing failed. Please try again."
-            )
-            session.setdefault("messages", []).append({
-                "role": "assistant",
-                "content": reply,
-                "created_at": _iso_now(),
-            })
-            await queue.put({
-                "type": "done",
-                "session_id": session_id,
-                "reply": reply,
-                "timestamp": _iso_now(),
-            })
-            try:
-                await repo.add_message(session_id, role="assistant", content=reply)
-            except Exception:
-                _log.warning(
-                    "DB unavailable; skipping assistant message persist for %s", session_id
+            if interrupted:
+                # Signal the SSE stream to close cleanly; the ask_user card is the response.
+                await queue.put({
+                    "type": "awaiting_input",
+                    "session_id": session_id,
+                    "ask_user_id": ask_user_id or "",
+                    "timestamp": _iso_now(),
+                })
+            else:
+                reply = response.reply if response else (
+                    "Processing failed. Please try again."
                 )
+                session.setdefault("messages", []).append({
+                    "role": "assistant",
+                    "content": reply,
+                    "created_at": _iso_now(),
+                })
+                await queue.put({
+                    "type": "done",
+                    "session_id": session_id,
+                    "reply": reply,
+                    "timestamp": _iso_now(),
+                })
+                try:
+                    await repo.add_message(session_id, role="assistant", content=reply)
+                except Exception:
+                    _log.warning(
+                        "DB unavailable; skipping assistant message persist for %s", session_id
+                    )
 
     asyncio.create_task(_run_and_signal())
 
@@ -397,7 +425,7 @@ async def stream_session(session_id: str) -> StreamingResponse:
                 try:
                     event = await asyncio.wait_for(sub_queue.get(), timeout=30.0)
                     yield f"data: {json.dumps(event)}\n\n"
-                    if event.get("type") == "done":
+                    if event.get("type") in ("done", "awaiting_input"):
                         break
                 except asyncio.TimeoutError:
                     yield ": keepalive\n\n"
@@ -411,18 +439,61 @@ async def stream_session(session_id: str) -> StreamingResponse:
     )
 
 
-def _get_orchestrator_for_answer() -> SessionOrchestrator:
-    return get_orchestrator(sse_queue=None)
-
-
 @router.post(
     "/{session_id}/answer",
-    status_code=status.HTTP_200_OK,
-    response_model=SessionResponse,
+    status_code=status.HTTP_202_ACCEPTED,
 )
 async def submit_ask_user_answer(
     session_id: UUID,
     body: AskUserAnswerRequest,
-    orchestrator: SessionOrchestrator = Depends(_get_orchestrator_for_answer),
-) -> SessionResponse:
-    return await orchestrator.answer_ask_user(session_id, body.answer)
+) -> dict[str, Any]:
+    session_id_str = str(session_id)
+    session = sessions.get(session_id_str)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    queue = Broadcaster()
+    broadcasters[session_id_str] = queue
+
+    orchestrator = get_orchestrator(queue)
+    orchestrator._event_persister = make_event_persister(session_id_str)
+
+    repo = DecisionSessionRepository()
+    answer = body.answer
+
+    async def _run_resume_and_signal() -> None:
+        response: SessionResponse | None = None
+        try:
+            response = await orchestrator.answer_ask_user(session_id, answer)
+        except Exception as exc:
+            _log.exception("Resume failed for session %s: %s", session_id_str, exc)
+            await queue.put({
+                "type": "error",
+                "code": "resume_failed",
+                "message": str(exc),
+                "recoverable": False,
+                "timestamp": _iso_now(),
+            })
+        finally:
+            if response is not None:
+                reply = response.reply
+                session.setdefault("messages", []).append({
+                    "role": "assistant",
+                    "content": reply,
+                    "created_at": _iso_now(),
+                })
+                await queue.put({
+                    "type": "done",
+                    "session_id": session_id_str,
+                    "reply": reply,
+                    "timestamp": _iso_now(),
+                })
+                try:
+                    await repo.add_message(session_id_str, role="assistant", content=reply)
+                except Exception:
+                    _log.warning(
+                        "DB unavailable; skipping assistant message persist for %s", session_id_str
+                    )
+
+    asyncio.create_task(_run_resume_and_signal())
+    return {"status": "processing", "session_id": session_id_str}
