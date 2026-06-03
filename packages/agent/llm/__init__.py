@@ -257,6 +257,14 @@ class ScenarioStubClaudeClient:
                 "status": "pass",
                 "rationale": "Mock mode — no verification performed",
             })
+        elif "information-gathering" in system_text:
+            if os.environ.get("MOCK_ASK_USER", "").lower() == "true":
+                response_text = json.dumps({
+                    "needs_input": True,
+                    "question": "What date range should I analyze?",
+                })
+            else:
+                response_text = json.dumps({"needs_input": False, "question": None})
         else:
             response_text = "Mock mode response — no LLM cost incurred."
 

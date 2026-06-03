@@ -44,7 +44,7 @@ def test_readyz() -> None:
 
 
 @pytest.mark.e2e
-def test_create_session() -> None:
+def test_create_session(cleanup_test_sessions: list[str]) -> None:
     """POST /api/v1/sessions creates a session."""
     import httpx
 
@@ -53,6 +53,7 @@ def test_create_session() -> None:
     data = resp.json()
     assert "session_id" in data
     assert data["status"] == "active"
+    cleanup_test_sessions.append(data["session_id"])
 
 
 @pytest.mark.e2e

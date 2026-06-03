@@ -1196,3 +1196,1065 @@ After T-067 is done, T-068, T-069, and T-072 can run in parallel.
     5. Confirm the graph resumes from the last checkpointed node, not from
        `classify_intent`.
 - **Depends on:** T-074
+
+
+---
+
+## P10 — Web UI Server State Standardisation (TanStack Query migration)
+
+**ADR:** `docs/adr/2026-06-03-tanstack-query-web-ui.md`
+
+Goal: eliminate React 18 Strict Mode double-fetch and standardise all non-SSE API
+communication behind a `features/<domain>/api.ts` + `features/<domain>/hooks.ts` pattern
+backed by TanStack Query v5.
+
+Scope: `apps/web/` only. No Python, no public interfaces, no database changes.
+SSE streaming (`ChatStateContext`, `useChat`) is explicitly excluded.
+
+### Batch P10-B1 — Foundation (App Builder)
+
+#### T-076: QueryClientProvider + queryKeys — Done
+- **Files:**
+  - `apps/web/app/providers.tsx` (new Client Component)
+  - `apps/web/app/layout.tsx` (wrap children with `<Providers>`)
+  - `apps/web/lib/queryKeys.ts` (new)
+- **What:**
+  - Create `providers.tsx` as a `"use client"` wrapper that holds `QueryClient` and
+    renders `<QueryClientProvider>`. Keeps `app/layout.tsx` as a Server Component.
+  - `QueryClient` config: `defaultOptions.queries.staleTime = 30_000` (30 s).
+  - `queryKeys.ts` centralises all query key factories.
+- **Dependencies:** none
+
+### Batch P10-B2 — API + Hooks layer (App Builder — after T-076)
+
+#### T-077: apiFetch wrapper + features/*/api.ts — Done
+- **Files:**
+  - `apps/web/lib/api.ts` — add `apiFetch<T>()` wrapper; keep existing named exports unchanged
+  - New: `apps/web/features/{sessions,approvals,audit,kpi,agents,jobs,usage,settings,scenarios,recommendations}/api.ts`
+- **What:**
+  - `apiFetch<T>(path, options?)`: common wrapper injecting `"X-Dev-User": "dev-user"` header, throws on `!res.ok`
+  - Each `features/<domain>/api.ts` exports plain async functions (no React imports)
+  - Inline type definitions from each page move into the corresponding `api.ts`
+- **Dependencies:** T-076
+
+#### T-078: features/*/hooks.ts — Done
+- **Files:** One `hooks.ts` per domain (10 files total)
+- **What:**
+  - Each file exports `useQuery` / `useMutation` wrappers keyed from `queryKeys.ts`
+  - Mutations call `queryClient.invalidateQueries()` in `onSuccess`
+  - Domains with mutations: `approvals` (decide), `settings` (save, generate sample data)
+  - Read-only domains expose `refetch` for manual refresh buttons (agents, usage)
+- **Dependencies:** T-077
+
+### Batch P10-B3 — Page migration (App Builder — after T-078)
+
+#### T-079: Replace useEffect+fetch in all affected pages — Done
+- **Files (10 pages):**
+  - `apps/web/app/(shell)/approvals/page.tsx`
+  - `apps/web/app/(shell)/audit/page.tsx`
+  - `apps/web/app/(shell)/kpi/page.tsx`
+  - `apps/web/app/(shell)/agents/page.tsx`
+  - `apps/web/app/(shell)/jobs/page.tsx`
+  - `apps/web/app/(shell)/usage/page.tsx`
+  - `apps/web/app/(shell)/settings/page.tsx`
+  - `apps/web/app/scenarios/[sessionId]/page.tsx`
+  - `apps/web/app/recommendations/[id]/page.tsx`
+  - `apps/web/app/chat/layout.tsx`
+- **What:**
+  - Replace every `useEffect(() => { fetch(...) }, [...])` block with custom hooks from `features/<domain>/hooks.ts`
+  - Remove `useState` for loading/data/error where TanStack Query owns them; keep UI-only state
+  - `jobs/page.tsx`: remove `jobsInitialized`/`filesInitialized` flags; TanStack Query deduplicates natively
+  - `chat/layout.tsx`: replace `fetchSessions()` in useEffect with `useSessions()`
+  - No changes to `ChatStateContext`, `useChat`, or `chat/[sessionId]/page.tsx`
+- **Dependencies:** T-078
+
+### Batch P10-B4 — Verification (Test/Review — after T-079)
+
+#### T-080: TypeScript + lint + build check — Done
+- **What:** Run `cd apps/web && npx tsc --noEmit && npm run lint && npm run build`.
+  Confirm no `useEffect` with bare `fetch(` remains in the 10 pages from T-079 (grep check).
+  All imports resolve; no `any` introduced.
+- **Dependencies:** T-079
+
+---
+
+### P10 Amendment — SSE × TanStack Query integration (App Builder)
+
+#### T-081: Wire SSE completion events to invalidateQueries — Done
+- **File:** `apps/web/app/chat/ChatStateContext.tsx`
+- **What:** Add `useQueryClient()` call inside `ChatStateProvider`. In `sendMessage`,
+  after each SSE event is processed, call `queryClient.invalidateQueries` at the right point:
+  - `done` event → `invalidateQueries({ queryKey: queryKeys.sessions.all })`
+  - `job_completed` event → `invalidateQueries({ queryKey: ["jobs"] })` (prefix match)
+  - `awaiting_approval` event → `invalidateQueries({ queryKey: ["approvals"] })` (prefix match)
+- **Dependencies:** T-080
+
+#### T-082: Invalidate sessions cache after createSession in chat/layout.tsx — Done
+- **File:** `apps/web/app/chat/layout.tsx`
+- **What:** In `onNewSession` callback, after `createSession()` succeeds, call
+  `queryClient.invalidateQueries({ queryKey: queryKeys.sessions.all })` so the sidebar
+  reflects the new session immediately without waiting for staleTime expiry.
+
+---
+
+## P11 — AskUser: Pre-execution Information Gathering
+
+**Goal:** Replace the reactive clarification flow (T-019) with a proactive `AskUser`
+mechanism. When the orchestrator classifies an analytical intent but detects critical
+missing parameters, it asks the user a targeted question **before** planning — improving
+plan quality without failing silently.
+
+**Design decision:** See `docs/DECISIONS.md` entry dated 2026-06-03.
+
+### Batch P11-B1 (App Builder — T-083 and T-084 run sequentially: remove first, add second)
+
+#### T-083: Remove clarification flow — fallthrough to direct_chat — **Done**
+- **Files:**
+  - `packages/agent/orchestrator/session_orchestrator.py`
+  - `packages/agent/orchestrator/clarification.py` — **DELETE**
+  - `tests/unit/test_clarification.py` — **DELETE**
+- **What:**
+  - In `session_orchestrator.py`: remove `_node_handle_clarification()`, remove
+    `_edge_after_clarification()`, remove the `handle_clarification` node and its edges
+    from `_build_graph()`. Rewire: `classify_intent → ask_user` (T-084's node, or
+    `select_mode` temporarily until T-084 lands).
+  - When intent is `"chat"` with no `goal_text`, the graph flows directly to
+    `select_mode` which routes to `run_direct_chat` — the LLM answers freely.
+  - Delete `packages/agent/orchestrator/clarification.py` entirely (the file was
+    added by T-019 and is fully replaced by T-084's `ask_user.py`).
+  - Delete `tests/unit/test_clarification.py` — tests covered a removed feature.
+  - Keep the language instruction in `INTENT_SYSTEM` (added in `prompts.py`) — it
+    correctly prevents Japanese supply chain queries from being classified as `"chat"`.
+- **Note:** Do NOT remove `ClarificationRequiredEvent` from `packages/schemas/sse_events.py`
+  yet — leave it as unused but present to avoid breaking any client that might reference it.
+- **Test:** `uv run pytest tests/unit/ -q` passes with no reference to deleted files.
+
+#### T-084: Implement AskUser — pre-execution information gathering — **Done**
+- **Files:**
+  - `packages/agent/orchestrator/ask_user.py` (new)
+  - `packages/agent/orchestrator/prompts.py` — add `ASK_USER_SYSTEM`
+  - `packages/agent/orchestrator/session_orchestrator.py` — add `_node_ask_user` node
+  - `packages/schemas/sse_events.py` — add `AskUserRequiredEvent`
+  - `tests/unit/test_ask_user.py` (new)
+- **Depends on:** T-083 (clarification node removed before ask_user node added)
+- **What:**
+
+  **`ask_user.py`**
+  ```python
+  _ANALYTICAL_INTENTS = frozenset({"domain_analysis", "cross_domain_analysis", "decision_support"})
+
+  def is_analytical_intent(category: str) -> bool:
+      return category in _ANALYTICAL_INTENTS
+
+  def build_ask_user_event(session_id: UUID, question: str) -> dict[str, Any]:
+      return {"type": "ask_user_required", "session_id": str(session_id),
+              "question": question, "timestamp": datetime.now(timezone.utc).isoformat()}
+  ```
+
+  **`ASK_USER_SYSTEM` prompt** (add to `prompts.py`):
+  ```
+  You are the information-gathering assistant inside SessionOrchestrator.
+  Given a user query and its classified intent, decide if there is ONE critical
+  missing parameter that would significantly improve the analysis quality.
+
+  Return ONLY JSON: {"needs_input": true|false, "question": string|null}
+
+  Rules:
+  - Only ask when a CRITICAL parameter is absent (e.g., date range, specific SKU,
+    warehouse location, comparison baseline).
+  - Ask ONE question only — the most important missing parameter.
+  - If the conversation_context shows a prior ask_user_required question was already
+    answered by the user, return {"needs_input": false, "question": null}.
+  - If sufficient context exists to begin a useful analysis, return needs_input: false.
+  - For "chat" or "lookup" intents, always return needs_input: false.
+  - Write the question in the same language the user used.
+  ```
+
+  **`_node_ask_user` in `session_orchestrator.py`**:
+  - Read `intent` from state. If `not is_analytical_intent(intent.category)` → return `{}`.
+  - LLM call with `ASK_USER_SYSTEM` + user query + `conversation_context` + intent JSON.
+  - Parse response `{"needs_input": bool, "question": str|None}`.
+  - If `needs_input is True and question`:
+    - Fire `ask_user_required` SSE event via `_push()`.
+    - `_schedule_status_update(session_id, "completed")`.
+    - Return `{"result": SessionResponse(mode="direct_chat", reply=question, intent=intent, route=AgentRoute(mode="direct_chat", agents=[], requires_planning=False, requires_dag=False, rationale="ask_user"))}`.
+  - Else → return `{}`.
+
+  **Graph edges** (in `_build_graph`):
+  ```
+  START → classify_intent → ask_user → [if result] END
+                                      [else] select_mode → ...
+  ```
+  Use `_edge_after_ask_user` conditional edge mirroring the old `_edge_after_clarification`.
+
+  **`AskUserRequiredEvent`** in `sse_events.py`:
+  ```python
+  class AskUserRequiredEvent(BaseModel):
+      type: Literal["ask_user_required"] = "ask_user_required"
+      session_id: str
+      question: str
+      timestamp: str
+  ```
+  Add to `SseEvent` union.
+
+- **Test (`tests/unit/test_ask_user.py`):**
+  - `test_is_analytical_intent_domain_analysis` → True
+  - `test_is_analytical_intent_chat` → False
+  - `test_build_ask_user_event_type` → `"ask_user_required"`
+  - `test_build_ask_user_event_question_present`
+  - `test_ask_user_event_session_id_matches`
+  - Use `StubClaudeClient` returning `{"needs_input": true, "question": "Which warehouse?"}` to test that `_node_ask_user` returns a `SessionResponse` with the question as `reply`.
+  - Use `StubClaudeClient` returning `{"needs_input": false, "question": null}` to verify `_node_ask_user` returns `{}` (passes through to select_mode).
+
+### Batch P11-B2 (Test/Review — after T-084)
+
+#### T-085: Quality gate — unit tests + lint + typecheck — **Done**
+- **What:** `uv run pytest tests/unit/ -q && make lint && make typecheck`
+- **Depends on:** T-084
+- **Test:** All commands exit 0. No references to deleted `clarification.py` remain.
+- **Dependencies:** T-081
+
+### P11 Amendment — ScenarioStubClaudeClient AskUser scenario
+
+#### T-088: Add `ask_user` scenario to `ScenarioStubClaudeClient` — **Done**
+- **File:** `packages/agent/llm/__init__.py` — `ScenarioStubClaudeClient.complete()`, `.env.example`
+- **Depends on:** T-084 (`ASK_USER_SYSTEM` prompt and `_node_ask_user` node exist)
+- **Why this is needed:** `ScenarioStubClaudeClient` (used when `MOCK_LLM=true`) has scenarios
+  for `intent`, `route`, and `verify` calls, but no scenario for the `ask_user` LLM call
+  introduced in T-084. When an analytical-intent query is submitted in mock mode, `_node_ask_user`
+  calls `LLMClient.complete()` with `ASK_USER_SYSTEM` (which contains `"information-gathering"`).
+  `ScenarioStubClaudeClient` falls through to the plain-text default response, which then fails
+  JSON parsing in `_node_ask_user` and raises an exception — making mock mode unusable for
+  analytical queries.
+- **What:**
+  Add a fourth branch to `ScenarioStubClaudeClient.complete()` before the `else` fallthrough:
+  ```python
+  elif "information-gathering" in system_text:
+      response_text = json.dumps({"needs_input": False, "question": None})
+  ```
+  Detection keyword: `"information-gathering"` — this string appears in `ASK_USER_SYSTEM`
+  ("You are the information-gathering assistant inside SessionOrchestrator") and is unique
+  to the ask_user call type.
+  Default response `needs_input: false` — mock mode should not pause the flow with a question;
+  it should pass through to `select_mode` and let the rest of the pipeline continue.
+
+  **Additionally** add `MOCK_ASK_USER=true` support for E2E testing (required by T-097):
+  When `os.environ.get("MOCK_ASK_USER", "").lower() == "true"`, the `"information-gathering"`
+  branch returns `needs_input=true` instead of `false`:
+  ```python
+  elif "information-gathering" in system_text:
+      if os.environ.get("MOCK_ASK_USER", "").lower() == "true":
+          response_text = json.dumps({
+              "needs_input": True,
+              "question": "What date range should I analyze?",
+          })
+      else:
+          response_text = json.dumps({"needs_input": False, "question": None})
+  ```
+  Add to `.env.example`:
+  ```
+  # Set to true alongside MOCK_LLM=true to trigger ask_user_required in E2E tests
+  # MOCK_ASK_USER=true
+  ```
+
+- **Test** (`tests/unit/test_scenario_stub.py` — new file, or append to existing stub test):
+  - `test_scenario_stub_ask_user_returns_valid_json`: build a `LLMMessage` with `role="system"`
+    and content containing `"information-gathering"`; call `ScenarioStubClaudeClient().complete()`
+    with that message; assert the returned `text` parses as JSON with `"needs_input": false`.
+  - `test_scenario_stub_ask_user_does_not_raise`: same setup; assert no exception raised.
+  - Existing scenario tests must still pass (no regression).
+- **Quality gate:** `uv run pytest tests/unit/ -q && make lint && make typecheck` exits 0.
+
+#### T-089: Two-request AskUser flow unit test — zero DB, zero LLM cost
+- **File:** `tests/unit/test_ask_user.py` — append new test section
+- **Depends on:** T-088 (`ScenarioStubClaudeClient` must handle `ask_user` scenario correctly)
+- **⚠ Superseded by T-096 after P13 is complete:** T-089 tests the soft-completion
+  (`_edge_after_ask_user` / two `run()` calls) model. P13 (T-092) replaces this with
+  `interrupt()`. Once T-092 is implemented, `_edge_after_ask_user` is removed and the
+  `_TwoRequestLLMClient` stub defined here will test a non-existent code path. Implement
+  T-089 only if P13 is not yet started; skip it and go directly to T-096 if P13 is in progress.
+  After T-092 lands, delete the T-089 tests and rely on T-096 instead.
+- **Why this is needed (pre-P13 only):** Existing `test_ask_user.py` tests cover individual node behavior with
+  hand-crafted stub clients. There is no test that exercises the full two-request turn-and-continue
+  pattern: (1) first query triggers `ask_user_required`, (2) follow-up query with the answer in
+  `conversation_context` passes through to `select_mode`. This gap means a regression in the
+  conversation-context wiring (e.g., `_query_text` not forwarding context to the ask_user LLM
+  call, or `_edge_after_ask_user` not routing correctly on the second request) would go undetected.
+- **Implementation note — no `interrupt()`, no `Command(resume=...)`:**
+  AskUser uses a soft-completion model, NOT LangGraph `interrupt()`. The correct test structure
+  is two sequential `orchestrator.run()` calls on the same `session_id`. `MemorySaver` is already
+  the default checkpointer when `DATABASE_URL` is absent (see `_get_graph()` fallback), so no
+  extra setup is required.
+- **What:**
+  Add the following tests to `tests/unit/test_ask_user.py`:
+
+  ```python
+  # ---------------------------------------------------------------------------
+  # Two-request AskUser flow
+  # ---------------------------------------------------------------------------
+
+  class _TwoRequestLLMClient:
+      """
+      Request 1 (no conversation_context): ask_user LLM returns needs_input=true.
+      Request 2 (conversation_context present): ask_user LLM returns needs_input=false.
+      Intent and route responses are always valid.
+      """
+      _model = "stub"
+
+      async def complete(self, messages, tools=None, temperature=0.0,
+                         max_tokens=4096, prompt_cache=True,
+                         agent_step_id=None, specialist_role=None):
+          system = messages[0].content if messages else ""
+          if "information-gathering" in system:
+              # Check if conversation_context is present in the user message
+              user_content = messages[1].content if len(messages) > 1 else ""
+              if "conversation_context" in user_content and "Q1 2025" in user_content:
+                  return _make_llm_response('{"needs_input": false, "question": null}')
+              return _make_llm_response(
+                  '{"needs_input": true, "question": "What date range should I analyze?"}'
+              )
+          if "intent classifier" in system:
+              return _make_llm_response(
+                  '{"category":"domain_analysis","confidence":0.9,'
+                  '"rationale":"needs params","goal_text":"analyze inventory"}'
+              )
+          if "router inside SessionOrchestrator" in system:
+              return _make_llm_response(
+                  '{"mode":"direct_chat","agents":[],'
+                  '"requires_planning":false,"requires_dag":false,"rationale":"chat"}'
+              )
+          return _make_llm_response("Analysis complete.")
+
+  @pytest.mark.asyncio
+  async def test_ask_user_two_request_flow_first_request_returns_question() -> None:
+      """First request: ask_user node should return the question as reply."""
+      from unittest.mock import AsyncMock, MagicMock, patch
+      from packages.agent.orchestrator import SessionUserQuery
+
+      orchestrator = _make_orchestrator(_TwoRequestLLMClient())
+      session_id = uuid4()
+
+      mock_repo = MagicMock()
+      mock_repo.update_status = AsyncMock()
+
+      with patch(
+          "packages.agent.orchestrator.session_orchestrator.DecisionSessionRepository",
+          return_value=mock_repo,
+      ):
+          result = await orchestrator.run(
+              session_id,
+              SessionUserQuery(text="Analyze inventory levels"),
+          )
+          await asyncio.sleep(0)
+
+      assert result.reply == "What date range should I analyze?"
+      assert result.route.rationale == "ask_user"
+
+  @pytest.mark.asyncio
+  async def test_ask_user_two_request_flow_second_request_passes_through() -> None:
+      """Second request with answer in conversation_context passes through to select_mode."""
+      from unittest.mock import AsyncMock, MagicMock, patch
+      from packages.agent.orchestrator import SessionUserQuery
+
+      orchestrator = _make_orchestrator(_TwoRequestLLMClient())
+      session_id = uuid4()
+
+      mock_repo = MagicMock()
+      mock_repo.update_status = AsyncMock()
+
+      with patch(
+          "packages.agent.orchestrator.session_orchestrator.DecisionSessionRepository",
+          return_value=mock_repo,
+      ):
+          # Request 1 — triggers ask_user
+          await orchestrator.run(session_id, SessionUserQuery(text="Analyze inventory levels"))
+          await asyncio.sleep(0)
+
+          # Request 2 — user answers; conversation_context carries the Q&A pair
+          result = await orchestrator.run(
+              session_id,
+              SessionUserQuery(
+                  text="Q1 2025",
+                  conversation_context=(
+                      "Q: What date range should I analyze? A: Q1 2025"
+                  ),
+              ),
+          )
+          await asyncio.sleep(0)
+
+      # ask_user must NOT trigger again — the node should return {} and pass through
+      assert result.route.rationale != "ask_user"
+  ```
+
+- **Test:** `uv run pytest tests/unit/test_ask_user.py -v` passes all tests including the two new ones.
+  No network calls (enforced by `tests/unit/conftest.py` T-043 guard). No Docker required.
+
+---
+
+## P13 — AskUser: interrupt()-based Mid-Execution Information Gathering
+
+**Goal:** Migrate AskUser from soft-completion to LangGraph `interrupt()`. This eliminates the
+fragile LLM-based "was this already answered?" detection, preserves full graph state in the
+checkpoint between question and answer, and establishes the pattern for future specialist-level
+(mid-execution) ask_user (P14).
+
+**Design change rationale:** The P11 design (DECISIONS.md 2026-06-03) relied on the LLM reading
+`conversation_context` to decide if a prior question was already answered. This is fragile — a
+misread causes the question to repeat. `interrupt()` replaces this with a typed
+`Command(resume={"answer": "..."})` injection; no LLM call needed to detect the answer.
+
+**ADR required:** `Orchestrator` Protocol gains `answer_ask_user(session_id, answer)` — a
+public interface change that requires an ADR before any code changes.
+
+**LangGraph interrupt() isolation rule (from P9 ADR):** Nodes that call `interrupt()` must contain
+**zero DB side effects**. The LLM call and SSE event emission must happen in `prepare_ask_user`
+(before `interrupt()`); `wait_for_answer` contains only the `interrupt()` call.
+
+**Scope for P13:** Orchestrator-level interrupt only (fires between `classify_intent` and
+`select_mode`, same trigger point as today). Specialist-level mid-execution ask_user (where a
+running agent requests input) is scoped to P14 and noted in the ADR as a future extension.
+
+---
+
+### Batch P13-B0 — ADR (prerequisite for all)
+
+#### T-090: ADR — AskUser interrupt() migration
+- **File:** `docs/adr/2026-06-03-ask-user-interrupt.md` (new); update `docs/DECISIONS.md`
+- **What:**
+  - Document the decision to migrate AskUser from soft-completion to `interrupt()`.
+  - Justify: eliminates LLM-based context parsing, typed answer injection, state preservation.
+  - Record the `Orchestrator` Protocol extension: new `answer_ask_user(session_id, answer)` method.
+  - Note the `interrupt()` isolation rule: zero DB side effects in `wait_for_answer`.
+  - Note the P14 future extension point: specialist-level (mid-execution) ask_user.
+  - Update `docs/DECISIONS.md` to record the reversal of the P11 design decision ("LLM reads
+    conversation_context" → "typed `Command(resume=...)` injection").
+- **No code changes in this task.**
+
+---
+
+### Batch P13-B1 — Schema + Protocol (App Builder — after T-090)
+
+#### T-091: Extend schemas, OrchestratorState, and Orchestrator Protocol
+- **Files:**
+  - `packages/schemas/sse_events.py` — extend `AskUserRequiredEvent`
+  - `packages/agent/orchestrator/models.py` — extend `Orchestrator` Protocol; extend `OrchestratorState`
+  - `packages/schemas-ts/src/sse-events.ts` — regenerate via `make codegen`
+- **Depends on:** T-090 (ADR must be written before interface change)
+- **What:**
+
+  **`AskUserRequiredEvent`** — add `ask_user_id` field (UUID string, identifies this specific
+  ask-user interrupt so the frontend can reference it in the answer submission):
+  ```python
+  class AskUserRequiredEvent(BaseModel):
+      type: Literal["ask_user_required"] = "ask_user_required"
+      session_id: str
+      ask_user_id: str          # NEW — UUID, correlates the question to the answer endpoint
+      question: str
+      timestamp: str
+  ```
+
+  **`OrchestratorState`** — add two new fields for ask_user interrupt state:
+  ```python
+  class OrchestratorState(TypedDict):
+      session_id: str
+      query: SessionUserQuery
+      intent: SessionIntent | None
+      route: AgentRoute | None
+      result: SessionResponse | None
+      clarification_round: int   # legacy field from T-019; keep for now, do NOT remove
+      error: str | None
+      ask_user_id: str | None    # NEW — UUID set by prepare_ask_user, cleared after resume
+      ask_user_question: str | None   # NEW — the question emitted by prepare_ask_user
+      ask_user_answer: str | None     # NEW — answer injected by wait_for_answer on resume
+  ```
+
+  **`Orchestrator` Protocol** — add `answer_ask_user`:
+  ```python
+  class Orchestrator(Protocol):
+      async def run(self, session_id: UUID, query: SessionUserQuery) -> SessionResponse: ...
+      async def resume(self, session_id: UUID, approval_id: UUID) -> SessionResponse: ...
+      async def answer_ask_user(self, session_id: UUID, answer: str) -> SessionResponse: ...  # NEW
+  ```
+
+  Run `make codegen` after updating `sse_events.py`; confirm no diff remains in
+  `packages/schemas-ts/src/sse-events.ts` with `git diff --exit-code packages/schemas-ts/`.
+
+- **Test:** `uv run pytest tests/unit/ -q && make codegen && git diff --exit-code packages/schemas-ts/`
+
+---
+
+### Batch P13-B2 — Backend (App Builder — after T-091; T-092 and T-093 run in parallel)
+
+#### T-092: Split `_node_ask_user` → `prepare_ask_user` + `wait_for_answer`
+- **File:** `packages/agent/orchestrator/session_orchestrator.py`
+- **Depends on:** T-091
+- **What:**
+
+  Replace the single `_node_ask_user` with two nodes:
+
+  **`_node_prepare_ask_user`** (side effects allowed — runs before `interrupt()`):
+  - Same non-analytical intent guard: `if not is_analytical_intent(intent.category): return {}`
+  - LLM call with `ASK_USER_SYSTEM` (unchanged)
+  - If `needs_input is False`: return `{}`
+  - If `needs_input is True`:
+    - Generate `ask_user_id = str(uuid4())`
+    - Emit `ask_user_required` SSE event (with new `ask_user_id` field)
+    - Call `_schedule_status_update(session_id, "awaiting_input")`
+    - Return `{"ask_user_id": ask_user_id, "ask_user_question": question}`
+
+  **`_node_wait_for_answer`** (zero side effects — interrupt only):
+  ```python
+  async def _node_wait_for_answer(self, state, config):
+      if not state.get("ask_user_id"):
+          return {}   # not an ask_user pause — pass through
+      from langgraph.types import interrupt
+      answer = interrupt({
+          "ask_user_id": state["ask_user_id"],
+          "question": state["ask_user_question"],
+      })
+      return {"ask_user_answer": answer.get("answer", "")}
+  ```
+
+  **Graph wiring** (in `_build_graph`):
+  ```
+  START → classify_intent → prepare_ask_user → wait_for_answer → select_mode → ...
+  ```
+  Use `sg.add_edge("wait_for_answer", "select_mode")` — a plain unconditional edge.
+
+  **Why no conditional edge on `wait_for_answer`:** When `_node_wait_for_answer` calls
+  `interrupt(...)`, LangGraph raises `GraphInterrupt` immediately and checkpoints the graph.
+  The edge after the node is never evaluated in that invocation. On resume (via
+  `Command(resume=...)`), `interrupt()` returns the resume value, the node returns
+  `{"ask_user_answer": answer}`, and execution continues to `select_mode` normally.
+  There is no "route to END when paused" branch needed — `interrupt()` handles the pause.
+
+  The only case where `_node_wait_for_answer` must pass through without pausing is when
+  `ask_user_id` is NOT set (non-analytical intent): `if not state.get("ask_user_id"): return {}`.
+  In this case the edge fires to `select_mode` immediately. ✓
+
+  **`build_ask_user_event` signature** — also update in `ask_user.py` to accept `ask_user_id`:
+  ```python
+  def build_ask_user_event(session_id: UUID, question: str, ask_user_id: str) -> dict[str, Any]:
+      return {
+          "type": "ask_user_required",
+          "session_id": str(session_id),
+          "ask_user_id": ask_user_id,
+          "question": question,
+          "timestamp": datetime.now(timezone.utc).isoformat(),
+      }
+  ```
+  T-098 will further extend this signature to add `suggestions`.
+
+  **Pass answer to `select_mode`:** In `_node_select_mode` (or `_query_text`), if
+  `state.get("ask_user_answer")`, append it to the query context:
+  ```python
+  if state.get("ask_user_answer"):
+      query = SessionUserQuery(
+          text=query.text,
+          conversation_context=f"User answered: {state['ask_user_answer']}",
+      )
+  ```
+  This preserves the intent classification result from the first run without re-classifying.
+
+  **`GraphInterrupt` import** (for tests): `from langgraph.errors import GraphInterrupt`
+
+  Remove: `_node_ask_user`, `_edge_after_ask_user` (replaced by new nodes/edge).
+
+- **Test:** Unit with `MemorySaver`:
+  - `test_prepare_ask_user_emits_sse_and_pauses`: mock LLM returns `needs_input=true`; run graph
+    until `GraphInterrupt`; confirm `ask_user_id` and `ask_user_question` in checkpoint state.
+  - `test_wait_for_answer_resumes_to_select_mode`: resume with `Command(resume={"answer": "Q1 2025"})`;
+    confirm `ask_user_answer` in state; confirm graph reaches `select_mode` node.
+  - `test_prepare_ask_user_passthrough_for_non_analytical`: `chat` intent → `ask_user_id` not set →
+    `wait_for_answer` passes through immediately to `select_mode`.
+
+#### T-093: Implement `SessionOrchestrator.answer_ask_user()`
+- **File:** `packages/agent/orchestrator/session_orchestrator.py`
+- **Depends on:** T-091
+- **What:**
+  ```python
+  async def answer_ask_user(self, session_id: UUID, answer: str) -> SessionResponse:
+      """Resume a graph paused at wait_for_answer with the user's answer."""
+      from langgraph.types import Command
+
+      config: dict[str, Any] = {
+          "configurable": {
+              "thread_id": str(session_id),
+              "sse_queue": self._sse_queue,
+          }
+      }
+      graph = await self._get_graph()
+
+      try:
+          result_state: dict[str, Any] = {}
+          async for chunk in graph.astream(
+              Command(resume={"answer": answer}),
+              config=config,
+              stream_mode="updates",
+          ):
+              result_state.update(chunk)
+      except Exception as exc:
+          self._schedule_status_update(session_id, "failed")
+          await self._push({
+              "type": "error", "code": "ask_user_resume_failed",
+              "message": str(exc), "recoverable": False,
+              "timestamp": _iso_now(),
+          })
+          raise
+
+      result = result_state.get("result") or result_state.get("run_dag", {}).get("result")
+      if result is None:
+          raise RuntimeError(f"ask_user resume produced no result for session {session_id}")
+      return cast(SessionResponse, result)
+  ```
+- **Test:** Unit with `MemorySaver`: pause at `wait_for_answer`; call `answer_ask_user(session_id, "Q1 2025")`; assert `SessionResponse` returned without error.
+
+---
+
+### Batch P13-B3 — API endpoint (App Builder — after P13-B2)
+
+#### T-094: `POST /api/v1/sessions/{session_id}/answer`
+- **File:** `apps/api/routers/sessions.py` (extend existing sessions router)
+- **Depends on:** T-092, T-093
+- **What:**
+  Add endpoint that accepts the user's answer and resumes the paused graph.
+
+  **Orchestrator injection pattern** — follow the same pattern as `approvals.py`:
+  ```python
+  from apps.api.state import get_orchestrator
+
+  def _get_orchestrator_for_answer() -> SessionOrchestrator:
+      return get_orchestrator(sse_queue=None)
+  ```
+
+  **Response model** — `SessionResponse` from `packages.agent.orchestrator` (no separate
+  `SessionResponseSchema` exists; use the domain model directly as `response_model`):
+  ```python
+  from packages.agent.orchestrator import SessionResponse
+
+  class AskUserAnswerRequest(BaseModel):
+      answer: str
+
+  @router.post(
+      "/{session_id}/answer",
+      status_code=status.HTTP_200_OK,
+      response_model=SessionResponse,
+  )
+  async def submit_ask_user_answer(
+      session_id: UUID,
+      body: AskUserAnswerRequest,
+      orchestrator: SessionOrchestrator = Depends(_get_orchestrator_for_answer),
+  ) -> SessionResponse:
+      return await orchestrator.answer_ask_user(session_id, body.answer)
+  ```
+
+  The endpoint is synchronous from the HTTP perspective (returns when the graph completes).
+  SSE streaming of the resumed execution is out of scope for P13 — the full analysis result
+  is returned in the response body. SSE-based streaming resume can be added in P14.
+
+- **Test:** Unit with `ASGITransport`: POST `{"answer": "Q1 2025"}` to the endpoint with a mock
+  orchestrator injected via `app.dependency_overrides`; assert HTTP 200 and `SessionResponse`
+  fields in response body.
+
+---
+
+### Batch P13-B4 — Frontend (App Builder — after T-094)
+
+#### T-095: Inline answer input for `ask_user_required` SSE events
+- **Files:**
+  - `apps/web/components/AskUserInput.tsx` (new)
+  - `apps/web/app/chat/ChatStateContext.tsx` — handle `ask_user_required` event
+  - `apps/web/features/sessions/api.ts` — add `submitAskUserAnswer()`
+- **Depends on:** T-094
+- **What:**
+
+  **`AskUserInput` component:**
+  ```tsx
+  // Props: sessionId, askUserId, question, onAnswered
+  // Renders: question text + text input + Submit button
+  // data-testid="ask-user-input" on the input
+  // data-testid="ask-user-submit" on the button
+  // On submit: POST /api/v1/sessions/{sessionId}/answer, then calls onAnswered(result)
+  // After submit: replaces input with the answer text (non-interactive)
+  ```
+
+  **`ChatStateContext`:** When SSE event `type === "ask_user_required"` arrives, insert an
+  `AskUserInput` message into the message list (new `ChatMessage` type `"ask_user"`).
+
+  **Result display after answer submission (P13 model — HTTP, not SSE):**
+  In `submitAskUserAnswer()`, after `POST /sessions/{id}/answer` resolves, the HTTP response
+  body is a `SessionResponse` (`{ reply: string, ... }`). The `onAnswered(result)` callback in
+  `ChatStateContext` must append `result.reply` as a new assistant `ChatMessage` directly —
+  do NOT wait for a `done` SSE event (no SSE stream is opened for the `/answer` endpoint in P13).
+  Example in `ChatStateContext`:
+  ```ts
+  const onAnswered = (result: SessionResponse) => {
+      setMessages(prev => [
+          ...prev,
+          { role: "assistant", content: result.reply, id: crypto.randomUUID() },
+      ]);
+  };
+  ```
+  SSE-based streaming for the resumed analysis is deferred to P14.
+
+  **`submitAskUserAnswer()`** in `features/sessions/api.ts`:
+  ```ts
+  export async function submitAskUserAnswer(sessionId: string, answer: string): Promise<unknown> {
+      return apiFetch(`/api/v1/sessions/${sessionId}/answer`, {
+          method: "POST",
+          body: JSON.stringify({ answer }),
+      });
+  }
+  ```
+
+- **Test:** Vitest + React Testing Library: render `AskUserInput` with mocked `submitAskUserAnswer`;
+  type answer + click Submit → `submitAskUserAnswer` called with correct args; input replaced by
+  answer text.
+
+---
+
+### Batch P13-B5 — Tests (Test/Review — after P13-B4)
+
+#### T-096: Unit tests — interrupt/resume cycle with MemorySaver
+- **File:** `tests/unit/test_ask_user_interrupt.py` (new)
+- **Depends on:** T-092, T-093
+- **What:**
+  Three tests. Import: `from langgraph.errors import GraphInterrupt`.
+
+  **Stub note:** `ScenarioStubClaudeClient` (T-088) returns `needs_input=false` by default.
+  Tests 1 and 2 below need `needs_input=true` to trigger the pause — use `MOCK_ASK_USER=true`
+  env var (added to T-088) OR reuse `_AskUserYesLLMClient` from `test_ask_user.py`. Test 3
+  uses the default `ScenarioStubClaudeClient` (chat intent → no pause).
+
+  All three tests mock `DecisionSessionRepository` (same pattern as `test_ask_user.py`) since
+  `_schedule_status_update` performs a fire-and-forget DB write.
+
+  1. `test_ask_user_graph_pauses_at_wait_for_answer`: build orchestrator with
+     `_AskUserYesLLMClient`; invoke graph; assert `GraphInterrupt` raised; get checkpoint
+     state via `graph.get_state(config)`; assert `ask_user_id` and `ask_user_question` present.
+  2. `test_ask_user_resume_reaches_select_mode`: continue from test 1 checkpoint; call
+     `answer_ask_user(session_id, "Q1 2025")`; assert `SessionResponse` returned;
+     assert `response.route.rationale != "ask_user"`.
+  3. `test_ask_user_non_analytical_passes_through`: `ScenarioStubClaudeClient` (intent=`"chat"`);
+     assert no `GraphInterrupt`; graph completes normally and returns a `SessionResponse`.
+
+  No Docker, no DB, no LLM API calls.
+
+#### T-097: Playwright E2E — inline answer input
+- **File:** `tests/e2e/playwright/ask_user_flow.spec.ts` (new)
+- **Depends on:** T-095, T-096, T-099 (chip `data-testid` assertions require T-099 to be done),
+  T-088 (`ScenarioStubClaudeClient` must support `MOCK_ASK_USER=true` — see T-088 note below)
+- **What:**
+  1. Set env `MOCK_LLM=true MOCK_ASK_USER=true` for the API server so `ask_user_required` fires.
+  2. Navigate to `/chat/<session_id>`; send an analytical query.
+  3. Assert `[data-testid="ask-user-question"]` renders in the chat.
+  4. Assert `[data-testid="ask-user-suggestion-0"]` is visible (T-099 chip).
+  5. Type answer `"Q1 2025"` into `[data-testid="ask-user-input"]`; click `[data-testid="ask-user-submit"]`.
+  6. Assert `[data-testid="ask-user-answered"]` replaces the input (non-interactive state).
+  7. Assert an assistant message appears with the analysis result (rendered from the HTTP response
+     returned by `POST /sessions/{id}/answer` — NOT via SSE; `ChatStateContext` must add this
+     response as a regular assistant message after `submitAskUserAnswer()` resolves).
+- **T-088 prerequisite:** T-088 must add a `MOCK_ASK_USER` env var branch that returns
+  `needs_input=true` when set. Without this, `MOCK_LLM=true` always returns `needs_input=false`
+  and `ask_user_required` never fires in E2E. See T-088 errata note.
+
+---
+
+### Execution order summary
+
+```
+T-088 (ScenarioStub + MOCK_ASK_USER) ────────────────────────────────────────┐
+T-090 (ADR) ─────────────────────────────────────────────────────────────────┤
+                                                                              ↓
+T-091 (schemas + Protocol) ──────────────────────────────────────────────────┤
+                                                                              ↓
+                                          T-092 (prepare_ask_user / wait) ───┤
+                                          T-093 (answer_ask_user) ───────────┤
+                                                          ↓                  │
+                                          T-098 (suggestions — after T-092)  │
+                                                          ↓                  │
+                                                     T-094 (API)             │
+                                                          ↓                  │
+                                          T-095 (UI base) + T-099 (chips) ───┤
+                                                          ↓                  │
+                                          T-096 (unit) ──┤                   │
+                                          T-097 (E2E — needs T-099) ─────────┘
+```
+
+- T-089 (P11 Amendment): skip if P13 has started; implement only if T-092 is not yet begun.
+- T-096 runs after T-092 + T-093; can run in parallel with T-094/T-095.
+- T-097 requires T-095, T-096, T-099, and T-088 (with `MOCK_ASK_USER` support).
+
+---
+
+### P13 Amendment — AskUser suggestion candidates in chat UI
+
+**Goal:** When `ask_user_required` fires in the chat UI, display 3 LLM-generated answer
+suggestions as quick-reply chips alongside a free-text input. Clicking a chip pre-populates
+the text input (user can edit before submitting). The free-text input is always present as
+the fallback.
+
+#### T-098: Extend `ASK_USER_SYSTEM` + `AskUserRequiredEvent` with `suggestions`
+- **Files:**
+  - `packages/agent/orchestrator/prompts.py` — extend `ASK_USER_SYSTEM`
+  - `packages/agent/orchestrator/ask_user.py` — extend `build_ask_user_event` signature
+  - `packages/schemas/sse_events.py` — add `suggestions` to `AskUserRequiredEvent`
+  - `packages/agent/orchestrator/session_orchestrator.py` — extract suggestions from LLM response in `_node_prepare_ask_user`
+  - Run `make codegen` to regenerate `packages/schemas-ts/src/sse-events.ts`
+- **Depends on:** T-092 (creates `_node_prepare_ask_user` which this task extends), T-091
+  (`AskUserRequiredEvent` must already have `ask_user_id` before `suggestions` is added)
+- **What:**
+
+  **`ASK_USER_SYSTEM`** — update the return schema and rules:
+  ```
+  Return ONLY a JSON object:
+  {"needs_input": true|false, "question": string|null, "suggestions": [string, string, string] | null}
+
+  Rules (additions):
+  - When needs_input is true, also provide exactly 3 concrete answer suggestions.
+    Suggestions must be short (2–10 words), domain-appropriate, and span the likely range of answers.
+    Examples:
+      Q "Which warehouse should I focus on?" → ["Tokyo DC", "Osaka DC", "All warehouses"]
+      Q "What date range?" → ["Last 30 days", "Q1 2025", "Last 12 months"]
+      Q "Which SKU?" → ["SKU-001", "Top 10 by volume", "All SKUs"]
+  - When needs_input is false, suggestions must be null.
+  - Write suggestions in the same language the user used.
+  ```
+
+  **`build_ask_user_event`** — add `suggestions` parameter (extends T-092's `ask_user_id` addition):
+  ```python
+  def build_ask_user_event(
+      session_id: UUID,
+      question: str,
+      ask_user_id: str,
+      suggestions: list[str] | None = None,
+  ) -> dict[str, Any]:
+      return {
+          "type": "ask_user_required",
+          "session_id": str(session_id),
+          "ask_user_id": ask_user_id,
+          "question": question,
+          "suggestions": suggestions or [],
+          "timestamp": datetime.now(timezone.utc).isoformat(),
+      }
+  ```
+
+  **`AskUserRequiredEvent`** — add `suggestions` field (after `ask_user_id` from T-091):
+  ```python
+  class AskUserRequiredEvent(BaseModel):
+      type: Literal["ask_user_required"] = "ask_user_required"
+      session_id: str
+      ask_user_id: str           # added by T-091
+      question: str
+      suggestions: list[str] = []  # NEW — empty list when LLM returns null
+      timestamp: str
+  ```
+
+  **`_node_prepare_ask_user`** — extract suggestions from LLM response:
+  ```python
+  suggestions: list[str] = parsed.get("suggestions") or []
+  # Clamp to exactly 3 if LLM returns more or fewer
+  suggestions = suggestions[:3]
+  event = build_ask_user_event(session_id, question, suggestions)
+  ```
+
+  Run `make codegen`; confirm no manual diff in `packages/schemas-ts/src/sse-events.ts`.
+
+- **Test:**
+  - Unit: `build_ask_user_event` with `suggestions=["A", "B", "C"]` → event dict has
+    `"suggestions": ["A", "B", "C"]`.
+  - Unit: `build_ask_user_event` with `suggestions=None` → `"suggestions": []`.
+  - Unit: LLM returns 5 suggestions → `_node_prepare_ask_user` clamps to 3.
+  - `make codegen && git diff --exit-code packages/schemas-ts/` exits 0.
+
+#### T-099: `AskUserInput` — 3 suggestion chips + free-text input
+- **File:** `apps/web/components/AskUserInput.tsx` — amends T-095's component definition
+- **Depends on:** T-098 (SSE event must carry `suggestions` field), T-095 (base component)
+- **What:**
+
+  ```tsx
+  interface AskUserInputProps {
+    sessionId: string;
+    askUserId: string;
+    question: string;
+    suggestions: string[];   // up to 3 items; empty array when no suggestions
+    onAnswered: (result: unknown) => void;
+  }
+  ```
+
+  **Layout:**
+  ```
+  ┌──────────────────────────────────────────────────────┐
+  │  [question text]                                     │
+  │                                                      │
+  │  [chip: "Last 30 days"] [chip: "Q1 2025"] [chip: "Last 12 months"]  │
+  │                                                      │
+  │  ┌────────────────────────────────────┐  [Submit]   │
+  │  │  free-text input                   │             │
+  │  └────────────────────────────────────┘             │
+  └──────────────────────────────────────────────────────┘
+  ```
+
+  - Chip click → pre-populates the text input with the chip label (user can still edit)
+  - Submit → `POST /api/v1/sessions/{sessionId}/answer` with current input value
+  - After submit → replace entire component with a non-interactive display of the answer
+  - If `suggestions.length === 0` → render only the question + free-text input (no chips row)
+
+  **`data-testid` attributes:**
+  - `data-testid="ask-user-question"` — question text element
+  - `data-testid="ask-user-suggestion-0"`, `...-1"`, `...-2"` — each chip button
+  - `data-testid="ask-user-input"` — text input
+  - `data-testid="ask-user-submit"` — submit button
+  - `data-testid="ask-user-answered"` — the non-interactive answer display (post-submit)
+
+  **Styling:** Tailwind. Chips: `rounded-full border px-3 py-1 text-sm hover:bg-muted cursor-pointer`.
+  Input + submit: existing form styles from `JobApprovalCard.tsx` for consistency.
+
+- **Test (Vitest + React Testing Library):**
+  - `test_suggestion_chip_pre_populates_input`: render with `suggestions=["Tokyo DC", ...]`;
+    click first chip → input value equals `"Tokyo DC"`.
+  - `test_submit_with_chip_value_calls_api`: click chip then Submit → `submitAskUserAnswer`
+    called with `"Tokyo DC"`.
+  - `test_submit_with_free_text_calls_api`: type `"Custom answer"` then Submit → API called
+    with `"Custom answer"`.
+  - `test_no_chips_when_suggestions_empty`: render with `suggestions=[]` → no elements with
+    `data-testid` matching `ask-user-suggestion-*`.
+  - `test_component_becomes_non_interactive_after_submit`: after Submit resolves → input/chips
+    replaced by `data-testid="ask-user-answered"` element.
+
+- **E2E amendment (T-097):** Add one step to `ask_user_flow.spec.ts`:
+  `assert([data-testid="ask-user-suggestion-0"] is visible)` before submitting.
+
+---
+
+## P12 — Test Session Pollution Fix
+
+**Goal:** Prevent test-created sessions from appearing in the UI session list.
+E2E and integration tests that hit the live API create real rows in `decision_sessions`
+and never delete them, causing the sidebar to fill up with test entries after every test run.
+
+Two-pronged fix: tests clean up after themselves (T-086); operators can bulk-delete
+stale sessions via a new API endpoint + UI control (T-087).
+
+### Batch P12-B1 (all independent — run in parallel)
+
+#### T-086: Add session cleanup to E2E and integration test conftest — **Done**
+- **Files:**
+  - `tests/e2e/conftest.py`
+  - `tests/integration/conftest.py`
+- **What:**
+  Add an autouse, function-scoped fixture in both conftest files that tracks every
+  session created during a test and deletes it via the API after the test completes.
+
+  **`tests/e2e/conftest.py`** — add after the existing `_api_is_up` helper:
+  ```python
+  @pytest.fixture(autouse=True)
+  def cleanup_test_sessions() -> Generator[list[str], None, None]:
+      """Collect session IDs created during the test; delete them all on teardown."""
+      created: list[str] = []
+      yield created
+      if not _api_is_up():
+          return
+      import httpx
+      for sid in created:
+          httpx.delete(f"http://localhost:8000/api/v1/sessions/{sid}", timeout=5)
+  ```
+
+  Test functions that create sessions must append the returned `session_id` to the
+  fixture list:
+  ```python
+  def test_create_session(cleanup_test_sessions: list[str]) -> None:
+      resp = httpx.post(...)
+      cleanup_test_sessions.append(resp.json()["session_id"])
+      ...
+  ```
+
+  The `test_decisions_sse_stream` test creates a session implicitly via
+  `POST /api/v1/decisions` — after the test completes, query
+  `GET /api/v1/sessions?limit=1` and delete the most recent session that matches
+  the test goal `"Optimize replenishment for SKU-E2E-001"`.
+
+  **`tests/integration/conftest.py`** — add the same pattern using `httpx.AsyncClient`.
+  Note: `_api_is_up()` is defined only in `tests/e2e/conftest.py`; copy the helper or
+  import it into `tests/integration/conftest.py` as a local `_api_is_up()`:
+  ```python
+  def _api_is_up() -> bool:
+      import httpx
+      try:
+          return httpx.get("http://localhost:8000/health", timeout=1).status_code == 200
+      except Exception:
+          return False
+
+  @pytest.fixture(autouse=True)
+  async def cleanup_test_sessions() -> AsyncGenerator[list[str], None]:
+      created: list[str] = []
+      yield created
+      if not _api_is_up():
+          return
+      async with httpx.AsyncClient(base_url="http://localhost:8000") as client:
+          for sid in created:
+              try:
+                  await client.delete(f"/api/v1/sessions/{sid}", timeout=5)
+              except Exception:
+                  pass
+  ```
+
+- **Test:** Run `uv run pytest tests/e2e/ -v`; confirm that immediately after the test
+  run, `GET /api/v1/sessions` returns 0 sessions that match the test goal strings.
+
+#### T-087: Add bulk-delete sessions endpoint + UI "Clear All" button
+- **Files:**
+  - `apps/api/routers/sessions.py` — add `DELETE /api/v1/sessions`
+  - `apps/web/features/sessions/api.ts` — add `deleteAllSessions()`
+  - `apps/web/features/sessions/hooks.ts` — add `useDeleteAllSessions()`
+  - `apps/web/app/chat/layout.tsx` — add Clear All button to `ChatSidebar`
+- **What:**
+
+  **API endpoint** (`apps/api/routers/sessions.py`):
+  ```python
+  @router.delete("", status_code=status.HTTP_204_NO_CONTENT)
+  async def delete_all_sessions() -> None:
+      sessions.clear()
+      repo = DecisionSessionRepository()
+      await repo.delete_all_sessions()
+  ```
+
+  **`DecisionSessionRepository.delete_all_sessions()`** (`packages/persistence/sessions_repo.py`):
+  ```python
+  async def delete_all_sessions(self) -> int:
+      pool = await get_pool()
+      async with pool.acquire() as conn:
+          result = await conn.execute("DELETE FROM decision_sessions")
+      return int(result.split()[-1])  # "DELETE N" → N
+  ```
+
+  **Frontend** (`apps/web/features/sessions/api.ts`):
+  ```ts
+  export async function deleteAllSessions(): Promise<void> {
+      await apiFetch("/api/v1/sessions", { method: "DELETE" });
+  }
+  ```
+
+  **Hook** (`apps/web/features/sessions/hooks.ts`):
+  ```ts
+  export function useDeleteAllSessions() {
+      const qc = useQueryClient();
+      return useMutation({
+          mutationFn: deleteAllSessions,
+          onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.sessions.all }),
+      });
+  }
+  ```
+
+  **UI** (`apps/web/app/chat/layout.tsx`):
+  Add a "Clear All" button (icon + label) in the `ChatSidebar` header, next to the
+  existing "New Session" button. On click, show a confirmation dialog (`window.confirm`
+  is acceptable for now); on confirm, call `deleteAllSessions.mutate()`. The button
+  is styled with a destructive/muted variant to signal danger. Disable while mutation
+  is pending (`isPending`).
+
+- **Test:**
+  - Unit (`apps/web`): mock `deleteAllSessions` API fn; click "Clear All" → confirm →
+    mutation fires; after success, `sessions` query is invalidated.
+  - API unit: `DELETE /api/v1/sessions` calls `repo.delete_all_sessions()` and returns 204.
+  - Manual: after running tests, click "Clear All" → sidebar empties immediately.

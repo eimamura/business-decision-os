@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import socket
+from typing import Generator
 
 import pytest
 
@@ -22,3 +23,18 @@ def pytest_collection_modifyitems(items: list) -> None:
     for item in items:
         if "e2e" in item.nodeid:
             item.add_marker(skip)
+
+
+@pytest.fixture(autouse=True)
+def cleanup_test_sessions() -> Generator[list[str], None, None]:
+    """Collect session IDs created during the test; delete them all on teardown."""
+    created: list[str] = []
+    yield created
+    if not _api_is_up():
+        return
+    import httpx
+    for sid in created:
+        try:
+            httpx.delete(f"http://localhost:8000/api/v1/sessions/{sid}", timeout=5)
+        except Exception:
+            pass
