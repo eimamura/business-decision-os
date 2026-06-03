@@ -101,9 +101,11 @@ async def post_decision(
 
         # Trigger job execution if this approval is linked to a job
         try:
-            from packages.persistence.jobs_repo import JobsRepository as _JobsRepo
-            from packages.agent.job_executor import execute_job as _execute_job
             import asyncio as _asyncio
+
+            from packages.agent.job_executor import execute_job as _execute_job
+            from packages.persistence.jobs_repo import JobsRepository as _JobsRepo
+
             _jr = _JobsRepo()
             _job = await _jr.get_by_approval_id(approval_id)
             if _job is not None:

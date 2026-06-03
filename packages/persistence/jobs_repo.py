@@ -104,7 +104,8 @@ class JobsRepository:
         async with pool.acquire() as conn:
             row = await conn.fetchrow(
                 """
-                INSERT INTO jobs (id, session_id, status, job_type, params_json, approval_id, created_at)
+                INSERT INTO jobs
+                    (id, session_id, status, job_type, params_json, approval_id, created_at)
                 VALUES ($1, $2, 'pending_approval', $3, $4::jsonb, $5, now())
                 RETURNING *
                 """,
@@ -114,7 +115,7 @@ class JobsRepository:
                 json.dumps(params),
                 approval_id,
             )
-        return dict(row)  # type: ignore[arg-type]
+        return dict(row)
 
     async def update_status(
         self,
@@ -159,7 +160,7 @@ class JobsRepository:
                 output_tokens,
                 cost_usd,
             )
-        return dict(row)  # type: ignore[arg-type]
+        return dict(row)
 
     async def add_file(
         self,
@@ -175,7 +176,8 @@ class JobsRepository:
         async with pool.acquire() as conn:
             row = await conn.fetchrow(
                 """
-                INSERT INTO job_files (id, job_id, file_name, file_size_bytes, mime_type, download_url, created_at)
+                INSERT INTO job_files
+                    (id, job_id, file_name, file_size_bytes, mime_type, download_url, created_at)
                 VALUES ($1, $2, $3, $4, $5, $6, now())
                 RETURNING *
                 """,
@@ -186,7 +188,7 @@ class JobsRepository:
                 mime_type,
                 download_url,
             )
-        return dict(row)  # type: ignore[arg-type]
+        return dict(row)
 
     async def get_by_approval_id(self, approval_id: UUID) -> dict[str, Any] | None:
         """SELECT the jobs row where approval_id = $1. Returns None if not found."""

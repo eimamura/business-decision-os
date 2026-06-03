@@ -545,7 +545,7 @@ def create_llm_client(
 
 
 class BudgetedClaudeClient:
-    def __init__(self, inner: ClaudeClient, guard: BudgetGuard) -> None:
+    def __init__(self, inner: ClaudeClient | ScenarioStubClaudeClient, guard: BudgetGuard) -> None:
         self._inner = inner
         self._guard = guard
 

@@ -271,7 +271,9 @@ class AgentRuntime:
                             _job_id: str | None = None
                             _job_description: str = ""
                             if call["name"] == "job_dispatch":
-                                from packages.persistence.jobs_repo import JobsRepository as _JobsRepo
+                                from packages.persistence.jobs_repo import (
+                                    JobsRepository as _JobsRepo,
+                                )
                                 _jr = _JobsRepo()
                                 try:
                                     _job = await _jr.create(

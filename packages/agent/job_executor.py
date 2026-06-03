@@ -7,6 +7,7 @@ from uuid import UUID, uuid4
 
 import structlog
 
+from packages.agent.base import SpecialistRole
 from packages.persistence.jobs_repo import JobsRepository
 
 _log = structlog.get_logger(__name__)
@@ -63,7 +64,10 @@ def _parse_params(raw: Any) -> dict[str, Any]:
         parsed = json.loads(raw)
         if isinstance(parsed, dict):
             return parsed
-    _log.warning("params_json is neither dict nor JSON string; using empty params", raw_type=type(raw).__name__)
+    _log.warning(
+        "params_json is neither dict nor JSON string; using empty params",
+        raw_type=type(raw).__name__,
+    )
     return {}
 
 
@@ -99,16 +103,17 @@ async def execute_job(
 
     from packages.tools.base import ToolContext
 
-    _role_by_type: dict[str, str] = {
+    _role_by_type: dict[str, SpecialistRole] = {
         "simulate": "simulation_optimizer",
         "optimize": "simulation_optimizer",
         "forecast": "demand",
         "train_forecast": "demand",
     }
+    _specialist_role: SpecialistRole = _role_by_type.get(job_type, "simulation_optimizer")
     ctx = ToolContext(
         session_id=job["session_id"] if job.get("session_id") else uuid4(),
         agent_step_id=uuid4(),
-        specialist_role=_role_by_type.get(job_type, "simulation_optimizer"),
+        specialist_role=_specialist_role,
         actor="system",
         correlation_id=uuid4(),
         user_role="admin",
