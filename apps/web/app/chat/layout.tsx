@@ -3,9 +3,11 @@
 import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import type { ReactNode } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import SessionsContext from "./SessionsContext";
 import { ChatStateProvider } from "./ChatStateContext";
 import { createSession, deleteSession, deleteAllSessions } from "@/lib/api";
+import { queryKeys } from "@/lib/queryKeys";
 import { useSessions } from "@/features/sessions/hooks";
 import type { Session } from "@/types/chat";
 
@@ -15,6 +17,7 @@ interface ChatLayoutProps {
 
 export default function ChatLayout({ children }: ChatLayoutProps): React.ReactElement {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const [sessions, setSessions] = useState<Session[]>([]);
   const [creating, setCreating] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
@@ -30,11 +33,12 @@ export default function ChatLayout({ children }: ChatLayoutProps): React.ReactEl
     try {
       const data = await createSession("New decision session");
       setCreating(false);
+      void queryClient.invalidateQueries({ queryKey: queryKeys.sessions.all });
       router.push(`/chat/${data.session_id}`);
     } catch {
       setCreating(false);
     }
-  }, [router]);
+  }, [router, queryClient]);
 
   const onDelete = useCallback(async (deletedId: string): Promise<void> => {
     const snapshot = sessions;

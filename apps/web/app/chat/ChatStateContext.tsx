@@ -2,6 +2,7 @@
 
 import { createContext, useCallback, useContext, useRef, useState } from "react";
 import type { ReactNode } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   fetchMessages,
   fetchSessionUsage,
@@ -10,6 +11,7 @@ import {
   streamSession,
   updateSessionTitle,
 } from "@/lib/api";
+import { queryKeys } from "@/lib/queryKeys";
 import type { ChatMessage, SessionUsage, SseEvent } from "@/types/chat";
 
 interface SessionState {
@@ -50,6 +52,7 @@ export function useChatStateContext(): ChatStateContextValue {
 }
 
 export function ChatStateProvider({ children }: { children: ReactNode }): React.ReactElement {
+  const queryClient = useQueryClient();
   const [sessions, setSessions] = useState<Record<string, SessionState>>({});
   // Per-session refs — keyed by sessionId, never cause re-renders
   const titleSetRef = useRef<Record<string, boolean>>({});
@@ -184,6 +187,7 @@ export function ChatStateProvider({ children }: { children: ReactNode }): React.
                   .then(() => onTitleGenerated(titleText))
                   .catch(() => undefined);
               }
+              void queryClient.invalidateQueries({ queryKey: queryKeys.sessions.all });
               break;
             }
 
@@ -239,6 +243,7 @@ export function ChatStateProvider({ children }: { children: ReactNode }): React.
                       ];
                 return { ...prev, messages: msgs };
               });
+              void queryClient.invalidateQueries({ queryKey: ["approvals"] });
             }
 
             if (event.type === "job_completed" && event.files.length > 0) {
@@ -254,6 +259,7 @@ export function ChatStateProvider({ children }: { children: ReactNode }): React.
                 ...prev,
                 messages: [...prev.messages, filesMsg],
               }));
+              void queryClient.invalidateQueries({ queryKey: ["jobs"] });
             }
 
             if (event.type === "error") {
