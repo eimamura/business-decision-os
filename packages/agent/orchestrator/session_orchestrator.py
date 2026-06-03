@@ -47,7 +47,6 @@ class OrchestratorState(TypedDict):
     intent: SessionIntent | None
     route: AgentRoute | None
     result: SessionResponse | None
-    clarification_round: int   # legacy — keep, do NOT remove
     error: str | None
     ask_user_id: str | None           # NEW — UUID set by prepare_ask_user
     ask_user_question: str | None     # NEW — question emitted by prepare_ask_user
@@ -508,15 +507,12 @@ class SessionOrchestrator:
             "timestamp": _iso_now(),
         })
 
-        clarification_round: int = query.metadata.get("clarification_round", 0)
-
         initial_state: OrchestratorState = {
             "session_id": str(session_id),
             "query": query,
             "intent": None,
             "route": None,
             "result": None,
-            "clarification_round": clarification_round,
             "error": None,
             "ask_user_id": None,
             "ask_user_question": None,

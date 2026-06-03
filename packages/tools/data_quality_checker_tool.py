@@ -10,7 +10,6 @@ from packages.tools.sql_allowlist import ALLOWED_READ_TABLES
 class DataQualityCheckerTool:
     name = "data_quality_checker"
     description = "Check for missing values and data quality issues in an operational table"
-    requires_approval = False
     safety_level: Literal["read_only", "write", "hitl"] = "read_only"
     input_schema: dict[str, Any] = {
         "type": "object",

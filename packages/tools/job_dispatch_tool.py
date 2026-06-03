@@ -12,7 +12,6 @@ class JobDispatchTool:
         "before running. Supported job_types: simulate, optimize, forecast, train_forecast."
     )
     safety_level: Literal["read_only", "write", "hitl"] = "hitl"
-    requires_approval = True
     input_schema: dict[str, Any] = {  # Any: JSON schema values are untyped
         "type": "object",
         "properties": {

@@ -12,7 +12,6 @@ class TrainForecastTool:
         "Reads demand_history, fits a linear regression model, "
         "and writes predictions to prediction_features."
     )
-    requires_approval = False
     safety_level: Literal["read_only", "write", "hitl"] = "write"
     input_schema: dict[str, Any] = {
         "type": "object",

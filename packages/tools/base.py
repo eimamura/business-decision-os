@@ -48,7 +48,6 @@ class Tool(Protocol):
     description: str
     input_schema: dict[str, Any]
     output_schema: dict[str, Any]
-    requires_approval: bool
     safety_level: Literal["read_only", "write", "hitl"]
 
     async def handle(self, input: dict[str, Any], ctx: ToolContext) -> ToolResult: ...

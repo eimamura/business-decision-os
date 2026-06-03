@@ -10,7 +10,6 @@ from packages.tools.sql_allowlist import ALLOWED_READ_TABLES
 class TableSchemaReaderTool:
     name = "table_schema_reader"
     description = "Read column names and types for an operational table"
-    requires_approval = False
     safety_level: Literal["read_only", "write", "hitl"] = "read_only"
     input_schema: dict[str, Any] = {
         "type": "object",

@@ -327,8 +327,10 @@ def test_t073_edge_after_select_mode_routes_correctly(mode: str, expected_node: 
         "intent": None,
         "route": route,
         "result": None,
-        "clarification_round": 0,
         "error": None,
+        "ask_user_id": None,
+        "ask_user_question": None,
+        "ask_user_answer": None,
     }
 
     actual_node = orchestrator._edge_after_select_mode(state)
@@ -372,8 +374,10 @@ def test_t073_edge_after_select_mode_unknown_mode_returns_end() -> None:
         "intent": None,
         "route": route,
         "result": None,
-        "clarification_round": 0,
         "error": None,
+        "ask_user_id": None,
+        "ask_user_question": None,
+        "ask_user_answer": None,
     }
 
     actual = orchestrator._edge_after_select_mode(state)
@@ -405,8 +409,10 @@ def test_t073_edge_after_select_mode_none_route_returns_end() -> None:
         "intent": None,
         "route": None,
         "result": None,
-        "clarification_round": 0,
         "error": None,
+        "ask_user_id": None,
+        "ask_user_question": None,
+        "ask_user_answer": None,
     }
 
     actual = orchestrator._edge_after_select_mode(state)

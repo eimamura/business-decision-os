@@ -11,7 +11,6 @@ _audit_store: list[dict[str, Any]] = []
 class AuditLogTool:
     name = "write_audit_log"
     description = "Write a tamper-evident audit log entry"
-    requires_approval = False
     safety_level: Literal["read_only", "write", "hitl"] = "write"
     input_schema: dict[str, Any] = {
         "type": "object",

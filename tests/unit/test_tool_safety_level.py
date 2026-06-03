@@ -17,7 +17,6 @@ class _ReadOnlyTool:
     description = "Fake read-only tool"
     input_schema: dict[str, Any] = {}
     output_schema: dict[str, Any] = {}
-    requires_approval = False
     safety_level = "read_only"
 
     async def handle(self, input: dict[str, Any], ctx: ToolContext) -> ToolResult:
@@ -29,7 +28,6 @@ class _WriteTool:
     description = "Fake write tool"
     input_schema: dict[str, Any] = {}
     output_schema: dict[str, Any] = {}
-    requires_approval = False
     safety_level = "write"
 
     async def handle(self, input: dict[str, Any], ctx: ToolContext) -> ToolResult:
@@ -41,7 +39,6 @@ class _HitlTool:
     description = "Fake HITL tool"
     input_schema: dict[str, Any] = {}
     output_schema: dict[str, Any] = {}
-    requires_approval = True
     safety_level = "hitl"
 
     async def handle(self, input: dict[str, Any], ctx: ToolContext) -> ToolResult:

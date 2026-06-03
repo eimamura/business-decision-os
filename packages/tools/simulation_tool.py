@@ -8,7 +8,6 @@ from packages.tools.base import ToolContext, ToolResult
 class SimulationTool:
     name = "simulate_inventory"
     description = "Run a deterministic inventory simulation for a SKU and order quantity"
-    requires_approval = False
     safety_level: Literal["read_only", "write", "hitl"] = "write"
     input_schema: dict[str, Any] = {
         "type": "object",

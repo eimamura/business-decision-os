@@ -63,7 +63,6 @@ class _FakeTool:
     name = "sql_query"
     description = "Run SQL"
     input_schema: dict[str, Any] = {}
-    requires_approval = False
 
     async def handle(self, input: dict[str, Any], ctx: Any) -> Any:
         from packages.tools.base import ToolResult

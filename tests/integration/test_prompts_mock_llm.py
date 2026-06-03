@@ -130,8 +130,6 @@ def _make_recording_tool(
     recorder: _InvocationRecorder,
 ) -> Any:
     class _RecordingTool:
-        requires_approval = False
-
         async def handle(self, input: dict[str, Any], ctx: Any) -> ToolResult:
             recorder.record(self.name, input)
             return ToolResult(
@@ -464,7 +462,6 @@ async def test_hitl_tool_raises_pause_and_session_set_to_awaiting_approval() -> 
     approval_id = str(uuid4())
 
     hitl_tool: Any = _make_recording_tool("request_approval", "hitl", _InvocationRecorder())
-    hitl_tool.requires_approval = True
 
     # LLM sequence: classify intent → route to single_agent → request hitl tool
     llm = _ScriptedLLMClient([
@@ -522,7 +519,6 @@ async def test_analyst_user_role_excludes_write_tools_from_registry() -> None:
         description = "read-only"
         input_schema: dict[str, Any] = {}
         output_schema: dict[str, Any] = {}
-        requires_approval = False
         safety_level = "read_only"
 
         async def handle(self, input: dict[str, Any], ctx: Any) -> ToolResult:
@@ -533,7 +529,6 @@ async def test_analyst_user_role_excludes_write_tools_from_registry() -> None:
         description = "write"
         input_schema: dict[str, Any] = {}
         output_schema: dict[str, Any] = {}
-        requires_approval = False
         safety_level = "write"
 
         async def handle(self, input: dict[str, Any], ctx: Any) -> ToolResult:
@@ -565,7 +560,6 @@ async def test_manager_user_role_includes_hitl_tools() -> None:
         description = "read-only"
         input_schema: dict[str, Any] = {}
         output_schema: dict[str, Any] = {}
-        requires_approval = False
         safety_level = "read_only"
 
         async def handle(self, input: dict[str, Any], ctx: Any) -> ToolResult:
@@ -576,7 +570,6 @@ async def test_manager_user_role_includes_hitl_tools() -> None:
         description = "hitl"
         input_schema: dict[str, Any] = {}
         output_schema: dict[str, Any] = {}
-        requires_approval = True
         safety_level = "hitl"
 
         async def handle(self, input: dict[str, Any], ctx: Any) -> ToolResult:
@@ -587,7 +580,6 @@ async def test_manager_user_role_includes_hitl_tools() -> None:
         description = "write"
         input_schema: dict[str, Any] = {}
         output_schema: dict[str, Any] = {}
-        requires_approval = False
         safety_level = "write"
 
         async def handle(self, input: dict[str, Any], ctx: Any) -> ToolResult:

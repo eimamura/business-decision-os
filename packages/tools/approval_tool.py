@@ -12,7 +12,6 @@ _approval_store: dict[str, dict[str, Any]] = {}
 class ApprovalTool:
     name = "request_approval"
     description = "Request human approval for a proposed action"
-    requires_approval = True
     safety_level: Literal["read_only", "write", "hitl"] = "hitl"
     input_schema: dict[str, Any] = {
         "type": "object",

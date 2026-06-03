@@ -11,7 +11,6 @@ from packages.tools.sql_guardrail import SQLGuardrailError, validate_read_sql
 class SqlQueryTool:
     name = "sql_query"
     description = "Execute read-only SQL against operational tables"
-    requires_approval = False
     safety_level: Literal["read_only", "write", "hitl"] = "read_only"
     input_schema: dict[str, Any] = {
         "type": "object",

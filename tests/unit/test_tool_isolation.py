@@ -404,7 +404,7 @@ async def test_approval_tool_returns_pending():
     assert result.output["status"] == "pending"
     assert "approval_id" in result.output
     assert "expires_at" in result.output
-    assert tool.requires_approval is True
+    assert tool.safety_level == "hitl"
 
 
 # ===== T-1012: AuditLogTool =====

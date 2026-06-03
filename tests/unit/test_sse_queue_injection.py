@@ -73,7 +73,6 @@ class _FakeReadOnlyTool:
     description = "Run SQL"
     input_schema: dict[str, Any] = {}
     output_schema: dict[str, Any] = {}
-    requires_approval = False
     safety_level = "read_only"
 
     async def handle(self, input: dict[str, Any], ctx: Any) -> Any:
@@ -86,7 +85,6 @@ class _FakeHITLTool:
     description = "Requests approval"
     input_schema: dict[str, Any] = {}
     output_schema: dict[str, Any] = {}
-    requires_approval = True
     safety_level = "hitl"
 
     async def handle(self, input: dict[str, Any], ctx: Any) -> Any:

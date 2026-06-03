@@ -130,7 +130,6 @@ class NlQueryTool:
         "Answer a question about operational data in natural language. "
         "Generates and executes a read-only SQL query."
     )
-    requires_approval = False
     safety_level: Literal["read_only", "write", "hitl"] = "read_only"
     input_schema: dict[str, Any] = {
         "type": "object",

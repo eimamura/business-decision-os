@@ -91,7 +91,6 @@ class _FakeHITLTool:
         "required": ["action_summary"],
     }
     output_schema: dict[str, Any] = {}
-    requires_approval = True
     safety_level = "hitl"
 
     async def handle(self, input: dict[str, Any], ctx: Any) -> Any:
@@ -322,7 +321,6 @@ async def test_hitl_resume_calls_execute_job() -> None:
             },
         }
         output_schema: dict[str, Any] = {}
-        requires_approval = True
         safety_level = "hitl"
 
         async def handle(self, input: dict[str, Any], ctx: Any) -> Any:
@@ -471,7 +469,6 @@ async def test_hitl_handle_never_called_on_resume() -> None:
             },
         }
         output_schema: dict[str, Any] = {}
-        requires_approval = True
         safety_level = "hitl"
 
         async def handle(self, input: dict[str, Any], ctx: Any) -> Any:

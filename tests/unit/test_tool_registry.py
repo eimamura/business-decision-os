@@ -10,7 +10,6 @@ class _FakeTool:
     description = "A fake tool for testing"
     input_schema: dict = {}
     output_schema: dict = {}
-    requires_approval = False
 
     async def handle(self, input: dict, ctx: ToolContext) -> ToolResult:
         return ToolResult(output={}, audit_payload={})

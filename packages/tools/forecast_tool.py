@@ -8,7 +8,6 @@ from packages.tools.base import ToolContext, ToolResult
 class ForecastTool:
     name = "forecast"
     description = "Forecast future demand for a SKU using a 28-day moving average"
-    requires_approval = False
     safety_level: Literal["read_only", "write", "hitl"] = "write"
     input_schema: dict[str, Any] = {
         "type": "object",
