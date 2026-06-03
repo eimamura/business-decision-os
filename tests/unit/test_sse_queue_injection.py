@@ -217,11 +217,13 @@ async def test_t070_tool_events_pushed_to_config_sse_queue() -> None:
         config_events.append(await config_queue.get())
 
     config_types = [e.get("type") for e in config_events]
-    assert "tool_started" in config_types, (
-        f"Expected 'tool_started' in config_queue events, got: {config_types}"
+    # P20: tool_started/tool_completed replaced by graph_node (kind="tool") events
+    assert "graph_node" in config_types, (
+        f"Expected 'graph_node' in config_queue events, got: {config_types}"
     )
-    assert "tool_completed" in config_types, (
-        f"Expected 'tool_completed' in config_queue events, got: {config_types}"
+    tool_events = [e for e in config_events if e.get("type") == "graph_node" and e.get("kind") == "tool"]
+    assert len(tool_events) >= 2, (
+        f"Expected at least 2 tool graph_node events (start+end), got: {tool_events}"
     )
 
     # constructor_queue must NOT have received any events (nodes bypass it)

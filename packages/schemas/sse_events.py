@@ -6,83 +6,29 @@ from uuid import UUID
 from pydantic import BaseModel, Field
 
 
-class QueryReceivedEvent(BaseModel):
-    type: Literal["query_received"] = "query_received"
-    session_id: str
+class TokenCost(BaseModel):
+    input_tokens: int
+    output_tokens: int
+    cost_usd: float
+
+
+class GraphNodeEvent(BaseModel):
+    type: Literal["graph_node"] = "graph_node"
+    event: Literal["start", "end"]
+    kind: Literal["orchestrator", "agent", "tool"]
+    name: str
+    run_id: str
+    parent_run_id: str | None = None
     timestamp: str
-
-
-class IntentClassifiedEvent(BaseModel):
-    type: Literal["intent_classified"] = "intent_classified"
-    category: str
-    confidence: float
-    rationale: str
-    goal_text: str | None = None
-    timestamp: str
-
-
-class ExecutionModeSelectedEvent(BaseModel):
-    type: Literal["execution_mode_selected"] = "execution_mode_selected"
-    mode: str
-    agents: list[str]
-    requires_planning: bool
-    requires_dag: bool
-    rationale: str
-    timestamp: str
-
-
-class PlanCreatedEvent(BaseModel):
-    type: Literal["plan_created"] = "plan_created"
-    mode: str
-    steps: list[dict[str, Any]] | None = None
-    nodes: list[dict[str, Any]] | None = None
-    timestamp: str
-
-
-class AgentStartedEvent(BaseModel):
-    type: Literal["agent_started"] = "agent_started"
-    agent_name: str
-    agent_role: str
-    task_id: str
-    started_at: str
+    # "start" only:
     input_summary: str | None = None
-
-
-class AgentCompletedEvent(BaseModel):
-    type: Literal["agent_completed"] = "agent_completed"
-    agent_name: str
-    agent_role: str
-    task_id: str
-    duration_ms: int = 0
-    output_summary: str | None = None
-    timestamp: str
-    # token cost for this agent invocation
-    input_tokens: int | None = None
-    output_tokens: int | None = None
-    cost_usd: float | None = None
-
-
-class ToolStartedEvent(BaseModel):
-    type: Literal["tool_started"] = "tool_started"
-    tool_name: str
-    tool_call_id: str
-    step_id: str | None = None
-    agent_role: str
-    input: dict[str, Any] | None = None
-    timestamp: str
-
-
-class ToolCompletedEvent(BaseModel):
-    type: Literal["tool_completed"] = "tool_completed"
-    tool_name: str
-    tool_call_id: str
-    agent_role: str
-    duration_ms: int = 0
+    # "end" only:
+    duration_ms: int | None = None
+    status: Literal["ok", "error"] = "ok"
+    meta: dict[str, Any] = Field(default_factory=dict)
     output: dict[str, Any] | None = None
-    executed_query: str | None = None
-    status: Literal["success", "error"] = "success"
+    token_cost: TokenCost | None = None
     error: str | None = None
-    timestamp: str
 
 
 class MemoryRetrievedEvent(BaseModel):
@@ -211,14 +157,7 @@ class AwaitingInputEvent(BaseModel):
 
 SseEvent = Annotated[
     Union[
-        QueryReceivedEvent,
-        IntentClassifiedEvent,
-        ExecutionModeSelectedEvent,
-        PlanCreatedEvent,
-        AgentStartedEvent,
-        AgentCompletedEvent,
-        ToolStartedEvent,
-        ToolCompletedEvent,
+        GraphNodeEvent,
         MemoryRetrievedEvent,
         MemoryWrittenEvent,
         ResponseReadyEvent,

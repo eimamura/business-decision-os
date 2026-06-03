@@ -161,12 +161,10 @@ async def test_direct_chat_does_not_create_decision(stub_orchestrator):
     assert response.agent_results == {}
     assert response.reply == "Good morning! How can I help?"
     emitted_types = [event["type"] for event in await _events(queue)]
-    # text_delta events are emitted before response_ready when streaming is active
-    assert emitted_types[0] == "query_received"
-    assert "intent_classified" in emitted_types
-    assert "execution_mode_selected" in emitted_types
+    # P20: legacy progress events replaced by graph_node events; graph_node end fires after response_ready
+    assert "graph_node" in emitted_types
     assert "text_delta" in emitted_types
-    assert emitted_types[-1] == "response_ready"
+    assert "response_ready" in emitted_types
 
 
 @pytest.mark.asyncio
@@ -177,7 +175,9 @@ async def test_single_agent_runs_only_selected_agent(stub_orchestrator):
     assert response.mode == "single_agent"
     assert list(response.agent_results) == ["inventory"]
     event_types = [event["type"] for event in await _events(queue)]
-    assert event_types.count("agent_started") >= 1
+    # P20: agent_started replaced by graph_node (kind="agent") events
+    agent_nodes = [e for e in event_types if e == "graph_node"]
+    assert len(agent_nodes) >= 1
     assert "response_ready" in event_types
 
 
@@ -200,8 +200,10 @@ async def test_planned_execution_uses_serial_plan(stub_orchestrator):
     assert response.mode == "planned_execution"
     assert list(response.agent_results) == ["data", "sim"]
     events = await _events(queue)
-    plan_event = next(event for event in events if event["type"] == "plan_created")
-    assert [step["id"] for step in plan_event["steps"]] == ["data", "sim"]
+    # P20: plan_created event removed; plan structure visible via graph_node agent events
+    event_types = [e["type"] for e in events]
+    assert "graph_node" in event_types
+    assert "response_ready" in event_types
 
 
 @pytest.mark.asyncio

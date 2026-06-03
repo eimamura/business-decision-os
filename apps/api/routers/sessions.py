@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from typing import Any, AsyncGenerator
 from uuid import UUID, uuid4
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, HTTPException, Request, status
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
@@ -19,7 +19,7 @@ from apps.api.state import (
     sessions,
 )
 from packages.agent.history import compress_history
-from packages.agent.orchestrator import SessionOrchestrator, SessionResponse, SessionUserQuery
+from packages.agent.orchestrator import SessionResponse, SessionUserQuery
 from packages.agent.rate_limiter import RateLimitExceeded, check_rate_limit
 from packages.memory import ShortTermMemory
 from packages.persistence.llm_usage_repo import LlmUsageRepository

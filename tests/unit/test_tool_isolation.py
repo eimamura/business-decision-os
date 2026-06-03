@@ -664,9 +664,8 @@ async def test_orchestrator_emits_sse_events():
         events.append(sse_queue.get_nowait())
 
     event_types = {e["type"] for e in events}
-    assert "query_received" in event_types
-    assert "intent_classified" in event_types
-    assert "execution_mode_selected" in event_types
+    # P20: query_received/intent_classified/execution_mode_selected replaced by graph_node events
+    assert "graph_node" in event_types
     assert "response_ready" in event_types
 
 

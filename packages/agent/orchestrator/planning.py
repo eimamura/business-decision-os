@@ -22,7 +22,7 @@ from packages.agent.orchestrator.models import (
     SpecialistResult,
     TaskNode,
 )
-from packages.agent.orchestrator.parsing import _iso_now, _json_array, _json_obj
+from packages.agent.orchestrator.parsing import _json_array, _json_obj
 from packages.agent.orchestrator.prompts import DAG_SYSTEM, PLAN_SYSTEM
 from packages.agent.orchestrator.roles import VALID_AGENT_ROLES
 
@@ -96,12 +96,6 @@ async def create_execution_plan(
     plan = ExecutionPlan(**_json_obj(response.text))
     for step in plan.steps:
         _validate_agent_role(step.agent_role, source="plan")
-    await orchestrator._push({
-        "type": "plan_created",
-        "mode": "planned_execution",
-        "steps": [s.model_dump() for s in plan.steps],
-        "timestamp": _iso_now(),
-    })
     return plan
 
 
@@ -168,12 +162,6 @@ async def create_task_nodes(
     nodes = [TaskNode(**item) for item in _json_array(response.text)]
     for node in nodes:
         _validate_agent_role(node.agent_role, source="DAG")
-    await orchestrator._push({
-        "type": "plan_created",
-        "mode": "dag_execution",
-        "nodes": [n.model_dump() for n in nodes],
-        "timestamp": _iso_now(),
-    })
     return nodes
 
 

@@ -771,11 +771,22 @@ async def test_ask_user_analytical_intent_emits_event_and_raises_graph_interrupt
 
     event_types = [e.get("type") for e in events]
     assert "ask_user_required" in event_types, f"ask_user_required missing; got: {event_types}"
+    assert "graph_node" in event_types, f"graph_node missing; got: {event_types}"
 
     ask_event = next(e for e in events if e.get("type") == "ask_user_required")
     assert ask_event["question"] == "What date range should I analyze?"
     assert isinstance(ask_event.get("suggestions"), list)
     assert ask_event.get("ask_user_id") is not None
+
+    # graph_node events must appear for orchestrator nodes that ran before the interrupt
+    graph_nodes = [e for e in events if e.get("type") == "graph_node"]
+    node_names = [e.get("name") for e in graph_nodes]
+    assert "classify_intent" in node_names, f"classify_intent graph_node missing; names: {node_names}"
+    assert "prepare_ask_user" in node_names, f"prepare_ask_user graph_node missing; names: {node_names}"
+    # Each start event must have a matching end event
+    start_run_ids = {e.get("run_id") for e in graph_nodes if e.get("event") == "start"}
+    end_run_ids = {e.get("run_id") for e in graph_nodes if e.get("event") == "end"}
+    assert start_run_ids == end_run_ids, f"Unmatched graph_node start/end run_ids"
 
 
 # ---------------------------------------------------------------------------

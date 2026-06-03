@@ -147,16 +147,6 @@ class AgentRuntime:
         self._output_builder: OutputBuilder = output_builder or _default_output_builder(name)
 
     # ------------------------------------------------------------------
-    # SSE helper — reads queue from config or falls back to constructor arg
-    # ------------------------------------------------------------------
-
-    async def _push(self, event: dict[str, Any], sse_queue: Any = None) -> None:
-        q = sse_queue if sse_queue is not None else self._sse_queue
-        if q is not None:
-            from packages.agent.orchestrator.parsing import json_safe
-            await q.put(json_safe(event))
-
-    # ------------------------------------------------------------------
     # Node: call_model
     # ------------------------------------------------------------------
 
@@ -404,8 +394,10 @@ class AgentRuntime:
         from packages.agent.llm import LLMMessage
         from packages.agent.orchestrator.parsing import json_safe
 
-        sse_queue = (config.get("configurable") or {}).get("sse_queue")
-        ctx: ToolContext = (config.get("configurable") or {})["ctx"]
+        configurable = config.get("configurable") or {}
+        sse_queue = configurable.get("sse_queue")
+        ctx: ToolContext = configurable["ctx"]
+        agent_run_id: str = configurable.get("agent_run_id", "")
 
         response = state.get("response")
         if response is None:
@@ -436,13 +428,12 @@ class AgentRuntime:
                 tool_t0 = time.monotonic()
                 if sse_queue is not None:
                     await sse_queue.put(json_safe({
-                        "type": "tool_started",
-                        "tool_name": call["name"],
-                        "tool_call_id": tool_call_id,
-                        "step_id": str(ctx.agent_step_id),
-                        "agent_role": self.role,
-                        "input": tool_input,
+                        "type": "graph_node", "event": "start",
+                        "kind": "tool", "name": call["name"],
+                        "run_id": tool_call_id, "parent_run_id": agent_run_id,
                         "timestamp": datetime.now(timezone.utc).isoformat(),
+                        "input_summary": str(tool_input)[:200],
+                        "status": "ok", "meta": {},
                     }))
                 try:
                     job_result = await execute_job(_UUID(pending_job_id), sse_queue=sse_queue)
@@ -454,14 +445,12 @@ class AgentRuntime:
                     new_tool_results.append({call["name"]: result_output})
                     if sse_queue is not None:
                         await sse_queue.put(json_safe({
-                            "type": "tool_completed",
-                            "tool_name": call["name"],
-                            "tool_call_id": tool_call_id,
-                            "agent_role": self.role,
-                            "duration_ms": tool_duration_ms,
-                            "output": result_output,
-                            "status": "success",
+                            "type": "graph_node", "event": "end",
+                            "kind": "tool", "name": call["name"],
+                            "run_id": tool_call_id, "parent_run_id": agent_run_id,
                             "timestamp": datetime.now(timezone.utc).isoformat(),
+                            "duration_ms": tool_duration_ms,
+                            "status": "ok", "output": result_output, "meta": {},
                         }))
                     new_messages.append(LLMMessage(
                         role="tool",
@@ -472,14 +461,12 @@ class AgentRuntime:
                     tool_duration_ms = int((time.monotonic() - tool_t0) * 1000)
                     if sse_queue is not None:
                         await sse_queue.put(json_safe({
-                            "type": "tool_completed",
-                            "tool_name": call["name"],
-                            "tool_call_id": tool_call_id,
-                            "agent_role": self.role,
-                            "duration_ms": tool_duration_ms,
-                            "status": "error",
-                            "error": str(exc),
+                            "type": "graph_node", "event": "end",
+                            "kind": "tool", "name": call["name"],
+                            "run_id": tool_call_id, "parent_run_id": agent_run_id,
                             "timestamp": datetime.now(timezone.utc).isoformat(),
+                            "duration_ms": tool_duration_ms,
+                            "status": "error", "error": str(exc), "meta": {},
                         }))
                     raise
                 # Clear HITL job id after use
@@ -490,13 +477,12 @@ class AgentRuntime:
             tool_t0 = time.monotonic()
             if sse_queue is not None:
                 await sse_queue.put(json_safe({
-                    "type": "tool_started",
-                    "tool_name": call["name"],
-                    "tool_call_id": tool_call_id,
-                    "step_id": str(ctx.agent_step_id),
-                    "agent_role": self.role,
-                    "input": tool_input,
+                    "type": "graph_node", "event": "start",
+                    "kind": "tool", "name": call["name"],
+                    "run_id": tool_call_id, "parent_run_id": agent_run_id,
                     "timestamp": datetime.now(timezone.utc).isoformat(),
+                    "input_summary": str(tool_input)[:200],
+                    "status": "ok", "meta": {},
                 }))
             try:
                 tool_result = await tool.handle(tool_input, ctx)
@@ -509,29 +495,29 @@ class AgentRuntime:
                 )
                 new_tool_results.append({call["name"]: tool_output})
                 if sse_queue is not None:
+                    output_with_query: dict[str, Any] = (
+                        {**tool_output, "executed_query": executed_query}
+                        if isinstance(tool_output, dict) and executed_query is not None
+                        else (tool_output if isinstance(tool_output, dict) else {})
+                    )
                     await sse_queue.put(json_safe({
-                        "type": "tool_completed",
-                        "tool_name": call["name"],
-                        "tool_call_id": tool_call_id,
-                        "agent_role": self.role,
-                        "duration_ms": tool_duration_ms,
-                        "output": tool_output,
-                        "executed_query": executed_query,
-                        "status": "success",
+                        "type": "graph_node", "event": "end",
+                        "kind": "tool", "name": call["name"],
+                        "run_id": tool_call_id, "parent_run_id": agent_run_id,
                         "timestamp": datetime.now(timezone.utc).isoformat(),
+                        "duration_ms": tool_duration_ms,
+                        "status": "ok", "output": output_with_query, "meta": {},
                     }))
             except Exception as exc:
                 tool_duration_ms = int((time.monotonic() - tool_t0) * 1000)
                 if sse_queue is not None:
                     await sse_queue.put(json_safe({
-                        "type": "tool_completed",
-                        "tool_name": call["name"],
-                        "tool_call_id": tool_call_id,
-                        "agent_role": self.role,
-                        "duration_ms": tool_duration_ms,
-                        "status": "error",
-                        "error": str(exc),
+                        "type": "graph_node", "event": "end",
+                        "kind": "tool", "name": call["name"],
+                        "run_id": tool_call_id, "parent_run_id": agent_run_id,
                         "timestamp": datetime.now(timezone.utc).isoformat(),
+                        "duration_ms": tool_duration_ms,
+                        "status": "error", "error": str(exc), "meta": {},
                     }))
                 raise
 
@@ -768,6 +754,7 @@ class AgentRuntime:
         ctx: "ToolContext",
         max_iterations: int | None = None,
         checkpointer: Any = None,
+        agent_run_id: str = "",
     ) -> "SpecialistResult":
         from packages.agent.llm import LLMMessage, LLMToolSpec
         from packages.agent.orchestrator import SpecialistResult
@@ -832,6 +819,7 @@ class AgentRuntime:
                 "ctx": ctx,
                 "llm_tools": llm_tools,
                 "sse_queue": self._sse_queue,
+                "agent_run_id": agent_run_id,
             }
         }
 

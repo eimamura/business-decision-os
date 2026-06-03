@@ -4,82 +4,27 @@ import { z } from "zod";
 // Single Source of Truth: packages/schemas/sse_events.py
 // Regenerate:  make codegen
 
-export const QueryReceivedEventSchema = z.object({
-  type: z.literal("query_received"),
-  session_id: z.string(),
-  timestamp: z.string(),
+export const TokenCostSchema = z.object({
+  input_tokens: z.number().int(),
+  output_tokens: z.number().int(),
+  cost_usd: z.number(),
 });
 
-export const IntentClassifiedEventSchema = z.object({
-  type: z.literal("intent_classified"),
-  category: z.string(),
-  confidence: z.number(),
-  rationale: z.string(),
-  goal_text: z.string().nullable().optional(),
+export const GraphNodeEventSchema = z.object({
+  type: z.literal("graph_node"),
+  event: z.enum(["start", "end"]),
+  kind: z.enum(["orchestrator", "agent", "tool"]),
+  name: z.string(),
+  run_id: z.string(),
+  parent_run_id: z.string().nullable().optional(),
   timestamp: z.string(),
-});
-
-export const ExecutionModeSelectedEventSchema = z.object({
-  type: z.literal("execution_mode_selected"),
-  mode: z.string(),
-  agents: z.array(z.string()),
-  requires_planning: z.boolean(),
-  requires_dag: z.boolean(),
-  rationale: z.string(),
-  timestamp: z.string(),
-});
-
-export const PlanCreatedEventSchema = z.object({
-  type: z.literal("plan_created"),
-  mode: z.string(),
-  steps: z.array(z.record(z.unknown())).nullable().optional(),
-  nodes: z.array(z.record(z.unknown())).nullable().optional(),
-  timestamp: z.string(),
-});
-
-export const AgentStartedEventSchema = z.object({
-  type: z.literal("agent_started"),
-  agent_name: z.string(),
-  agent_role: z.string(),
-  task_id: z.string(),
-  started_at: z.string(),
   input_summary: z.string().nullable().optional(),
-});
-
-export const AgentCompletedEventSchema = z.object({
-  type: z.literal("agent_completed"),
-  agent_name: z.string(),
-  agent_role: z.string(),
-  task_id: z.string(),
-  duration_ms: z.number().int(),
-  output_summary: z.string().nullable().optional(),
-  timestamp: z.string(),
-  input_tokens: z.number().int().nullable().optional(),
-  output_tokens: z.number().int().nullable().optional(),
-  cost_usd: z.number().nullable().optional(),
-});
-
-export const ToolStartedEventSchema = z.object({
-  type: z.literal("tool_started"),
-  tool_name: z.string(),
-  tool_call_id: z.string(),
-  step_id: z.string().nullable().optional(),
-  agent_role: z.string(),
-  input: z.record(z.unknown()).nullable().optional(),
-  timestamp: z.string(),
-});
-
-export const ToolCompletedEventSchema = z.object({
-  type: z.literal("tool_completed"),
-  tool_name: z.string(),
-  tool_call_id: z.string(),
-  agent_role: z.string(),
-  duration_ms: z.number().int(),
+  duration_ms: z.number().int().nullable().optional(),
+  status: z.enum(["ok", "error"]),
+  meta: z.record(z.unknown()),
   output: z.record(z.unknown()).nullable().optional(),
-  executed_query: z.string().nullable().optional(),
-  status: z.enum(["success", "error"]),
+  token_cost: TokenCostSchema.nullable().optional(),
   error: z.string().nullable().optional(),
-  timestamp: z.string(),
 });
 
 export const MemoryRetrievedEventSchema = z.object({
@@ -205,14 +150,7 @@ export const AwaitingInputEventSchema = z.object({
 });
 
 export const SseEventSchema = z.discriminatedUnion("type", [
-  QueryReceivedEventSchema,
-  IntentClassifiedEventSchema,
-  ExecutionModeSelectedEventSchema,
-  PlanCreatedEventSchema,
-  AgentStartedEventSchema,
-  AgentCompletedEventSchema,
-  ToolStartedEventSchema,
-  ToolCompletedEventSchema,
+  GraphNodeEventSchema,
   MemoryRetrievedEventSchema,
   MemoryWrittenEventSchema,
   ResponseReadyEventSchema,

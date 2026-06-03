@@ -1,18 +1,18 @@
-export type AgentStepStatus = "pending" | "running" | "completed" | "failed";
+export type GraphNodeKind = "orchestrator" | "agent" | "tool";
+export type GraphNodeStatus = "running" | "completed" | "failed";
 
-export interface AgentStep {
-  id: string;
-  label: string;
-  status: AgentStepStatus;
-  duration?: string;
-  subtext?: string;
-  startedAt?: string;
+export interface GraphRunNode {
+  runId: string;
+  parentRunId?: string;
+  kind: GraphNodeKind;
+  name: string;
+  status: GraphNodeStatus;
+  startedAt: string;
   completedAt?: string;
-  tokenCost?: {
-    inputTokens: number;
-    outputTokens: number;
-    costUsd: number;
-  };
+  durationMs?: number;
+  meta?: Record<string, unknown>;
+  output?: Record<string, unknown>;
+  tokenCost?: { inputTokens: number; outputTokens: number; costUsd: number };
 }
 
 export interface EvidenceSource {

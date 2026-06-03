@@ -1,22 +1,25 @@
 "use client";
 
-import type { AgentStep } from "@/types/workspace";
+import type { GraphRunNode } from "@/types/workspace";
 
-interface DataSource {
+const TOOL_DISPLAY_NAMES: Record<string, string> = {
+  sql_query: "SQL Query",
+  nl_query: "Natural Language Query",
+  forecast: "Demand Forecast",
+  simulate_inventory: "Inventory Simulation",
+  optimize_replenishment: "Replenishment Optimization",
+  evaluate_candidates: "Candidate Evaluation",
+  write_audit_log: "Audit Log",
+};
+
+interface ToolSource {
   name: string;
-  freshness: string;
-  status: string;
+  toolName: string;
+  detail: string;
 }
 
-const DEFAULT_SOURCES: readonly DataSource[] = [
-  { name: "Inventory On Hand", freshness: "Real-time", status: "Used" },
-  { name: "Demand Forecast", freshness: "Next 4 weeks", status: "Used" },
-  { name: "Sales Orders", freshness: "Last 90 days", status: "Used" },
-  { name: "Supplier Lead Time", freshness: "Latest available", status: "Used" },
-] as const;
-
 interface EvidenceSourcesProps {
-  steps: AgentStep[];
+  graphRun: GraphRunNode[];
 }
 
 function DatabaseIcon(): React.ReactElement {
@@ -44,47 +47,56 @@ function DatabaseIcon(): React.ReactElement {
   );
 }
 
-function SourceRow({ name, freshness, status }: DataSource): React.ReactElement {
+function outputDetail(node: GraphRunNode): string {
+  const out = node.output;
+  if (!out) return "Retrieved";
+  if (typeof out.row_count === "number") return `${out.row_count} rows`;
+  if (typeof out.executed_query === "string") return "Query executed";
+  if (typeof out.forecast_periods === "number") return `${out.forecast_periods} periods`;
+  return "Retrieved";
+}
+
+function SourceRow({ name, detail }: ToolSource): React.ReactElement {
   return (
     <li className="flex items-start gap-3 py-2.5 border-b border-white/[0.06] last:border-0">
       <DatabaseIcon />
       <div className="flex-1 min-w-0">
         <p className="text-xs text-white/70 font-medium truncate">{name}</p>
-        <p className="text-[10px] text-white/35 mt-0.5">{freshness}</p>
+        <p className="text-[10px] text-white/35 mt-0.5">{detail}</p>
       </div>
       <span className="text-[10px] font-semibold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-1.5 py-0.5 rounded shrink-0">
-        {status}
+        Used
       </span>
     </li>
   );
 }
 
-export default function EvidenceSources({ steps }: EvidenceSourcesProps): React.ReactElement {
-  // Collect unique completed tool steps by label
-  const usedTools: Map<string, string> = new Map();
-  for (const step of steps) {
-    const isToolStep =
-      (step.id.startsWith("tool:") || step.id.startsWith("tdone:")) &&
-      step.status === "completed";
-    if (isToolStep) {
-      usedTools.set(step.label, "Retrieved");
-    }
+export default function EvidenceSources({ graphRun }: EvidenceSourcesProps): React.ReactElement {
+  // Deduplicate completed tool nodes by tool name
+  const seen = new Set<string>();
+  const sources: ToolSource[] = [];
+  for (const node of graphRun) {
+    if (node.kind !== "tool" || node.status !== "completed") continue;
+    if (seen.has(node.name)) continue;
+    seen.add(node.name);
+    sources.push({
+      name: TOOL_DISPLAY_NAMES[node.name] ?? node.name.replace(/_/g, " "),
+      toolName: node.name,
+      detail: outputDetail(node),
+    });
   }
 
-  const sources: readonly DataSource[] =
-    usedTools.size === 0
-      ? DEFAULT_SOURCES
-      : Array.from(usedTools.entries()).map(([label, freshness]) => ({
-          name: label,
-          freshness,
-          status: "Used",
-        }));
+  if (sources.length === 0) {
+    return (
+      <p className="text-[11px] text-white/25 py-2">No data sources used yet.</p>
+    );
+  }
 
   return (
     <>
       <ul>
         {sources.map((src) => (
-          <SourceRow key={src.name} name={src.name} freshness={src.freshness} status={src.status} />
+          <SourceRow key={src.toolName} name={src.name} toolName={src.toolName} detail={src.detail} />
         ))}
       </ul>
       <button className="mt-2 text-[10px] text-indigo-400/70 hover:text-indigo-300 transition-colors">

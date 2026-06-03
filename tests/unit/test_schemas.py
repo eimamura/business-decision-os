@@ -7,7 +7,8 @@ from packages.schemas.recommendation import Candidate, KpiScore, Recommendation,
 from packages.schemas.sse_events import (
     DoneEvent,
     ErrorEvent,
-    QueryReceivedEvent,
+    GraphNodeEvent,
+    TokenCost,
 )
 
 
@@ -68,12 +69,35 @@ def test_evaluation_result_schema():
     assert result.risk_level == "medium"
 
 
-def test_sse_query_received():
-    event = QueryReceivedEvent(
-        session_id=str(uuid4()),
+def test_sse_graph_node_start():
+    event = GraphNodeEvent(
+        event="start",
+        kind="agent",
+        name="data_engineer",
+        run_id=str(uuid4()),
         timestamp="2026-01-01T00:00:00Z",
+        input_summary="analyze inventory",
     )
-    assert event.type == "query_received"
+    assert event.type == "graph_node"
+    assert event.kind == "agent"
+    assert event.event == "start"
+
+
+def test_sse_graph_node_end_with_token_cost():
+    cost = TokenCost(input_tokens=100, output_tokens=50, cost_usd=0.001)
+    event = GraphNodeEvent(
+        event="end",
+        kind="agent",
+        name="data_engineer",
+        run_id=str(uuid4()),
+        timestamp="2026-01-01T00:00:00Z",
+        duration_ms=1234,
+        status="ok",
+        token_cost=cost,
+    )
+    assert event.status == "ok"
+    assert event.token_cost is not None
+    assert event.token_cost.input_tokens == 100
 
 
 def test_sse_done():

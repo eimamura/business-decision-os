@@ -1,27 +1,29 @@
 /**
- * T-127: Render tests for AgentActivityPanel component.
+ * Render tests for AgentActivityPanel component.
  *
- * AgentActivityPanel is now a pure display component that reads processingSteps,
- * sessionStartedAt, sessionEndedAt, isSending, and usage from ChatStateContext.
- * It has no EventSource of its own.
+ * AgentActivityPanel reads graphRun, sessionStartedAt, sessionEndedAt,
+ * isSending, and usage from ChatStateContext.
  *
- * Strategy: vi.mock useChatStateContext so we can inject a controlled
- * ChatStateContextValue without rendering ChatStateProvider (which needs
- * @tanstack/react-query and real API modules).
+ * Strategy: vi.mock useChatStateContext to inject controlled state without
+ * rendering ChatStateProvider.
  *
  * Scenarios:
- * 1. 2 completed processingSteps → both step labels appear in the document
- * 2. Empty processingSteps → "No active analysis yet." is shown
+ * 1. 2 completed orchestrator nodes → both node labels appear in the document
+ * 2. Empty graphRun → "No active analysis yet." is shown
+ * 3. getSessionState called with the correct sessionId
+ * 4. "Live" badge shown when isSending is true
+ * 5. "Live" badge NOT shown when isSending is false
+ * 6. Orchestrator node meta (category + confidence) rendered as subtext
  */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen } from "@testing-library/react";
 import React from "react";
-import type { AgentStep } from "@/types/workspace";
+import type { GraphRunNode } from "@/types/workspace";
 import type { SessionUsage } from "@/types/chat";
 
 // ---------------------------------------------------------------------------
-// Mock useChatStateContext — must be set up before any component import
+// Mock useChatStateContext
 // ---------------------------------------------------------------------------
 
 const mockGetSessionState = vi.fn();
@@ -36,7 +38,6 @@ vi.mock("@/app/chat/ChatStateContext", () => ({
   }),
 }));
 
-// Import component *after* the mock is in place
 const AgentActivityPanel = (await import("@/components/agent/AgentActivityPanel")).default;
 
 // ---------------------------------------------------------------------------
@@ -46,7 +47,7 @@ const AgentActivityPanel = (await import("@/components/agent/AgentActivityPanel"
 const DEFAULT_USAGE: SessionUsage = { inputTokens: 0, outputTokens: 0, costUsd: 0 };
 
 function makeSessionState(
-  processingSteps: AgentStep[],
+  graphRun: GraphRunNode[],
   extra?: {
     sessionStartedAt?: string | null;
     sessionEndedAt?: string | null;
@@ -58,16 +59,29 @@ function makeSessionState(
     isSending: extra?.isSending ?? false,
     usage: DEFAULT_USAGE,
     isLoadingMessages: false,
+    graphRun,
     agentNodes: [],
     executionMode: undefined,
-    processingSteps,
     sessionStartedAt: extra?.sessionStartedAt ?? null,
     sessionEndedAt: extra?.sessionEndedAt ?? null,
   };
 }
 
-function makeCompletedStep(id: string, label: string): AgentStep {
-  return { id, label, status: "completed" };
+function makeCompletedOrchestratorNode(
+  name: string,
+  runId: string,
+  meta?: Record<string, unknown>,
+): GraphRunNode {
+  return {
+    runId,
+    kind: "orchestrator",
+    name,
+    status: "completed",
+    startedAt: "2024-01-01T00:00:00.000Z",
+    completedAt: "2024-01-01T00:00:01.000Z",
+    durationMs: 1000,
+    meta,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -79,18 +93,15 @@ const SESSION_ID = "sess-panel-test";
 describe("AgentActivityPanel", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    // jsdom does not implement scrollIntoView; mock it to prevent errors from
-    // AgentActivityPanel's useEffect that calls bottomRef.current?.scrollIntoView
     Element.prototype.scrollIntoView = vi.fn();
   });
 
-  // T-127 scenario 1: 2 completed processingSteps → both labels appear
-  it("renders both step labels when processingSteps has 2 completed steps", () => {
-    const steps: AgentStep[] = [
-      makeCompletedStep("intent", "Classifying intent"),
-      makeCompletedStep("route", "Planning analysis route"),
+  it("renders both node labels when graphRun has 2 completed orchestrator nodes", () => {
+    const graphRun: GraphRunNode[] = [
+      makeCompletedOrchestratorNode("classify_intent", "run-1"),
+      makeCompletedOrchestratorNode("select_mode", "run-2"),
     ];
-    mockGetSessionState.mockReturnValue(makeSessionState(steps));
+    mockGetSessionState.mockReturnValue(makeSessionState(graphRun));
 
     render(<AgentActivityPanel sessionId={SESSION_ID} />);
 
@@ -98,8 +109,7 @@ describe("AgentActivityPanel", () => {
     expect(screen.getByText("Planning analysis route")).toBeInTheDocument();
   });
 
-  // T-127 scenario 2: empty processingSteps → empty state message shown
-  it("shows 'No active analysis yet.' when processingSteps is empty", () => {
+  it("shows 'No active analysis yet.' when graphRun is empty", () => {
     mockGetSessionState.mockReturnValue(makeSessionState([]));
 
     render(<AgentActivityPanel sessionId={SESSION_ID} />);
@@ -107,7 +117,6 @@ describe("AgentActivityPanel", () => {
     expect(screen.getByText("No active analysis yet.")).toBeInTheDocument();
   });
 
-  // Additional: getSessionState is called with the correct sessionId
   it("calls getSessionState with the provided sessionId", () => {
     mockGetSessionState.mockReturnValue(makeSessionState([]));
 
@@ -116,7 +125,6 @@ describe("AgentActivityPanel", () => {
     expect(mockGetSessionState).toHaveBeenCalledWith("my-session-id");
   });
 
-  // Additional: "Live" badge shown when isSending is true
   it("shows the 'Live' badge when isSending is true", () => {
     mockGetSessionState.mockReturnValue(makeSessionState([], { isSending: true }));
 
@@ -125,7 +133,6 @@ describe("AgentActivityPanel", () => {
     expect(screen.getByText("Live")).toBeInTheDocument();
   });
 
-  // Additional: "Live" badge NOT shown when isSending is false
   it("does not show the 'Live' badge when isSending is false", () => {
     mockGetSessionState.mockReturnValue(makeSessionState([], { isSending: false }));
 
@@ -134,24 +141,20 @@ describe("AgentActivityPanel", () => {
     expect(screen.queryByText("Live")).not.toBeInTheDocument();
   });
 
-  // Additional: step subtext rendered when present
-  it("renders step subtext when a step includes it", () => {
-    const steps: AgentStep[] = [
-      {
-        id: "intent",
-        label: "Classifying intent",
-        status: "completed",
-        subtext: "optimization · 90% confidence",
-      },
+  it("renders orchestrator node meta (category + confidence) as subtext", () => {
+    const graphRun: GraphRunNode[] = [
+      makeCompletedOrchestratorNode("classify_intent", "run-1", {
+        category: "optimization",
+        confidence: 0.9,
+      }),
     ];
-    mockGetSessionState.mockReturnValue(makeSessionState(steps));
+    mockGetSessionState.mockReturnValue(makeSessionState(graphRun));
 
     render(<AgentActivityPanel sessionId={SESSION_ID} />);
 
     expect(screen.getByText("optimization · 90% confidence")).toBeInTheDocument();
   });
 
-  // Additional: component renders "Agent Activity" header
   it("renders the 'Agent Activity' header", () => {
     mockGetSessionState.mockReturnValue(makeSessionState([]));
 

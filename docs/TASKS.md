@@ -162,7 +162,6 @@ projects that improve correctness without changing public interfaces.
   returns only HITL tools.
 
 ### T-013: Implement 2-layer role × intent tool access control — **Done**
-- **Status:** Done
 - **Files:** `packages/tools/base.py`, `packages/agent/runtime.py`
 - **What:** Add a user-role axis to tool filtering alongside the existing agent-role axis.
   - Layer 1 (user role): `analyst` → read-only tools only; `manager` → includes HITL tools; `admin` → unrestricted
@@ -1136,6 +1135,9 @@ After T-067 is done, T-068, T-069, and T-072 can run in parallel.
 - **Depends on:** T-067 (parallel with T-071 after T-069)
 - **Test:** Integration: stream a mock session; assert `tool_started` and `tool_completed`
   events are received by the SSE client in the correct order.
+- **P20 note:** The named event types (`tool_started`, `tool_completed`, etc.) were
+  replaced by the unified `graph_node` event (P20 T-128–T-132). The `sse_queue` injection
+  via `RunnableConfig` was retained; `_astream_run()` replaced `astream(stream_mode="custom")`.
 
 #### T-071: Update `POST /approvals/{id}/decision` to trigger LangGraph resume — **Done**
 - **File:** `apps/api/routers/approvals.py`
@@ -1412,7 +1414,6 @@ plan quality without failing silently.
 - **What:** `uv run pytest tests/unit/ -q && make lint && make typecheck`
 - **Depends on:** T-084
 - **Test:** All commands exit 0. No references to deleted `clarification.py` remain.
-- **Dependencies:** T-081
 
 ### P11 Amendment — ScenarioStubClaudeClient AskUser scenario
 
@@ -1465,7 +1466,7 @@ plan quality without failing silently.
   - Existing scenario tests must still pass (no regression).
 - **Quality gate:** `uv run pytest tests/unit/ -q && make lint && make typecheck` exits 0.
 
-#### T-089: Two-request AskUser flow unit test — zero DB, zero LLM cost
+#### T-089: Two-request AskUser flow unit test — **Superseded by T-096**
 - **File:** `tests/unit/test_ask_user.py` — append new test section
 - **Depends on:** T-088 (`ScenarioStubClaudeClient` must handle `ask_user` scenario correctly)
 - **⚠ Superseded by T-096 after P13 is complete:** T-089 tests the soft-completion
@@ -1618,7 +1619,7 @@ running agent requests input) is scoped to P14 and noted in the ADR as a future 
 
 ### Batch P13-B0 — ADR (prerequisite for all)
 
-#### T-090: ADR — AskUser interrupt() migration
+#### T-090: ADR — AskUser interrupt() migration — **Done**
 - **File:** `docs/adr/2026-06-03-ask-user-interrupt.md` (new); update `docs/DECISIONS.md`
 - **What:**
   - Document the decision to migrate AskUser from soft-completion to `interrupt()`.
@@ -1661,7 +1662,7 @@ running agent requests input) is scoped to P14 and noted in the ADR as a future 
       intent: SessionIntent | None
       route: AgentRoute | None
       result: SessionResponse | None
-      clarification_round: int   # legacy field from T-019; keep for now, do NOT remove
+      clarification_round: int   # legacy field from T-019 — REMOVED by T-118 (P16)
       error: str | None
       ask_user_id: str | None    # NEW — UUID set by prepare_ask_user, cleared after resume
       ask_user_question: str | None   # NEW — the question emitted by prepare_ask_user
@@ -1981,7 +1982,7 @@ T-091 (schemas + Protocol) ─────────────────�
                                           T-097 (E2E — needs T-099) ─────────┘
 ```
 
-- T-089 (P11 Amendment): skip if P13 has started; implement only if T-092 is not yet begun.
+- T-089 (P11 Amendment): superseded — P13 is complete; T-096 is the authoritative test.
 - T-096 runs after T-092 + T-093; can run in parallel with T-094/T-095.
 - T-097 requires T-095, T-096, T-099, and T-088 (with `MOCK_ASK_USER` support).
 
@@ -2269,6 +2270,12 @@ Show real-time per-agent execution progress as collapsible node cards while the
 session is running. All required SSE events are already emitted by the backend
 (`agent_started`, `agent_completed`, `tool_started`, `tool_completed`,
 `execution_mode_selected`, `plan_created`). Work is **frontend-only**.
+
+> **P20 note:** The 8 event types listed above were removed by P20 T-128 and replaced
+> with a single `graph_node` event. The `agentNodes`/`executionMode` state fields added
+> by T-100/T-101 were removed from `SessionState` by P20 T-133 and are now derived
+> on-the-fly from `graphRun: GraphRunNode[]`. Task descriptions below remain as the
+> historical record of what was implemented; the current code reflects the P20 design.
 
 No public interface changes → no ADR required.
 
@@ -3097,6 +3104,10 @@ and two separate state shapes for the same underlying data.
 **Fix:** single SSE consumer in `ChatStateContext`; `AgentActivityPanel` becomes a pure display
 component that reads `processingSteps` from context.
 
+> **P20 note:** P20 further evolved this architecture — `processingSteps: AgentStep[]`,
+> `eventsToSteps()`, and `apps/web/lib/sse-steps.ts` were all replaced by
+> `graphRun: GraphRunNode[]` (T-133). The current frontend code reflects the P20 design.
+
 **No ADR required** — no public interface changes (frontend internal restructuring only).
 
 ---
@@ -3187,4 +3198,179 @@ component that reads `processingSteps` from context.
 
 ```
 T-125 (extend ChatStateContext) ──→ T-126 (refactor AgentActivityPanel) ──→ T-127 (tests)
+```
+
+---
+
+## P20 — LangGraph-Native SSE Pipeline Rebuild
+
+**Goal:** Replace the 6-layer manual SSE transformation pipeline (`sse_queue.put(dict)` × 10+
+→ `eventsToSteps()` O(n²) → dual state) with a single `GraphNodeEvent` type that covers all
+agent/tool/orchestrator lifecycle signals. Introduce `graphRun: GraphRunNode[]` as the frontend
+single source of truth; derive `agentNodes` and `executionMode` on-the-fly.
+
+**Motivation:** 8 overlapping progress event types scattered across session_orchestrator,
+runtime, and planning; `eventsToSteps()` recomputing the full list on every event; dual state
+management for `processingSteps` vs `agentNodes`; `EvidenceSources` showing hardcoded fake
+sources instead of real tool output data.
+
+**Scope:**
+- `packages/schemas/sse_events.py` + `packages/schemas-ts/src/sse-events.ts`
+- `packages/agent/runtime.py`
+- `packages/agent/orchestrator/runtime.py`
+- `packages/agent/orchestrator/session_orchestrator.py`
+- `packages/agent/orchestrator/planning.py`
+- `apps/web/types/workspace.ts`
+- `apps/web/app/chat/ChatStateContext.tsx`
+- `apps/web/components/agent/AgentActivityPanel.tsx`
+- `apps/web/components/agent/EvidenceSources.tsx`
+- `apps/web/app/chat/__tests__/ChatStateContext.processingSteps.test.tsx`
+- `apps/web/components/__tests__/AgentActivityPanel.test.tsx`
+- `tests/integration/test_prompts_mock_llm.py`
+
+---
+
+### Batch 1 — Schema (Agent: App Builder)
+
+#### T-128: Add `GraphNodeEvent` + `TokenCost` to schema; remove 8 legacy progress event types — Done
+
+- **Files:**
+  - `packages/schemas/sse_events.py`
+  - `packages/schemas-ts/src/sse-events.ts` (via `make codegen`)
+- **Depends on:** none
+- **What:**
+  1. Add `TokenCost(BaseModel)` with `input_tokens: int`, `output_tokens: int`, `cost_usd: float`.
+  2. Add `GraphNodeEvent(BaseModel)` with fields: `type: Literal["graph_node"]`, `event:
+     Literal["start","end"]`, `kind: Literal["orchestrator","agent","tool"]`, `name: str`,
+     `run_id: str`, `parent_run_id: str | None`, `timestamp: str`, `input_summary: str | None`,
+     `duration_ms: int | None`, `status: Literal["ok","error"]`, `meta: dict[str,Any]`,
+     `output: dict[str,Any] | None`, `token_cost: TokenCost | None`, `error: str | None`.
+  3. Remove from `SseEvent` union and delete class definitions: `QueryReceivedEvent`,
+     `IntentClassifiedEvent`, `ExecutionModeSelectedEvent`, `PlanCreatedEvent`,
+     `AgentStartedEvent`, `AgentCompletedEvent`, `ToolStartedEvent`, `ToolCompletedEvent`.
+  4. Run `make codegen`; verify `npx tsc --noEmit` exits 0.
+
+---
+
+### Batch 2 — Backend (Agent: App Builder)
+
+#### T-129: Migrate `AgentRuntime._execute_tools_node` to `graph_node` SSE format — Done
+
+- **File:** `packages/agent/runtime.py`
+- **Depends on:** T-128 Done
+- **What:**
+  1. Add `agent_run_id: str = ""` parameter to `AgentRuntime.run()`; pass it through
+     `run_config["configurable"]["agent_run_id"]`.
+  2. In `_execute_tools_node`, read `agent_run_id` from `config["configurable"]`.
+  3. Replace all 4 `sse_queue.put({"type": "tool_started"/"tool_completed", ...})` calls
+     (normal path start, normal path success end, normal path error end; HITL path has the
+     same 3 variants) with `graph_node` format:
+     - start: `kind="tool"`, `run_id=tool_call_id`, `parent_run_id=agent_run_id`
+     - success end: include `output` dict with `executed_query` if present
+     - error end: `status="error"`, `error=str(exc)`
+  4. Remove `AgentRuntime._push()` method (no longer used).
+
+#### T-130: Migrate `_run_agent()` in `orchestrator/runtime.py` to `graph_node` SSE format — Done
+
+- **File:** `packages/agent/orchestrator/runtime.py`
+- **Depends on:** T-129 Done
+- **What:**
+  1. Replace `agent_started` push with `graph_node start` (kind="agent").
+  2. Call `agent.run(task, ctx, agent_run_id=str(task_id))` to thread `agent_run_id` into
+     the specialist graph so tool events can reference their parent.
+  3. Replace `agent_completed` push with `graph_node end` including `token_cost` object when
+     usage data is available, and `error` field when agent failed.
+  4. Keep the existing `ErrorEvent` push for failed agents.
+
+#### T-131: Replace `ainvoke`/`astream` with `_astream_run()` in `SessionOrchestrator` — Done
+
+- **File:** `packages/agent/orchestrator/session_orchestrator.py`
+- **Depends on:** T-130 Done
+- **What:**
+  1. Add module-level `_ORCHESTRATOR_NODES = frozenset({...})` covering the 8 LangGraph
+     node names.
+  2. Add `_extract_orch_meta(node_name, output)` helper that extracts `category`/`confidence`
+     from `classify_intent` output and `mode`/`agents` from `select_mode` output.
+  3. Add `_astream_run(initial_state, config) → dict[str,Any]` method that drives
+     `graph.astream_events(version="v2")`, emits `graph_node` start/end for every node in
+     `_ORCHESTRATOR_NODES`, and captures final state from the root `on_chain_end` event.
+  4. Update `run()`, `resume()`, `answer_ask_user()` to use `_astream_run`.
+  5. Remove `query_received` push from `run()`.
+  6. Remove `intent_classified` push from `classify_intent()`.
+  7. Remove `execution_mode_selected` push from `select_execution_mode()`.
+  8. Remove the `sse_queue` swap pattern (`original_queue = ...; try/finally`) from all 6
+     run-node methods.
+
+#### T-132: Remove `plan_created` pushes from `planning.py` — Done
+
+- **File:** `packages/agent/orchestrator/planning.py`
+- **Depends on:** T-131 Done
+- **What:**
+  Remove `orchestrator._push({"type": "plan_created", ...})` from `create_execution_plan()`
+  and `create_task_nodes()`. Plan information is now visible from the sequence of
+  `graph_node(kind="agent")` events that follow.
+
+---
+
+### Batch 3 — Frontend (Agent: App Builder)
+
+#### T-133: Introduce `graphRun: GraphRunNode[]` as frontend single source of truth — Done
+
+- **Files:**
+  - `apps/web/types/workspace.ts`
+  - `apps/web/app/chat/ChatStateContext.tsx`
+  - `apps/web/components/agent/AgentActivityPanel.tsx`
+  - `apps/web/components/agent/EvidenceSources.tsx`
+- **Depends on:** T-128 Done (TypeScript types from codegen)
+- **What:**
+  1. `workspace.ts`: remove `AgentStep`/`AgentStepStatus`; add `GraphRunNode`, `GraphNodeKind`,
+     `GraphNodeStatus`.
+  2. `ChatStateContext.tsx`: replace `processingSteps: AgentStep[]` + `executionMode` +
+     `agentNodes` state fields with `graphRun: GraphRunNode[]`; derive `agentNodes` and
+     `executionMode` on-the-fly in `getSessionState()`; handle `graph_node` events
+     incrementally (O(1) per event); update SQL message injection to read from
+     `event.output.executed_query`; update `loadMessages()` to reconstruct `graphRun`
+     from historical `graph_node` events; remove `seenEvents` accumulation; remove
+     `eventsToSteps` import.
+  3. `AgentActivityPanel.tsx`: read `graphRun` from context; add `GRAPH_NODE_LABELS` map;
+     render tool nodes indented, agent nodes slightly indented; show meta subtext (category
+     + confidence%, mode + agent count); show duration and token cost; pass `graphRun` to
+     `EvidenceSources`.
+  4. `EvidenceSources.tsx`: accept `graphRun: GraphRunNode[]`; deduplicate completed tool
+     nodes; show real output snippets (`row_count`, `executed_query` flag); remove
+     `DEFAULT_SOURCES` hardcode; show "No data sources used yet." when empty.
+  5. Delete `apps/web/lib/sse-steps.ts`.
+
+---
+
+### Batch 4 — Tests (Agent: Test/Review)
+
+#### T-134: Rewrite frontend tests for `graphRun`; add `graph_node` assertions to integration test — Done
+
+- **Files:**
+  - `apps/web/app/chat/__tests__/ChatStateContext.processingSteps.test.tsx`
+  - `apps/web/components/__tests__/AgentActivityPanel.test.tsx`
+  - `tests/integration/test_prompts_mock_llm.py`
+- **Depends on:** T-133 Done
+- **What:**
+  1. `ChatStateContext.processingSteps.test.tsx`: rewrite all fixtures and assertions to use
+     `graph_node` events and `graphRun` state (4 scenarios: populates graphRun, sets
+     sessionStartedAt, sets sessionEndedAt from response_ready, resets on second send).
+  2. `AgentActivityPanel.test.tsx`: replace `AgentStep[]` fixtures with `GraphRunNode[]`;
+     update `makeSessionState` helper; verify category + confidence% meta subtext renders.
+  3. Integration test Scenario 11 (`test_ask_user_analytical_intent_emits_event_and_raises`):
+     assert `graph_node` event type is present; assert `classify_intent` and
+     `prepare_ask_user` appear in node names; assert `start_run_ids == end_run_ids`.
+- **Test command:** `cd apps/web && npx vitest run` exits 0 (42 pass)
+
+---
+
+### Dependency Graph (P20)
+
+```
+T-128 (schema) ──┬──→ T-129 (agent runtime tools)
+                 │         └──→ T-130 (orch runtime agents)
+                 │                   └──→ T-131 (session orchestrator astream_run)
+                 │                              └──→ T-132 (planning.py cleanup)
+                 └──→ T-133 (frontend graphRun) ──→ T-134 (tests)
 ```

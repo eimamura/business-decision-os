@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json as _json
+import time
 from typing import Any, cast
 from uuid import UUID, uuid4
 
@@ -43,14 +44,42 @@ _log = structlog.get_logger(__name__)
 
 class OrchestratorState(TypedDict):
     session_id: str
-    query: dict[str, Any]  # SessionUserQuery.model_dump() — primitives only for safe checkpoint serialization
+    # SessionUserQuery.model_dump() — primitives only for safe checkpoint serialization
+    query: dict[str, Any]
     intent: SessionIntent | None
     route: AgentRoute | None
     result: SessionResponse | None
     error: str | None
-    ask_user_id: str | None           # NEW — UUID set by prepare_ask_user
-    ask_user_question: str | None     # NEW — question emitted by prepare_ask_user
-    ask_user_answer: str | None       # NEW — answer injected by wait_for_answer on resume
+    ask_user_id: str | None           # UUID set by prepare_ask_user
+    ask_user_question: str | None     # question emitted by prepare_ask_user
+    ask_user_answer: str | None       # answer injected by wait_for_answer on resume
+
+
+# ---------------------------------------------------------------------------
+# Module-level helpers for astream_events
+# ---------------------------------------------------------------------------
+
+_ORCHESTRATOR_NODES = frozenset({
+    "classify_intent", "prepare_ask_user", "wait_for_answer",
+    "select_mode", "run_direct_chat", "run_sequential", "run_planned", "run_dag",
+})
+
+
+def _extract_orch_meta(node_name: str, output: Any) -> dict[str, Any]:
+    meta: dict[str, Any] = {}
+    if not isinstance(output, dict):
+        return meta
+    if node_name == "classify_intent":
+        intent = output.get("intent")
+        if intent is not None:
+            d = intent.model_dump() if hasattr(intent, "model_dump") else {}
+            meta.update({"category": d.get("category", ""), "confidence": d.get("confidence", 0.0)})
+    elif node_name == "select_mode":
+        route = output.get("route")
+        if route is not None:
+            d = route.model_dump() if hasattr(route, "model_dump") else {}
+            meta.update({"mode": d.get("mode", ""), "agents": d.get("agents", [])})
+    return meta
 
 
 # ---------------------------------------------------------------------------
@@ -121,16 +150,7 @@ class SessionOrchestrator:
             specialist_role="orchestrator",
             agent_step_id=step_id,
         )
-        intent = SessionIntent(**_json_obj(response.text))
-        await self._push({
-            "type": "intent_classified",
-            "category": intent.category,
-            "confidence": intent.confidence,
-            "rationale": intent.rationale,
-            "goal_text": intent.goal_text,
-            "timestamp": _iso_now(),
-        })
-        return intent
+        return SessionIntent(**_json_obj(response.text))
 
     async def select_execution_mode(
         self, query: SessionUserQuery, intent: SessionIntent, session_id: UUID
@@ -161,15 +181,6 @@ class SessionOrchestrator:
         )
         route = AgentRoute(**_json_obj(response.text))
         self._validate_route(route)
-        await self._push({
-            "type": "execution_mode_selected",
-            "mode": route.mode,
-            "agents": route.agents,
-            "requires_planning": route.requires_planning,
-            "requires_dag": route.requires_dag,
-            "rationale": route.rationale,
-            "timestamp": _iso_now(),
-        })
         return route
 
     def _validate_route(self, route: AgentRoute) -> None:
@@ -183,15 +194,8 @@ class SessionOrchestrator:
         self, state: OrchestratorState, config: RunnableConfig
     ) -> dict[str, Any]:
         session_id = UUID(state["session_id"])
-        sse_queue = (config.get("configurable") or {}).get("sse_queue")
-        # Use config sse_queue if provided
-        original_queue = self._sse_queue
-        if sse_queue is not None:
-            self._sse_queue = sse_queue
-        try:
-            intent = await self.classify_intent(SessionUserQuery.model_validate(state["query"]), session_id)
-        finally:
-            self._sse_queue = original_queue
+        query = SessionUserQuery.model_validate(state["query"])
+        intent = await self.classify_intent(query, session_id)
         return {"intent": intent}
 
     async def _node_prepare_ask_user(
@@ -204,7 +208,6 @@ class SessionOrchestrator:
 
         session_id = UUID(state["session_id"])
         query = SessionUserQuery.model_validate(state["query"])
-        sse_queue = (config.get("configurable") or {}).get("sse_queue")
 
         from packages.agent.llm import LLMMessage
 
@@ -241,10 +244,7 @@ class SessionOrchestrator:
         suggestions: list[str] = raw_suggestions[:3]
         ask_user_id = str(uuid4())
         event = build_ask_user_event(session_id, question, ask_user_id, suggestions)
-        if sse_queue is not None:
-            await sse_queue.put(json_safe(event))
-        elif self._sse_queue is not None:
-            await self._sse_queue.put(json_safe(event))
+        await self._push(event)
 
         self._schedule_status_update(session_id, "awaiting_input")
 
@@ -263,7 +263,6 @@ class SessionOrchestrator:
             "ask_user_id": state["ask_user_id"],
             "question": state["ask_user_question"],
         })
-        # answer is the value from Command(resume={"answer": "..."})
         answer_text: str = ""
         if isinstance(answer, dict):
             answer_text = answer.get("answer", "")
@@ -279,7 +278,6 @@ class SessionOrchestrator:
         assert intent is not None
 
         query = SessionUserQuery.model_validate(state["query"])
-        # Inject ask_user answer into conversation_context if present
         if state.get("ask_user_answer"):
             query = SessionUserQuery(
                 text=query.text,
@@ -287,14 +285,7 @@ class SessionOrchestrator:
                 weight_override_json=query.weight_override_json,
             )
 
-        sse_queue = (config.get("configurable") or {}).get("sse_queue")
-        original_queue = self._sse_queue
-        if sse_queue is not None:
-            self._sse_queue = sse_queue
-        try:
-            route = await self.select_execution_mode(query, intent, session_id)
-        finally:
-            self._sse_queue = original_queue
+        route = await self.select_execution_mode(query, intent, session_id)
         return {"route": route}
 
     async def _node_run_direct_chat(
@@ -306,15 +297,9 @@ class SessionOrchestrator:
         assert intent is not None
         assert route is not None
 
-        sse_queue = (config.get("configurable") or {}).get("sse_queue")
-        original_queue = self._sse_queue
-        if sse_queue is not None:
-            self._sse_queue = sse_queue
-        try:
-            result = await run_direct_chat(self, session_id, SessionUserQuery.model_validate(state["query"]), intent, route)
-            self._schedule_status_update(session_id, "completed")
-        finally:
-            self._sse_queue = original_queue
+        _query = SessionUserQuery.model_validate(state["query"])
+        result = await run_direct_chat(self, session_id, _query, intent, route)
+        self._schedule_status_update(session_id, "completed")
         return {"result": result}
 
     async def _node_run_sequential(
@@ -326,20 +311,13 @@ class SessionOrchestrator:
         assert intent is not None
         assert route is not None
 
-        sse_queue = (config.get("configurable") or {}).get("sse_queue")
-        original_queue = self._sse_queue
-        if sse_queue is not None:
-            self._sse_queue = sse_queue
-        try:
-            _query = SessionUserQuery.model_validate(state["query"])
-            results = await _run_agents_in_order(
-                self, session_id, _query, route.agents, intent
-            )
-            result = await _synthesize_response(
-                self, session_id, _query, intent, route, results
-            )
-        finally:
-            self._sse_queue = original_queue
+        _query = SessionUserQuery.model_validate(state["query"])
+        results = await _run_agents_in_order(
+            self, session_id, _query, route.agents, intent
+        )
+        result = await _synthesize_response(
+            self, session_id, _query, intent, route, results
+        )
         return {"result": result}
 
     async def _node_run_planned(
@@ -351,36 +329,24 @@ class SessionOrchestrator:
         assert intent is not None
         assert route is not None
 
-        sse_queue = (config.get("configurable") or {}).get("sse_queue")
-        original_queue = self._sse_queue
-        if sse_queue is not None:
-            self._sse_queue = sse_queue
-        try:
-            result = await run_planned_execution(self, session_id, SessionUserQuery.model_validate(state["query"]), intent, route)
-            self._schedule_status_update(session_id, "completed")
-        finally:
-            self._sse_queue = original_queue
+        _query = SessionUserQuery.model_validate(state["query"])
+        result = await run_planned_execution(self, session_id, _query, intent, route)
+        self._schedule_status_update(session_id, "completed")
         return {"result": result}
 
     async def _node_run_dag(
         self, state: OrchestratorState, config: RunnableConfig
     ) -> dict[str, Any]:
-        """Bridge node — calls run_dag_execution unchanged; T-068 upgrades the internals."""
+        """Bridge node — calls run_dag_execution unchanged."""
         session_id = UUID(state["session_id"])
         intent = state["intent"]
         route = state["route"]
         assert intent is not None
         assert route is not None
 
-        sse_queue = (config.get("configurable") or {}).get("sse_queue")
-        original_queue = self._sse_queue
-        if sse_queue is not None:
-            self._sse_queue = sse_queue
-        try:
-            result = await run_dag_execution(self, session_id, SessionUserQuery.model_validate(state["query"]), intent, route)
-            self._schedule_status_update(session_id, "completed")
-        finally:
-            self._sse_queue = original_queue
+        _query = SessionUserQuery.model_validate(state["query"])
+        result = await run_dag_execution(self, session_id, _query, intent, route)
+        self._schedule_status_update(session_id, "completed")
         return {"result": result}
 
     # ------------------------------------------------------------------
@@ -400,7 +366,6 @@ class SessionOrchestrator:
             return "run_planned"
         if mode == "dag_execution":
             return "run_dag"
-        # Unknown mode — end
         return END
 
     # ------------------------------------------------------------------
@@ -450,8 +415,6 @@ class SessionOrchestrator:
 
         Falls back to MemorySaver when DATABASE_URL is absent (unit tests,
         CI without DB).
-
-        The compiled graph is cached on ``self._graph`` after the first call.
         """
         if self._graph is not None:
             return self._graph
@@ -460,8 +423,6 @@ class SessionOrchestrator:
 
         database_url = os.environ.get("DATABASE_URL", "")
         if database_url:
-            # Use the async Postgres checkpointer so graph state survives across HTTP requests.
-            # psycopg v3 expects plain postgresql:// — strip the SQLAlchemy +asyncpg driver prefix.
             from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
             from psycopg import AsyncConnection
             from psycopg.rows import dict_row
@@ -491,6 +452,75 @@ class SessionOrchestrator:
         return self._graph
 
     # ------------------------------------------------------------------
+    # Core streaming runner — replaces ainvoke() / astream() calls
+    # ------------------------------------------------------------------
+
+    async def _astream_run(
+        self, initial_state: Any, config: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Run the graph via astream_events, emitting graph_node SSE events for
+        orchestrator nodes, and return the final state dict.
+
+        Interrupt detection: LangGraph emits the interrupt value in an on_chain_stream
+        event (chunk={"__interrupt__": ...}) on the root chain before on_chain_end.
+        We capture that here and inject it into final_state so callers can detect it.
+        """
+        graph = await self._get_graph()
+        node_start_times: dict[str, float] = {}
+        final_state: dict[str, Any] | None = None
+        interrupt_chunk: Any = None
+
+        async for ev in graph.astream_events(initial_state, config=config, version="v2"):
+            ev_type: str = ev["event"]
+            name: str = ev.get("name", "")
+            run_id: str = str(ev.get("run_id", ""))
+
+            # Capture interrupt from root chain stream (fires before on_chain_end on pause)
+            if ev_type == "on_chain_stream" and not ev.get("parent_ids"):
+                chunk = ev.get("data", {}).get("chunk", {})
+                if isinstance(chunk, dict) and "__interrupt__" in chunk:
+                    interrupt_chunk = chunk["__interrupt__"]
+                continue
+
+            # Capture final state from the root chain end event
+            if ev_type == "on_chain_end" and not ev.get("parent_ids"):
+                output = ev.get("data", {}).get("output", {})
+                if isinstance(output, dict):
+                    final_state = output
+                continue
+
+            if name not in _ORCHESTRATOR_NODES:
+                continue
+
+            if ev_type == "on_chain_start":
+                node_start_times[run_id] = time.monotonic()
+                await self._push({
+                    "type": "graph_node", "event": "start",
+                    "kind": "orchestrator", "name": name,
+                    "run_id": run_id, "timestamp": _iso_now(),
+                    "status": "ok", "meta": {},
+                })
+            elif ev_type == "on_chain_end":
+                duration_ms = int(
+                    (time.monotonic() - node_start_times.pop(run_id, time.monotonic())) * 1000
+                )
+                meta = _extract_orch_meta(name, ev.get("data", {}).get("output", {}))
+                await self._push({
+                    "type": "graph_node", "event": "end",
+                    "kind": "orchestrator", "name": name,
+                    "run_id": run_id, "timestamp": _iso_now(),
+                    "duration_ms": duration_ms, "status": "ok", "meta": meta,
+                })
+
+        # Inject captured interrupt into final_state so run() can detect and re-raise
+        if interrupt_chunk is not None:
+            fs: dict[str, Any] = dict(final_state) if isinstance(final_state, dict) else {}
+            fs["__interrupt__"] = interrupt_chunk
+            return fs
+
+        return final_state or {}
+
+    # ------------------------------------------------------------------
     # Public run()
     # ------------------------------------------------------------------
 
@@ -502,11 +532,6 @@ class SessionOrchestrator:
             )
 
         self._schedule_status_update(session_id, "running")
-        await self._push({
-            "type": "query_received",
-            "session_id": str(session_id),
-            "timestamp": _iso_now(),
-        })
 
         initial_state: OrchestratorState = {
             "session_id": str(session_id),
@@ -520,17 +545,15 @@ class SessionOrchestrator:
             "ask_user_answer": None,
         }
 
-        config = {
+        config: dict[str, Any] = {
             "configurable": {
                 "thread_id": str(session_id),
                 "sse_queue": self._sse_queue,
             }
         }
 
-        graph = await self._get_graph()
-
         try:
-            final_state: dict[str, Any] = await graph.ainvoke(initial_state, config=config)
+            final_state = await self._astream_run(initial_state, config)
         except Exception as exc:
             self._schedule_status_update(session_id, "failed")
             await self._push({
@@ -542,10 +565,8 @@ class SessionOrchestrator:
             })
             raise
 
-        # LangGraph 1.x: ainvoke() catches GraphInterrupt internally and returns a
-        # state dict containing an '__interrupt__' key instead of raising.
-        # Re-raise GraphInterrupt so callers can distinguish a paused graph from a
-        # completed one.
+        # LangGraph stores GraphInterrupt in final_state["__interrupt__"] rather than
+        # raising — re-raise so callers can distinguish paused from completed.
         if "__interrupt__" in final_state:
             from langgraph.errors import GraphInterrupt
 
@@ -559,13 +580,7 @@ class SessionOrchestrator:
         return raw_result
 
     async def resume(self, session_id: UUID, approval_id: UUID) -> SessionResponse:
-        """Resume graph execution from the last LangGraph checkpoint for this session.
-
-        Passes ``None`` as the input to ``astream`` so LangGraph continues from the
-        interrupted node (``wait_for_approval``) rather than re-running from START.
-        The ``approval_id`` parameter is kept for API compatibility; the graph already
-        holds it in the checkpoint state written by ``prepare_hitl``.
-        """
+        """Resume graph execution from the last LangGraph checkpoint for this session."""
         config: dict[str, Any] = {
             "configurable": {
                 "thread_id": str(session_id),
@@ -573,12 +588,8 @@ class SessionOrchestrator:
             }
         }
 
-        graph = await self._get_graph()
-
         try:
-            result_state: dict[str, Any] = {}
-            async for chunk in graph.astream(None, config=config, stream_mode="updates"):
-                result_state.update(chunk)
+            final_state = await self._astream_run(None, config)
         except Exception as exc:
             self._schedule_status_update(session_id, "failed")
             await self._push({
@@ -590,7 +601,7 @@ class SessionOrchestrator:
             })
             raise
 
-        result = result_state.get("result") or result_state.get("run_dag", {}).get("result")
+        result = final_state.get("result")
         if result is None:
             raise RuntimeError(f"Graph resume produced no result for session {session_id}")
         return cast(SessionResponse, result)
@@ -605,13 +616,9 @@ class SessionOrchestrator:
                 "sse_queue": self._sse_queue,
             }
         }
-        graph = await self._get_graph()
 
         try:
-            final_state: dict[str, Any] = await graph.ainvoke(
-                Command(resume={"answer": answer}),
-                config=config,
-            )
+            final_state = await self._astream_run(Command(resume={"answer": answer}), config)
         except Exception as exc:
             self._schedule_status_update(session_id, "failed")
             await self._push({

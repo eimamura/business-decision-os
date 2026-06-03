@@ -81,7 +81,7 @@ def _make_session_response() -> SessionResponse:
 
 @pytest.mark.asyncio
 async def test_resume_uses_graph_astream_with_none_input() -> None:
-    """resume() must call graph.astream(None, ...) — not graph.ainvoke(initial_state, ...)."""
+    """resume() must call graph.astream_events(None, ...) — not ainvoke(initial_state, ...)."""
     orchestrator = _make_orchestrator()
     session_id = uuid4()
     approval_id = uuid4()
@@ -89,43 +89,63 @@ async def test_resume_uses_graph_astream_with_none_input() -> None:
 
     astream_calls: list[tuple[Any, ...]] = []
 
-    async def _fake_astream(
-        input: Any, config: dict[str, Any], stream_mode: str
+    async def _fake_astream_events(
+        input: Any, *, config: dict[str, Any], version: str
     ) -> Any:
-        astream_calls.append((input, config, stream_mode))
-        # Yield one chunk that contains the result
-        yield {"result": expected}
+        astream_calls.append((input, config, version))
+        # Emit root on_chain_end event with result in output
+        yield {
+            "event": "on_chain_end",
+            "name": "LangGraph",
+            "run_id": "test-run",
+            "parent_ids": [],
+            "data": {"output": {"result": expected}},
+        }
 
     mock_graph = MagicMock()
-    mock_graph.astream = _fake_astream
+    mock_graph.astream_events = _fake_astream_events
     orchestrator._graph = mock_graph
 
     result = await orchestrator.resume(session_id, approval_id)
 
-    assert len(astream_calls) == 1, "astream must be called exactly once"
-    called_input, called_config, called_stream_mode = astream_calls[0]
-    assert called_input is None, "resume() must pass None as input to graph.astream"
+    assert len(astream_calls) == 1, "astream_events must be called exactly once"
+    called_input, called_config, called_version = astream_calls[0]
+    assert called_input is None, "resume() must pass None as input to graph.astream_events"
     assert called_config["configurable"]["thread_id"] == str(session_id)
-    assert called_stream_mode == "updates"
+    assert called_version == "v2"
     assert result is expected
 
 
 @pytest.mark.asyncio
 async def test_resume_returns_result_from_graph_state() -> None:
-    """resume() must extract SessionResponse from the 'result' key of streamed chunks."""
+    """resume() must extract SessionResponse from the 'result' key of the root chain output."""
     orchestrator = _make_orchestrator()
     session_id = uuid4()
     approval_id = uuid4()
     expected = _make_session_response()
 
-    async def _fake_astream(
-        input: Any, config: dict[str, Any], stream_mode: str
+    async def _fake_astream_events(
+        input: Any, *, config: dict[str, Any], version: str
     ) -> Any:
-        yield {"classify_intent": {"intent": None}}
-        yield {"result": expected}
+        # Emit a non-root node event (should be ignored for final_state extraction)
+        yield {
+            "event": "on_chain_end",
+            "name": "classify_intent",
+            "run_id": "node-run",
+            "parent_ids": ["root-run"],
+            "data": {"output": {"intent": None}},
+        }
+        # Emit root on_chain_end with result
+        yield {
+            "event": "on_chain_end",
+            "name": "LangGraph",
+            "run_id": "root-run",
+            "parent_ids": [],
+            "data": {"output": {"result": expected}},
+        }
 
     mock_graph = MagicMock()
-    mock_graph.astream = _fake_astream
+    mock_graph.astream_events = _fake_astream_events
     orchestrator._graph = mock_graph
 
     result = await orchestrator.resume(session_id, approval_id)
@@ -162,19 +182,19 @@ async def test_resume_raises_on_no_result() -> None:
 
 @pytest.mark.asyncio
 async def test_resume_schedules_failed_status_on_graph_exception() -> None:
-    """When graph.astream raises, resume() must schedule a 'failed' status update."""
+    """When graph.astream_events raises, resume() must schedule a 'failed' status update."""
     orchestrator = _make_orchestrator()
     session_id = uuid4()
     approval_id = uuid4()
 
-    async def _fake_astream(
-        input: Any, config: dict[str, Any], stream_mode: str
+    async def _fake_astream_events(
+        input: Any, *, config: dict[str, Any], version: str
     ) -> Any:
         raise RuntimeError("graph exploded")
         yield  # make it an async generator
 
     mock_graph = MagicMock()
-    mock_graph.astream = _fake_astream
+    mock_graph.astream_events = _fake_astream_events
     orchestrator._graph = mock_graph
 
     mock_repo = MagicMock()
@@ -201,13 +221,19 @@ async def test_resume_does_not_call_jobs_repository() -> None:
     approval_id = uuid4()
     expected = _make_session_response()
 
-    async def _fake_astream(
-        input: Any, config: dict[str, Any], stream_mode: str
+    async def _fake_astream_events(
+        input: Any, *, config: dict[str, Any], version: str
     ) -> Any:
-        yield {"result": expected}
+        yield {
+            "event": "on_chain_end",
+            "name": "LangGraph",
+            "run_id": "root-run",
+            "parent_ids": [],
+            "data": {"output": {"result": expected}},
+        }
 
     mock_graph = MagicMock()
-    mock_graph.astream = _fake_astream
+    mock_graph.astream_events = _fake_astream_events
     orchestrator._graph = mock_graph
 
     with patch("packages.persistence.jobs_repo.JobsRepository") as mock_jobs_cls:

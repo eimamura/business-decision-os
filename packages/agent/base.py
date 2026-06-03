@@ -28,7 +28,12 @@ class Specialist(Protocol):
     name: str
     role: SpecialistRole
 
-    async def run(self, task: SpecialistTask, ctx: ToolContext) -> SpecialistResult: ...
+    async def run(
+        self,
+        task: SpecialistTask,
+        ctx: ToolContext,
+        agent_run_id: str = "",
+    ) -> SpecialistResult: ...
 
 
 class AgentBasedSpecialist:
@@ -54,5 +59,10 @@ class AgentBasedSpecialist:
             output_builder=output_builder,
         )
 
-    async def run(self, task: SpecialistTask, ctx: ToolContext) -> SpecialistResult:
-        return await self._runtime.run(task, ctx)
+    async def run(
+        self,
+        task: SpecialistTask,
+        ctx: ToolContext,
+        agent_run_id: str = "",
+    ) -> SpecialistResult:
+        return await self._runtime.run(task, ctx, agent_run_id=agent_run_id)

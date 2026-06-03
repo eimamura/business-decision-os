@@ -2,12 +2,43 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useChatStateContext } from "@/app/chat/ChatStateContext";
-import type { AgentStepStatus } from "@/types/workspace";
+import type { GraphNodeKind, GraphNodeStatus, GraphRunNode } from "@/types/workspace";
 import EvidenceSources from "./EvidenceSources";
+
+// ---- Label map ----
+
+const GRAPH_NODE_LABELS: Record<string, string> = {
+  classify_intent: "Classifying intent",
+  prepare_ask_user: "Preparing clarification",
+  wait_for_answer: "Waiting for answer",
+  select_mode: "Planning analysis route",
+  run_direct_chat: "Generating response",
+  run_sequential: "Running agents",
+  run_planned: "Executing plan",
+  run_dag: "Executing analysis graph",
+  sql_query: "Loading inventory data",
+  nl_query: "Loading inventory data",
+  forecast: "Checking demand forecast",
+  simulate_inventory: "Running inventory simulation",
+  optimize_replenishment: "Optimizing replenishment plan",
+  evaluate_candidates: "Evaluating action candidates",
+  write_audit_log: "Writing audit log",
+};
+
+function nodeLabel(node: GraphRunNode): string {
+  const base = GRAPH_NODE_LABELS[node.name] ?? node.name.replace(/_/g, " ");
+  return node.kind === "agent" ? `Agent: ${base}` : base;
+}
+
+function kindIndent(kind: GraphNodeKind): string {
+  if (kind === "tool") return "pl-5";
+  if (kind === "agent") return "pl-2.5";
+  return "";
+}
 
 // ---- Step icon ----
 
-function StepIcon({ status }: { status: AgentStepStatus }): React.ReactElement {
+function StepIcon({ status }: { status: GraphNodeStatus }): React.ReactElement {
   switch (status) {
     case "completed":
       return (
@@ -27,12 +58,6 @@ function StepIcon({ status }: { status: AgentStepStatus }): React.ReactElement {
           <span className="inline-block w-2 h-2 rounded-full bg-indigo-400 animate-pulse" />
         </span>
       );
-    default:
-      return (
-        <span className="shrink-0 w-5 h-5 rounded-full bg-white/5 border border-white/10 flex items-center justify-center text-white/20 text-[10px]">
-          ○
-        </span>
-      );
   }
 }
 
@@ -48,7 +73,7 @@ type ActiveTab = "evidence" | "notes";
 
 export default function AgentActivityPanel({ sessionId }: Props): React.ReactElement {
   const { getSessionState } = useChatStateContext();
-  const { processingSteps, sessionStartedAt, sessionEndedAt, isSending, usage } =
+  const { graphRun, sessionStartedAt, sessionEndedAt, isSending, usage } =
     getSessionState(sessionId);
 
   const [activeTab, setActiveTab] = useState<ActiveTab>("evidence");
@@ -56,7 +81,7 @@ export default function AgentActivityPanel({ sessionId }: Props): React.ReactEle
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [processingSteps]);
+  }, [graphRun]);
 
   return (
     <div className="flex flex-col h-full bg-[#0B1020] text-gray-100 text-xs">
@@ -80,7 +105,7 @@ export default function AgentActivityPanel({ sessionId }: Props): React.ReactEle
         <p className="text-[10px] font-semibold uppercase tracking-widest text-white/30 mb-2.5">
           Processing steps
         </p>
-        {processingSteps.length === 0 ? (
+        {graphRun.length === 0 ? (
           <div className="py-4 text-center">
             <p className="text-[11px] text-white/35">No active analysis yet.</p>
           </div>
@@ -88,7 +113,7 @@ export default function AgentActivityPanel({ sessionId }: Props): React.ReactEle
       </div>
 
       <div className="flex-1 overflow-y-auto px-4 pb-3 min-h-0">
-        {processingSteps.length > 0 && (
+        {graphRun.length > 0 && (
           <div>
             {sessionStartedAt && (
               <div className="flex items-center gap-1.5 mb-3 text-[10px] text-white/30">
@@ -101,42 +126,62 @@ export default function AgentActivityPanel({ sessionId }: Props): React.ReactEle
                 })}
               </div>
             )}
-            {processingSteps.map((step, idx) => (
-              <div key={step.id} className="relative flex items-start gap-2.5 pb-3">
-                {idx < processingSteps.length - 1 && (
-                  <div className="absolute left-[9px] top-[22px] w-px bg-white/10" style={{ height: "calc(100% - 14px)" }} />
+            {graphRun.map((node, idx) => (
+              <div
+                key={node.runId}
+                className={`relative flex items-start gap-2.5 pb-3 ${kindIndent(node.kind)}`}
+              >
+                {idx < graphRun.length - 1 && (
+                  <div
+                    className="absolute left-[9px] top-[22px] w-px bg-white/10"
+                    style={{ height: "calc(100% - 14px)" }}
+                  />
                 )}
-                <StepIcon status={step.status} />
+                <StepIcon status={node.status} />
                 <div className="flex-1 min-w-0 pt-0.5">
                   <span
                     className={`text-[11px] leading-snug ${
-                      step.status === "completed"
+                      node.status === "completed"
                         ? "text-white/60"
-                        : step.status === "running"
+                        : node.status === "running"
                         ? "text-white/90 font-medium"
-                        : step.status === "failed"
-                        ? "text-red-400"
-                        : "text-white/25"
+                        : "text-red-400"
                     }`}
                   >
-                    {step.label}
+                    {nodeLabel(node)}
                   </span>
-                  {step.subtext && (
-                    <span className="block text-[10px] text-white/40 mt-0.5 leading-relaxed truncate">
-                      {step.subtext}
-                    </span>
-                  )}
-                  {step.duration && (
+                  {node.kind === "orchestrator" &&
+                    typeof node.meta?.category === "string" && (
+                      <span className="block text-[10px] text-white/40 mt-0.5 leading-relaxed truncate">
+                        {node.meta.category}
+                        {typeof node.meta.confidence === "number"
+                          ? ` · ${Math.round((node.meta.confidence as number) * 100)}% confidence`
+                          : ""}
+                      </span>
+                    )}
+                  {node.kind === "orchestrator" &&
+                    typeof node.meta?.mode === "string" && (
+                      <span className="block text-[10px] text-white/40 mt-0.5 leading-relaxed truncate">
+                        {node.meta.mode}
+                        {Array.isArray(node.meta.agents) && node.meta.agents.length > 0
+                          ? ` · ${node.meta.agents.length} agent${node.meta.agents.length !== 1 ? "s" : ""}`
+                          : ""}
+                      </span>
+                    )}
+                  {node.durationMs != null && node.status !== "running" && (
                     <span className="block text-[10px] text-white/25 mt-0.5">
-                      Completed · {step.duration}
+                      Completed ·{" "}
+                      {node.durationMs < 1000
+                        ? `${node.durationMs}ms`
+                        : `${(node.durationMs / 1000).toFixed(1)}s`}
                     </span>
                   )}
-                  {step.tokenCost && (
+                  {node.tokenCost && (
                     <span className="block text-[10px] text-white/25 mt-0.5 font-mono">
-                      {step.tokenCost.inputTokens.toLocaleString()} in ·{" "}
-                      {step.tokenCost.outputTokens.toLocaleString()} out ·{" "}
+                      {node.tokenCost.inputTokens.toLocaleString()} in ·{" "}
+                      {node.tokenCost.outputTokens.toLocaleString()} out ·{" "}
                       <span className="text-emerald-600/60">
-                        ${step.tokenCost.costUsd.toFixed(4)}
+                        ${node.tokenCost.costUsd.toFixed(4)}
                       </span>
                     </span>
                   )}
@@ -192,7 +237,7 @@ export default function AgentActivityPanel({ sessionId }: Props): React.ReactEle
         </div>
         <div className="px-4 py-2">
           {activeTab === "evidence" ? (
-            <EvidenceSources steps={processingSteps} />
+            <EvidenceSources graphRun={graphRun} />
           ) : (
             <p className="text-[11px] text-white/25 py-2">No notes yet.</p>
           )}

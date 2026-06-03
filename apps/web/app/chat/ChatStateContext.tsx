@@ -14,18 +14,24 @@ import {
   updateSessionTitle,
 } from "@/lib/api";
 import { queryKeys } from "@/lib/queryKeys";
-import { eventsToSteps } from "@/lib/sse-steps";
 import type { AgentNodeState, AgentNodeToolCall, ChatMessage, SessionUsage, SseEvent } from "@/types/chat";
-import type { AgentStep } from "@/types/workspace";
+import type { GraphRunNode } from "@/types/workspace";
+
+const AGENT_DISPLAY_NAMES: Record<string, string> = {
+  demand: "Demand Analyst",
+  inventory: "Inventory Specialist",
+  replenishment: "Replenishment Planner",
+  data_engineer: "Data Engineer",
+  risk: "Risk Analyst",
+  supply_chain: "Supply Chain Analyst",
+};
 
 interface SessionState {
   messages: ChatMessage[];
   isSending: boolean;
   usage: SessionUsage;
   isLoadingMessages: boolean;
-  agentNodes: AgentNodeState[];
-  executionMode?: string;
-  processingSteps: AgentStep[];
+  graphRun: GraphRunNode[];
   sessionStartedAt: string | null;
   sessionEndedAt: string | null;
 }
@@ -37,15 +43,18 @@ const DEFAULT_STATE: SessionState = {
   isSending: false,
   usage: DEFAULT_USAGE,
   isLoadingMessages: true,
-  agentNodes: [],
-  executionMode: undefined,
-  processingSteps: [],
+  graphRun: [],
   sessionStartedAt: null,
   sessionEndedAt: null,
 };
 
+type DerivedSessionState = SessionState & {
+  agentNodes: AgentNodeState[];
+  executionMode: string | undefined;
+};
+
 interface ChatStateContextValue {
-  getSessionState: (sessionId: string) => SessionState;
+  getSessionState: (sessionId: string) => DerivedSessionState;
   loadMessages: (sessionId: string) => Promise<void>;
   sendMessage: (
     sessionId: string,
@@ -70,14 +79,48 @@ export function useChatStateContext(): ChatStateContextValue {
 export function ChatStateProvider({ children }: { children: ReactNode }): React.ReactElement {
   const queryClient = useQueryClient();
   const [sessions, setSessions] = useState<Record<string, SessionState>>({});
-  // Per-session refs — keyed by sessionId, never cause re-renders
   const titleSetRef = useRef<Record<string, boolean>>({});
   const isSendingRef = useRef<Record<string, boolean>>({});
   const abortMap = useRef<Record<string, AbortController>>({});
   const hasStreamedRef = useRef<Record<string, boolean>>({});
 
   const getSessionState = useCallback(
-    (sessionId: string): SessionState => sessions[sessionId] ?? DEFAULT_STATE,
+    (sessionId: string): DerivedSessionState => {
+      const base = sessions[sessionId] ?? DEFAULT_STATE;
+      const { graphRun } = base;
+
+      const agentNodes: AgentNodeState[] = graphRun
+        .filter((n) => n.kind === "agent")
+        .map((n) => ({
+          taskId: n.runId,
+          agentName:
+            AGENT_DISPLAY_NAMES[n.name] ??
+            n.name.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()),
+          agentRole: n.name,
+          status: (n.status === "failed" ? "error" : n.status) as AgentNodeState["status"],
+          startedAt: n.startedAt,
+          durationMs: n.durationMs,
+          inputSummary:
+            typeof n.meta?.input_summary === "string" ? n.meta.input_summary : undefined,
+          toolCalls: graphRun
+            .filter((t) => t.kind === "tool" && t.parentRunId === n.runId)
+            .map((t) => ({
+              toolCallId: t.runId,
+              toolName: t.name,
+              status: (t.status === "failed" ? "error" : t.status) as AgentNodeToolCall["status"],
+              durationMs: t.durationMs,
+            })),
+        }));
+
+      const routeNode = graphRun.find(
+        (n) =>
+          n.kind === "orchestrator" && n.name === "select_mode" && n.status !== "running",
+      );
+      const executionMode =
+        typeof routeNode?.meta?.mode === "string" ? routeNode.meta.mode : undefined;
+
+      return { ...base, agentNodes, executionMode };
+    },
     [sessions],
   );
 
@@ -98,7 +141,6 @@ export function ChatStateProvider({ children }: { children: ReactNode }): React.
 
   const loadMessages = useCallback(
     async (sessionId: string): Promise<void> => {
-      // Don't overwrite in-flight streaming messages
       if (isSendingRef.current[sessionId]) return;
       updateSession(sessionId, (prev) => ({ ...prev, isLoadingMessages: true }));
       try {
@@ -111,32 +153,121 @@ export function ChatStateProvider({ children }: { children: ReactNode }): React.
         updateSession(sessionId, (prev) => ({ ...prev, isLoadingMessages: false }));
       }
       fetchSessionEvents(sessionId)
-        .then((historical) => {
-          const steps = eventsToSteps(historical);
-          const startedEvt = historical.find((e) => e.type === "query_received") as
-            | Record<string, unknown>
-            | undefined;
-          const startedAt =
-            startedEvt !== undefined && typeof startedEvt["timestamp"] === "string"
-              ? startedEvt["timestamp"]
-              : null;
-          const endedEvt = [...historical]
-            .reverse()
-            .find((e) => e.type === "response_ready" || e.type === "done") as
-            | Record<string, unknown>
-            | undefined;
-          const endedAt =
-            endedEvt !== undefined && typeof endedEvt["timestamp"] === "string"
-              ? endedEvt["timestamp"]
-              : null;
+        .then((events) => {
+          const nodeMap = new Map<string, GraphRunNode>();
+          let sessionStartedAt: string | null = null;
+          let sessionEndedAt: string | null = null;
+          for (const ev of events) {
+            if (ev.type === "response_ready") {
+              sessionEndedAt = ev.timestamp;
+              continue;
+            }
+            if (ev.type !== "graph_node") continue;
+            if (ev.event === "start") {
+              if (!sessionStartedAt) sessionStartedAt = ev.timestamp;
+              nodeMap.set(ev.run_id, {
+                runId: ev.run_id,
+                parentRunId: ev.parent_run_id ?? undefined,
+                kind: ev.kind,
+                name: ev.name,
+                status: "running",
+                startedAt: ev.timestamp,
+              });
+            } else {
+              const existing = nodeMap.get(ev.run_id);
+              nodeMap.set(ev.run_id, {
+                ...(existing ?? {
+                  runId: ev.run_id,
+                  parentRunId: ev.parent_run_id ?? undefined,
+                  kind: ev.kind,
+                  name: ev.name,
+                  startedAt: ev.timestamp,
+                  status: "running" as const,
+                }),
+                status: ev.status === "error" ? "failed" : "completed",
+                completedAt: ev.timestamp,
+                durationMs: ev.duration_ms ?? undefined,
+                meta:
+                  ev.meta != null && Object.keys(ev.meta).length > 0 ? ev.meta : undefined,
+                output: ev.output ?? undefined,
+                tokenCost: ev.token_cost
+                  ? {
+                      inputTokens: ev.token_cost.input_tokens,
+                      outputTokens: ev.token_cost.output_tokens,
+                      costUsd: ev.token_cost.cost_usd,
+                    }
+                  : undefined,
+              });
+            }
+          }
           updateSession(sessionId, (prev) => ({
             ...prev,
-            processingSteps: steps,
-            sessionStartedAt: startedAt,
-            sessionEndedAt: endedAt,
+            graphRun: Array.from(nodeMap.values()),
+            sessionStartedAt,
+            sessionEndedAt,
           }));
         })
         .catch(() => undefined);
+    },
+    [updateSession],
+  );
+
+  const _handleGraphNodeEvent = useCallback(
+    (sessionId: string, event: Extract<SseEvent, { type: "graph_node" }>): void => {
+      updateSession(sessionId, (prev) => {
+        if (event.event === "start") {
+          if (prev.graphRun.some((n) => n.runId === event.run_id)) return prev;
+          const newNode: GraphRunNode = {
+            runId: event.run_id,
+            parentRunId: event.parent_run_id ?? undefined,
+            kind: event.kind,
+            name: event.name,
+            status: "running",
+            startedAt: event.timestamp,
+          };
+          return {
+            ...prev,
+            graphRun: [...prev.graphRun, newNode],
+            sessionStartedAt: prev.sessionStartedAt ?? event.timestamp,
+          };
+        } else {
+          const idx = prev.graphRun.findIndex((n) => n.runId === event.run_id);
+          const base: GraphRunNode =
+            idx !== -1
+              ? prev.graphRun[idx]
+              : {
+                  runId: event.run_id,
+                  parentRunId: event.parent_run_id ?? undefined,
+                  kind: event.kind,
+                  name: event.name,
+                  startedAt: event.timestamp,
+                  status: "running",
+                };
+          const updatedNode: GraphRunNode = {
+            ...base,
+            status: event.status === "error" ? "failed" : "completed",
+            completedAt: event.timestamp,
+            durationMs: event.duration_ms ?? undefined,
+            meta:
+              event.meta != null && Object.keys(event.meta).length > 0
+                ? event.meta
+                : base.meta,
+            output: event.output ?? base.output,
+            tokenCost: event.token_cost
+              ? {
+                  inputTokens: event.token_cost.input_tokens,
+                  outputTokens: event.token_cost.output_tokens,
+                  costUsd: event.token_cost.cost_usd,
+                }
+              : base.tokenCost,
+          };
+          const graphRun =
+            idx !== -1
+              ? prev.graphRun.map((n, i) => (i === idx ? updatedNode : n))
+              : [...prev.graphRun, updatedNode];
+          return { ...prev, graphRun };
+        }
+      });
     },
     [updateSession],
   );
@@ -171,7 +302,7 @@ export function ChatStateProvider({ children }: { children: ReactNode }): React.
         ...prev,
         messages: [...prev.messages, userMsg, assistantMsg],
         isSending: true,
-        processingSteps: [],
+        graphRun: [],
         sessionStartedAt: null,
         sessionEndedAt: null,
       }));
@@ -189,20 +320,12 @@ export function ChatStateProvider({ children }: { children: ReactNode }): React.
         const controller = new AbortController();
         abortMap.current[sessionId] = controller;
 
-        // Open SSE stream before posting — ensures no events are missed in the
-        // gap between postMessage returning and the stream reader being established.
-        // The backend's GET /stream blocks until a message is posted; this ordering is safe.
         const initialStream = await streamSession(sessionId, controller.signal);
-
         await postMessage(sessionId, text);
 
-        // Stream with auto-reconnect and exponential backoff (T-054).
-        // Retries up to 3 times on unexpected stream close (no `done` event).
-        // Delays: 500ms, 1s, 2s. Honours the AbortController for navigation/new-message.
         const MAX_RETRIES = 3;
         let attempt = 0;
         let receivedDone = false;
-        const seenEvents: SseEvent[] = [];
 
         while (attempt <= MAX_RETRIES && !receivedDone) {
           if (attempt > 0) {
@@ -236,43 +359,40 @@ export function ChatStateProvider({ children }: { children: ReactNode }): React.
               }));
             }
 
-            if (
-              event.type === "query_received" ||
-              event.type === "intent_classified" ||
-              event.type === "execution_mode_selected" ||
-              event.type === "plan_created" ||
-              event.type === "agent_started" ||
-              event.type === "agent_completed" ||
-              event.type === "tool_started" ||
-              event.type === "tool_completed" ||
-              event.type === "response_ready" ||
-              event.type === "done"
-            ) {
-              seenEvents.push(event);
-              const steps = eventsToSteps(seenEvents);
-              const startedAt =
-                seenEvents.find((e) => e.type === "query_received") as
-                  | Record<string, unknown>
-                  | undefined;
-              const sessionStartedAt =
-                startedAt !== undefined && typeof startedAt["timestamp"] === "string"
-                  ? startedAt["timestamp"]
-                  : null;
-              const endedEvt = [...seenEvents]
-                .reverse()
-                .find((e) => e.type === "response_ready" || e.type === "done") as
-                | Record<string, unknown>
-                | undefined;
-              const sessionEndedAt =
-                endedEvt !== undefined && typeof endedEvt["timestamp"] === "string"
-                  ? endedEvt["timestamp"]
-                  : null;
+            if (event.type === "graph_node") {
+              _handleGraphNodeEvent(sessionId, event);
+            }
+
+            if (event.type === "response_ready") {
               updateSession(sessionId, (prev) => ({
                 ...prev,
-                processingSteps: steps,
-                sessionStartedAt,
-                sessionEndedAt,
+                sessionEndedAt: event.timestamp,
               }));
+            }
+
+            if (
+              event.type === "graph_node" &&
+              event.event === "end" &&
+              event.kind === "tool" &&
+              (event.name === "sql_query" || event.name === "nl_query") &&
+              typeof event.output?.executed_query === "string"
+            ) {
+              const sqlMsg: ChatMessage = {
+                id: crypto.randomUUID(),
+                role: "tool",
+                content: "",
+                toolName: event.name,
+                sql: event.output.executed_query,
+                created_at: new Date().toISOString(),
+              };
+              updateSession(sessionId, (prev) => {
+                const idx = prev.messages.findIndex((m) => m.id === assistantId);
+                const msgs =
+                  idx === -1
+                    ? [...prev.messages, sqlMsg]
+                    : [...prev.messages.slice(0, idx), sqlMsg, ...prev.messages.slice(idx)];
+                return { ...prev, messages: msgs };
+              });
             }
 
             if (event.type === "done") {
@@ -290,8 +410,6 @@ export function ChatStateProvider({ children }: { children: ReactNode }): React.
                     : m,
                 ),
                 isSending: false,
-                agentNodes: [],
-                executionMode: undefined,
               }));
               fetchSessionUsage(sessionId)
                 .then((usage) => updateSession(sessionId, (prev) => ({ ...prev, usage })))
@@ -299,102 +417,6 @@ export function ChatStateProvider({ children }: { children: ReactNode }): React.
               void queryClient.invalidateQueries({ queryKey: queryKeys.sessions.all });
               hasStreamedRef.current[sessionId] = false;
               break;
-            }
-
-            if (event.type === "execution_mode_selected") {
-              updateSession(sessionId, (prev) => ({
-                ...prev,
-                executionMode: event.mode,
-              }));
-            }
-
-            if (event.type === "agent_started") {
-              const node: AgentNodeState = {
-                taskId: `${event.agent_name}:${event.started_at}`,
-                agentName: event.agent_name,
-                agentRole: event.agent_role,
-                status: "running",
-                startedAt: event.started_at,
-                inputSummary: event.input_summary ?? undefined,
-                toolCalls: [],
-              };
-              updateSession(sessionId, (prev) => ({
-                ...prev,
-                agentNodes: [...prev.agentNodes, node],
-              }));
-            }
-
-            if (event.type === "agent_completed") {
-              updateSession(sessionId, (prev) => ({
-                ...prev,
-                agentNodes: prev.agentNodes.map((n) =>
-                  n.agentName === event.agent_name && n.status === "running"
-                    ? {
-                        ...n,
-                        status: "completed" as const,
-                        durationMs: event.duration_ms,
-                        outputSummary: event.output_summary ?? undefined,
-                      }
-                    : n,
-                ),
-              }));
-            }
-
-            if (event.type === "tool_started") {
-              const toolCall: AgentNodeToolCall = {
-                toolCallId: event.tool_call_id,
-                toolName: event.tool_name,
-                status: "running",
-              };
-              updateSession(sessionId, (prev) => ({
-                ...prev,
-                agentNodes: prev.agentNodes.map((n) =>
-                  n.agentRole === event.agent_role && n.status === "running"
-                    ? { ...n, toolCalls: [...n.toolCalls, toolCall] }
-                    : n,
-                ),
-              }));
-            }
-
-            if (event.type === "tool_completed") {
-              updateSession(sessionId, (prev) => ({
-                ...prev,
-                agentNodes: prev.agentNodes.map((n) => ({
-                  ...n,
-                  toolCalls: n.toolCalls.map((t) =>
-                    t.toolCallId === event.tool_call_id
-                      ? {
-                          ...t,
-                          status: (event.status === "error" ? "error" : "completed") as "error" | "completed",
-                          durationMs: event.duration_ms,
-                        }
-                      : t,
-                  ),
-                })),
-              }));
-            }
-
-            if (
-              event.type === "tool_completed" &&
-              (event.tool_name === "sql_query" || event.tool_name === "nl_query") &&
-              event.executed_query
-            ) {
-              const sqlMsg: ChatMessage = {
-                id: crypto.randomUUID(),
-                role: "tool",
-                content: "",
-                toolName: event.tool_name,
-                sql: event.executed_query,
-                created_at: new Date().toISOString(),
-              };
-              updateSession(sessionId, (prev) => {
-                const idx = prev.messages.findIndex((m) => m.id === assistantId);
-                const msgs =
-                  idx === -1
-                    ? [...prev.messages, sqlMsg]
-                    : [...prev.messages.slice(0, idx), sqlMsg, ...prev.messages.slice(idx)];
-                return { ...prev, messages: msgs };
-              });
             }
 
             if (event.type === "awaiting_approval" && event.tool_name === "job_dispatch") {
@@ -470,8 +492,6 @@ export function ChatStateProvider({ children }: { children: ReactNode }): React.
             }
 
             if (event.type === "awaiting_input") {
-              // Graph is paused at wait_for_answer — remove the empty assistant
-              // placeholder since the ask_user card is the visible response.
               receivedDone = true;
               updateSession(sessionId, (prev) => ({
                 ...prev,
@@ -494,7 +514,6 @@ export function ChatStateProvider({ children }: { children: ReactNode }): React.
                     : m,
                 ),
               }));
-              // Treat a server-side error event as terminal — do not retry.
               receivedDone = true;
               break;
             }
@@ -506,7 +525,6 @@ export function ChatStateProvider({ children }: { children: ReactNode }): React.
         }
 
         if (!receivedDone) {
-          // All retries exhausted — stream closed without a done/error event.
           updateSession(sessionId, (prev) => ({
             ...prev,
             messages: prev.messages.map((m) =>
@@ -564,7 +582,7 @@ export function ChatStateProvider({ children }: { children: ReactNode }): React.
         }));
       }
     },
-    [updateSession],
+    [updateSession, _handleGraphNodeEvent],
   );
 
   const submitFeedback = useCallback(
@@ -599,7 +617,7 @@ export function ChatStateProvider({ children }: { children: ReactNode }): React.
         ...prev,
         messages: [...prev.messages, assistantMsg],
         isSending: true,
-        processingSteps: [],
+        graphRun: [],
         sessionStartedAt: null,
         sessionEndedAt: null,
       }));
@@ -615,7 +633,6 @@ export function ChatStateProvider({ children }: { children: ReactNode }): React.
         const MAX_RETRIES = 3;
         let attempt = 0;
         let receivedDone = false;
-        const seenEvents: SseEvent[] = [];
 
         while (attempt <= MAX_RETRIES && !receivedDone) {
           if (attempt > 0) {
@@ -649,25 +666,40 @@ export function ChatStateProvider({ children }: { children: ReactNode }): React.
               }));
             }
 
+            if (event.type === "graph_node") {
+              _handleGraphNodeEvent(sessionId, event);
+            }
+
+            if (event.type === "response_ready") {
+              updateSession(sessionId, (prev) => ({
+                ...prev,
+                sessionEndedAt: event.timestamp,
+              }));
+            }
+
             if (
-              event.type === "query_received" ||
-              event.type === "intent_classified" ||
-              event.type === "execution_mode_selected" ||
-              event.type === "plan_created" ||
-              event.type === "agent_started" ||
-              event.type === "agent_completed" ||
-              event.type === "tool_started" ||
-              event.type === "tool_completed" ||
-              event.type === "response_ready" ||
-              event.type === "done"
+              event.type === "graph_node" &&
+              event.event === "end" &&
+              event.kind === "tool" &&
+              (event.name === "sql_query" || event.name === "nl_query") &&
+              typeof event.output?.executed_query === "string"
             ) {
-              seenEvents.push(event);
-              const steps = eventsToSteps(seenEvents);
-              const startedAt = seenEvents.find((e) => e.type === "query_received") as Record<string, unknown> | undefined;
-              const sessionStartedAt = startedAt !== undefined && typeof startedAt["timestamp"] === "string" ? startedAt["timestamp"] : null;
-              const endedEvt = [...seenEvents].reverse().find((e) => e.type === "response_ready" || e.type === "done") as Record<string, unknown> | undefined;
-              const sessionEndedAt = endedEvt !== undefined && typeof endedEvt["timestamp"] === "string" ? endedEvt["timestamp"] : null;
-              updateSession(sessionId, (prev) => ({ ...prev, processingSteps: steps, sessionStartedAt, sessionEndedAt }));
+              const sqlMsg: ChatMessage = {
+                id: crypto.randomUUID(),
+                role: "tool",
+                content: "",
+                toolName: event.name,
+                sql: event.output.executed_query,
+                created_at: new Date().toISOString(),
+              };
+              updateSession(sessionId, (prev) => {
+                const idx = prev.messages.findIndex((m) => m.id === assistantId);
+                const msgs =
+                  idx === -1
+                    ? [...prev.messages, sqlMsg]
+                    : [...prev.messages.slice(0, idx), sqlMsg, ...prev.messages.slice(idx)];
+                return { ...prev, messages: msgs };
+              });
             }
 
             if (event.type === "done") {
@@ -677,12 +709,14 @@ export function ChatStateProvider({ children }: { children: ReactNode }): React.
                 ...prev,
                 messages: prev.messages.map((m) =>
                   m.id === assistantId
-                    ? { ...m, content: didStream ? m.content : (event.reply ?? m.content), isStreaming: false }
+                    ? {
+                        ...m,
+                        content: didStream ? m.content : (event.reply ?? m.content),
+                        isStreaming: false,
+                      }
                     : m,
                 ),
                 isSending: false,
-                agentNodes: [],
-                executionMode: undefined,
               }));
               fetchSessionUsage(sessionId)
                 .then((usage) => updateSession(sessionId, (prev) => ({ ...prev, usage })))
@@ -691,70 +725,17 @@ export function ChatStateProvider({ children }: { children: ReactNode }): React.
               break;
             }
 
-            if (event.type === "execution_mode_selected") {
-              updateSession(sessionId, (prev) => ({ ...prev, executionMode: event.mode }));
-            }
-
-            if (event.type === "agent_started") {
-              const node: AgentNodeState = {
-                taskId: `${event.agent_name}:${event.started_at}`,
-                agentName: event.agent_name,
-                agentRole: event.agent_role,
-                status: "running",
-                startedAt: event.started_at,
-                inputSummary: event.input_summary ?? undefined,
-                toolCalls: [],
-              };
-              updateSession(sessionId, (prev) => ({ ...prev, agentNodes: [...prev.agentNodes, node] }));
-            }
-
-            if (event.type === "agent_completed") {
-              updateSession(sessionId, (prev) => ({
-                ...prev,
-                agentNodes: prev.agentNodes.map((n) =>
-                  n.agentName === event.agent_name && n.status === "running"
-                    ? { ...n, status: "completed" as const, durationMs: event.duration_ms, outputSummary: event.output_summary ?? undefined }
-                    : n,
-                ),
-              }));
-            }
-
-            if (event.type === "tool_started") {
-              const toolCall: AgentNodeToolCall = {
-                toolCallId: event.tool_call_id,
-                toolName: event.tool_name,
-                status: "running",
-              };
-              updateSession(sessionId, (prev) => ({
-                ...prev,
-                agentNodes: prev.agentNodes.map((n) =>
-                  n.agentRole === event.agent_role && n.status === "running"
-                    ? { ...n, toolCalls: [...n.toolCalls, toolCall] }
-                    : n,
-                ),
-              }));
-            }
-
-            if (event.type === "tool_completed") {
-              updateSession(sessionId, (prev) => ({
-                ...prev,
-                agentNodes: prev.agentNodes.map((n) => ({
-                  ...n,
-                  toolCalls: n.toolCalls.map((t) =>
-                    t.toolCallId === event.tool_call_id
-                      ? { ...t, status: (event.status === "error" ? "error" : "completed") as "error" | "completed", durationMs: event.duration_ms }
-                      : t,
-                  ),
-                })),
-              }));
-            }
-
             if (event.type === "error") {
               updateSession(sessionId, (prev) => ({
                 ...prev,
                 messages: prev.messages.map((m) =>
                   m.id === assistantId
-                    ? { ...m, content: event.message ?? "An error occurred during processing.", isError: true, isStreaming: false }
+                    ? {
+                        ...m,
+                        content: event.message ?? "An error occurred during processing.",
+                        isError: true,
+                        isStreaming: false,
+                      }
                     : m,
                 ),
               }));
@@ -773,7 +754,13 @@ export function ChatStateProvider({ children }: { children: ReactNode }): React.
             ...prev,
             messages: prev.messages.map((m) =>
               m.id === assistantId
-                ? { ...m, content: "Network error — check your connection.", isError: true, isStreaming: false, errorCode: "network_error" as const }
+                ? {
+                    ...m,
+                    content: "Network error — check your connection.",
+                    isError: true,
+                    isStreaming: false,
+                    errorCode: "network_error" as const,
+                  }
                 : m,
             ),
           }));
@@ -784,7 +771,14 @@ export function ChatStateProvider({ children }: { children: ReactNode }): React.
           ...prev,
           messages: prev.messages.map((m) =>
             m.id === assistantId
-              ? { ...m, content: "Error contacting the API. Please check the backend is running.", isError: true, isStreaming: false, errorCode: "unknown_error" as const }
+              ? {
+                  ...m,
+                  content:
+                    "Error contacting the API. Please check the backend is running.",
+                  isError: true,
+                  isStreaming: false,
+                  errorCode: "unknown_error" as const,
+                }
               : m,
           ),
         }));
@@ -799,7 +793,7 @@ export function ChatStateProvider({ children }: { children: ReactNode }): React.
         }));
       }
     },
-    [updateSession],
+    [updateSession, _handleGraphNodeEvent],
   );
 
   const appendAssistantReply = useCallback(
@@ -820,7 +814,14 @@ export function ChatStateProvider({ children }: { children: ReactNode }): React.
 
   return (
     <ChatStateContext.Provider
-      value={{ getSessionState, loadMessages, sendMessage, sendAskUserAnswer, submitFeedback, appendAssistantReply }}
+      value={{
+        getSessionState,
+        loadMessages,
+        sendMessage,
+        sendAskUserAnswer,
+        submitFeedback,
+        appendAssistantReply,
+      }}
     >
       {children}
     </ChatStateContext.Provider>

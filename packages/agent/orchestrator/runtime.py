@@ -60,14 +60,15 @@ async def _run_agent(
 
     agent = _make_agent(orchestrator, agent_role)
     task_id = uuid4()
+    agent_run_id = str(task_id)
     started_at = datetime.now(timezone.utc)
     await orchestrator._push({
-        "type": "agent_started",
-        "agent_name": getattr(agent, "name", agent_role).replace("_", " ").title(),
-        "agent_role": agent_role,
-        "task_id": str(task_id),
-        "started_at": started_at.isoformat(),
+        "type": "graph_node", "event": "start",
+        "kind": "agent", "name": agent_role,
+        "run_id": agent_run_id,
+        "timestamp": started_at.isoformat(),
         "input_summary": instruction[:200],
+        "status": "ok", "meta": {},
     })
 
     async def _persist_create() -> None:
@@ -99,21 +100,26 @@ async def _run_agent(
         allowed_tools=allowed_tools,
     )
     t0 = time.monotonic()
-    result = cast(SpecialistResult, await agent.run(task, ctx))
+    result = cast(SpecialistResult, await agent.run(task, ctx, agent_run_id=agent_run_id))
     ended_at = datetime.now(timezone.utc)
 
     _usage = result.usage or {}
+    token_cost: dict[str, Any] | None = None
+    if _usage.get("input_tokens") is not None:
+        token_cost = {
+            "input_tokens": _usage.get("input_tokens", 0),
+            "output_tokens": _usage.get("output_tokens", 0),
+            "cost_usd": _usage.get("cost_usd", 0.0),
+        }
     await orchestrator._push({
-        "type": "agent_completed",
-        "agent_name": getattr(agent, "name", agent_role).replace("_", " ").title(),
-        "agent_role": agent_role,
-        "task_id": str(task_id),
-        "duration_ms": int((time.monotonic() - t0) * 1000),
-        "output_summary": str(result.output.get("text", ""))[:200] if result.output else None,
+        "type": "graph_node", "event": "end",
+        "kind": "agent", "name": agent_role,
+        "run_id": agent_run_id,
         "timestamp": ended_at.isoformat(),
-        "input_tokens": _usage.get("input_tokens"),
-        "output_tokens": _usage.get("output_tokens"),
-        "cost_usd": _usage.get("cost_usd"),
+        "duration_ms": int((time.monotonic() - t0) * 1000),
+        "status": "error" if result.status == "failed" else "ok",
+        "meta": {}, "token_cost": token_cost,
+        **({"error": result.error} if result.status == "failed" else {}),
     })
 
     if result.status == "failed":
