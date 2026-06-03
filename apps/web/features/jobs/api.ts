@@ -50,3 +50,7 @@ export async function getJobFiles(
     `/api/v1/files?${qs}`,
   );
 }
+
+export async function getJobDetail(jobId: string): Promise<JobResponse> {
+  return apiFetch<JobResponse>(`/api/v1/jobs/${jobId}`);
+}

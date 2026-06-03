@@ -3,19 +3,8 @@
 import React, { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { useJobs, useJobFiles } from "@/features/jobs/hooks";
+import { getJobs, getJobFiles, getJobDetail } from "@/features/jobs/api";
 import type { JobResponse, JobFileResponse, StatusFilter } from "@/features/jobs/api";
-
-const API_BASE = "";
-
-interface JobListResponse {
-  items: JobResponse[];
-  next_cursor: string | null;
-}
-
-interface FileListResponse {
-  items: JobFileResponse[];
-  next_cursor: string | null;
-}
 
 type Tab = "jobs" | "files";
 
@@ -171,14 +160,7 @@ export default function JobsPage(): React.ReactElement {
     async (cursor: string, filter: StatusFilter): Promise<void> => {
       setJobsLoading(true);
       try {
-        const params = new URLSearchParams({ limit: "20" });
-        params.set("cursor", cursor);
-        if (filter) params.set("status", filter);
-        const resp = await fetch(`${API_BASE}/api/v1/jobs?${params}`, {
-          headers: { "X-Dev-User": "dev-user" },
-        });
-        if (!resp.ok) return;
-        const data: JobListResponse = await resp.json();
+        const data = await getJobs({ cursor, status: filter });
         setJobs((prev) => [...prev, ...data.items]);
         setJobsCursor(data.next_cursor);
       } catch {
@@ -193,13 +175,7 @@ export default function JobsPage(): React.ReactElement {
   const loadMoreFiles = useCallback(async (cursor: string): Promise<void> => {
     setFilesLoading(true);
     try {
-      const params = new URLSearchParams({ limit: "20" });
-      params.set("cursor", cursor);
-      const resp = await fetch(`${API_BASE}/api/v1/files?${params}`, {
-        headers: { "X-Dev-User": "dev-user" },
-      });
-      if (!resp.ok) return;
-      const data: FileListResponse = await resp.json();
+      const data = await getJobFiles(cursor);
       setFiles((prev) => [...prev, ...data.items]);
       setFilesCursor(data.next_cursor);
     } catch {
@@ -217,14 +193,7 @@ export default function JobsPage(): React.ReactElement {
   const fetchJobDetail = useCallback(async (jobId: string): Promise<void> => {
     setDetailMap((prev) => ({ ...prev, [jobId]: { detail: null, loading: true } }));
     try {
-      const resp = await fetch(`${API_BASE}/api/v1/jobs/${jobId}`, {
-        headers: { "X-Dev-User": "dev-user" },
-      });
-      if (!resp.ok) {
-        setDetailMap((prev) => ({ ...prev, [jobId]: { detail: null, loading: false } }));
-        return;
-      }
-      const detail: JobResponse = await resp.json();
+      const detail = await getJobDetail(jobId);
       setDetailMap((prev) => ({ ...prev, [jobId]: { detail, loading: false } }));
     } catch {
       setDetailMap((prev) => ({ ...prev, [jobId]: { detail: null, loading: false } }));
