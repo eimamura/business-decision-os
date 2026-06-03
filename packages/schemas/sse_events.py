@@ -130,6 +130,14 @@ class AwaitingApprovalEvent(BaseModel):
     timestamp: str
 
 
+class AskUserRequiredEvent(BaseModel):
+    type: Literal["ask_user_required"] = "ask_user_required"
+    session_id: str
+    ask_user_id: str          # NEW — UUID identifying this specific ask-user interrupt
+    question: str
+    timestamp: str
+
+
 class ClarificationRequiredEvent(BaseModel):
     type: Literal["clarification_required"] = "clarification_required"
     session_id: str
@@ -146,12 +154,17 @@ class SessionPausedEvent(BaseModel):
     timestamp: str
 
 
+class JobFile(BaseModel):
+    file_name: str
+    download_url: str
+
+
 class JobCompletedEvent(BaseModel):
     type: Literal["job_completed"] = "job_completed"
     job_id: str
     job_type: str
     file_count: int
-    files: list[dict[str, Any]]
+    files: list[JobFile]
     timestamp: str
 
 
@@ -195,6 +208,7 @@ SseEvent = Annotated[
         ApprovalRequestedEvent,
         AutoExecutedEvent,
         AwaitingApprovalEvent,
+        AskUserRequiredEvent,
         ClarificationRequiredEvent,
         SessionPausedEvent,
         JobCompletedEvent,

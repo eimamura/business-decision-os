@@ -1,5 +1,9 @@
 import { z } from "zod";
 
+// AUTO-GENERATED — do not edit by hand.
+// Single Source of Truth: packages/schemas/sse_events.py
+// Regenerate:  make codegen
+
 export const QueryReceivedEventSchema = z.object({
   type: z.literal("query_received"),
   session_id: z.string(),
@@ -28,8 +32,8 @@ export const ExecutionModeSelectedEventSchema = z.object({
 export const PlanCreatedEventSchema = z.object({
   type: z.literal("plan_created"),
   mode: z.string(),
-  steps: z.array(z.record(z.unknown())).optional(),
-  nodes: z.array(z.record(z.unknown())).optional(),
+  steps: z.array(z.record(z.unknown())).nullable().optional(),
+  nodes: z.array(z.record(z.unknown())).nullable().optional(),
   timestamp: z.string(),
 });
 
@@ -50,7 +54,6 @@ export const AgentCompletedEventSchema = z.object({
   duration_ms: z.number().int(),
   output_summary: z.string().nullable().optional(),
   timestamp: z.string(),
-  // token cost for this agent invocation
   input_tokens: z.number().int().nullable().optional(),
   output_tokens: z.number().int().nullable().optional(),
   cost_usd: z.number().nullable().optional(),
@@ -79,11 +82,29 @@ export const ToolCompletedEventSchema = z.object({
   timestamp: z.string(),
 });
 
+export const MemoryRetrievedEventSchema = z.object({
+  type: z.literal("memory_retrieved"),
+  count: z.number().int(),
+  source: z.string().nullable().optional(),
+  timestamp: z.string(),
+});
+
+export const MemoryWrittenEventSchema = z.object({
+  type: z.literal("memory_written"),
+  timestamp: z.string(),
+});
+
 export const ResponseReadyEventSchema = z.object({
   type: z.literal("response_ready"),
   mode: z.string(),
   risk_level: z.enum(["low", "medium", "high"]).nullable().optional(),
   requires_approval: z.boolean().nullable().optional(),
+  timestamp: z.string(),
+});
+
+export const AutoExecutedEventSchema = z.object({
+  type: z.literal("auto_executed"),
+  recommendation_id: z.string(),
   timestamp: z.string(),
 });
 
@@ -95,12 +116,6 @@ export const ApprovalRequestedEventSchema = z.object({
   timestamp: z.string(),
 });
 
-export const AutoExecutedEventSchema = z.object({
-  type: z.literal("auto_executed"),
-  recommendation_id: z.string(),
-  timestamp: z.string(),
-});
-
 export const AwaitingApprovalEventSchema = z.object({
   type: z.literal("awaiting_approval"),
   session_id: z.string(),
@@ -109,6 +124,14 @@ export const AwaitingApprovalEventSchema = z.object({
   tool_input: z.record(z.unknown()),
   job_id: z.string().nullable().optional(),
   description: z.string(),
+  timestamp: z.string(),
+});
+
+export const AskUserRequiredEventSchema = z.object({
+  type: z.literal("ask_user_required"),
+  session_id: z.string(),
+  ask_user_id: z.string(),
+  question: z.string(),
   timestamp: z.string(),
 });
 
@@ -128,17 +151,17 @@ export const SessionPausedEventSchema = z.object({
   timestamp: z.string(),
 });
 
+export const JobFileSchema = z.object({
+  file_name: z.string(),
+  download_url: z.string(),
+});
+
 export const JobCompletedEventSchema = z.object({
   type: z.literal("job_completed"),
   job_id: z.string(),
   job_type: z.string(),
   file_count: z.number().int(),
-  files: z.array(
-    z.object({
-      file_name: z.string(),
-      download_url: z.string(),
-    }),
-  ),
+  files: z.array(JobFileSchema),
   timestamp: z.string(),
 });
 
@@ -152,6 +175,7 @@ export const JobFailedEventSchema = z.object({
 
 export const ErrorEventSchema = z.object({
   type: z.literal("error"),
+  step_id: z.string().nullable().optional(),
   code: z.string(),
   message: z.string(),
   recoverable: z.boolean(),
@@ -174,10 +198,13 @@ export const SseEventSchema = z.discriminatedUnion("type", [
   AgentCompletedEventSchema,
   ToolStartedEventSchema,
   ToolCompletedEventSchema,
+  MemoryRetrievedEventSchema,
+  MemoryWrittenEventSchema,
   ResponseReadyEventSchema,
   ApprovalRequestedEventSchema,
   AutoExecutedEventSchema,
   AwaitingApprovalEventSchema,
+  AskUserRequiredEventSchema,
   ClarificationRequiredEventSchema,
   SessionPausedEventSchema,
   JobCompletedEventSchema,

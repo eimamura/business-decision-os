@@ -10,10 +10,9 @@ from langchain_core.runnables import RunnableConfig
 from langgraph.graph import END, START, StateGraph
 from typing_extensions import TypedDict
 
-from packages.agent.orchestrator.clarification import (
-    build_clarification_event,
-    clarification_exhausted,
-    needs_clarification,
+from packages.agent.orchestrator.ask_user import (
+    build_ask_user_event,
+    is_analytical_intent,
 )
 from packages.agent.orchestrator.models import (
     AgentRoute,
@@ -23,7 +22,7 @@ from packages.agent.orchestrator.models import (
     SessionUserQuery,
 )
 from packages.agent.orchestrator.parsing import _iso_now, _json_obj, json_safe
-from packages.agent.orchestrator.prompts import INTENT_SYSTEM, ROUTER_SYSTEM
+from packages.agent.orchestrator.prompts import ASK_USER_SYSTEM, INTENT_SYSTEM, ROUTER_SYSTEM
 from packages.agent.orchestrator.routing import validate_route
 from packages.agent.orchestrator.runtime import (
     _run_agents_in_order,
@@ -48,8 +47,11 @@ class OrchestratorState(TypedDict):
     intent: SessionIntent | None
     route: AgentRoute | None
     result: SessionResponse | None
-    clarification_round: int
+    clarification_round: int   # legacy — keep, do NOT remove
     error: str | None
+    ask_user_id: str | None           # NEW — UUID set by prepare_ask_user
+    ask_user_question: str | None     # NEW — question emitted by prepare_ask_user
+    ask_user_answer: str | None       # NEW — answer injected by wait_for_answer on resume
 
 
 # ---------------------------------------------------------------------------
@@ -193,38 +195,69 @@ class SessionOrchestrator:
             self._sse_queue = original_queue
         return {"intent": intent}
 
-    async def _node_handle_clarification(
+    async def _node_ask_user(
         self, state: OrchestratorState, config: RunnableConfig
     ) -> dict[str, Any]:
-        """No-op node — routing logic is in the conditional edge."""
         intent = state.get("intent")
-        if intent is None:
+        if intent is None or not is_analytical_intent(intent.category):
             return {}
-        session_id = UUID(state["session_id"])
-        clarification_round: int = state.get("clarification_round", 0)
 
+        session_id = UUID(state["session_id"])
+        query = state["query"]
         sse_queue = (config.get("configurable") or {}).get("sse_queue")
 
-        if needs_clarification(intent.category, intent.goal_text):
-            if not clarification_exhausted(clarification_round):
-                event = build_clarification_event(session_id, clarification_round + 1)
-                if sse_queue is not None:
-                    await sse_queue.put(json_safe(event))
-                self._schedule_status_update(session_id, "completed")
-                result = SessionResponse(
-                    mode="direct_chat",
-                    reply=event["message"],
-                    intent=intent,
-                    route=AgentRoute(
-                        mode="direct_chat",
-                        agents=[],
-                        requires_planning=False,
-                        requires_dag=False,
-                        rationale="clarification",
-                    ),
-                )
-                return {"result": result}
-        return {}
+        from packages.agent.llm import LLMMessage
+
+        user_content = _json.dumps({
+            "query": query.text,
+            "conversation_context": query.conversation_context,
+            "intent": intent.model_dump(),
+        })
+
+        response = await self._llm_client.complete(
+            messages=[
+                LLMMessage(role="system", content=ASK_USER_SYSTEM),
+                LLMMessage(role="user", content=user_content),
+            ],
+            tools=None,
+            temperature=0.0,
+            max_tokens=256,
+            prompt_cache=False,
+            specialist_role="orchestrator",
+            agent_step_id=None,
+        )
+
+        try:
+            parsed = _json_obj(response.text)
+            needs_input: bool = bool(parsed.get("needs_input", False))
+            question: str | None = parsed.get("question")
+        except Exception:
+            return {}
+
+        if not needs_input or not question:
+            return {}
+
+        event = build_ask_user_event(session_id, question)
+        if sse_queue is not None:
+            await sse_queue.put(json_safe(event))
+        elif self._sse_queue is not None:
+            await self._sse_queue.put(json_safe(event))
+
+        self._schedule_status_update(session_id, "completed")
+
+        result = SessionResponse(
+            mode="direct_chat",
+            reply=question,
+            intent=intent,
+            route=AgentRoute(
+                mode="direct_chat",
+                agents=[],
+                requires_planning=False,
+                requires_dag=False,
+                rationale="ask_user",
+            ),
+        )
+        return {"result": result}
 
     async def _node_select_mode(
         self, state: OrchestratorState, config: RunnableConfig
@@ -332,8 +365,7 @@ class SessionOrchestrator:
     # Conditional edges
     # ------------------------------------------------------------------
 
-    def _edge_after_clarification(self, state: OrchestratorState) -> str:
-        """If a clarification result was set, we end. Otherwise continue to select_mode."""
+    def _edge_after_ask_user(self, state: OrchestratorState) -> str:
         if state.get("result") is not None:
             return END
         return "select_mode"
@@ -362,7 +394,7 @@ class SessionOrchestrator:
         sg: StateGraph = StateGraph(OrchestratorState)  # type: ignore[type-arg]
 
         sg.add_node("classify_intent", self._node_classify_intent)
-        sg.add_node("handle_clarification", self._node_handle_clarification)
+        sg.add_node("ask_user", self._node_ask_user)
         sg.add_node("select_mode", self._node_select_mode)
         sg.add_node("run_direct_chat", self._node_run_direct_chat)
         sg.add_node("run_sequential", self._node_run_sequential)
@@ -370,14 +402,11 @@ class SessionOrchestrator:
         sg.add_node("run_dag", self._node_run_dag)
 
         sg.add_edge(START, "classify_intent")
-        sg.add_edge("classify_intent", "handle_clarification")
+        sg.add_edge("classify_intent", "ask_user")
         sg.add_conditional_edges(
-            "handle_clarification",
-            self._edge_after_clarification,
-            {
-                END: END,
-                "select_mode": "select_mode",
-            },
+            "ask_user",
+            self._edge_after_ask_user,
+            {END: END, "select_mode": "select_mode"},
         )
         sg.add_conditional_edges(
             "select_mode",
@@ -457,7 +486,7 @@ class SessionOrchestrator:
                 weight_override_json=query.weight_override_json,
             )
 
-        self._schedule_status_update(session_id, "active")
+        self._schedule_status_update(session_id, "running")
         await self._push({
             "type": "query_received",
             "session_id": str(session_id),
@@ -474,6 +503,9 @@ class SessionOrchestrator:
             "result": None,
             "clarification_round": clarification_round,
             "error": None,
+            "ask_user_id": None,
+            "ask_user_question": None,
+            "ask_user_answer": None,
         }
 
         config = {

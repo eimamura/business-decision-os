@@ -1634,7 +1634,7 @@ running agent requests input) is scoped to P14 and noted in the ADR as a future 
 
 ### Batch P13-B1 — Schema + Protocol (App Builder — after T-090)
 
-#### T-091: Extend schemas, OrchestratorState, and Orchestrator Protocol
+#### T-091: Extend schemas, OrchestratorState, and Orchestrator Protocol — **Done**
 - **Files:**
   - `packages/schemas/sse_events.py` — extend `AskUserRequiredEvent`
   - `packages/agent/orchestrator/models.py` — extend `Orchestrator` Protocol; extend `OrchestratorState`
