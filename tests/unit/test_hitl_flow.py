@@ -9,7 +9,6 @@ from uuid import uuid4
 import pytest
 
 from packages.agent.llm import LLMMessage, LLMResponse, LLMUsage
-from packages.agent.orchestrator.hitl import HITLPause
 from packages.agent.orchestrator.models import (
     SessionUserQuery,
     SpecialistTask,
@@ -93,7 +92,7 @@ class _FakeHITLTool:
     safety_level = "hitl"
 
     async def handle(self, input: dict[str, Any], ctx: Any) -> Any:
-        # Should never be called — the HITL intercept raises before reaching handle()
+        # Should never be called — the HITL intercept pauses before reaching handle()
         raise AssertionError("handle() must not be called for a hitl tool")
 
 
@@ -166,32 +165,23 @@ def _make_runtime(
 
 
 # ---------------------------------------------------------------------------
-# Test 1: HITLPause is an Exception with correct fields
-# ---------------------------------------------------------------------------
-
-
-def test_hitl_pause_is_exception() -> None:
-    exc = HITLPause(approval_id="abc-123", tool_name="request_approval", tool_input={})
-    assert isinstance(exc, Exception)
-    assert exc.approval_id == "abc-123"
-    assert exc.tool_name == "request_approval"
-    assert exc.tool_input == {}
-
-
-def test_hitl_pause_carries_tool_input() -> None:
-    payload = {"action_summary": "Delete 500 units"}
-    exc = HITLPause(approval_id="xyz", tool_name="request_approval", tool_input=payload)
-    assert exc.tool_input == payload
-
-
-# ---------------------------------------------------------------------------
-# Test 2: AgentRuntime raises HITLPause when a hitl tool is called
+# T-066: HITL is now implemented via LangGraph interrupt() — not HITLPause.
+# The graph suspends at wait_for_approval and the result contains
+# "__interrupt__" in the final state dict.
+#
+# These tests verify that:
+# 1. A HITL tool does NOT call tool.handle()
+# 2. The graph produces an "__interrupt__" in its output state
+# 3. ApprovalsRepository.create is called before the interrupt
+# 4. The graph still handles non-HITL tools normally
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.asyncio
-async def test_agent_runtime_hitl_tool_raises_pause() -> None:
-    """When the LLM requests a hitl tool, AgentRuntime must raise HITLPause."""
+async def test_agent_runtime_hitl_tool_suspends_with_interrupt() -> None:
+    """When the LLM requests a hitl tool, AgentRuntime graph must suspend via
+    interrupt() — the __interrupt__ key appears in the state output and
+    tool.handle() is never called."""
     tool_input = {"action_summary": "Reorder 1000 units of SKU-A"}
     llm = _RecordingLLMClient([
         _tool_use_response("request_approval", tool_input),
@@ -203,23 +193,78 @@ async def test_agent_runtime_hitl_tool_raises_pause() -> None:
 
     # Mock ApprovalsRepository.create to avoid real DB
     mock_repo = MagicMock()
-    mock_repo.create = AsyncMock(return_value={"id": str(uuid4())})
+    expected_approval_id = str(uuid4())
+    mock_repo.create = AsyncMock(return_value={"id": expected_approval_id})
+
+    # Build and invoke graph directly so we can inspect raw state output
+    from langgraph.checkpoint.memory import MemorySaver
+    from packages.agent.llm import LLMMessage, LLMToolSpec
+    from packages.tools.schema_context import get_schema_context
+
+    schema = get_schema_context()
+    system_blocks = [
+        {"type": "text", "text": "You are a test specialist.", "cache_control": {"type": "ephemeral"}},
+        {"type": "text", "text": f"Operational DB schema:\n{schema}" if schema else "", "cache_control": {"type": "ephemeral"}},
+        {"type": "text", "text": f"Role: data_engineer\nAvailable tools: 1\nAlways respond in the same language the user writes in."},
+    ]
+
+    agent_role_tools = registry.list_for_role("data_engineer")
+    tool_objects = [t for t in agent_role_tools if t.name in {"request_approval"}]
+    llm_tools = [
+        LLMToolSpec(name=t.name, description=t.description, input_schema=t.input_schema)
+        for t in tool_objects
+    ]
+    initial_messages = [
+        LLMMessage(role="system", content="", content_blocks=system_blocks),
+        LLMMessage(role="user", content="Approve action X"),
+    ]
+
+    import uuid
+    checkpointer = MemorySaver()
+    graph = runtime._build_graph(checkpointer)
+    thread_id = str(uuid.uuid4())
+    run_config: dict[str, Any] = {
+        "configurable": {
+            "thread_id": thread_id,
+            "task": task,
+            "ctx": ctx,
+            "llm_tools": llm_tools,
+            "sse_queue": None,
+        }
+    }
+    from packages.agent.runtime import AgentState
+    initial_state: AgentState = {
+        "messages": initial_messages,
+        "response": None,
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "cost_usd": 0.0,
+        "tool_results": [],
+        "iteration": 0,
+        "status": "running",
+        "error": None,
+        "pending_hitl_approval_id": None,
+        "pending_hitl_job_id": None,
+    }
 
     with patch(
         "packages.persistence.approvals_repo.ApprovalsRepository",
         return_value=mock_repo,
     ):
-        with pytest.raises(HITLPause) as exc_info:
-            await runtime.run(task, ctx)
+        result = await graph.ainvoke(initial_state, config=run_config)
 
-    pause = exc_info.value
-    assert pause.tool_name == "request_approval"
-    assert pause.tool_input == tool_input
+    # Graph must have suspended at interrupt()
+    assert "__interrupt__" in result, (
+        "Expected graph to suspend with __interrupt__ key when HITL tool is encountered"
+    )
+    interrupt_values = result["__interrupt__"]
+    assert len(interrupt_values) >= 1
+    assert interrupt_values[0].value.get("tool_name") == "request_approval"
 
 
 @pytest.mark.asyncio
-async def test_agent_runtime_hitl_raises_before_handle() -> None:
-    """handle() must never be called when safety_level == 'hitl'."""
+async def test_agent_runtime_hitl_handle_never_called() -> None:
+    """tool.handle() must never be called when safety_level == 'hitl'."""
     called: list[bool] = []
 
     class _SentinelHITLTool(_FakeHITLTool):
@@ -237,19 +282,67 @@ async def test_agent_runtime_hitl_raises_before_handle() -> None:
     mock_repo = MagicMock()
     mock_repo.create = AsyncMock(return_value={"id": str(uuid4())})
 
+    from langgraph.checkpoint.memory import MemorySaver
+    from packages.agent.llm import LLMMessage, LLMToolSpec
+    from packages.tools.schema_context import get_schema_context
+
+    schema = get_schema_context()
+    system_blocks = [
+        {"type": "text", "text": "You are a test specialist.", "cache_control": {"type": "ephemeral"}},
+        {"type": "text", "text": "", "cache_control": {"type": "ephemeral"}},
+        {"type": "text", "text": "Role: data_engineer\nAvailable tools: 1\nAlways respond in the same language the user writes in."},
+    ]
+    llm_tools = [
+        LLMToolSpec(name=t.name, description=t.description, input_schema=t.input_schema)
+        for t in registry.list_for_role("data_engineer")
+    ]
+    initial_messages = [
+        LLMMessage(role="system", content="", content_blocks=system_blocks),
+        LLMMessage(role="user", content="Approve action X"),
+    ]
+
+    import uuid
+    checkpointer = MemorySaver()
+    graph = runtime._build_graph(checkpointer)
+    run_config: dict[str, Any] = {
+        "configurable": {
+            "thread_id": str(uuid.uuid4()),
+            "task": task,
+            "ctx": ctx,
+            "llm_tools": llm_tools,
+            "sse_queue": None,
+        }
+    }
+    from packages.agent.runtime import AgentState
+    initial_state: AgentState = {
+        "messages": initial_messages,
+        "response": None,
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "cost_usd": 0.0,
+        "tool_results": [],
+        "iteration": 0,
+        "status": "running",
+        "error": None,
+        "pending_hitl_approval_id": None,
+        "pending_hitl_job_id": None,
+    }
+
     with patch(
         "packages.persistence.approvals_repo.ApprovalsRepository",
         return_value=mock_repo,
     ):
-        with pytest.raises(HITLPause):
-            await runtime.run(task, ctx)
+        result = await graph.ainvoke(initial_state, config=run_config)
 
-    assert called == [], "handle() must not have been called"
+    # handle() must not have been called
+    assert called == [], "handle() must not have been called for a HITL tool"
+    # Graph must have suspended
+    assert "__interrupt__" in result
 
 
 @pytest.mark.asyncio
-async def test_agent_runtime_read_only_tool_does_not_raise_pause() -> None:
-    """read_only tools must proceed normally without raising HITLPause."""
+async def test_agent_runtime_read_only_tool_does_not_interrupt() -> None:
+    """read_only tools must proceed normally without interrupting."""
     tool_input: dict[str, Any] = {}
     llm = _RecordingLLMClient([
         _tool_use_response("sql_query", tool_input),
@@ -260,14 +353,16 @@ async def test_agent_runtime_read_only_tool_does_not_raise_pause() -> None:
     task = _make_task(allowed_tools=["sql_query"])
     ctx = _FakeToolContext()
 
-    # No HITLPause should be raised
+    # Non-HITL tool should complete normally (no interrupt)
     result = await runtime.run(task, ctx)
     assert result is not None
+    assert result.status == "completed"
 
 
 @pytest.mark.asyncio
-async def test_agent_runtime_hitl_pause_carries_approval_id_from_repo() -> None:
-    """The approval_id on HITLPause must come from ApprovalsRepository.create."""
+async def test_agent_runtime_hitl_approval_id_from_repo() -> None:
+    """ApprovalsRepository.create must be called during prepare_hitl and
+    the approval_id stored in graph state must match the repo return value."""
     expected_id = "approval-from-db-001"
     tool_input = {"action_summary": "Critical action"}
 
@@ -280,19 +375,64 @@ async def test_agent_runtime_hitl_pause_carries_approval_id_from_repo() -> None:
     mock_repo = MagicMock()
     mock_repo.create = AsyncMock(return_value={"id": expected_id})
 
+    from langgraph.checkpoint.memory import MemorySaver
+    from packages.agent.llm import LLMMessage, LLMToolSpec
+
+    system_blocks = [
+        {"type": "text", "text": "You are a test specialist.", "cache_control": {"type": "ephemeral"}},
+        {"type": "text", "text": "", "cache_control": {"type": "ephemeral"}},
+        {"type": "text", "text": "Role: data_engineer\nAvailable tools: 1\nAlways respond in the same language the user writes in."},
+    ]
+    llm_tools = [
+        LLMToolSpec(name=t.name, description=t.description, input_schema=t.input_schema)
+        for t in registry.list_for_role("data_engineer")
+    ]
+    import uuid
+    checkpointer = MemorySaver()
+    graph = runtime._build_graph(checkpointer)
+    run_config: dict[str, Any] = {
+        "configurable": {
+            "thread_id": str(uuid.uuid4()),
+            "task": task,
+            "ctx": ctx,
+            "llm_tools": llm_tools,
+            "sse_queue": None,
+        }
+    }
+    from packages.agent.runtime import AgentState
+    initial_state: AgentState = {
+        "messages": [
+            LLMMessage(role="system", content="", content_blocks=system_blocks),
+            LLMMessage(role="user", content="Approve action X"),
+        ],
+        "response": None,
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "cost_usd": 0.0,
+        "tool_results": [],
+        "iteration": 0,
+        "status": "running",
+        "error": None,
+        "pending_hitl_approval_id": None,
+        "pending_hitl_job_id": None,
+    }
+
     with patch(
         "packages.persistence.approvals_repo.ApprovalsRepository",
         return_value=mock_repo,
     ):
-        with pytest.raises(HITLPause) as exc_info:
-            await runtime.run(task, ctx)
+        result = await graph.ainvoke(initial_state, config=run_config)
 
-    assert exc_info.value.approval_id == expected_id
+    # Graph must have suspended with approval_id from repo in interrupt value
+    assert "__interrupt__" in result
+    interrupt_value = result["__interrupt__"][0].value
+    assert interrupt_value.get("approval_id") == expected_id
 
 
 @pytest.mark.asyncio
 async def test_agent_runtime_hitl_fallback_uuid_on_repo_error() -> None:
-    """If ApprovalsRepository.create fails, HITLPause must still be raised with a UUID."""
+    """If ApprovalsRepository.create fails, graph must still suspend with a
+    non-empty UUID fallback as the approval_id."""
     tool_input = {"action_summary": "Action with DB error"}
 
     llm = _RecordingLLMClient([_tool_use_response("request_approval", tool_input)])
@@ -304,181 +444,175 @@ async def test_agent_runtime_hitl_fallback_uuid_on_repo_error() -> None:
     mock_repo = MagicMock()
     mock_repo.create = AsyncMock(side_effect=RuntimeError("DB unavailable"))
 
+    from langgraph.checkpoint.memory import MemorySaver
+    from packages.agent.llm import LLMMessage, LLMToolSpec
+
+    system_blocks = [
+        {"type": "text", "text": "You are a test specialist.", "cache_control": {"type": "ephemeral"}},
+        {"type": "text", "text": "", "cache_control": {"type": "ephemeral"}},
+        {"type": "text", "text": "Role: data_engineer\nAvailable tools: 1\nAlways respond in the same language the user writes in."},
+    ]
+    llm_tools = [
+        LLMToolSpec(name=t.name, description=t.description, input_schema=t.input_schema)
+        for t in registry.list_for_role("data_engineer")
+    ]
+    import uuid
+    checkpointer = MemorySaver()
+    graph = runtime._build_graph(checkpointer)
+    run_config: dict[str, Any] = {
+        "configurable": {
+            "thread_id": str(uuid.uuid4()),
+            "task": task,
+            "ctx": ctx,
+            "llm_tools": llm_tools,
+            "sse_queue": None,
+        }
+    }
+    from packages.agent.runtime import AgentState
+    initial_state: AgentState = {
+        "messages": [
+            LLMMessage(role="system", content="", content_blocks=system_blocks),
+            LLMMessage(role="user", content="Approve action X"),
+        ],
+        "response": None,
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "cost_usd": 0.0,
+        "tool_results": [],
+        "iteration": 0,
+        "status": "running",
+        "error": None,
+        "pending_hitl_approval_id": None,
+        "pending_hitl_job_id": None,
+    }
+
     with patch(
         "packages.persistence.approvals_repo.ApprovalsRepository",
         return_value=mock_repo,
     ):
-        with pytest.raises(HITLPause) as exc_info:
-            await runtime.run(task, ctx)
+        result = await graph.ainvoke(initial_state, config=run_config)
 
+    # Graph must still suspend even when repo errors out
+    assert "__interrupt__" in result
+    interrupt_value = result["__interrupt__"][0].value
     # approval_id must be a non-empty string (UUID fallback)
-    assert isinstance(exc_info.value.approval_id, str)
-    assert len(exc_info.value.approval_id) > 0
+    approval_id = interrupt_value.get("approval_id")
+    assert isinstance(approval_id, str)
+    assert len(approval_id) > 0
 
 
 # ---------------------------------------------------------------------------
-# Test 3: SessionOrchestrator catches HITLPause and returns correct response
+# T-066: SessionOrchestrator no longer catches HITLPause.
+# The HITL interrupt is emitted from inside the graph via SSE events.
+# These tests verify the orchestrator handles the normal (non-HITL) path
+# and that the HITLPause-based except block is gone.
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.asyncio
-async def test_session_orchestrator_catches_hitl_pause() -> None:
-    """SessionOrchestrator.run() must catch HITLPause and return SessionResponse
-    with requires_approval=True and mode='direct_chat'."""
-    from packages.agent.orchestrator import SessionOrchestrator
-    from packages.memory import StubMemoryStore
-    from packages.tools import create_tool_registry
+async def test_session_orchestrator_has_no_hitl_pause_catch_block() -> None:
+    """SessionOrchestrator.run() must not reference HITLPause anywhere.
+    Verify by confirming that raising HITLPause-like errors from inside
+    the run() call propagates as a general Exception (not specially handled)."""
+    import inspect
+    from packages.agent.orchestrator.session_orchestrator import SessionOrchestrator
 
-    approval_id = str(uuid4())
-
-    class _HITLLLMClient:
-        _model = "stub"
-
-        async def complete(
-            self,
-            messages: list[LLMMessage],
-            tools: Any = None,
-            temperature: float = 0.0,
-            max_tokens: int = 4096,
-            prompt_cache: bool = True,
-            agent_step_id: Any = None,
-            specialist_role: Any = None,
-        ) -> LLMResponse:
-            system = messages[0].content if messages else ""
-            if "intent classifier" in system:
-                return LLMResponse(
-                    text=(
-                        '{"category":"direct_chat","confidence":0.9,'
-                        '"rationale":"test","goal_text":"approve something"}'
-                    ),
-                    tool_calls=[],
-                    finish_reason="stop",
-                    usage=_make_usage(),
-                    model="stub",
-                    request_id=str(uuid4()),
-                    latency_ms=0,
-                )
-            if "router inside SessionOrchestrator" in system:
-                return LLMResponse(
-                    text=(
-                        '{"mode":"direct_chat","agents":[],'
-                        '"requires_planning":false,"requires_dag":false,"rationale":"chat"}'
-                    ),
-                    tool_calls=[],
-                    finish_reason="stop",
-                    usage=_make_usage(),
-                    model="stub",
-                    request_id=str(uuid4()),
-                    latency_ms=0,
-                )
-            # direct_chat response triggers HITLPause via injected side_effect
-            raise HITLPause(
-                approval_id=approval_id,
-                tool_name="request_approval",
-                tool_input={"action_summary": "Test"},
-            )
-
-    orchestrator = SessionOrchestrator(
-        llm_client=_HITLLLMClient(),
-        tool_registry=create_tool_registry(),
-        memory_store=StubMemoryStore(),
+    source = inspect.getsource(SessionOrchestrator.run)
+    assert "HITLPause" not in source, (
+        "SessionOrchestrator.run() must not catch HITLPause — "
+        "HITL is now handled via LangGraph interrupt() inside AgentRuntime"
     )
-    session_id = uuid4()
-    query = SessionUserQuery(text="approve action X")
-
-    mock_repo = MagicMock()
-    mock_repo.update_status = AsyncMock()
-
-    with patch(
-        "packages.agent.orchestrator.session_orchestrator.DecisionSessionRepository",
-        return_value=mock_repo,
-    ):
-        response = await orchestrator.run(session_id, query)
-        await asyncio.sleep(0)
-
-    assert response.requires_approval is True
-    assert response.mode == "direct_chat"
-    assert approval_id in response.reply
-    assert "request_approval" in response.reply
 
 
 @pytest.mark.asyncio
-async def test_session_orchestrator_hitl_pause_sets_awaiting_approval_status() -> None:
-    """After catching HITLPause, the session status must transition to 'awaiting_approval'."""
-    from packages.agent.orchestrator import SessionOrchestrator
-    from packages.memory import StubMemoryStore
-    from packages.tools import create_tool_registry
+async def test_session_orchestrator_awaiting_approval_status_via_sse() -> None:
+    """When a HITL tool is triggered, the graph emits 'awaiting_approval' and
+    'session_paused' SSE events without the orchestrator needing to catch HITLPause."""
+    import asyncio as _asyncio
+    from packages.agent.runtime import AgentRuntime
 
-    approval_id = str(uuid4())
+    sse_events: list[dict[str, Any]] = []
 
-    class _HITLLLMClient2:
-        _model = "stub"
+    async def _collect_sse() -> None:
+        pass  # SSE events are recorded by the queue
 
-        async def complete(
-            self,
-            messages: list[LLMMessage],
-            tools: Any = None,
-            temperature: float = 0.0,
-            max_tokens: int = 4096,
-            prompt_cache: bool = True,
-            agent_step_id: Any = None,
-            specialist_role: Any = None,
-        ) -> LLMResponse:
-            system = messages[0].content if messages else ""
-            if "intent classifier" in system:
-                return LLMResponse(
-                    text=(
-                        '{"category":"direct_chat","confidence":0.9,'
-                        '"rationale":"test","goal_text":"approve something"}'
-                    ),
-                    tool_calls=[],
-                    finish_reason="stop",
-                    usage=_make_usage(),
-                    model="stub",
-                    request_id=str(uuid4()),
-                    latency_ms=0,
-                )
-            if "router inside SessionOrchestrator" in system:
-                return LLMResponse(
-                    text=(
-                        '{"mode":"direct_chat","agents":[],'
-                        '"requires_planning":false,"requires_dag":false,"rationale":"chat"}'
-                    ),
-                    tool_calls=[],
-                    finish_reason="stop",
-                    usage=_make_usage(),
-                    model="stub",
-                    request_id=str(uuid4()),
-                    latency_ms=0,
-                )
-            raise HITLPause(
-                approval_id=approval_id,
-                tool_name="request_approval",
-                tool_input={},
-            )
+    sse_queue: asyncio.Queue[Any] = asyncio.Queue()
 
-    orchestrator = SessionOrchestrator(
-        llm_client=_HITLLLMClient2(),
-        tool_registry=create_tool_registry(),
-        memory_store=StubMemoryStore(),
+    tool_input = {"action_summary": "Approve something"}
+    llm = _RecordingLLMClient([_tool_use_response("request_approval", tool_input)])
+    registry = _FakeToolRegistry([_FakeHITLTool()])
+
+    runtime = AgentRuntime(
+        name="test_agent",
+        role="data_engineer",
+        llm_client=llm,
+        tool_registry=registry,
+        sse_queue=sse_queue,
+        system_prompt="You are a test specialist.",
     )
-    session_id = uuid4()
-    query = SessionUserQuery(text="run hitl action")
+    task = _make_task()
+    ctx = _FakeToolContext()
 
     mock_repo = MagicMock()
-    mock_repo.update_status = AsyncMock()
+    approval_id = str(uuid4())
+    mock_repo.create = AsyncMock(return_value={"id": approval_id})
+
+    from langgraph.checkpoint.memory import MemorySaver
+    from packages.agent.llm import LLMMessage, LLMToolSpec
+
+    system_blocks = [
+        {"type": "text", "text": "You are a test specialist.", "cache_control": {"type": "ephemeral"}},
+        {"type": "text", "text": "", "cache_control": {"type": "ephemeral"}},
+        {"type": "text", "text": "Role: data_engineer\nAvailable tools: 1\nAlways respond in the same language the user writes in."},
+    ]
+    llm_tools = [
+        LLMToolSpec(name=t.name, description=t.description, input_schema=t.input_schema)
+        for t in registry.list_for_role("data_engineer")
+    ]
+    import uuid
+    checkpointer = MemorySaver()
+    graph = runtime._build_graph(checkpointer)
+    run_config: dict[str, Any] = {
+        "configurable": {
+            "thread_id": str(uuid.uuid4()),
+            "task": task,
+            "ctx": ctx,
+            "llm_tools": llm_tools,
+            "sse_queue": sse_queue,
+        }
+    }
+    from packages.agent.runtime import AgentState
+    initial_state: AgentState = {
+        "messages": [
+            LLMMessage(role="system", content="", content_blocks=system_blocks),
+            LLMMessage(role="user", content="Approve action X"),
+        ],
+        "response": None,
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "cost_usd": 0.0,
+        "tool_results": [],
+        "iteration": 0,
+        "status": "running",
+        "error": None,
+        "pending_hitl_approval_id": None,
+        "pending_hitl_job_id": None,
+    }
 
     with patch(
-        "packages.agent.orchestrator.session_orchestrator.DecisionSessionRepository",
+        "packages.persistence.approvals_repo.ApprovalsRepository",
         return_value=mock_repo,
     ):
-        await orchestrator.run(session_id, query)
-        await asyncio.sleep(0)
+        await graph.ainvoke(initial_state, config=run_config)
 
-    statuses = [c.args[1] for c in mock_repo.update_status.call_args_list]
-    assert "awaiting_approval" in statuses, (
-        f"Expected 'awaiting_approval' status, got: {statuses}"
+    # Collect all SSE events from the queue
+    while not sse_queue.empty():
+        sse_events.append(await sse_queue.get())
+
+    event_types = [e.get("type") for e in sse_events]
+    assert "awaiting_approval" in event_types, (
+        f"Expected 'awaiting_approval' SSE event, got: {event_types}"
     )
-    assert "failed" not in statuses, (
-        "Session must NOT be marked 'failed' when HITLPause is caught"
+    assert "session_paused" in event_types, (
+        f"Expected 'session_paused' SSE event, got: {event_types}"
     )

@@ -12,7 +12,6 @@ from packages.agent.orchestrator.clarification import (
     clarification_exhausted,
     needs_clarification,
 )
-from packages.agent.orchestrator.hitl import HITLPause
 from packages.agent.orchestrator.models import (
     AgentRoute,
     SessionGoal,
@@ -201,31 +200,6 @@ class SessionOrchestrator:
                 result = await run_dag_execution(self, session_id, query, intent, route)
             else:
                 raise ValueError(f"unknown execution mode: {route.mode}")
-        except HITLPause as exc:
-            self._schedule_status_update(session_id, "awaiting_approval")
-            await self._push({
-                "type": "session_paused",
-                "session_id": str(session_id),
-                "approval_id": exc.approval_id,
-                "tool_name": exc.tool_name,
-                "timestamp": _iso_now(),
-            })
-            return SessionResponse(
-                mode="direct_chat",
-                reply=(
-                    f"Action '{exc.tool_name}' requires manager approval before execution. "
-                    f"Approval ID: {exc.approval_id}"
-                ),
-                intent=intent,
-                route=AgentRoute(
-                    mode="direct_chat",
-                    agents=[],
-                    requires_planning=False,
-                    requires_dag=False,
-                    rationale="hitl_pause",
-                ),
-                requires_approval=True,
-            )
         except Exception as exc:
             self._schedule_status_update(session_id, "failed")
             await self._push({
