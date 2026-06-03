@@ -51,6 +51,8 @@ class _HealthCheckFilter(logging.Filter):
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+    from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
+
     from packages.tools.schema_context import load_schema_context
 
     if os.environ.get("ENV") == "development":
@@ -66,6 +68,15 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
         experiment_name = os.environ.get("MLFLOW_EXPERIMENT_NAME", "business-decision-os")
         setup_mlflow_tracing(mlflow_uri, experiment_name)
+
+    # Create LangGraph checkpoint tables (checkpoints, checkpoint_writes, checkpoint_blobs)
+    # idempotently on every startup. Skipped when DATABASE_URL is absent (e.g. unit tests).
+    database_url = os.environ.get("DATABASE_URL", "")
+    if database_url:
+        # psycopg v3 uses plain postgresql:// — strip the SQLAlchemy +asyncpg driver prefix.
+        psycopg_url = database_url.replace("postgresql+asyncpg://", "postgresql://")
+        async with AsyncPostgresSaver.from_conn_string(psycopg_url) as saver:
+            await saver.setup()
 
     yield
 
