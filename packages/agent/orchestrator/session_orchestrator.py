@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json as _json
-from typing import Any
+from typing import Any, cast
 from uuid import UUID
 
 import structlog
@@ -71,6 +71,7 @@ class SessionOrchestrator:
         self._memory_store = memory_store
         self._sse_queue = sse_queue
         self._event_persister = event_persister
+        self._graph: Any = None  # lazily initialised by _get_graph()
 
     async def _push(self, event: dict[str, Any], sse_queue: Any = None) -> None:
         q = sse_queue if sse_queue is not None else self._sse_queue
@@ -361,7 +362,7 @@ class SessionOrchestrator:
     # Graph builder
     # ------------------------------------------------------------------
 
-    def _build_graph(self) -> Any:
+    def _build_graph(self, checkpointer: Any = None) -> Any:
         sg: StateGraph = StateGraph(OrchestratorState)  # type: ignore[type-arg]
 
         sg.add_node("classify_intent", self._node_classify_intent)
@@ -398,7 +399,56 @@ class SessionOrchestrator:
         sg.add_edge("run_planned", END)
         sg.add_edge("run_dag", END)
 
-        return sg.compile()
+        return sg.compile(checkpointer=checkpointer)
+
+    async def _get_graph(self) -> Any:
+        """Return the compiled graph, building it lazily with a checkpointer.
+
+        When DATABASE_URL is set, uses AsyncPostgresSaver backed by an
+        AsyncConnectionPool so that checkpoint state persists across HTTP
+        requests (required for cross-request HITL resume).
+
+        Falls back to MemorySaver when DATABASE_URL is absent (unit tests,
+        CI without DB).
+
+        The compiled graph is cached on ``self._graph`` after the first call.
+        """
+        if self._graph is not None:
+            return self._graph
+
+        import os
+
+        database_url = os.environ.get("DATABASE_URL", "")
+        if database_url:
+            # Use the async Postgres checkpointer so graph state survives across HTTP requests.
+            # psycopg v3 expects plain postgresql:// — strip the SQLAlchemy +asyncpg driver prefix.
+            from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
+            from psycopg import AsyncConnection
+            from psycopg.rows import dict_row
+            from psycopg_pool import AsyncConnectionPool
+
+            psycopg_url = database_url.replace("postgresql+asyncpg://", "postgresql://")
+            pool: AsyncConnectionPool[AsyncConnection[dict[str, Any]]] = (
+                AsyncConnectionPool(
+                    psycopg_url,
+                    max_size=5,
+                    kwargs={
+                        "autocommit": True,
+                        "prepare_threshold": 0,
+                        "row_factory": dict_row,
+                    },
+                    open=False,
+                )
+            )
+            await pool.open()
+            checkpointer: Any = AsyncPostgresSaver(conn=pool)
+        else:
+            from langgraph.checkpoint.memory import MemorySaver
+
+            checkpointer = MemorySaver()
+
+        self._graph = self._build_graph(checkpointer=checkpointer)
+        return self._graph
 
     # ------------------------------------------------------------------
     # Public run()
@@ -437,7 +487,7 @@ class SessionOrchestrator:
             }
         }
 
-        graph = self._build_graph()
+        graph = await self._get_graph()
 
         try:
             final_state: dict[str, Any] = await graph.ainvoke(initial_state, config=config)
@@ -460,46 +510,38 @@ class SessionOrchestrator:
         return raw_result
 
     async def resume(self, session_id: UUID, approval_id: UUID) -> SessionResponse:
-        from packages.agent.orchestrator.result_builder import build_job_result_reply
-        from packages.persistence.jobs_repo import JobsRepository
+        """Resume graph execution from the last LangGraph checkpoint for this session.
+
+        Passes ``None`` as the input to ``astream`` so LangGraph continues from the
+        interrupted node (``wait_for_approval``) rather than re-running from START.
+        The ``approval_id`` parameter is kept for API compatibility; the graph already
+        holds it in the checkpoint state written by ``prepare_hitl``.
+        """
+        config: dict[str, Any] = {
+            "configurable": {
+                "thread_id": str(session_id),
+                "sse_queue": self._sse_queue,
+            }
+        }
+
+        graph = await self._get_graph()
 
         try:
-            repo = JobsRepository()
-            job = await repo.get_by_approval_id(approval_id)
-            if job is not None and job.get("status") == "completed":
-                result = job.get("result_json") or {}
-                if isinstance(result, str):
-                    import json
-                    result = json.loads(result)
-                files = await repo.list_files(job["id"])
-                reply = build_job_result_reply(
-                    job_type=job["job_type"],
-                    result=result,
-                    files=files,
-                )
-                self._schedule_status_update(session_id, "completed")
-                return SessionResponse(
-                    mode="direct_chat",
-                    reply=reply,
-                    intent=SessionIntent(
-                        category="job_resume",
-                        confidence=1.0,
-                        rationale="job_resume",
-                        goal_text=None,
-                    ),
-                    route=AgentRoute(
-                        mode="direct_chat",
-                        agents=[],
-                        requires_planning=False,
-                        requires_dag=False,
-                        rationale="job_resume",
-                    ),
-                )
-        except Exception:
-            pass  # fall through to generic resume
+            result_state: dict[str, Any] = {}
+            async for chunk in graph.astream(None, config=config, stream_mode="updates"):
+                result_state.update(chunk)
+        except Exception as exc:
+            self._schedule_status_update(session_id, "failed")
+            await self._push({
+                "type": "error",
+                "code": "orchestration_failed",
+                "message": str(exc),
+                "recoverable": False,
+                "timestamp": _iso_now(),
+            })
+            raise
 
-        query = SessionUserQuery(
-            text="Resume the approved decision.",
-            metadata={"approval_id": str(approval_id)},
-        )
-        return await self.run(session_id, query)
+        result = result_state.get("result") or result_state.get("run_dag", {}).get("result")
+        if result is None:
+            raise RuntimeError(f"Graph resume produced no result for session {session_id}")
+        return cast(SessionResponse, result)

@@ -83,7 +83,10 @@ async def _summarize_messages(messages: list[Any], llm_client: Any) -> str:
     )
     response = await llm_client.complete(
         messages=[
-            LLMMessage(role="system", content="Summarize this conversation history in 2-3 sentences."),
+            LLMMessage(
+                role="system",
+                content="Summarize this conversation history in 2-3 sentences.",
+            ),
             LLMMessage(role="user", content=text_content),
         ],
         tools=None,
@@ -93,7 +96,7 @@ async def _summarize_messages(messages: list[Any], llm_client: Any) -> str:
         specialist_role="orchestrator",
         agent_step_id=None,
     )
-    return response.text
+    return str(response.text)
 
 
 # ---------------------------------------------------------------------------
