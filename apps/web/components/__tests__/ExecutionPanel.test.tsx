@@ -1,7 +1,7 @@
 /**
- * Render tests for AgentActivityPanel component.
+ * Render tests for ExecutionPanel component.
  *
- * AgentActivityPanel reads graphRun, sessionStartedAt, sessionEndedAt,
+ * ExecutionPanel reads graphRun, sessionStartedAt, sessionEndedAt,
  * isSending, and usage from ChatStateContext.
  *
  * Strategy: vi.mock useChatStateContext to inject controlled state without
@@ -38,7 +38,7 @@ vi.mock("@/app/chat/ChatStateContext", () => ({
   }),
 }));
 
-const AgentActivityPanel = (await import("@/components/agent/AgentActivityPanel")).default;
+const ExecutionPanel = (await import("@/components/agent/ExecutionPanel")).default;
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -90,7 +90,7 @@ function makeCompletedOrchestratorNode(
 
 const SESSION_ID = "sess-panel-test";
 
-describe("AgentActivityPanel", () => {
+describe("ExecutionPanel", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     Element.prototype.scrollIntoView = vi.fn();
@@ -103,7 +103,7 @@ describe("AgentActivityPanel", () => {
     ];
     mockGetSessionState.mockReturnValue(makeSessionState(graphRun));
 
-    render(<AgentActivityPanel sessionId={SESSION_ID} />);
+    render(<ExecutionPanel sessionId={SESSION_ID} />);
 
     expect(screen.getByText("Classifying intent")).toBeInTheDocument();
     expect(screen.getByText("Planning analysis route")).toBeInTheDocument();
@@ -112,7 +112,7 @@ describe("AgentActivityPanel", () => {
   it("shows 'No active analysis yet.' when graphRun is empty", () => {
     mockGetSessionState.mockReturnValue(makeSessionState([]));
 
-    render(<AgentActivityPanel sessionId={SESSION_ID} />);
+    render(<ExecutionPanel sessionId={SESSION_ID} />);
 
     expect(screen.getByText("No active analysis yet.")).toBeInTheDocument();
   });
@@ -120,7 +120,7 @@ describe("AgentActivityPanel", () => {
   it("calls getSessionState with the provided sessionId", () => {
     mockGetSessionState.mockReturnValue(makeSessionState([]));
 
-    render(<AgentActivityPanel sessionId="my-session-id" />);
+    render(<ExecutionPanel sessionId="my-session-id" />);
 
     expect(mockGetSessionState).toHaveBeenCalledWith("my-session-id");
   });
@@ -128,7 +128,7 @@ describe("AgentActivityPanel", () => {
   it("shows the 'Live' badge when isSending is true", () => {
     mockGetSessionState.mockReturnValue(makeSessionState([], { isSending: true }));
 
-    render(<AgentActivityPanel sessionId={SESSION_ID} />);
+    render(<ExecutionPanel sessionId={SESSION_ID} />);
 
     expect(screen.getByText("Live")).toBeInTheDocument();
   });
@@ -136,7 +136,7 @@ describe("AgentActivityPanel", () => {
   it("does not show the 'Live' badge when isSending is false", () => {
     mockGetSessionState.mockReturnValue(makeSessionState([], { isSending: false }));
 
-    render(<AgentActivityPanel sessionId={SESSION_ID} />);
+    render(<ExecutionPanel sessionId={SESSION_ID} />);
 
     expect(screen.queryByText("Live")).not.toBeInTheDocument();
   });
@@ -150,16 +150,16 @@ describe("AgentActivityPanel", () => {
     ];
     mockGetSessionState.mockReturnValue(makeSessionState(graphRun));
 
-    render(<AgentActivityPanel sessionId={SESSION_ID} />);
+    render(<ExecutionPanel sessionId={SESSION_ID} />);
 
     expect(screen.getByText("optimization · 90% confidence")).toBeInTheDocument();
   });
 
-  it("renders the 'Agent Activity' header", () => {
+  it("renders the 'Execution Trace' header", () => {
     mockGetSessionState.mockReturnValue(makeSessionState([]));
 
-    render(<AgentActivityPanel sessionId={SESSION_ID} />);
+    render(<ExecutionPanel sessionId={SESSION_ID} />);
 
-    expect(screen.getByText("Agent Activity")).toBeInTheDocument();
+    expect(screen.getByText("Execution Trace")).toBeInTheDocument();
   });
 });

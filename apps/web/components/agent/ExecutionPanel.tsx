@@ -71,7 +71,7 @@ type ActiveTab = "evidence" | "notes";
 
 // ---- Main component ----
 
-export default function AgentActivityPanel({ sessionId }: Props): React.ReactElement {
+export default function ExecutionPanel({ sessionId }: Props): React.ReactElement {
   const { getSessionState } = useChatStateContext();
   const { graphRun, sessionStartedAt, sessionEndedAt, isSending, usage } =
     getSessionState(sessionId);
@@ -89,7 +89,7 @@ export default function AgentActivityPanel({ sessionId }: Props): React.ReactEle
       <div className="px-4 py-3 border-b border-white/8 flex items-center justify-between shrink-0">
         <div className="flex items-center gap-2">
           <span className="text-[11px] font-semibold text-white/70 uppercase tracking-wider">
-            Agent Activity
+            Execution Trace
           </span>
         </div>
         {isSending && (
@@ -100,11 +100,7 @@ export default function AgentActivityPanel({ sessionId }: Props): React.ReactEle
         )}
       </div>
 
-      {/* Processing Steps */}
       <div className="px-4 pt-3 pb-1 shrink-0">
-        <p className="text-[10px] font-semibold uppercase tracking-widest text-white/30 mb-2.5">
-          Processing steps
-        </p>
         {graphRun.length === 0 ? (
           <div className="py-4 text-center">
             <p className="text-[11px] text-white/35">No active analysis yet.</p>

@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { SlidersHorizontal, ChevronDown, Mic, BrainCircuit } from "lucide-react";
-import AgentActivityPanel from "@/components/agent/AgentActivityPanel";
+import ExecutionPanel from "@/components/agent/ExecutionPanel";
 import QuickActionGrid from "@/components/analysis/QuickActionGrid";
 import MessageBubble from "@/components/MessageBubble";
 import { ExecutionProgressPanel } from "@/components/ExecutionProgressPanel";
@@ -118,7 +118,7 @@ export default function ChatPage({ params }: ChatPageProps) {
                 : "bg-transparent text-muted dark:text-white/40 border-border dark:border-white/10 hover:text-foreground dark:hover:text-white/70 hover:border-muted dark:hover:border-white/20"
             }`}
           >
-            Agent Activity <kbd className="ml-1 opacity-50 font-mono">⌘.</kbd>
+            Execution Trace <kbd className="ml-1 opacity-50 font-mono">⌘.</kbd>
           </button>
         </header>
 
@@ -245,7 +245,7 @@ export default function ChatPage({ params }: ChatPageProps) {
 
           {showActivity && (
             <div className="w-80 shrink-0 border-l border-border dark:border-white/8 bg-surface dark:bg-[#0B1020] overflow-hidden flex flex-col custom-scrollbar">
-              <AgentActivityPanel sessionId={sessionId} />
+              <ExecutionPanel sessionId={sessionId} />
             </div>
           )}
         </main>
