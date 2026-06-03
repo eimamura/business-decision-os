@@ -1,6 +1,5 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import {
   LineChart,
   Line,
@@ -11,47 +10,12 @@ import {
   Legend,
   ResponsiveContainer,
 } from "recharts";
+import { useKpiTrends, useLlmCostEntries } from "@/features/kpi/hooks";
+import type { KpiTrend, LlmCostEntry } from "@/features/kpi/api";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
-
-interface KpiTrend {
-  date: string;
-  service_level?: number;
-  inventory_cost?: number;
-  stockout_days?: number;
-  working_capital?: number;
-}
-
-interface LlmCostEntry {
-  date: string;
-  specialist: string;
-  model: string;
-  cost_usd: number;
-}
-
-export default function KpiPage() {
-  const [kpiData, setKpiData] = useState<KpiTrend[]>([]);
-  const [llmData, setLlmData] = useState<LlmCostEntry[]>([]);
-  const [kpiLoading, setKpiLoading] = useState(true);
-  const [llmLoading, setLlmLoading] = useState(true);
-
-  useEffect(() => {
-    fetch(`${API_BASE}/api/v1/kpi/trends`, {
-      headers: { "X-Dev-User": "dev-user" },
-    })
-      .then((r) => r.json())
-      .then((data) => setKpiData(Array.isArray(data) ? data : data.items ?? []))
-      .catch(() => setKpiData([]))
-      .finally(() => setKpiLoading(false));
-
-    fetch(`${API_BASE}/api/v1/kpi/llm-cost`, {
-      headers: { "X-Dev-User": "dev-user" },
-    })
-      .then((r) => r.json())
-      .then((data) => setLlmData(Array.isArray(data) ? data : data.items ?? []))
-      .catch(() => setLlmData([]))
-      .finally(() => setLlmLoading(false));
-  }, []);
+export default function KpiPage(): React.ReactElement {
+  const { data: kpiData = [], isLoading: kpiLoading } = useKpiTrends();
+  const { data: llmData = [], isLoading: llmLoading } = useLlmCostEntries();
 
   const llmByDate = aggregateLlmByDate(llmData);
 
@@ -144,7 +108,7 @@ export default function KpiPage() {
   );
 }
 
-function PlaceholderChart({ label, height = 256 }: { label: string; height?: number }) {
+function PlaceholderChart({ label, height = 256 }: { label: string; height?: number }): React.ReactElement {
   return (
     <div
       className="flex items-center justify-center bg-surface rounded-lg border border-dashed border-border text-muted text-sm"

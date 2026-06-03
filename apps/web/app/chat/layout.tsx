@@ -5,7 +5,8 @@ import { useRouter } from "next/navigation";
 import type { ReactNode } from "react";
 import SessionsContext from "./SessionsContext";
 import { ChatStateProvider } from "./ChatStateContext";
-import { fetchSessions, createSession, deleteSession, deleteAllSessions } from "@/lib/api";
+import { createSession, deleteSession, deleteAllSessions } from "@/lib/api";
+import { useSessions } from "@/features/sessions/hooks";
 import type { Session } from "@/types/chat";
 
 interface ChatLayoutProps {
@@ -18,11 +19,11 @@ export default function ChatLayout({ children }: ChatLayoutProps): React.ReactEl
   const [creating, setCreating] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
 
+  const { data: fetchedSessions = [] } = useSessions();
+
   useEffect(() => {
-    fetchSessions()
-      .then(setSessions)
-      .catch(() => setSessions([]));
-  }, []);
+    setSessions(fetchedSessions);
+  }, [fetchedSessions]);
 
   const onNewSession = useCallback(async (): Promise<void> => {
     setCreating(true);
@@ -43,7 +44,6 @@ export default function ChatLayout({ children }: ChatLayoutProps): React.ReactEl
       setSessions(snapshot);
       setDeleteError("Failed to delete session. Please try again.");
     }
-    // Navigation after delete is handled by the page itself (it knows the active sessionId)
   }, [sessions]);
 
   const onDeleteAll = useCallback(async (): Promise<void> => {

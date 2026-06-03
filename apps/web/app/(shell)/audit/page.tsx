@@ -1,28 +1,17 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
+import { useAuditEntries } from "@/features/audit/hooks";
+import type { AuditEntry } from "@/features/audit/api";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
-
-interface AuditEntry {
-  id: string;
-  session_id?: string;
-  agent?: string;
-  tool_name?: string;
-  status: string;
-  input?: unknown;
-  output?: unknown;
-  tokens_in?: number;
-  tokens_out?: number;
-  cost_usd?: number;
-  created_at: string;
-  audit_hash?: string;
-}
-
-export default function AuditPage() {
-  const [entries, setEntries] = useState<AuditEntry[]>([]);
-  const [loading, setLoading] = useState(true);
+export default function AuditPage(): React.ReactElement {
   const [filters, setFilters] = useState({
+    session_id: "",
+    agent: "",
+    tool: "",
+    status: "",
+  });
+  const [activeFilters, setActiveFilters] = useState({
     session_id: "",
     agent: "",
     tool: "",
@@ -30,7 +19,7 @@ export default function AuditPage() {
   });
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
 
-  function toggleExpanded(id: string) {
+  function toggleExpanded(id: string): void {
     setExpanded((prev) => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id);
@@ -39,26 +28,10 @@ export default function AuditPage() {
     });
   }
 
-  function loadEntries() {
-    setLoading(true);
-    const params = new URLSearchParams();
-    if (filters.session_id) params.set("session_id", filters.session_id);
-    if (filters.agent) params.set("agent", filters.agent);
-    if (filters.tool) params.set("tool", filters.tool);
-    if (filters.status) params.set("status", filters.status);
-
-    fetch(`${API_BASE}/api/v1/audit?${params}`, {
-      headers: { "X-Dev-User": "dev-user" },
-    })
-      .then((r) => r.json())
-      .then((data) => setEntries(Array.isArray(data) ? data : data.items ?? []))
-      .catch(() => setEntries([]))
-      .finally(() => setLoading(false));
-  }
-
-  useEffect(() => {
-    loadEntries();
-  }, []);
+  const { data: entries = [], isLoading: loading } = useAuditEntries({
+    sessionId: activeFilters.session_id || undefined,
+    role: activeFilters.agent || undefined,
+  });
 
   const totalTokensIn = entries.reduce((s, e) => s + (e.tokens_in ?? 0), 0);
   const totalTokensOut = entries.reduce((s, e) => s + (e.tokens_out ?? 0), 0);
@@ -88,7 +61,7 @@ export default function AuditPage() {
               />
             ))}
             <button
-              onClick={loadEntries}
+              onClick={() => setActiveFilters(filters)}
               className="bg-blue-600 text-white px-4 py-1.5 rounded-lg text-sm font-medium hover:bg-blue-700"
             >
               Filter
@@ -139,7 +112,7 @@ export default function AuditPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
-                {entries.map((e) => (
+                {entries.map((e: AuditEntry) => (
                   <>
                     <tr key={e.id} className="hover:bg-surface transition-colors">
                       <td className="px-5 py-3 text-xs text-muted font-mono whitespace-nowrap">

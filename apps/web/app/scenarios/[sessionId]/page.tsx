@@ -1,6 +1,5 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import Link from "next/link";
 import {
   RadarChart,
@@ -12,20 +11,8 @@ import {
   ResponsiveContainer,
   Tooltip,
 } from "recharts";
-
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
-
-interface KpiScore {
-  kpi: string;
-  score: number;
-}
-
-interface Candidate {
-  id: string;
-  label: string;
-  kpi_scores: KpiScore[];
-  is_primary: boolean;
-}
+import { useScenarios } from "@/features/scenarios/hooks";
+import type { Candidate } from "@/features/scenarios/api";
 
 interface ScenarioPageProps {
   params: { sessionId: string };
@@ -33,20 +20,9 @@ interface ScenarioPageProps {
 
 const COLORS = ["#3b82f6", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6"];
 
-export default function ScenarioPage({ params }: ScenarioPageProps) {
+export default function ScenarioPage({ params }: ScenarioPageProps): React.ReactElement {
   const { sessionId } = params;
-  const [candidates, setCandidates] = useState<Candidate[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    fetch(`${API_BASE}/api/v1/sessions/${sessionId}/scenarios`, {
-      headers: { "X-Dev-User": "dev-user" },
-    })
-      .then((r) => r.json())
-      .then((data) => setCandidates(Array.isArray(data) ? data : data.candidates ?? []))
-      .catch(() => setCandidates([]))
-      .finally(() => setLoading(false));
-  }, [sessionId]);
+  const { data: candidates = [], isLoading: loading } = useScenarios(sessionId);
 
   const radarData = buildRadarData(candidates);
   const kpis = radarData.length > 0 ? Object.keys(radarData[0]).filter((k) => k !== "kpi") : [];
@@ -77,7 +53,7 @@ export default function ScenarioPage({ params }: ScenarioPageProps) {
                   <PolarGrid />
                   <PolarAngleAxis dataKey="kpi" tick={{ fontSize: 12 }} />
                   <PolarRadiusAxis angle={90} domain={[0, 1]} tick={{ fontSize: 10 }} />
-                  {candidates.map((c, i) => (
+                  {candidates.map((c: Candidate, i) => (
                     <Radar
                       key={c.id}
                       name={c.label ?? `Candidate ${i + 1}`}
@@ -112,7 +88,7 @@ export default function ScenarioPage({ params }: ScenarioPageProps) {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
-                    {candidates.map((c, i) => (
+                    {candidates.map((c: Candidate, i) => (
                       <tr key={c.id} className={c.is_primary ? "bg-blue-50" : ""}>
                         <td className="px-6 py-3 font-medium text-gray-900">
                           <span

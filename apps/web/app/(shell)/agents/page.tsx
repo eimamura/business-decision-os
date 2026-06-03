@@ -1,34 +1,14 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useState } from "react";
 import { RefreshCw } from "lucide-react";
-
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
-const DEV_HEADERS = { "X-Dev-User": "dev-user" };
-
-interface AgentEntry {
-  role: string;
-  display_name: string;
-  category: "domain" | "cross_domain" | "orchestrator";
-  tools: string[];
-  execution_count: number;
-  last_executed_at: string | null;
-}
-
-interface ToolEntry {
-  name: string;
-  display_name: string;
-  used_by_agents: string[];
-  execution_count: number;
-  last_executed_at: string | null;
-}
-
-interface RegistryData {
-  agents: AgentEntry[];
-  tools: ToolEntry[];
-}
+import { useAgentRegistry } from "@/features/agents/hooks";
+import type { RegistryData } from "@/features/agents/api";
 
 type ActiveTab = "agents" | "tools";
+
+type AgentEntry = RegistryData["agents"][number];
+type ToolEntry = RegistryData["tools"][number];
 
 function fmtTime(iso: string | null): string {
   if (!iso) return "—";
@@ -65,28 +45,8 @@ function agentBadgeClass(role: string): string {
 }
 
 export default function AgentsPage(): React.ReactElement {
-  const [data, setData] = useState<RegistryData>({ agents: [], tools: [] });
-  const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<ActiveTab>("agents");
-
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
-      const res = await fetch(`${API_BASE}/api/v1/admin/registry`, { headers: DEV_HEADERS });
-      const json: unknown = res.ok ? await res.json() : null;
-      if (json && typeof json === "object" && "agents" in json && "tools" in json) {
-        setData(json as RegistryData);
-      }
-    } catch {
-      // leave stale data
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    void load();
-  }, [load]);
+  const { data = { agents: [], tools: [] }, isLoading: loading, refetch } = useAgentRegistry();
 
   const totalRuns = data.agents.reduce((s, a) => s + a.execution_count, 0);
   const totalCalls = data.tools.reduce((s, t) => s + t.execution_count, 0);
@@ -97,7 +57,7 @@ export default function AgentsPage(): React.ReactElement {
         <h1 className="text-sm font-semibold text-foreground dark:text-white">Agents &amp; Tools</h1>
         <button
           type="button"
-          onClick={() => void load()}
+          onClick={() => void refetch()}
           className="flex items-center gap-1.5 text-xs text-muted dark:text-white/40 hover:text-foreground dark:hover:text-white/70 transition-colors"
         >
           <RefreshCw size={12} className={loading ? "animate-spin" : ""} />
@@ -106,7 +66,6 @@ export default function AgentsPage(): React.ReactElement {
       </header>
 
       <main className="max-w-screen-xl mx-auto px-6 py-6 space-y-6">
-        {/* Stats bar */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           {[
             { label: "Agents", value: data.agents.length.toString() },
@@ -121,7 +80,6 @@ export default function AgentsPage(): React.ReactElement {
           ))}
         </div>
 
-        {/* Tab switcher */}
         <div className="flex gap-1 bg-white/4 rounded-lg p-1 w-fit">
           {(["agents", "tools"] as ActiveTab[]).map((t) => (
             <button

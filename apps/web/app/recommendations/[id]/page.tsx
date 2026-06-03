@@ -1,43 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import Link from "next/link";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeSanitize from "rehype-sanitize";
-
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
-
-interface KpiScore {
-  kpi: string;
-  score: number;
-}
-
-interface TradeoffExplanation {
-  what_you_give_up: string;
-  benefit: string;
-}
-
-interface Alternative {
-  id: string;
-  label: string;
-  kpi_scores: KpiScore[];
-  tradeoff: TradeoffExplanation;
-}
-
-interface Recommendation {
-  id: string;
-  session_id: string;
-  primary_candidate_id: string;
-  primary_label: string;
-  primary_kpi_scores: KpiScore[];
-  alternatives: Alternative[];
-  rationale: string;
-  risk_level: "low" | "medium" | "high";
-  requires_approval: boolean;
-  weight_vector: Record<string, number>;
-  created_at: string;
-}
+import { useRecommendation } from "@/features/recommendations/hooks";
+import type { Recommendation } from "@/features/recommendations/api";
 
 interface RecommendationPageProps {
   params: { id: string };
@@ -49,20 +17,9 @@ const RISK_STYLES = {
   high: "bg-red-100 text-red-700",
 };
 
-export default function RecommendationPage({ params }: RecommendationPageProps) {
+export default function RecommendationPage({ params }: RecommendationPageProps): React.ReactElement {
   const { id } = params;
-  const [rec, setRec] = useState<Recommendation | null>(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    fetch(`${API_BASE}/api/v1/recommendations/${id}`, {
-      headers: { "X-Dev-User": "dev-user" },
-    })
-      .then((r) => r.json())
-      .then((data) => setRec(data))
-      .catch(() => setRec(null))
-      .finally(() => setLoading(false));
-  }, [id]);
+  const { data: recommendation, isLoading: loading } = useRecommendation(id);
 
   if (loading) {
     return (
@@ -72,7 +29,7 @@ export default function RecommendationPage({ params }: RecommendationPageProps) 
     );
   }
 
-  if (!rec) {
+  if (recommendation === undefined && !loading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-gray-500">Recommendation not found.</div>
@@ -80,17 +37,25 @@ export default function RecommendationPage({ params }: RecommendationPageProps) 
     );
   }
 
+  if (!recommendation) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-gray-400">Loading...</div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-gray-50">
       <header className="bg-white border-b border-gray-200 px-6 py-4 flex items-center gap-4">
-        <Link href={`/chat/${rec.session_id}`} className="text-sm text-blue-600 hover:underline">
+        <Link href={`/chat/${recommendation.session_id}`} className="text-sm text-blue-600 hover:underline">
           ← Back to Chat
         </Link>
         <h1 className="text-lg font-semibold text-gray-900">Recommendation Detail</h1>
         <span
-          className={`ml-auto text-xs px-2.5 py-1 rounded-full font-medium capitalize ${RISK_STYLES[rec.risk_level]}`}
+          className={`ml-auto text-xs px-2.5 py-1 rounded-full font-medium capitalize ${RISK_STYLES[recommendation.risk_level]}`}
         >
-          {rec.risk_level} risk
+          {recommendation.risk_level} risk
         </span>
       </header>
 
@@ -99,30 +64,30 @@ export default function RecommendationPage({ params }: RecommendationPageProps) 
           <div className="flex items-start justify-between mb-4">
             <div>
               <h2 className="text-base font-semibold text-gray-900">Primary Recommendation</h2>
-              <p className="text-sm text-gray-600 mt-0.5">{rec.primary_label}</p>
+              <p className="text-sm text-gray-600 mt-0.5">{recommendation.primary_label}</p>
             </div>
-            {rec.requires_approval && (
+            {recommendation.requires_approval && (
               <span className="bg-orange-100 text-orange-700 text-xs px-2.5 py-1 rounded-full font-medium">
                 Requires Approval
               </span>
             )}
           </div>
-          <KpiScoreGrid scores={rec.primary_kpi_scores} />
+          <KpiScoreGrid scores={recommendation.primary_kpi_scores} />
         </div>
 
         <div className="bg-white rounded-xl border border-gray-200 p-6">
           <h2 className="text-base font-semibold text-gray-900 mb-3">Rationale</h2>
           <div className="prose prose-sm max-w-none text-gray-700">
             <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeSanitize]}>
-              {rec.rationale}
+              {recommendation.rationale}
             </ReactMarkdown>
           </div>
         </div>
 
-        {rec.alternatives.length > 0 && (
+        {recommendation.alternatives.length > 0 && (
           <div className="space-y-4">
             <h2 className="text-base font-semibold text-gray-900">Alternatives</h2>
-            {rec.alternatives.map((alt) => (
+            {recommendation.alternatives.map((alt) => (
               <div key={alt.id} className="bg-white rounded-xl border border-gray-200 p-6">
                 <h3 className="text-sm font-semibold text-gray-800 mb-2">{alt.label}</h3>
                 <KpiScoreGrid scores={alt.kpi_scores} />
@@ -146,7 +111,7 @@ export default function RecommendationPage({ params }: RecommendationPageProps) 
         <div className="bg-white rounded-xl border border-gray-200 p-6">
           <h2 className="text-sm font-semibold text-gray-800 mb-3">Weight Vector Used</h2>
           <div className="flex flex-wrap gap-2">
-            {Object.entries(rec.weight_vector).map(([kpi, w]) => (
+            {Object.entries(recommendation.weight_vector).map(([kpi, w]) => (
               <span key={kpi} className="text-xs bg-gray-100 text-gray-700 px-2.5 py-1 rounded-full">
                 {kpi}: {(w * 100).toFixed(0)}%
               </span>
@@ -158,7 +123,7 @@ export default function RecommendationPage({ params }: RecommendationPageProps) 
   );
 }
 
-function KpiScoreGrid({ scores }: { scores: KpiScore[] }) {
+function KpiScoreGrid({ scores }: { scores: Recommendation["primary_kpi_scores"] }): React.ReactElement {
   return (
     <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
       {scores.map((s) => (

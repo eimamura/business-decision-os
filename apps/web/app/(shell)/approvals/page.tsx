@@ -1,19 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import Link from "next/link";
-
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
-
-interface Approval {
-  id: string;
-  recommendation_id: string;
-  status: "pending" | "approved" | "rejected" | "needs_revision" | "expired";
-  risk_level: "low" | "medium" | "high";
-  summary?: string;
-  expires_at?: string;
-  created_at: string;
-}
+import { useApprovals, useApprovalDecision, useApprovalRevision } from "@/features/approvals/hooks";
+import type { Approval } from "@/features/approvals/api";
 
 const RISK_STYLES = {
   low: "bg-green-100 text-green-700 dark:bg-green-500/15 dark:text-green-300",
@@ -29,75 +19,48 @@ const STATUS_STYLES: Record<string, string> = {
   expired: "bg-surface text-muted dark:bg-gray-100 dark:text-gray-600",
 };
 
-export default function ApprovalsPage() {
-  const [approvals, setApprovals] = useState<Approval[]>([]);
-  const [loading, setLoading] = useState(true);
+export default function ApprovalsPage(): React.ReactElement {
   const [actionId, setActionId] = useState<string | null>(null);
   const [revisionId, setRevisionId] = useState<string | null>(null);
   const [revisionReason, setRevisionReason] = useState("");
   const [weights, setWeights] = useState<Record<string, string>>({});
   const [statusFilter, setStatusFilter] = useState("pending");
 
-  function loadApprovals(status: string) {
-    setLoading(true);
-    fetch(`${API_BASE}/api/v1/approvals?status=${status}`, {
-      headers: { "X-Dev-User": "dev-user" },
-    })
-      .then((r) => r.json())
-      .then((data) => setApprovals(Array.isArray(data) ? data : data.items ?? []))
-      .catch(() => setApprovals([]))
-      .finally(() => setLoading(false));
-  }
+  const { data: approvals = [], isLoading: loading } = useApprovals(statusFilter);
+  const decisionMutation = useApprovalDecision();
+  const revisionMutation = useApprovalRevision();
 
-  useEffect(() => {
-    loadApprovals(statusFilter);
-  }, [statusFilter]);
-
-  async function decide(id: string, decision: "approved" | "rejected") {
+  function decide(id: string, decision: "approved" | "rejected"): void {
     setActionId(id);
-    try {
-      await fetch(`${API_BASE}/api/v1/approvals/${id}/decision`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-Dev-User": "dev-user",
-        },
-        body: JSON.stringify({ decision }),
-      });
-      loadApprovals(statusFilter);
-    } finally {
-      setActionId(null);
-    }
+    decisionMutation.mutate({ id, decision }, { onSettled: () => setActionId(null) });
   }
 
-  async function requestRevision(id: string) {
+  function requestRevision(id: string): void {
     if (!revisionReason.trim()) return;
     setActionId(id);
-    const weightOverride: Record<string, number> = {};
+    const parsedWeights: Record<string, number> = {};
     for (const [k, v] of Object.entries(weights)) {
       const n = parseFloat(v);
-      if (!isNaN(n)) weightOverride[k] = n;
+      if (!isNaN(n)) parsedWeights[k] = n;
     }
-    try {
-      await fetch(`${API_BASE}/api/v1/approvals/${id}/decision`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-Dev-User": "dev-user",
-        },
-        body: JSON.stringify({
+    revisionMutation.mutate(
+      {
+        id,
+        payload: {
           decision: "needs_revision",
           reason: revisionReason,
-          weight_override: Object.keys(weightOverride).length > 0 ? weightOverride : undefined,
-        }),
-      });
-      setRevisionId(null);
-      setRevisionReason("");
-      setWeights({});
-      loadApprovals(statusFilter);
-    } finally {
-      setActionId(null);
-    }
+          kpi_weights: Object.keys(parsedWeights).length > 0 ? parsedWeights : undefined,
+        },
+      },
+      {
+        onSuccess: () => {
+          setRevisionId(null);
+          setRevisionReason("");
+          setWeights({});
+        },
+        onSettled: () => setActionId(null),
+      },
+    );
   }
 
   return (
@@ -130,7 +93,7 @@ export default function ApprovalsPage() {
           </div>
         ) : (
           <ul className="space-y-4">
-            {approvals.map((a) => (
+            {approvals.map((a: Approval) => (
               <li key={a.id} className="bg-background rounded-xl border border-border p-5">
                 <div className="flex items-start justify-between gap-4">
                   <div className="flex-1 min-w-0">

@@ -1,30 +1,8 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
-
-interface GroundTruthDataset {
-  columns: string[];
-  rows: string[][];
-}
-
-interface GroundTruthResponse {
-  sku_parameters: GroundTruthDataset;
-  location_parameters: GroundTruthDataset;
-  supplier_parameters: GroundTruthDataset;
-  customer_parameters: GroundTruthDataset;
-}
-
-interface SampleDataTable {
-  table_name: string;
-  row_count: number;
-  top_rows: Record<string, unknown>[];
-}
-
-interface SampleDataResponse {
-  tables: SampleDataTable[];
-}
+import { useGroundTruth, useSaveGroundTruth, useGenerateSampleData } from "@/features/settings/hooks";
+import type { GroundTruthResponse, GroundTruthDataset, SampleDataTable } from "@/features/settings/api";
 
 type StatusMsg = { type: "success" | "error"; message: string };
 
@@ -44,10 +22,16 @@ function formatCell(value: unknown): string {
 }
 
 export default function SettingsPage(): React.ReactElement {
-  const [groundTruth, setGroundTruth] = useState<GroundTruthResponse | null>(null);
-  const [gtLoading, setGtLoading] = useState(true);
+  const { data: groundTruth, isLoading: gtLoading } = useGroundTruth();
+  const saveGroundTruthMutation = useSaveGroundTruth();
+  const generateSampleMutation = useGenerateSampleData();
+
+  const [editedGroundTruth, setEditedGroundTruth] = useState<GroundTruthResponse | null>(null);
+  useEffect(() => {
+    if (groundTruth && !editedGroundTruth) setEditedGroundTruth(groundTruth);
+  }, [groundTruth, editedGroundTruth]);
+
   const [activeTab, setActiveTab] = useState<TabKey>("sku_parameters");
-  const [saving, setSaving] = useState(false);
   const [saveStatus, setSaveStatus] = useState<StatusMsg | null>(null);
 
   const [sampleSeed, setSampleSeed] = useState("42");
@@ -55,27 +39,13 @@ export default function SettingsPage(): React.ReactElement {
   const [sampleHorizonDays, setSampleHorizonDays] = useState("365");
   const [sampleWarehouseCount, setSampleWarehouseCount] = useState("2");
   const [sampleMissingRate, setSampleMissingRate] = useState("0.02");
-  const [sampleGenerating, setSampleGenerating] = useState(false);
   const [sampleStatus, setSampleStatus] = useState<StatusMsg | null>(null);
   const [sampleTables, setSampleTables] = useState<SampleDataTable[]>([]);
 
-  useEffect(() => {
-    fetch(`${API_BASE}/api/v1/admin/ground-truth`, {
-      headers: { "X-Dev-User": "dev-admin" },
-    })
-      .then((r) => {
-        if (!r.ok) throw new Error(`HTTP ${r.status}`);
-        return r.json() as Promise<GroundTruthResponse>;
-      })
-      .then(setGroundTruth)
-      .catch(() => setSaveStatus({ type: "error", message: "Failed to load ground truth parameters." }))
-      .finally(() => setGtLoading(false));
-  }, []);
-
   const updateCell = useCallback((tab: TabKey, rowIdx: number, colIdx: number, value: string) => {
-    setGroundTruth((prev) => {
+    setEditedGroundTruth((prev) => {
       if (!prev) return prev;
-      const dataset = prev[tab];
+      const dataset: GroundTruthDataset = prev[tab];
       const newRows = dataset.rows.map((r, ri) =>
         ri === rowIdx ? r.map((c, ci) => (ci === colIdx ? value : c)) : r
       );
@@ -83,77 +53,51 @@ export default function SettingsPage(): React.ReactElement {
     });
   }, []);
 
-  async function handleSave(): Promise<void> {
-    if (!groundTruth) return;
-    setSaving(true);
+  function handleSave(): void {
+    if (!editedGroundTruth) return;
     setSaveStatus(null);
-    try {
-      const res = await fetch(`${API_BASE}/api/v1/admin/ground-truth`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json", "X-Dev-User": "dev-admin" },
-        body: JSON.stringify(groundTruth),
-      });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error((err as { detail?: string }).detail ?? `HTTP ${res.status}`);
-      }
-      const updated = await res.json() as GroundTruthResponse;
-      setGroundTruth(updated);
-      setSaveStatus({ type: "success", message: "Ground truth parameters saved." });
-    } catch (err: unknown) {
-      setSaveStatus({ type: "error", message: err instanceof Error ? err.message : "Save failed." });
-    } finally {
-      setSaving(false);
-    }
+    saveGroundTruthMutation.mutate(editedGroundTruth, {
+      onSuccess: () => setSaveStatus({ type: "success", message: "Ground truth parameters saved." }),
+      onError: (err) =>
+        setSaveStatus({ type: "error", message: err instanceof Error ? err.message : "Save failed." }),
+    });
   }
 
-  async function handleGenerate(e: React.FormEvent): Promise<void> {
+  function handleGenerate(e: React.FormEvent): void {
     e.preventDefault();
-    setSampleGenerating(true);
     setSampleStatus(null);
     setSampleTables([]);
-    try {
-      const res = await fetch(`${API_BASE}/api/v1/admin/sample-data/generate`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "X-Dev-User": "dev-admin" },
-        body: JSON.stringify({
-          seed: Number(sampleSeed),
-          sku_count: Number(sampleSkuCount),
-          horizon_days: Number(sampleHorizonDays),
-          warehouse_count: Number(sampleWarehouseCount),
-          missing_rate: Number(sampleMissingRate),
-        }),
-      });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        const detail = (err as { detail?: string | { msg?: string }[] }).detail;
-        if (Array.isArray(detail) && detail.length > 0) {
-          throw new Error(detail.map((item) => item.msg ?? "Invalid input").join("; "));
-        }
-        throw new Error(typeof detail === "string" ? detail : `HTTP ${res.status}`);
-      }
-      const data = await res.json() as SampleDataResponse;
-      setSampleTables(data.tables);
-      setSampleStatus({ type: "success", message: "Sample data generated and loaded into database." });
-    } catch (err: unknown) {
-      setSampleStatus({ type: "error", message: err instanceof Error ? err.message : "Generation failed." });
-    } finally {
-      setSampleGenerating(false);
-    }
+    generateSampleMutation.mutate(
+      {
+        seed: Number(sampleSeed),
+        sku_count: Number(sampleSkuCount),
+        horizon_days: Number(sampleHorizonDays),
+        warehouse_count: Number(sampleWarehouseCount),
+        missing_rate: Number(sampleMissingRate),
+      },
+      {
+        onSuccess: (data) => {
+          setSampleTables(data.tables);
+          setSampleStatus({ type: "success", message: "Sample data generated and loaded into database." });
+        },
+        onError: (err) =>
+          setSampleStatus({ type: "error", message: err instanceof Error ? err.message : "Generation failed." }),
+      },
+    );
   }
 
-  const currentDataset = groundTruth?.[activeTab];
+  const saving = saveGroundTruthMutation.isPending;
+  const sampleGenerating = generateSampleMutation.isPending;
+  const currentDataset = editedGroundTruth?.[activeTab];
 
   return (
     <div className="min-h-screen bg-background dark:bg-[#070B14] text-foreground dark:text-white">
-      {/* Header */}
       <header className="border-b border-border dark:border-white/5 px-6 py-3 flex items-center gap-4">
         <h1 className="text-sm font-semibold text-foreground/80 dark:text-white/80 tracking-tight">Data Generation Studio</h1>
       </header>
 
       <main className="max-w-6xl mx-auto px-6 py-8 space-y-6">
 
-        {/* Ground Truth Parameters */}
         <section className="bg-surface dark:bg-[#0F1629] border border-border dark:border-white/8 rounded-xl overflow-hidden">
           <div className="px-5 py-4 border-b border-border dark:border-white/5 flex items-center justify-between">
             <div>
@@ -170,7 +114,7 @@ export default function SettingsPage(): React.ReactElement {
               )}
               <button
                 onClick={handleSave}
-                disabled={saving || gtLoading || !groundTruth}
+                disabled={saving || gtLoading || !editedGroundTruth}
                 className="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 text-white px-4 py-1.5 rounded-lg text-xs font-medium transition-colors"
               >
                 {saving ? "Saving…" : "Save Ground Truth"}
@@ -178,7 +122,6 @@ export default function SettingsPage(): React.ReactElement {
             </div>
           </div>
 
-          {/* Tabs */}
           <div className="flex border-b border-border dark:border-white/5">
             {TABS.map(({ key, label }) => (
               <button
@@ -191,16 +134,15 @@ export default function SettingsPage(): React.ReactElement {
                 }`}
               >
                 {label}
-                {groundTruth && (
+                {editedGroundTruth && (
                   <span className="ml-1.5 text-[10px] text-muted dark:text-white/25">
-                    {groundTruth[key].rows.length}
+                    {editedGroundTruth[key].rows.length}
                   </span>
                 )}
               </button>
             ))}
           </div>
 
-          {/* Editable Table */}
           <div className="overflow-x-auto">
             {gtLoading ? (
               <div className="px-5 py-8 space-y-2">
@@ -245,7 +187,6 @@ export default function SettingsPage(): React.ReactElement {
           </div>
         </section>
 
-        {/* Generation Config */}
         <section className="bg-surface dark:bg-[#0F1629] border border-border dark:border-white/8 rounded-xl p-5">
           <h2 className="text-sm font-semibold text-foreground dark:text-white mb-4">Generation Config</h2>
           <form onSubmit={handleGenerate} className="space-y-4">
@@ -304,7 +245,6 @@ export default function SettingsPage(): React.ReactElement {
           </form>
         </section>
 
-        {/* Preview Results */}
         {sampleTables.length > 0 && (
           <section>
             <h2 className="text-sm font-semibold text-muted dark:text-white/60 mb-3 px-1">

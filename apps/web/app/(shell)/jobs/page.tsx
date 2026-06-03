@@ -2,34 +2,10 @@
 
 import React, { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
+import { useJobs, useJobFiles } from "@/features/jobs/hooks";
+import type { JobResponse, JobFileResponse, StatusFilter } from "@/features/jobs/api";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
-
-// ---------------------------------------------------------------------------
-// Types (matching packages/schemas/jobs.py)
-// ---------------------------------------------------------------------------
-
-interface JobFileResponse {
-  id: string;
-  job_id: string;
-  file_name: string;
-  file_size_bytes: number;
-  mime_type: string;
-  download_url: string;
-  created_at: string;
-}
-
-interface JobResponse {
-  id: string;
-  session_id: string | null;
-  status: string;
-  job_type: string;
-  created_at: string;
-  completed_at: string | null;
-  approval_id: string | null;
-  result_json: Record<string, unknown> | null;
-  generated_files: JobFileResponse[];
-}
+const API_BASE = "";
 
 interface JobListResponse {
   items: JobResponse[];
@@ -42,18 +18,6 @@ interface FileListResponse {
 }
 
 type Tab = "jobs" | "files";
-
-type StatusFilter =
-  | ""
-  | "pending_approval"
-  | "running"
-  | "completed"
-  | "failed"
-  | "cancelled";
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
 
 function formatBytes(bytes: number): string {
   if (bytes === 0) return "0 B";
@@ -90,7 +54,6 @@ function statusBadge(status: string): React.ReactElement {
   );
 }
 
-/** Extract up to 3 scalar (string | number | boolean) key-value pairs from result_json. */
 function resultSummaryEntries(
   result: Record<string, unknown> | null,
 ): Array<{ key: string; value: string }> {
@@ -100,10 +63,6 @@ function resultSummaryEntries(
     .slice(0, 3)
     .map(([k, v]) => ({ key: k, value: String(v) }));
 }
-
-// ---------------------------------------------------------------------------
-// Expandable row detail component
-// ---------------------------------------------------------------------------
 
 interface JobDetailPanelProps {
   job: JobResponse;
@@ -123,7 +82,6 @@ function JobDetailPanel({ job, detail, loading }: JobDetailPanelProps): React.Re
           <p className="text-xs text-muted animate-pulse">Loading details...</p>
         ) : (
           <div className="flex gap-8 text-sm">
-            {/* Result summary */}
             <div className="flex-1">
               <p className="text-xs font-semibold text-muted uppercase tracking-wide mb-2">
                 Result
@@ -142,7 +100,6 @@ function JobDetailPanel({ job, detail, loading }: JobDetailPanelProps): React.Re
               )}
             </div>
 
-            {/* Generated files */}
             <div className="flex-1">
               <p className="text-xs font-semibold text-muted uppercase tracking-wide mb-2">
                 Files
@@ -176,48 +133,56 @@ function JobDetailPanel({ job, detail, loading }: JobDetailPanelProps): React.Re
   );
 }
 
-// ---------------------------------------------------------------------------
-// Page
-// ---------------------------------------------------------------------------
-
 export default function JobsPage(): React.ReactElement {
   const [tab, setTab] = useState<Tab>("jobs");
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("");
 
-  // Jobs tab state
+  const { data: initialJobs } = useJobs(statusFilter);
+  const { data: initialFiles } = useJobFiles();
+
   const [jobs, setJobs] = useState<JobResponse[]>([]);
   const [jobsCursor, setJobsCursor] = useState<string | null>(null);
   const [jobsLoading, setJobsLoading] = useState(false);
-  const [jobsInitialized, setJobsInitialized] = useState(false);
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>("");
 
-  // Expanded row state: job id → { detail, loading }
+  const [files, setFiles] = useState<JobFileResponse[]>([]);
+  const [filesCursor, setFilesCursor] = useState<string | null>(null);
+  const [filesLoading, setFilesLoading] = useState(false);
+
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [detailMap, setDetailMap] = useState<
     Record<string, { detail: JobResponse | null; loading: boolean }>
   >({});
 
-  // Files tab state
-  const [files, setFiles] = useState<JobFileResponse[]>([]);
-  const [filesCursor, setFilesCursor] = useState<string | null>(null);
-  const [filesLoading, setFilesLoading] = useState(false);
-  const [filesInitialized, setFilesInitialized] = useState(false);
+  useEffect(() => {
+    if (initialJobs) {
+      setJobs(initialJobs.items);
+      setJobsCursor(initialJobs.next_cursor);
+    }
+  }, [initialJobs]);
 
-  const loadJobs = useCallback(
-    async (cursor: string | null, filter: StatusFilter) => {
+  useEffect(() => {
+    if (initialFiles) {
+      setFiles(initialFiles.items);
+      setFilesCursor(initialFiles.next_cursor);
+    }
+  }, [initialFiles]);
+
+  const loadMoreJobs = useCallback(
+    async (cursor: string, filter: StatusFilter): Promise<void> => {
       setJobsLoading(true);
       try {
         const params = new URLSearchParams({ limit: "20" });
-        if (cursor) params.set("cursor", cursor);
+        params.set("cursor", cursor);
         if (filter) params.set("status", filter);
         const resp = await fetch(`${API_BASE}/api/v1/jobs?${params}`, {
           headers: { "X-Dev-User": "dev-user" },
         });
         if (!resp.ok) return;
         const data: JobListResponse = await resp.json();
-        setJobs((prev) => (cursor ? [...prev, ...data.items] : data.items));
+        setJobs((prev) => [...prev, ...data.items]);
         setJobsCursor(data.next_cursor);
       } catch {
-        // ignore fetch errors in client component
+        // ignore fetch errors
       } finally {
         setJobsLoading(false);
       }
@@ -225,44 +190,28 @@ export default function JobsPage(): React.ReactElement {
     [],
   );
 
-  const loadFiles = useCallback(async (cursor: string | null) => {
+  const loadMoreFiles = useCallback(async (cursor: string): Promise<void> => {
     setFilesLoading(true);
     try {
       const params = new URLSearchParams({ limit: "20" });
-      if (cursor) params.set("cursor", cursor);
+      params.set("cursor", cursor);
       const resp = await fetch(`${API_BASE}/api/v1/files?${params}`, {
         headers: { "X-Dev-User": "dev-user" },
       });
       if (!resp.ok) return;
       const data: FileListResponse = await resp.json();
-      setFiles((prev) => (cursor ? [...prev, ...data.items] : data.items));
+      setFiles((prev) => [...prev, ...data.items]);
       setFilesCursor(data.next_cursor);
     } catch {
-      // ignore fetch errors in client component
+      // ignore fetch errors
     } finally {
       setFilesLoading(false);
     }
   }, []);
 
-  // Initial load for jobs tab
-  useEffect(() => {
-    if (tab === "jobs" && !jobsInitialized) {
-      setJobsInitialized(true);
-      void loadJobs(null, statusFilter);
-    }
-    if (tab === "files" && !filesInitialized) {
-      setFilesInitialized(true);
-      void loadFiles(null);
-    }
-  }, [tab, jobsInitialized, filesInitialized, loadJobs, loadFiles, statusFilter]);
-
-  // Re-fetch when status filter changes (after first init)
   const handleStatusChange = (newFilter: StatusFilter): void => {
     setStatusFilter(newFilter);
-    setJobs([]);
-    setJobsCursor(null);
     setExpandedId(null);
-    void loadJobs(null, newFilter);
   };
 
   const fetchJobDetail = useCallback(async (jobId: string): Promise<void> => {
@@ -288,7 +237,6 @@ export default function JobsPage(): React.ReactElement {
       return;
     }
     setExpandedId(jobId);
-    // Only fetch if we haven't already loaded detail for this job
     if (!detailMap[jobId]) {
       void fetchJobDetail(jobId);
     }
@@ -304,7 +252,6 @@ export default function JobsPage(): React.ReactElement {
       </header>
 
       <main className="max-w-6xl mx-auto px-6 py-8">
-        {/* Tabs */}
         <div className="flex gap-1 mb-6 border-b border-border">
           {(["jobs", "files"] as Tab[]).map((t) => (
             <button
@@ -322,10 +269,8 @@ export default function JobsPage(): React.ReactElement {
           ))}
         </div>
 
-        {/* Jobs tab */}
         {tab === "jobs" && (
           <>
-            {/* Status filter */}
             <div className="mb-4 flex items-center gap-3">
               <label
                 htmlFor="status-filter"
@@ -429,7 +374,7 @@ export default function JobsPage(): React.ReactElement {
               {jobsCursor && (
                 <div className="px-4 py-3 border-t border-border text-center">
                   <button
-                    onClick={() => void loadJobs(jobsCursor, statusFilter)}
+                    onClick={() => void loadMoreJobs(jobsCursor, statusFilter)}
                     disabled={jobsLoading}
                     className="px-4 py-2 text-sm text-blue-600 hover:text-blue-700 disabled:opacity-50 transition-colors"
                     data-testid="jobs-load-more"
@@ -442,7 +387,6 @@ export default function JobsPage(): React.ReactElement {
           </>
         )}
 
-        {/* Files tab */}
         {tab === "files" && (
           <div className="bg-background rounded-xl border border-border overflow-hidden">
             {filesLoading && files.length === 0 ? (
@@ -510,7 +454,7 @@ export default function JobsPage(): React.ReactElement {
             {filesCursor && (
               <div className="px-4 py-3 border-t border-border text-center">
                 <button
-                  onClick={() => void loadFiles(filesCursor)}
+                  onClick={() => void loadMoreFiles(filesCursor)}
                   disabled={filesLoading}
                   className="px-4 py-2 text-sm text-blue-600 hover:text-blue-700 disabled:opacity-50 transition-colors"
                   data-testid="files-load-more"

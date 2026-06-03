@@ -1,41 +1,10 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useState } from "react";
 import Link from "next/link";
 import { RefreshCw } from "lucide-react";
-
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
-const DEV_HEADERS = { "X-Dev-User": "dev-user" };
-
-interface AgentStep {
-  step_id: string;
-  session_id: string;
-  session_title: string;
-  specialist_role: string;
-  step_type: string;
-  started_at: string | null;
-  ended_at: string | null;
-  duration_ms: number | null;
-  input_tokens: number;
-  output_tokens: number;
-  total_cost_usd: number;
-}
-
-interface LlmUsageRow {
-  id: string;
-  agent_step_id: string;
-  specialist_role: string;
-  session_id: string;
-  session_title: string;
-  model: string;
-  input_tokens: number;
-  output_tokens: number;
-  cache_read_tokens: number;
-  cache_write_tokens: number;
-  total_cost_usd: number;
-  latency_ms: number | null;
-  created_at: string;
-}
+import { useAgentSteps, useLlmUsage, useDeleteAllUsage } from "@/features/usage/hooks";
+import type { AgentStep, LlmUsageRow } from "@/features/usage/api";
 
 type ActiveTab = "steps" | "llm";
 
@@ -81,50 +50,19 @@ function roleBadgeClass(role: string): string {
 }
 
 export default function UsagePage(): React.ReactElement {
-  const [steps, setSteps] = useState<AgentStep[]>([]);
-  const [llmRows, setLlmRows] = useState<LlmUsageRow[]>([]);
-  const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<ActiveTab>("steps");
   const [confirmDelete, setConfirmDelete] = useState(false);
-  const [deleting, setDeleting] = useState(false);
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
-      const [stepsRes, llmRes] = await Promise.all([
-        fetch(`${API_BASE}/api/v1/admin/steps`, { headers: DEV_HEADERS }),
-        fetch(`${API_BASE}/api/v1/admin/llm-usage`, { headers: DEV_HEADERS }),
-      ]);
-      const [stepsData, llmData] = await Promise.all([
-        stepsRes.ok ? stepsRes.json() : [],
-        llmRes.ok ? llmRes.json() : [],
-      ]);
-      setSteps(Array.isArray(stepsData) ? (stepsData as AgentStep[]) : []);
-      setLlmRows(Array.isArray(llmData) ? (llmData as LlmUsageRow[]) : []);
-    } catch {
-      setSteps([]);
-      setLlmRows([]);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  const { data: steps = [], isLoading: stepsLoading, refetch: refetchSteps } = useAgentSteps();
+  const { data: llmRows = [], isLoading: llmLoading, refetch: refetchLlm } = useLlmUsage();
+  const loading = stepsLoading || llmLoading;
+  const deleteAllMutation = useDeleteAllUsage();
+  const deleting = deleteAllMutation.isPending;
 
-  useEffect(() => {
-    void load();
-  }, [load]);
-
-  async function handleDeleteAll(): Promise<void> {
-    setDeleting(true);
-    try {
-      await fetch(`${API_BASE}/api/v1/admin/sessions`, {
-        method: "DELETE",
-        headers: DEV_HEADERS,
-      });
-      setConfirmDelete(false);
-      await load();
-    } finally {
-      setDeleting(false);
-    }
+  function handleDeleteAll(): void {
+    deleteAllMutation.mutate(undefined, {
+      onSuccess: () => setConfirmDelete(false),
+    });
   }
 
   const totalCost = steps.reduce((s, r) => s + r.total_cost_usd, 0);
@@ -134,7 +72,6 @@ export default function UsagePage(): React.ReactElement {
 
   return (
     <div className="min-h-screen bg-background dark:bg-[#070B14] text-foreground dark:text-white">
-      {/* Header */}
       <header className="border-b border-border dark:border-white/8 px-6 py-4 flex items-center justify-between">
         <h1 className="text-sm font-semibold text-foreground dark:text-white">Usage &amp; Cost</h1>
         <div className="flex items-center gap-4">
@@ -149,7 +86,7 @@ export default function UsagePage(): React.ReactElement {
               </button>
               <button
                 type="button"
-                onClick={() => void handleDeleteAll()}
+                onClick={handleDeleteAll}
                 disabled={deleting}
                 className="text-xs px-3 py-1.5 rounded-md bg-red-600 text-white hover:bg-red-500 disabled:opacity-50 transition-colors"
               >
@@ -167,7 +104,7 @@ export default function UsagePage(): React.ReactElement {
           )}
           <button
             type="button"
-            onClick={() => void load()}
+            onClick={() => { void refetchSteps(); void refetchLlm(); }}
             className="flex items-center gap-1.5 text-xs text-muted dark:text-white/40 hover:text-foreground dark:hover:text-white/70 transition-colors"
           >
             <RefreshCw size={12} className={loading ? "animate-spin" : ""} />
@@ -177,7 +114,6 @@ export default function UsagePage(): React.ReactElement {
       </header>
 
       <main className="max-w-screen-xl mx-auto px-6 py-6 space-y-6">
-        {/* Stats bar */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           {[
             { label: "Sessions", value: uniqueSessions.toString() },
@@ -195,7 +131,6 @@ export default function UsagePage(): React.ReactElement {
           ))}
         </div>
 
-        {/* Tab switcher */}
         <div className="flex gap-1 bg-white/4 rounded-lg p-1 w-fit">
           {(["steps", "llm"] as ActiveTab[]).map((t) => (
             <button

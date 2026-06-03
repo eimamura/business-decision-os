@@ -8,7 +8,7 @@ export function useAuditEntries(
   params?: { sessionId?: string; role?: string; limit?: number },
 ): UseQueryResult<AuditEntry[]> {
   return useQuery({
-    queryKey: queryKeys.audit.all,
+    queryKey: [...queryKeys.audit.all, params?.sessionId ?? "", params?.role ?? ""],
     queryFn: () => getAuditEntries(params),
   });
 }
