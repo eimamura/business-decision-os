@@ -21,6 +21,9 @@ Orchestrator execution state. Written only by bdos-orchestrator.
 | P11 — AskUser: Pre-execution Information Gathering (T-083 – T-085) | 2026-06-03 |
 | P12 — Test Session Pollution Fix (T-086 – T-087) | 2026-06-03 |
 | P13 — AskUser: interrupt()-based Mid-Execution Gathering (T-088 – T-099) | 2026-06-03 |
+| P14 — Agent Node Cards (T-100 – T-108) | 2026-06-03 |
+| P15 — Text Streaming / text_delta SSE (T-109 – T-116) | 2026-06-03 |
+| P16 — Backward Compat Removal (T-117 – T-119) | 2026-06-03 |
 
 ---
 
@@ -86,11 +89,15 @@ None.
 
 ## Last Completed Batch
 
-P13 (2026-06-03): T-088–T-099 Done. AskUser migrated to LangGraph interrupt()/resume. prepare_ask_user + wait_for_answer nodes added. suggestion chips in UI. 512 unit tests pass, 11 skipped. lint + typecheck exit 0.
+P16 (2026-06-03): T-117–T-119 Done. Tool.requires_approval removed from Protocol + 14 tools + 10 tests. SessionState.clarification_round removed. 525 unit tests pass, 11 skipped. typecheck + lint exit 0.
+
+## Previous Completed Batch
+
+P14 Batch 3 (2026-06-03): T-106–T-108 Done. useAgentProgress.test.ts (5 tests), AgentNodeCard.test.tsx (5 tests), ExecutionProgressPanel.test.tsx (10 tests). All 20 Vitest pass. pytest 525 pass, 11 skipped.
 
 ## Last Validation
 
-2026-06-03: P13 AskUser interrupt() migration. uv run pytest tests/unit/ -q → 512 passed, 11 skipped. make lint → all checks passed. make typecheck → no issues in 139 source files.
+2026-06-03: P16 backward compat removal. uv run pytest tests/unit/ -q → 525 passed, 11 skipped. make typecheck → 0 issues in 139 files. make lint → all checks passed.
 
 ## Blockers
 

@@ -8,7 +8,9 @@ from uuid import uuid4
 
 import pytest
 
-from packages.agent.llm import LLMMessage, LLMResponse, LLMUsage
+from typing import AsyncIterator
+
+from packages.agent.llm import LLMMessage, LLMResponse, LLMStreamEvent, LLMToolSpec, LLMUsage
 from packages.agent.orchestrator import SessionOrchestrator, SessionUserQuery
 from packages.memory import StubMemoryStore
 from packages.tools import create_tool_registry
@@ -69,6 +71,19 @@ class DirectChatLLMClient:
             )
         # direct_chat response
         return _llm_response("Hello! How can I help you today?")
+
+    async def stream(
+        self,
+        messages: list[LLMMessage],
+        tools: list[LLMToolSpec] | None = None,
+        **kwargs: Any,
+    ) -> AsyncIterator[LLMStreamEvent]:
+        llm_response = await self.complete(messages, tools=tools, **kwargs)
+
+        async def _gen() -> AsyncIterator[LLMStreamEvent]:
+            yield LLMStreamEvent(event="text_delta", data=llm_response.text)
+
+        return _gen()
 
 
 class FailingLLMClient:

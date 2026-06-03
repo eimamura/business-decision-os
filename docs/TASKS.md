@@ -2258,3 +2258,709 @@ stale sessions via a new API endpoint + UI control (T-087).
     mutation fires; after success, `sessions` query is invalidated.
   - API unit: `DELETE /api/v1/sessions` calls `repo.delete_all_sessions()` and returns 204.
   - Manual: after running tests, click "Clear All" → sidebar empties immediately.
+
+---
+
+## P14 — Agent Node Cards (User-facing Progress Display)
+
+### Goal
+
+Show real-time per-agent execution progress as collapsible node cards while the
+session is running. All required SSE events are already emitted by the backend
+(`agent_started`, `agent_completed`, `tool_started`, `tool_completed`,
+`execution_mode_selected`, `plan_created`). Work is **frontend-only**.
+
+No public interface changes → no ADR required.
+
+---
+
+### Batch 1 — Types & Context State (App Builder)
+
+#### T-100: Add `AgentNodeState` type and extend `SessionState` — **Done**
+- **File:** `apps/web/types/chat.ts`
+- **What:** Add two new exported interfaces:
+
+  ```ts
+  export interface AgentNodeToolCall {
+    toolCallId: string;
+    toolName: string;
+    status: "running" | "completed" | "error";
+    durationMs?: number;
+  }
+
+  export interface AgentNodeState {
+    taskId: string;             // unique id — use agent_name + started_at
+    agentName: string;
+    agentRole: string;
+    status: "running" | "completed" | "error";
+    startedAt: string;
+    durationMs?: number;
+    inputSummary?: string;
+    outputSummary?: string;
+    toolCalls: AgentNodeToolCall[];
+  }
+  ```
+
+  Extend `SessionState` in `ChatStateContext.tsx`:
+  ```ts
+  interface SessionState {
+    messages: ChatMessage[];
+    isSending: boolean;
+    usage: SessionUsage;
+    isLoadingMessages: boolean;
+    agentNodes: AgentNodeState[];      // NEW
+    executionMode?: string;            // NEW — from execution_mode_selected
+  }
+  ```
+
+  Also extend `DEFAULT_STATE`:
+  ```ts
+  const DEFAULT_STATE: SessionState = {
+    ...
+    agentNodes: [],
+    executionMode: undefined,
+  };
+  ```
+
+- **Test:** TypeScript compile (`make typecheck`) passes with no errors.
+
+#### T-101: Wire SSE events into `agentNodes` state in `ChatStateContext` — **Done**
+- **File:** `apps/web/app/chat/ChatStateContext.tsx`
+- **Depends on:** T-100
+- **What:** Inside the `for await (const event of stream)` loop, add handlers for the
+  currently-ignored events:
+
+  ```ts
+  if (event.type === "execution_mode_selected") {
+    updateSession(sessionId, (prev) => ({
+      ...prev,
+      executionMode: event.mode,
+    }));
+  }
+
+  if (event.type === "agent_started") {
+    const node: AgentNodeState = {
+      taskId: `${event.agent_name}:${event.started_at}`,
+      agentName: event.agent_name,
+      agentRole: event.agent_role,
+      status: "running",
+      startedAt: event.started_at,
+      inputSummary: event.input_summary ?? undefined,
+      toolCalls: [],
+    };
+    updateSession(sessionId, (prev) => ({
+      ...prev,
+      agentNodes: [...prev.agentNodes, node],
+    }));
+  }
+
+  if (event.type === "agent_completed") {
+    updateSession(sessionId, (prev) => ({
+      ...prev,
+      agentNodes: prev.agentNodes.map((n) =>
+        n.agentName === event.agent_name && n.status === "running"
+          ? {
+              ...n,
+              status: "completed",
+              durationMs: event.duration_ms,
+              outputSummary: event.output_summary ?? undefined,
+            }
+          : n,
+      ),
+    }));
+  }
+
+  if (event.type === "tool_started") {
+    const toolCall: AgentNodeToolCall = {
+      toolCallId: event.tool_call_id,
+      toolName: event.tool_name,
+      status: "running",
+    };
+    updateSession(sessionId, (prev) => ({
+      ...prev,
+      agentNodes: prev.agentNodes.map((n) =>
+        n.agentRole === event.agent_role && n.status === "running"
+          ? { ...n, toolCalls: [...n.toolCalls, toolCall] }
+          : n,
+      ),
+    }));
+  }
+
+  if (event.type === "tool_completed") {
+    // Existing SQL display logic stays unchanged. Add node update:
+    updateSession(sessionId, (prev) => ({
+      ...prev,
+      agentNodes: prev.agentNodes.map((n) => ({
+        ...n,
+        toolCalls: n.toolCalls.map((t) =>
+          t.toolCallId === event.tool_call_id
+            ? {
+                ...t,
+                status: event.status === "error" ? "error" : "completed",
+                durationMs: event.duration_ms,
+              }
+            : t,
+        ),
+      })),
+    }));
+  }
+  ```
+
+  On `done` event, reset `agentNodes` to `[]` and `executionMode` to `undefined`
+  **after** setting the final reply — so the panel disappears cleanly once the
+  assistant message is rendered. (Alternatively, keep nodes collapsed; see T-104
+  for the chosen UX.)
+
+  **Note:** The existing `tool_completed` SQL display handler must be preserved.
+  The new `agentNodes` update must be added alongside it, not replacing it.
+
+- **Test:** `make typecheck` passes. Manual: send a message in mock mode and confirm
+  `agentNodes` populates correctly in React DevTools.
+
+### Dependencies (Batch 1)
+
+```
+T-100 (types + SessionState shape) ──→ T-101 (wire SSE events)
+```
+
+---
+
+### Batch 2 — Hook & UI Components (App Builder)
+
+**Depends on:** Batch 1 (T-100, T-101) Done
+
+#### T-102: `useAgentProgress` hook — **Done**
+- **File:** `apps/web/hooks/useAgentProgress.ts`
+- **Depends on:** T-100, T-101
+- **What:** Thin hook that reads `agentNodes` and `executionMode` from context:
+
+  ```ts
+  "use client";
+
+  import { useChatStateContext } from "@/app/chat/ChatStateContext";
+  import type { AgentNodeState } from "@/types/chat";
+
+  export interface AgentProgressState {
+    nodes: AgentNodeState[];
+    executionMode: string | undefined;
+    isRunning: boolean;
+  }
+
+  export function useAgentProgress(sessionId: string): AgentProgressState {
+    const { getSessionState } = useChatStateContext();
+    const { agentNodes, executionMode, isSending } = getSessionState(sessionId);
+    return {
+      nodes: agentNodes,
+      executionMode,
+      isRunning: isSending,
+    };
+  }
+  ```
+
+- **Test:** Vitest: mock `useChatStateContext`; assert hook returns correct shape for
+  empty, in-progress, and completed states.
+
+#### T-103: `AgentNodeCard` component — **Done**
+- **File:** `apps/web/components/AgentNodeCard.tsx`
+- **Depends on:** T-100
+- **What:** Card showing one agent's execution state. Props:
+  ```ts
+  interface AgentNodeCardProps {
+    node: AgentNodeState;
+  }
+  ```
+
+  Visual structure:
+  - **Header row**: agent name + role label on the left; status badge on the right
+    (`running` → pulsing blue dot, `completed` → green checkmark, `error` → red X)
+  - **Elapsed time**: shown next to the badge while running (uses `Date.now() -
+    Date.parse(node.startedAt)` via a 1-second `setInterval` while `running`);
+    shows final `durationMs` once completed
+  - **Tool list** (collapsible, shown by default while running, collapsed when
+    completed): each tool call as a compact row —
+    `<tool icon> tool_name · status · durationMs?`
+  - Card is collapsed (header only) when `status === "completed"`; clicking the
+    header toggles expansion
+
+  Use Tailwind utility classes only; no inline `style={{}}` except for dynamic
+  CSS custom properties.
+
+  Add `data-testid="agent-node-card"` to the root div and
+  `data-testid="agent-node-card-status"` to the badge element.
+
+- **Test:** Vitest: renders in all three `status` variants; header is always visible;
+  tool list toggles on click; elapsed time counter increments (mock `Date.now`).
+
+#### T-104: `ExecutionProgressPanel` component — **Done**
+- **File:** `apps/web/components/ExecutionProgressPanel.tsx`
+- **Depends on:** T-102, T-103
+- **What:** Wraps the ordered list of `AgentNodeCard`. Props:
+  ```ts
+  interface ExecutionProgressPanelProps {
+    sessionId: string;
+  }
+  ```
+
+  Behaviour:
+  - Uses `useAgentProgress(sessionId)`
+  - Renders nothing when `nodes.length === 0` (initial state)
+  - While `isRunning`: shows a labelled section header (e.g. `"Executing · {executionMode}"`)
+    above the list of cards; cards animate in via `transition-opacity` as they arrive
+  - After `isRunning` becomes `false` AND `nodes.length > 0`: show a collapsed one-line
+    summary — `"✓ {nodes.length} agents · {totalDurationMs}ms"` — with a toggle to
+    expand the full card list. This summary persists until the next message is sent,
+    at which point `agentNodes` resets and the panel disappears.
+
+  Add `data-testid="execution-progress-panel"` to the root element.
+
+- **Test:** Vitest: panel is hidden when `nodes = []`; renders N cards when N agents
+  start; shows collapsed summary after `isRunning → false`.
+
+#### T-105: Wire `ExecutionProgressPanel` into chat page — **Done**
+- **File:** `apps/web/app/chat/page.tsx`
+- **Depends on:** T-104
+- **What:** Insert `<ExecutionProgressPanel sessionId={sessionId} />` in the message
+  list, between the last user message and the streaming assistant placeholder. The
+  panel must sit above the animated "typing" indicator (if one exists).
+
+  The component must be rendered client-side only (`"use client"` boundary already
+  exists in `page.tsx` or its parent).
+
+- **Test:** Manual (mock mode): send a message → progress panel appears with agent
+  cards → completes → summary line shows. `make typecheck` and `make build` pass.
+
+### Dependencies (Batch 2)
+
+```
+T-100 ──→ T-102
+T-100 ──→ T-103
+T-102 + T-103 ──→ T-104
+T-104 ──→ T-105
+```
+
+---
+
+### Batch 3 — Tests (Test/Review)
+
+**Depends on:** Batch 2 (T-102 – T-105) Done
+
+#### T-106: Vitest unit tests — `useAgentProgress` — **Done**
+- **File:** `apps/web/hooks/__tests__/useAgentProgress.test.ts`
+- **Depends on:** T-102
+- **What:** Test the hook using `renderHook` with a mock `ChatStateContext`.
+  Scenarios:
+  1. Empty `agentNodes` → `nodes = []`, `isRunning = false`
+  2. One agent running → `nodes = [{ status: "running" }]`, `isRunning = true`
+  3. Agent completes → `nodes = [{ status: "completed", durationMs: 450 }]`
+  4. Multiple agents with tool calls → `nodes.length === 3`, each has `toolCalls`
+  5. After done → `nodes = []`, `isRunning = false`
+
+- **Test:** `cd apps/web && npx vitest run hooks/__tests__/useAgentProgress.test.ts` exits 0.
+
+#### T-107: Vitest render tests — `AgentNodeCard` — **Done**
+- **File:** `apps/web/components/__tests__/AgentNodeCard.test.tsx`
+- **Depends on:** T-103
+- **What:**
+  1. `status = "running"` → pulsing status badge visible, tool list visible
+  2. `status = "completed"` → green badge, card collapsed by default
+  3. `status = "error"` → red badge
+  4. Clicking header on a completed card expands tool list
+  5. `durationMs = 1234` → "1234ms" visible in completed state
+
+- **Test:** `cd apps/web && npx vitest run components/__tests__/AgentNodeCard.test.tsx` exits 0.
+
+#### T-108: Vitest render tests — `ExecutionProgressPanel` — **Done**
+- **File:** `apps/web/components/__tests__/ExecutionProgressPanel.test.tsx`
+- **Depends on:** T-104
+- **What:**
+  1. `nodes = [], isRunning = false` → panel renders null / hidden
+  2. `nodes = [running_agent], isRunning = true` → 1 `AgentNodeCard` visible
+  3. `nodes = [3 completed agents], isRunning = false` → collapsed summary line
+     "✓ 3 agents" visible; cards hidden by default
+  4. Clicking summary → card list expands
+
+- **Test:** `cd apps/web && npx vitest run components/__tests__/ExecutionProgressPanel.test.tsx` exits 0.
+
+### Dependencies (Batch 3)
+
+```
+T-102 ──→ T-106
+T-103 ──→ T-107
+T-104 ──→ T-108
+```
+
+---
+
+### Full Dependency DAG
+
+```
+T-100 (types) ──→ T-101 (context wiring)
+                   │
+T-100 ─────────→ T-102 (hook)    ─────→ T-106 (tests)
+T-100 ─────────→ T-103 (card)    ─────→ T-107 (tests)
+T-101 + T-102 + T-103 ──→ T-104 (panel) ─→ T-108 (tests)
+                T-104 ──→ T-105 (wire into page)
+```
+
+### Quality Gate
+
+`cd apps/web && npx vitest run && make typecheck && make build`
+
+---
+
+## P15 — Text Streaming (ChatGPT-style smooth reply)
+
+### Goal
+
+Replace the current "full reply on `done`" pattern with real token-by-token streaming
+via a new `text_delta` SSE event. Text starts appearing in the UI as soon as the LLM
+produces the first token — no wait for completion.
+
+**Two bugs must be fixed in the same phase:**
+1. `ClaudeClient.stream()` emits `data=str(event)` — wraps the whole Anthropic event
+   object as a string instead of extracting the text delta. Fix: use `stream.text_stream`.
+2. `run_direct_chat` and `_synthesize_response` use `complete()` (blocking).
+   Fix: switch to `stream()`.
+
+No public interface changes → no ADR required.
+`SseEvent` union extension is additive.
+
+---
+
+### Batch 1 — Backend: Fix `stream()` + Add SSE Schema (App Builder)
+
+#### T-109: Fix `ClaudeClient.stream()` to correctly yield text deltas — **Done**
+- **File:** `packages/agent/llm/__init__.py` — `ClaudeClient.stream()`
+- **Bug:** `data=str(event)` emits the full Anthropic stream event object as a string,
+  not the actual text delta.
+- **Fix:** Replace the inner loop with the SDK's `text_stream` async iterator:
+
+  ```python
+  async def _gen() -> AsyncIterator[LLMStreamEvent]:
+      async with client.messages.stream(**kwargs) as stream:
+          async for text in stream.text_stream:
+              yield LLMStreamEvent(event="text_delta", data=text)
+  ```
+
+  `stream.text_stream` yields only the text content deltas and is the canonical
+  way to consume text from the Anthropic streaming SDK.
+
+- **Test:** Unit test with a mocked Anthropic client: mock `text_stream` to yield
+  `["Hello", " world"]`; assert two `LLMStreamEvent(event="text_delta", data=...)` events.
+
+#### T-110: Add `TextDeltaEvent` to SSE schema + run codegen — **Done**
+- **File:** `packages/schemas/sse_events.py`
+- **Depends on:** none (can run parallel with T-109)
+- **What:** Add a new event type:
+
+  ```python
+  class TextDeltaEvent(BaseModel):
+      type: Literal["text_delta"] = "text_delta"
+      session_id: str
+      delta: str
+      timestamp: str
+  ```
+
+  Add `TextDeltaEvent` to the `SseEvent` union (before `DoneEvent`).
+  Run `make codegen` to regenerate `packages/schemas-ts/src/sse-events.ts`.
+  Verify `make typecheck` exits 0.
+
+- **Test:** `make codegen && make typecheck` exits 0.
+
+### Dependencies (Batch 1)
+
+```
+T-109 (fix stream()) ──→ Batch 2
+T-110 (schema)        ──→ Batch 2
+(T-109 and T-110 are independent — can run in parallel)
+```
+
+---
+
+### Batch 2 — Backend: Wire Streaming into Orchestrator Nodes (App Builder)
+
+**Depends on:** T-109, T-110 Done
+
+#### T-111: Stream `run_direct_chat` via `text_delta` SSE — **Done**
+- **File:** `packages/agent/orchestrator/runtime.py` — `run_direct_chat()`
+- **Depends on:** T-109, T-110
+- **What:** Replace `await orchestrator._llm_client.complete(...)` with
+  `await orchestrator._llm_client.stream(...)`. Accumulate the full text while
+  emitting one `text_delta` SSE per chunk:
+
+  ```python
+  parts: list[str] = []
+  async for evt in await orchestrator._llm_client.stream(
+      messages=[...],
+      tools=None,
+      temperature=0.0,
+      max_tokens=512,
+      specialist_role="orchestrator",
+      agent_step_id=step_id,
+  ):
+      if evt.get("event") == "text_delta" and evt.get("data"):
+          parts.append(evt["data"])
+          await orchestrator._push({
+              "type": "text_delta",
+              "session_id": str(session_id),
+              "delta": evt["data"],
+              "timestamp": _iso_now(),
+          })
+  full_text = "".join(parts)
+  ```
+
+  Return `SessionResponse` with `reply=full_text` as before (unchanged contract).
+  The `done` event (emitted by the caller — `_node_run_direct_chat`) still carries
+  `reply=full_text` as a persistence fallback; the frontend will prefer streamed content.
+
+- **Test:** Unit test: mock `stream()` to yield `["Hi", " there"]`; confirm two
+  `text_delta` pushes and `SessionResponse.reply == "Hi there"`.
+
+#### T-112: Stream `_synthesize_response` via `text_delta` SSE — **Done**
+- **File:** `packages/agent/orchestrator/decision.py` — `_synthesize_response()`
+- **Depends on:** T-109, T-110
+- **What:** Same pattern as T-111. `_synthesize_response` assembles the final reply for
+  `sequential`, `planned`, and `dag` modes. Replace `complete()` with `stream()` and
+  emit `text_delta` events:
+
+  ```python
+  parts: list[str] = []
+  async for evt in await orchestrator._llm_client.stream(
+      messages=[...],
+      tools=None,
+      temperature=0.0,
+      max_tokens=1024,
+      specialist_role="orchestrator",
+      agent_step_id=step_id,
+  ):
+      if evt.get("event") == "text_delta" and evt.get("data"):
+          parts.append(evt["data"])
+          await orchestrator._push({
+              "type": "text_delta",
+              "session_id": str(session_id),
+              "delta": evt["data"],
+              "timestamp": _iso_now(),
+          })
+  response_text = "".join(parts)
+  ```
+
+  Return `SessionResponse(reply=response_text, ...)` unchanged.
+
+- **Test:** Unit test: mock `stream()` to yield 3 tokens; confirm 3 SSE pushes and
+  correct `reply` assembly.
+
+### Dependencies (Batch 2)
+
+```
+T-109 + T-110 ──→ T-111
+T-109 + T-110 ──→ T-112
+(T-111 and T-112 are independent — can run in parallel)
+```
+
+---
+
+### Batch 3 — Frontend: Handle `text_delta` in ChatStateContext (App Builder)
+
+**Depends on:** T-110 (schema codegen so TypeScript type is available)
+
+#### T-113: Handle `text_delta` SSE events in `ChatStateContext` — **Done**
+- **File:** `apps/web/app/chat/ChatStateContext.tsx`
+- **Depends on:** T-110 (so `TextDeltaEvent` is in the TS union)
+- **What:**
+
+  1. Add a per-session `hasStreamedText` ref (alongside existing `isSendingRef`):
+     ```ts
+     const hasStreamedRef = useRef<Record<string, boolean>>({});
+     ```
+     Reset to `false` at the start of each `sendMessage` call.
+
+  2. In the SSE loop, add a `text_delta` handler **before** the `done` handler:
+     ```ts
+     if (event.type === "text_delta") {
+       hasStreamedRef.current[sessionId] = true;
+       updateSession(sessionId, (prev) => ({
+         ...prev,
+         messages: prev.messages.map((m) =>
+           m.id === assistantId
+             ? { ...m, content: (m.content ?? "") + event.delta, isStreaming: true }
+             : m,
+         ),
+       }));
+     }
+     ```
+
+  3. Modify the `done` handler: only set `content` from `done.reply` when
+     `!hasStreamedRef.current[sessionId]` (i.e., no text was streamed — fallback
+     for modes that may not stream):
+     ```ts
+     if (event.type === "done") {
+       const streamed = hasStreamedRef.current[sessionId];
+       updateSession(sessionId, (prev) => ({
+         ...prev,
+         messages: prev.messages.map((m) =>
+           m.id === assistantId
+             ? {
+                 ...m,
+                 content: streamed ? m.content : (event.reply ?? m.content),
+                 isStreaming: false,
+               }
+             : m,
+         ),
+         ...
+       }));
+       hasStreamedRef.current[sessionId] = false;
+       break;
+     }
+     ```
+
+  This ensures backwards compatibility: if no `text_delta` events arrive (e.g.,
+  mock mode with `ScenarioStubClaudeClient` which emits one chunk), `done.reply`
+  is still used.
+
+- **Test:** Manual (mock mode): send a message → text appears incrementally →
+  `done` received → `isStreaming` clears. `make typecheck` exits 0.
+
+### Dependencies (Batch 3)
+
+```
+T-110 ──→ T-113
+(Can start Batch 3 in parallel with Batch 2 since only schema codegen is needed)
+```
+
+---
+
+### Batch 4 — Tests (Test/Review)
+
+**Depends on:** T-109, T-111, T-112, T-113 Done
+
+#### T-114: Unit tests — `ClaudeClient.stream()` text extraction — **Done**
+- **File:** `tests/unit/test_llm_client_stream.py`
+- **Depends on:** T-109
+- **What:**
+  1. Mock `anthropic.AsyncAnthropic().messages.stream()` context manager;
+     mock `text_stream` to yield `["Hello", " world"]`
+  2. Assert two `LLMStreamEvent` yielded with `event="text_delta"`, `data="Hello"`, `data=" world"`
+  3. Mock yields empty sequence → no events yielded
+
+- **Test:** `uv run pytest tests/unit/test_llm_client_stream.py -q` exits 0.
+
+#### T-115: Unit tests — `run_direct_chat` streaming path — **Done**
+- **File:** `tests/unit/test_run_direct_chat_stream.py`
+- **Depends on:** T-111
+- **What:**
+  1. Mock `orchestrator._llm_client.stream()` to yield 3 `LLMStreamEvent` tokens
+  2. Assert `orchestrator._push` called 3 times with `type="text_delta"`
+  3. Assert `SessionResponse.reply == "token1token2token3"`
+
+- **Test:** `uv run pytest tests/unit/test_run_direct_chat_stream.py -q` exits 0.
+
+#### T-116: Vitest test — `ChatStateContext` `text_delta` handler — **Done**
+- **File:** `apps/web/app/chat/__tests__/ChatStateContext.text_delta.test.tsx`
+- **Depends on:** T-113
+- **What:**
+  1. Simulate SSE stream: `text_delta("Hello")` + `text_delta(" world")` + `done(reply=null)`
+  2. Assert message `content` after each event: `"Hello"` → `"Hello world"` → unchanged
+  3. `isStreaming` is `true` after first delta, `false` after `done`
+  4. Simulate stream with no deltas + `done(reply="fallback")`:
+     assert `content == "fallback"`
+
+- **Test:** `cd apps/web && npx vitest run app/chat/__tests__/ChatStateContext.text_delta.test.tsx` exits 0.
+
+### Dependencies (Batch 4)
+
+```
+T-109 ──→ T-114
+T-111 ──→ T-115
+T-113 ──→ T-116
+```
+
+---
+
+### Full Dependency DAG
+
+```
+T-109 (fix stream()) ─────────────────┐
+T-110 (schema + codegen) ─────────────┼──→ T-111 (direct_chat)  ──→ T-115 (test)
+                                      └──→ T-112 (_synthesize)   ──→ (no separate test needed)
+T-110 ──→ T-113 (frontend handler)    ──→ T-116 (test)
+T-109 ──→ T-114 (LLMClient test)
+```
+
+### Quality Gate
+
+```
+uv run pytest tests/unit/ -q
+&& make lint && make typecheck && make build
+&& cd apps/web && npx vitest run
+```
+
+### ScenarioStubClaudeClient note
+
+`ScenarioStubClaudeClient.stream()` emits exactly one chunk. After this phase,
+mock-mode sessions will still work — the single chunk arrives as one `text_delta`
+event followed by `done`. The frontend will render the full response in one step,
+which is acceptable for mock mode.
+
+---
+
+## P16 — Backward Compat Removal
+
+### Goal
+
+Remove two dead backward-compatibility fields confirmed by audit (2026-06-03):
+1. `Tool.requires_approval` — no production code reads it; all routing uses `safety_level`
+2. `SessionState.clarification_round` — set but never read; superseded by LangGraph interrupt()
+
+---
+
+### Batch 1 — Remove `Tool.requires_approval` (App Builder)
+
+**ADR:** `docs/adr/2026-06-03-remove-tool-requires-approval.md`
+
+#### T-117: Remove `Tool.requires_approval` from Protocol and all implementations — **Done**
+- **Files:**
+  - `packages/tools/base.py` — remove from `Tool` Protocol
+  - All concrete tool files in `packages/tools/`: `sql_tool.py`, `nl_query_tool.py`,
+    `forecast_tool.py`, `simulation_tool.py`, `job_dispatch_tool.py`, `approval_tool.py`,
+    `memory_write_tool.py`, `guardrail_tool.py`, `schema_context_tool.py`
+  - Any test fixtures that set `requires_approval` on mock tools
+- **What:**
+  - Delete `requires_approval: bool` from `Tool` Protocol definition
+  - Delete `requires_approval = ...` from every concrete tool class
+  - Update any test that constructs a mock tool with `requires_approval`
+  - Do NOT touch `ToolRegistry`, routing logic, or `safety_level` — those are unchanged
+- **Test:** `make typecheck` exits 0; `uv run pytest tests/unit/ -q` exits 0
+
+### Batch 2 — Remove `clarification_round` (App Builder)
+
+**Depends on:** Batch 1 (can be implemented in parallel — no dependency between T-117 and T-118)
+
+#### T-118: Remove `SessionState.clarification_round` — **Done**
+- **Files:**
+  - `packages/agent/orchestrator/session_orchestrator.py`
+- **What:**
+  - Remove `clarification_round: int` from `OrchestratorState` TypedDict
+  - Remove the line that reads `clarification_round` from `query.metadata.get(...)`
+  - Remove the `"clarification_round": clarification_round` key from the initial state dict
+  - Update any test that sets or asserts `clarification_round` in state fixtures
+- **Test:** `make typecheck` exits 0; `uv run pytest tests/unit/ -q` exits 0
+
+### Batch 3 — Tests (Test/Review)
+
+**Depends on:** T-117, T-118 Done
+
+#### T-119: Verify no remaining references to removed fields — **Done**
+- **What:** Confirm zero occurrences of:
+  - `requires_approval` in `packages/tools/` (grep check)
+  - `clarification_round` in `packages/agent/orchestrator/session_orchestrator.py` (grep check)
+  - All unit tests pass: `uv run pytest tests/unit/ -q`
+  - TypeScript build passes: `make typecheck`
+  - Lint passes: `make lint`
+
+### Full Dependency DAG
+
+```
+T-117 (remove requires_approval) ──┐
+T-118 (remove clarification_round) ─┴──→ T-119 (verify)
+(T-117 and T-118 can run in parallel)
+```

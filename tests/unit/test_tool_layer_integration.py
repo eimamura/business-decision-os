@@ -7,7 +7,9 @@ from uuid import uuid4
 
 import pytest
 
-from packages.agent.llm import LLMResponse, LLMUsage, StubClaudeClient
+from typing import AsyncIterator
+
+from packages.agent.llm import LLMMessage, LLMResponse, LLMStreamEvent, LLMToolSpec, LLMUsage, StubClaudeClient
 from packages.agent.orchestrator import SessionResponse, SessionUserQuery, SessionOrchestrator
 from packages.memory import StubMemoryStore
 from packages.tools import create_tool_registry
@@ -115,6 +117,19 @@ class QueryFlowStubClaudeClient(StubClaudeClient):
             return _response("Here is the agent summary.")
         return await super().complete(messages, **kwargs)
 
+    async def stream(
+        self,
+        messages: list[LLMMessage],
+        tools: list[LLMToolSpec] | None = None,
+        **kwargs: object,
+    ) -> AsyncIterator[LLMStreamEvent]:
+        llm_response = await self.complete(messages, tools=tools, **kwargs)
+
+        async def _gen() -> AsyncIterator[LLMStreamEvent]:
+            yield LLMStreamEvent(event="text_delta", data=llm_response.text)
+
+        return _gen()
+
 
 @pytest.fixture
 def stub_orchestrator():
@@ -145,12 +160,13 @@ async def test_direct_chat_does_not_create_decision(stub_orchestrator):
     assert response.primary is None
     assert response.agent_results == {}
     assert response.reply == "Good morning! How can I help?"
-    assert [event["type"] for event in await _events(queue)] == [
-        "query_received",
-        "intent_classified",
-        "execution_mode_selected",
-        "response_ready",
-    ]
+    emitted_types = [event["type"] for event in await _events(queue)]
+    # text_delta events are emitted before response_ready when streaming is active
+    assert emitted_types[0] == "query_received"
+    assert "intent_classified" in emitted_types
+    assert "execution_mode_selected" in emitted_types
+    assert "text_delta" in emitted_types
+    assert emitted_types[-1] == "response_ready"
 
 
 @pytest.mark.asyncio

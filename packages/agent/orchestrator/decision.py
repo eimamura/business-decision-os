@@ -251,40 +251,51 @@ async def _synthesize_response(
     from packages.persistence.agent_steps_repo import make_step
 
     step_id = await make_step(str(session_id), "synthesis")
-    response = await orchestrator._llm_client.complete(
-        messages=[
-            LLMMessage(
-                role="system",
-                content=(
-                    "Synthesize the agent results into a concise assistant reply. "
-                    "Use the same language as the user. Do not invent raw inventory rows."
-                ),
+    messages = [
+        LLMMessage(
+            role="system",
+            content=(
+                "Synthesize the agent results into a concise assistant reply. "
+                "Use the same language as the user. Do not invent raw inventory rows."
             ),
-            LLMMessage(
-                role="user",
-                content=json.dumps(
-                    {
-                        "query": query.text,
-                        "intent": intent.model_dump(),
-                        "agent_results": {k: v.output for k, v in agent_results.items()},
-                    },
-                    default=lambda o: float(o) if isinstance(o, Decimal) else str(o),
-                ),
+        ),
+        LLMMessage(
+            role="user",
+            content=json.dumps(
+                {
+                    "query": query.text,
+                    "intent": intent.model_dump(),
+                    "agent_results": {k: v.output for k, v in agent_results.items()},
+                },
+                default=lambda o: float(o) if isinstance(o, Decimal) else str(o),
             ),
-        ],
+        ),
+    ]
+    parts: list[str] = []
+    async for evt in await orchestrator._llm_client.stream(
+        messages=messages,
         tools=None,
         temperature=0.0,
         max_tokens=1024,
         specialist_role="orchestrator",
         agent_step_id=step_id,
-    )
+    ):
+        if evt.get("event") == "text_delta" and evt.get("data"):
+            parts.append(evt["data"])
+            await orchestrator._push({
+                "type": "text_delta",
+                "session_id": str(session_id),
+                "delta": evt["data"],
+                "timestamp": _iso_now(),
+            })
+    response_text = "".join(parts)
     await orchestrator._push(
         {"type": "response_ready", "mode": route.mode, "timestamp": _iso_now()}
     )
     orchestrator._schedule_status_update(session_id, "completed")
     return SessionResponse(
         mode=route.mode,
-        reply=response.text,
+        reply=response_text,
         intent=intent,
         route=route,
         agent_results=agent_results,

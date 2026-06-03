@@ -12,13 +12,15 @@ import {
   updateSessionTitle,
 } from "@/lib/api";
 import { queryKeys } from "@/lib/queryKeys";
-import type { ChatMessage, SessionUsage, SseEvent } from "@/types/chat";
+import type { AgentNodeState, AgentNodeToolCall, ChatMessage, SessionUsage, SseEvent } from "@/types/chat";
 
 interface SessionState {
   messages: ChatMessage[];
   isSending: boolean;
   usage: SessionUsage;
   isLoadingMessages: boolean;
+  agentNodes: AgentNodeState[];
+  executionMode?: string;
 }
 
 const DEFAULT_USAGE: SessionUsage = { inputTokens: 0, outputTokens: 0, costUsd: 0 };
@@ -28,6 +30,8 @@ const DEFAULT_STATE: SessionState = {
   isSending: false,
   usage: DEFAULT_USAGE,
   isLoadingMessages: true,
+  agentNodes: [],
+  executionMode: undefined,
 };
 
 interface ChatStateContextValue {
@@ -59,6 +63,7 @@ export function ChatStateProvider({ children }: { children: ReactNode }): React.
   const titleSetRef = useRef<Record<string, boolean>>({});
   const isSendingRef = useRef<Record<string, boolean>>({});
   const abortMap = useRef<Record<string, AbortController>>({});
+  const hasStreamedRef = useRef<Record<string, boolean>>({});
 
   const getSessionState = useCallback(
     (sessionId: string): SessionState => sessions[sessionId] ?? DEFAULT_STATE,
@@ -106,6 +111,7 @@ export function ChatStateProvider({ children }: { children: ReactNode }): React.
     ): Promise<void> => {
       if (!text.trim() || isSendingRef.current[sessionId]) return;
       isSendingRef.current[sessionId] = true;
+      hasStreamedRef.current[sessionId] = false;
 
       const userMsg: ChatMessage = {
         id: crypto.randomUUID(),
@@ -168,15 +174,35 @@ export function ChatStateProvider({ children }: { children: ReactNode }): React.
           }
 
           for await (const event of stream) {
+            if (event.type === "text_delta") {
+              hasStreamedRef.current[sessionId] = true;
+              updateSession(sessionId, (prev) => ({
+                ...prev,
+                messages: prev.messages.map((m) =>
+                  m.id === assistantId
+                    ? { ...m, content: (m.content ?? "") + event.delta, isStreaming: true }
+                    : m,
+                ),
+              }));
+            }
+
             if (event.type === "done") {
+              const didStream = hasStreamedRef.current[sessionId] ?? false;
               receivedDone = true;
               updateSession(sessionId, (prev) => ({
                 ...prev,
                 messages: prev.messages.map((m) =>
                   m.id === assistantId
-                    ? { ...m, content: event.reply ?? m.content, isStreaming: false }
+                    ? {
+                        ...m,
+                        content: didStream ? m.content : (event.reply ?? m.content),
+                        isStreaming: false,
+                      }
                     : m,
                 ),
+                isSending: false,
+                agentNodes: [],
+                executionMode: undefined,
               }));
               fetchSessionUsage(sessionId)
                 .then((usage) => updateSession(sessionId, (prev) => ({ ...prev, usage })))
@@ -189,7 +215,81 @@ export function ChatStateProvider({ children }: { children: ReactNode }): React.
                   .catch(() => undefined);
               }
               void queryClient.invalidateQueries({ queryKey: queryKeys.sessions.all });
+              hasStreamedRef.current[sessionId] = false;
               break;
+            }
+
+            if (event.type === "execution_mode_selected") {
+              updateSession(sessionId, (prev) => ({
+                ...prev,
+                executionMode: event.mode,
+              }));
+            }
+
+            if (event.type === "agent_started") {
+              const node: AgentNodeState = {
+                taskId: `${event.agent_name}:${event.started_at}`,
+                agentName: event.agent_name,
+                agentRole: event.agent_role,
+                status: "running",
+                startedAt: event.started_at,
+                inputSummary: event.input_summary ?? undefined,
+                toolCalls: [],
+              };
+              updateSession(sessionId, (prev) => ({
+                ...prev,
+                agentNodes: [...prev.agentNodes, node],
+              }));
+            }
+
+            if (event.type === "agent_completed") {
+              updateSession(sessionId, (prev) => ({
+                ...prev,
+                agentNodes: prev.agentNodes.map((n) =>
+                  n.agentName === event.agent_name && n.status === "running"
+                    ? {
+                        ...n,
+                        status: "completed" as const,
+                        durationMs: event.duration_ms,
+                        outputSummary: event.output_summary ?? undefined,
+                      }
+                    : n,
+                ),
+              }));
+            }
+
+            if (event.type === "tool_started") {
+              const toolCall: AgentNodeToolCall = {
+                toolCallId: event.tool_call_id,
+                toolName: event.tool_name,
+                status: "running",
+              };
+              updateSession(sessionId, (prev) => ({
+                ...prev,
+                agentNodes: prev.agentNodes.map((n) =>
+                  n.agentRole === event.agent_role && n.status === "running"
+                    ? { ...n, toolCalls: [...n.toolCalls, toolCall] }
+                    : n,
+                ),
+              }));
+            }
+
+            if (event.type === "tool_completed") {
+              updateSession(sessionId, (prev) => ({
+                ...prev,
+                agentNodes: prev.agentNodes.map((n) => ({
+                  ...n,
+                  toolCalls: n.toolCalls.map((t) =>
+                    t.toolCallId === event.tool_call_id
+                      ? {
+                          ...t,
+                          status: (event.status === "error" ? "error" : "completed") as "error" | "completed",
+                          durationMs: event.duration_ms,
+                        }
+                      : t,
+                  ),
+                })),
+              }));
             }
 
             if (

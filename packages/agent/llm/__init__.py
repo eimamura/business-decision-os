@@ -526,8 +526,8 @@ class ClaudeClient:
 
         async def _gen() -> AsyncIterator[LLMStreamEvent]:
             async with client.messages.stream(**kwargs) as stream:
-                async for event in stream:
-                    yield LLMStreamEvent(event="text_delta", data=str(event))
+                async for text in stream.text_stream:
+                    yield LLMStreamEvent(event="text_delta", data=text)
 
         return _gen()
 

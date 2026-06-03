@@ -7,7 +7,9 @@ from uuid import UUID, uuid4
 
 import pytest
 
-from packages.agent.llm import LLMMessage, LLMResponse, LLMUsage
+from typing import AsyncIterator
+
+from packages.agent.llm import LLMMessage, LLMResponse, LLMStreamEvent, LLMToolSpec, LLMUsage
 
 
 def _make_llm_response(text: str) -> LLMResponse:
@@ -58,6 +60,19 @@ class _AskUserYesLLMClient:
                 '"requires_planning":false,"requires_dag":false,"rationale":"resumed"}'
             )
         return _make_llm_response("Analysis complete for the requested date range.")
+
+    async def stream(
+        self,
+        messages: list[LLMMessage],
+        tools: list[LLMToolSpec] | None = None,
+        **kwargs: Any,
+    ) -> AsyncIterator[LLMStreamEvent]:
+        llm_response = await self.complete(messages, tools=tools, **kwargs)
+
+        async def _gen() -> AsyncIterator[LLMStreamEvent]:
+            yield LLMStreamEvent(event="text_delta", data=llm_response.text)
+
+        return _gen()
 
 
 def _make_orchestrator(llm_client: Any) -> Any:
@@ -236,6 +251,19 @@ async def test_ask_user_non_analytical_passes_through() -> None:
                     '"requires_planning":false,"requires_dag":false,"rationale":"chat"}'
                 )
             return _make_llm_response("Hello! How can I help?")
+
+        async def stream(
+            self,
+            messages: list[LLMMessage],
+            tools: list[LLMToolSpec] | None = None,
+            **kwargs: Any,
+        ) -> AsyncIterator[LLMStreamEvent]:
+            llm_response = await self.complete(messages, tools=tools, **kwargs)
+
+            async def _gen() -> AsyncIterator[LLMStreamEvent]:
+                yield LLMStreamEvent(event="text_delta", data=llm_response.text)
+
+            return _gen()
 
     orchestrator = _make_orchestrator(_ChatLLMClient())
     session_id = uuid4()

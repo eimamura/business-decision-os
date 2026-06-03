@@ -1,5 +1,24 @@
 export type MessageRole = "user" | "assistant" | "tool" | "job_approval" | "job_files" | "ask_user";
 
+export interface AgentNodeToolCall {
+  toolCallId: string;
+  toolName: string;
+  status: "running" | "completed" | "error";
+  durationMs?: number;
+}
+
+export interface AgentNodeState {
+  taskId: string;
+  agentName: string;
+  agentRole: string;
+  status: "running" | "completed" | "error";
+  startedAt: string;
+  durationMs?: number;
+  inputSummary?: string;
+  outputSummary?: string;
+  toolCalls: AgentNodeToolCall[];
+}
+
 export interface ChatMessage {
   id: string;
   messageId?: string;

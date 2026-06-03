@@ -7,7 +7,9 @@ from uuid import UUID, uuid4
 
 import pytest
 
-from packages.agent.llm import LLMMessage, LLMResponse, LLMUsage
+from typing import AsyncIterator
+
+from packages.agent.llm import LLMMessage, LLMResponse, LLMStreamEvent, LLMToolSpec, LLMUsage
 from packages.agent.orchestrator.ask_user import build_ask_user_event, is_analytical_intent
 
 _SESSION_ID = UUID("12345678-1234-5678-1234-567812345678")
@@ -135,6 +137,19 @@ class _AskUserYesLLMClient:
             )
         return _make_llm_response("Stub reply")
 
+    async def stream(
+        self,
+        messages: list[LLMMessage],
+        tools: list[LLMToolSpec] | None = None,
+        **kwargs: Any,
+    ) -> AsyncIterator[LLMStreamEvent]:
+        llm_response = await self.complete(messages, tools=tools, **kwargs)
+
+        async def _gen() -> AsyncIterator[LLMStreamEvent]:
+            yield LLMStreamEvent(event="text_delta", data=llm_response.text)
+
+        return _gen()
+
 
 class _AskUserNoLLMClient:
     """Returns needs_input=false — ask_user node passes through."""
@@ -165,6 +180,19 @@ class _AskUserNoLLMClient:
                 '"requires_planning":false,"requires_dag":false,"rationale":"chat"}'
             )
         return _make_llm_response("Analysis complete.")
+
+    async def stream(
+        self,
+        messages: list[LLMMessage],
+        tools: list[LLMToolSpec] | None = None,
+        **kwargs: Any,
+    ) -> AsyncIterator[LLMStreamEvent]:
+        llm_response = await self.complete(messages, tools=tools, **kwargs)
+
+        async def _gen() -> AsyncIterator[LLMStreamEvent]:
+            yield LLMStreamEvent(event="text_delta", data=llm_response.text)
+
+        return _gen()
 
 
 def _make_orchestrator(llm_client: Any) -> Any:
@@ -266,6 +294,19 @@ async def test_ask_user_node_skips_for_chat_intent() -> None:
                     '"requires_planning":false,"requires_dag":false,"rationale":"chat"}'
                 )
             return _make_llm_response("Hello!")
+
+        async def stream(
+            self,
+            messages: list[LLMMessage],
+            tools: list[LLMToolSpec] | None = None,
+            **kwargs: Any,
+        ) -> AsyncIterator[LLMStreamEvent]:
+            llm_response = await self.complete(messages, tools=tools, **kwargs)
+
+            async def _gen() -> AsyncIterator[LLMStreamEvent]:
+                yield LLMStreamEvent(event="text_delta", data=llm_response.text)
+
+            return _gen()
 
     llm = _ChatLLMClient()
     orchestrator = _make_orchestrator(llm)

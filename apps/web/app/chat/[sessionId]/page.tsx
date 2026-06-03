@@ -6,6 +6,7 @@ import { SlidersHorizontal, ChevronDown, Mic, BrainCircuit } from "lucide-react"
 import AgentActivityPanel from "@/components/agent/AgentActivityPanel";
 import QuickActionGrid from "@/components/analysis/QuickActionGrid";
 import MessageBubble from "@/components/MessageBubble";
+import { ExecutionProgressPanel } from "@/components/ExecutionProgressPanel";
 import { useChat } from "@/hooks/useChat";
 import ChatSidebar from "@/components/ChatSidebar";
 import ToolScenarioBar from "@/components/ToolScenarioBar";
@@ -170,6 +171,7 @@ export default function ChatPage({ params }: ChatPageProps) {
                       onAskUserAnswered={appendAssistantReply}
                     />
                   ))}
+                  <ExecutionProgressPanel sessionId={sessionId} />
                   <div ref={messagesEndRef} />
                 </div>
               )}

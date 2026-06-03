@@ -186,6 +186,13 @@ class ErrorEvent(BaseModel):
     timestamp: str
 
 
+class TextDeltaEvent(BaseModel):
+    type: Literal["text_delta"] = "text_delta"
+    session_id: str
+    delta: str
+    timestamp: str
+
+
 class DoneEvent(BaseModel):
     type: Literal["done"] = "done"
     session_id: UUID
@@ -215,6 +222,7 @@ SseEvent = Annotated[
         JobCompletedEvent,
         JobFailedEvent,
         ErrorEvent,
+        TextDeltaEvent,
         DoneEvent,
     ],
     Field(discriminator="type"),
