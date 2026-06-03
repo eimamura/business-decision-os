@@ -326,8 +326,9 @@ class AgentRuntime:
             _job_description = tool_input.get("description", "")
 
         # Emit awaiting_approval SSE event (informs session_orchestrator catch block is gone)
-        await self._push(
-            {
+        if sse_queue is not None:
+            from packages.agent.orchestrator.parsing import json_safe
+            await sse_queue.put(json_safe({
                 "type": "awaiting_approval",
                 "session_id": str(ctx.session_id),
                 "approval_id": _approval_id,
@@ -336,9 +337,7 @@ class AgentRuntime:
                 "job_id": _job_id,
                 "description": _job_description,
                 "timestamp": datetime.now(timezone.utc).isoformat(),
-            },
-            sse_queue=sse_queue,
-        )
+            }))
 
         return {
             "pending_hitl_approval_id": _approval_id,
@@ -375,16 +374,15 @@ class AgentRuntime:
                     break
 
         # Emit session_paused SSE and update session status before interrupting
-        await self._push(
-            {
+        if sse_queue is not None:
+            from packages.agent.orchestrator.parsing import json_safe
+            await sse_queue.put(json_safe({
                 "type": "session_paused",
                 "session_id": str(ctx.session_id),
                 "approval_id": approval_id,
                 "tool_name": tool_name,
                 "timestamp": datetime.now(timezone.utc).isoformat(),
-            },
-            sse_queue=sse_queue,
-        )
+            }))
 
         # interrupt() suspends execution here; resumes when Command(resume=...) is sent
         interrupt({
@@ -436,8 +434,8 @@ class AgentRuntime:
                 from packages.agent.job_executor import execute_job
 
                 tool_t0 = time.monotonic()
-                await self._push(
-                    {
+                if sse_queue is not None:
+                    await sse_queue.put(json_safe({
                         "type": "tool_started",
                         "tool_name": call["name"],
                         "tool_call_id": tool_call_id,
@@ -445,9 +443,7 @@ class AgentRuntime:
                         "agent_role": self.role,
                         "input": tool_input,
                         "timestamp": datetime.now(timezone.utc).isoformat(),
-                    },
-                    sse_queue=sse_queue,
-                )
+                    }))
                 try:
                     job_result = await execute_job(_UUID(pending_job_id), sse_queue=sse_queue)
                     tool_duration_ms = int((time.monotonic() - tool_t0) * 1000)
@@ -456,8 +452,8 @@ class AgentRuntime:
                         import json as _json
                         result_output = _json.loads(result_output)
                     new_tool_results.append({call["name"]: result_output})
-                    await self._push(
-                        {
+                    if sse_queue is not None:
+                        await sse_queue.put(json_safe({
                             "type": "tool_completed",
                             "tool_name": call["name"],
                             "tool_call_id": tool_call_id,
@@ -466,9 +462,7 @@ class AgentRuntime:
                             "output": result_output,
                             "status": "success",
                             "timestamp": datetime.now(timezone.utc).isoformat(),
-                        },
-                        sse_queue=sse_queue,
-                    )
+                        }))
                     new_messages.append(LLMMessage(
                         role="tool",
                         content=json.dumps(json_safe(result_output)),
@@ -476,8 +470,8 @@ class AgentRuntime:
                     ))
                 except Exception as exc:
                     tool_duration_ms = int((time.monotonic() - tool_t0) * 1000)
-                    await self._push(
-                        {
+                    if sse_queue is not None:
+                        await sse_queue.put(json_safe({
                             "type": "tool_completed",
                             "tool_name": call["name"],
                             "tool_call_id": tool_call_id,
@@ -486,9 +480,7 @@ class AgentRuntime:
                             "status": "error",
                             "error": str(exc),
                             "timestamp": datetime.now(timezone.utc).isoformat(),
-                        },
-                        sse_queue=sse_queue,
-                    )
+                        }))
                     raise
                 # Clear HITL job id after use
                 pending_job_id = None
@@ -496,8 +488,8 @@ class AgentRuntime:
 
             # Normal (non-HITL) tool execution
             tool_t0 = time.monotonic()
-            await self._push(
-                {
+            if sse_queue is not None:
+                await sse_queue.put(json_safe({
                     "type": "tool_started",
                     "tool_name": call["name"],
                     "tool_call_id": tool_call_id,
@@ -505,9 +497,7 @@ class AgentRuntime:
                     "agent_role": self.role,
                     "input": tool_input,
                     "timestamp": datetime.now(timezone.utc).isoformat(),
-                },
-                sse_queue=sse_queue,
-            )
+                }))
             try:
                 tool_result = await tool.handle(tool_input, ctx)
                 tool_duration_ms = int((time.monotonic() - tool_t0) * 1000)
@@ -518,8 +508,8 @@ class AgentRuntime:
                     else None
                 )
                 new_tool_results.append({call["name"]: tool_output})
-                await self._push(
-                    {
+                if sse_queue is not None:
+                    await sse_queue.put(json_safe({
                         "type": "tool_completed",
                         "tool_name": call["name"],
                         "tool_call_id": tool_call_id,
@@ -529,13 +519,11 @@ class AgentRuntime:
                         "executed_query": executed_query,
                         "status": "success",
                         "timestamp": datetime.now(timezone.utc).isoformat(),
-                    },
-                    sse_queue=sse_queue,
-                )
+                    }))
             except Exception as exc:
                 tool_duration_ms = int((time.monotonic() - tool_t0) * 1000)
-                await self._push(
-                    {
+                if sse_queue is not None:
+                    await sse_queue.put(json_safe({
                         "type": "tool_completed",
                         "tool_name": call["name"],
                         "tool_call_id": tool_call_id,
@@ -544,9 +532,7 @@ class AgentRuntime:
                         "status": "error",
                         "error": str(exc),
                         "timestamp": datetime.now(timezone.utc).isoformat(),
-                    },
-                    sse_queue=sse_queue,
-                )
+                    }))
                 raise
 
             new_messages.append(LLMMessage(

@@ -204,30 +204,26 @@ class SessionOrchestrator:
         clarification_round: int = state.get("clarification_round", 0)
 
         sse_queue = (config.get("configurable") or {}).get("sse_queue")
-        original_queue = self._sse_queue
-        if sse_queue is not None:
-            self._sse_queue = sse_queue
-        try:
-            if needs_clarification(intent.category, intent.goal_text):
-                if not clarification_exhausted(clarification_round):
-                    event = build_clarification_event(session_id, clarification_round + 1)
-                    await self._push(event)
-                    self._schedule_status_update(session_id, "completed")
-                    result = SessionResponse(
+
+        if needs_clarification(intent.category, intent.goal_text):
+            if not clarification_exhausted(clarification_round):
+                event = build_clarification_event(session_id, clarification_round + 1)
+                if sse_queue is not None:
+                    await sse_queue.put(json_safe(event))
+                self._schedule_status_update(session_id, "completed")
+                result = SessionResponse(
+                    mode="direct_chat",
+                    reply=event["message"],
+                    intent=intent,
+                    route=AgentRoute(
                         mode="direct_chat",
-                        reply=event["message"],
-                        intent=intent,
-                        route=AgentRoute(
-                            mode="direct_chat",
-                            agents=[],
-                            requires_planning=False,
-                            requires_dag=False,
-                            rationale="clarification",
-                        ),
-                    )
-                    return {"result": result}
-        finally:
-            self._sse_queue = original_queue
+                        agents=[],
+                        requires_planning=False,
+                        requires_dag=False,
+                        rationale="clarification",
+                    ),
+                )
+                return {"result": result}
         return {}
 
     async def _node_select_mode(
