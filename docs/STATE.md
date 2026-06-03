@@ -21,7 +21,9 @@ Orchestrator execution state. Written only by bdos-orchestrator.
 
 ## Active Phase
 
-None. All planned phases complete as of 2026-06-02.
+**P9 — LangGraph Migration** (Not Started — tasks defined 2026-06-02)
+ADR: `docs/adr/2026-06-02-langgraph-migration.md`
+Tasks: T-063 – T-075
 
 ---
 
@@ -82,6 +84,8 @@ None.
 ## Last Completed Batch
 
 P8 Batch 2 complete (2026-06-02): T-061, T-062 Done. All P8 tasks complete.
+P9 task definition complete (2026-06-02): T-063–T-075 defined. Implementation not yet started.
+P9 task validation complete (2026-06-02): 9 issues resolved — see TASKS.md P9 section.
 
 ## Last Validation
 

@@ -938,3 +938,261 @@ without incurring any LLM API cost.
 - **Depends on:** T-061 (`/api/v1/status` must exist)
 - **Test:** Vitest + React Testing Library: mock `fetch` to return `{ mock_mode: true }`;
   assert banner text visible. `mock_mode: false` → banner not rendered.
+
+---
+
+## P9 — LangGraph Migration
+
+**Goal:** Replace the custom `AgentRuntime` tool loop and `SessionOrchestrator` execution
+routing with LangGraph `StateGraph`, enabling checkpoint-based session persistence and
+resumption. `approvals` / `jobs` tables are retained as audit logs; LangGraph
+`langgraph-checkpoint-postgres` becomes the execution state source of truth.
+
+**ADR:** `docs/adr/2026-06-02-langgraph-migration.md`
+
+**Critical rule (enforced in all batches):** Nodes that call `interrupt()` must contain
+**zero DB side effects**. All writes to `approvals` / `jobs` must happen in a preceding
+node whose state is checkpointed before `interrupt()` is reached.
+
+### Batch P9-B0 — Dependencies & DB migration (Infra — prerequisite for all)
+
+#### T-063: Add LangGraph dependencies — **Not Started**
+- **File:** `pyproject.toml` (api workspace)
+- **What:**
+  - Add `langgraph==1.2.4` and `langgraph-checkpoint-postgres` to the API package
+    dependencies.
+  - Run `uv lock` to update the lockfile.
+  - Confirm `import langgraph` succeeds inside the Docker container.
+- **Test:** `uv run python -c "import langgraph; print(langgraph.__version__)"` exits 0.
+
+#### T-064: DB migration — `langgraph_checkpoints` schema — **Not Started**
+- **File:** `apps/api/app/main.py` (lifespan)
+- **What:**
+  - Call `await AsyncPostgresSaver.setup()` once inside the `@asynccontextmanager` lifespan
+    function. This creates `checkpoints`, `checkpoint_writes`, and `checkpoint_blobs` tables
+    idempotently on every startup — no separate Alembic migration file needed.
+  - Rationale for lifespan approach: LangGraph's own CI uses `setup()` idiomatically;
+    hand-writing the DDL risks drift if LangGraph updates its schema between versions.
+  - Do NOT drop or alter existing `approvals`, `jobs`, or `agent_steps` tables.
+- **Depends on:** T-063
+- **Test:** `SELECT table_name FROM information_schema.tables WHERE table_name LIKE
+  'checkpoint%'` returns at least 3 rows after startup.
+
+---
+
+### Batch P9-B1 — Specialist runtime (App Builder — after P9-B0)
+
+#### T-065: Rewrite `AgentRuntime` as LangGraph `StateGraph` — **Not Started**
+- **Files:** `packages/agent/runtime.py`
+- **What:** Replace the `_run_tool_loop` / `_verify_findings` imperative loop with a
+  `StateGraph` containing three nodes:
+  - `call_model` — builds 3-block system prompt (preserve `cache_control` blocks), calls
+    `LLMClient.complete()`, accumulates `input_tokens` / `output_tokens` / `cost_usd` in
+    graph state.
+  - `execute_tools` — iterates `response.tool_calls`, calls `tool.handle()`, pushes SSE
+    events (`tool_started` / `tool_completed`), appends tool results to messages in state.
+  - `verify_findings` — single LLM call; conditional edge: `pass` → END,
+    `needs_revision` → `call_model` (one retry), `blocked` → END with error status.
+  - Conditional edge `should_continue`: `finish_reason == "stop"` or no tool calls →
+    `verify_findings`; otherwise → `execute_tools`.
+  - `AgentBasedSpecialist.run()` public signature unchanged — it compiles and invokes the
+    graph with a `MemorySaver` checkpointer (unit tests) or the Postgres checkpointer
+    (production).
+  - Token accumulation: use a reducer on the state field, not a nonlocal variable.
+  - Retry logic (was `_run_specialist_with_retry`): implement as a `try/except` with
+    `for attempt in range(3)` inside `call_model`; exponential backoff with
+    `asyncio.sleep(delays[attempt])`.
+  - **Cleanup:** Remove `_run_specialist_with_retry()` from
+    `packages/agent/orchestrator/runtime.py` — retry is now inside the `call_model` node.
+    The orchestrator layer calls the graph directly via `specialist.run(task, ctx)` without
+    the retry wrapper.
+- **Depends on:** T-063, T-064
+- **Test:** All existing `tests/unit/test_agent_runtime.py` assertions pass with the new
+  graph structure. Use `MemorySaver` as checkpointer in tests.
+
+#### T-066: Rewrite HITL using `interrupt()` — **Not Started**
+- **Files:** `packages/agent/runtime.py`, `packages/agent/orchestrator/hitl.py`
+- **What:**
+  - Remove `HITLPause` exception class.
+  - Add `prepare_hitl` node to the `AgentRuntime` graph:
+    - Detects HITL tool in current tool call.
+    - Creates `approvals` row and `jobs` row in DB (side-effecting work).
+    - Stores `approval_id` and `job_id` in graph state.
+    - Returns normally (no exception).
+  - Add `wait_for_approval` node immediately after `prepare_hitl`:
+    - Calls `interrupt({"approval_id": state["approval_id"], "tool_name": ..., "tool_input": ...})`.
+    - Contains **zero DB writes** — enforces the interrupt() isolation rule.
+  - **Post-resume execution model (critical):** When the graph resumes after `interrupt()`,
+    execution continues in `execute_tools`. For HITL tools, `execute_tools` must NOT call
+    `tool.handle()` again — that would create a duplicate `jobs` row. Instead, `execute_tools`
+    checks `state.get("pending_hitl_job_id")`: if set, call `execute_job(job_id, sse_queue)`
+    directly using the `job_id` stored by `prepare_hitl` in graph state. Only non-HITL tools
+    call `tool.handle()`.
+  - **Compatibility with T-035:** The `asyncio.create_task(execute_job(...))` call in
+    `apps/api/routers/approvals.py` is removed by T-071; job execution moves exclusively
+    into the graph resume path.
+  - `SessionOrchestrator.run()` removes the `except HITLPause` block; the `session_paused`
+    SSE event and `awaiting_approval` status update are emitted from a post-`prepare_hitl`
+    graph node or hook.
+- **Depends on:** T-065
+- **Test:** Unit: mock DB repos; confirm `approvals.create()` called once even when the
+  graph is re-invoked after `interrupt()`. Confirm no duplicate rows. Confirm
+  `execute_job()` is called (not `tool.handle()`) when `pending_hitl_job_id` is in state.
+
+---
+
+### Batch P9-B2 — Session orchestration (App Builder — after P9-B1)
+
+**Internal sequencing within B2:** T-067 must complete first (all other B2 tasks depend on it).
+After T-067 is done, T-068, T-069, and T-072 can run in parallel.
+
+#### T-067: Rewrite `SessionOrchestrator` execution routing as `StateGraph` — **Not Started**
+- **Files:** `packages/agent/orchestrator/session_orchestrator.py`,
+  `packages/agent/orchestrator/runtime.py`
+- **What:**
+  - Build a top-level `StateGraph` with nodes:
+    - `classify_intent` — wraps existing `classify_intent()` logic.
+    - `select_mode` — wraps `select_execution_mode()` logic.
+    - `handle_clarification` — wraps clarification check; routes to END (clarification
+      response) or continues.
+    - `run_direct_chat` — wraps `run_direct_chat()`.
+    - `run_sequential` — wraps `_run_agents_in_order()`.
+    - `run_planned` — wraps `run_planned_execution()`.
+    - `run_dag` — wraps the **existing** `run_dag_execution()` as a bridge node;
+      T-068 upgrades the internal DAG execution to the LangGraph Send API after T-067 is done.
+    - `synthesize` — wraps `_synthesize_response()`.
+  - Conditional edges from `select_mode`:
+    - `"direct_chat"` → `run_direct_chat` → END
+    - `"single_agent"` / `"sequential_agents"` → `run_sequential` → `synthesize` → END
+    - `"planned_execution"` → `run_planned` → `synthesize` → END
+    - `"dag_execution"` → `run_dag` → `synthesize` → END
+  - `SessionOrchestrator.run()` compiles and invokes this graph with
+    `config={"configurable": {"thread_id": str(session_id)}}`.
+  - Public interface `Orchestrator` Protocol (`run()` / `resume()`) signatures unchanged.
+- **Depends on:** T-066
+- **Test:** All existing orchestrator unit tests pass. SSE events emitted in the same
+  order as before.
+
+#### T-068: Replace `run_dag_execution` with LangGraph `Send` API — **Not Started**
+- **File:** `packages/agent/orchestrator/planning.py`
+- **What:**
+  - Replace the `while remaining` / `asyncio.gather` loop with LangGraph's `Send` API:
+    - `create_task_nodes()` output maps to `Send` objects targeting a `run_dag_node` node.
+    - Dependency resolution: use `conditional_edges` to fan out ready nodes; a `merge`
+      node collects results.
+  - Preserves the same output structure (`completed: dict[str, SpecialistResult]`).
+- **Depends on:** T-067 (parallel with T-069 and T-072 after T-067)
+- **Test:** Unit: DAG with 3 nodes (A, B→depends on A, C→depends on A) executes A first,
+  then B and C in parallel (verify timing via mock).
+
+#### T-069: Rewrite `SessionOrchestrator.resume()` — **Not Started**
+- **File:** `packages/agent/orchestrator/session_orchestrator.py`
+- **What:**
+  - `resume(session_id, approval_id)`:
+    1. Always call `await graph.astream(None, config={"configurable": {"thread_id": str(session_id)}})`
+       to resume the paused LangGraph thread from checkpoint. The `execute_tools` node finds
+       `pending_hitl_job_id` in graph state (stored by `prepare_hitl`), calls `execute_job()`,
+       and produces the job result as part of the graph output.
+    2. Build `SessionResponse` from the graph's final output (job result, files).
+  - Remove the current shortcut that returns early when a job is already `completed`
+    (current: `if job.get("status") == "completed": return SessionResponse(...)`).
+    In the LangGraph model the graph always drives the response, including for completed jobs.
+  - Remove the fallback `await self.run(...)` path that re-classified intent from scratch.
+- **Depends on:** T-067 (parallel with T-068 and T-072 after T-067)
+- **Test:** Integration: pause a graph via `interrupt()`; call `resume()`; confirm
+  execution continues from the paused node without re-running `classify_intent`.
+
+#### T-072: Port history compression into a LangGraph pre-processing node — **Not Started**
+- **File:** `packages/agent/runtime.py`
+- **What:**
+  - Add a `compress_history` node that runs before `call_model` when
+    `len(state["messages"]) > SUMMARY_THRESHOLD` (30).
+  - Logic unchanged: summarize oldest messages with Haiku, keep recent 10, prepend
+    summary as a system message.
+  - Node is a no-op when message count ≤ threshold.
+- **Depends on:** T-065 (parallel with T-068 and T-069 after T-067 is done; does not
+  touch SessionOrchestrator graph)
+- **Test:** Unit: inject 35 messages into graph state; confirm `call_model` receives ≤ 11
+  messages (10 recent + 1 summary).
+
+---
+
+### Batch P9-B3 — Integration layer (App Builder — after P9-B2)
+
+#### T-070: Adapt SSE streaming to LangGraph `stream_mode="custom"` — **Not Started**
+- **Files:** `packages/agent/runtime.py`, `packages/agent/orchestrator/session_orchestrator.py`,
+  `apps/web/lib/api.ts` — `streamSession()`, `apps/web/app/chat/ChatStateContext.tsx`
+- **What:**
+  - Replace `await self._push({...})` calls with LangGraph's custom stream mode.
+  - Use `stream_mode="custom"` and emit existing event dicts
+    (`tool_started`, `tool_completed`, `agent_started`, `agent_completed`,
+    `awaiting_approval`, `session_paused`, `intent_classified`, etc.) via `astream_events`
+    or `astream` with `stream_mode=["custom", "updates"]`.
+  - The `asyncio.Queue` SSE bridge cannot be stored in graph state; inject it via
+    `RunnableConfig` (preferred — LangGraph-idiomatic) rather than a module-level
+    context variable.
+  - Frontend `EventSource` handler: verify all existing event types are still emitted;
+    update field paths if LangGraph wraps them in an envelope.
+- **Depends on:** T-067 (parallel with T-071 after T-069)
+- **Test:** Integration: stream a mock session; assert `tool_started` and `tool_completed`
+  events are received by the SSE client in the correct order.
+
+#### T-071: Update `POST /approvals/{id}/decision` to trigger LangGraph resume — **Not Started**
+- **File:** `apps/api/routers/approvals.py`
+- **What:**
+  - `approved` path (replacing the current `asyncio.create_task(execute_job(...))` call):
+    - Look up `session_id` from the updated `approvals` row.
+    - Fire `asyncio.create_task(orchestrator.resume(session_id, approval_id))` — non-blocking.
+      This calls `graph.astream(None, ...)` which resumes the graph; the graph's `execute_tools`
+      node runs `execute_job(job_id)` from checkpoint state.
+    - Remove the `asyncio.create_task(execute_job(...))` background task call entirely —
+      job execution now happens exclusively inside the LangGraph graph resume.
+  - `rejected` path: still calls `JobsRepository.update_status(job_id, "cancelled")` directly
+    (no graph resume; graph is abandoned).
+  - `needs_revision` path: no change.
+  - The `approvals` row update (audit log write) is unchanged.
+- **Depends on:** T-069 (parallel with T-070 after T-069)
+- **Test:** Integration: approve a pending HITL; verify the agent resumes and the job
+  transitions to `running` then `completed` without re-running the intent classification.
+  Verify `execute_job` is NOT called directly from the approvals router — only via the graph.
+
+---
+
+### Batch P9-B4 — Tests (Test/Review — after P9-B3)
+
+#### T-073: Update unit tests for LangGraph graph structure — **Not Started**
+- **Files:** `tests/unit/test_agent_runtime.py`, `tests/unit/test_agent_reclassification.py`,
+  `tests/unit/test_session_orchestrator*.py`
+- **What:**
+  - Replace direct `AgentRuntime` instantiation with graph compilation using `MemorySaver`.
+  - Assert graph node execution order via mock call counts.
+  - Verify `SpecialistResult` shape is unchanged after graph execution.
+  - Parametrize verify_findings retry: `needs_revision` triggers second `call_model` call.
+  - Update `tests/unit/test_session_orchestrator*.py`: compile the new StateGraph-based
+    `SessionOrchestrator` with `MemorySaver`; verify all 5 execution modes route through
+    the correct conditional edge. No LLM calls — use `ScenarioStubClaudeClient`.
+- **Depends on:** T-072
+
+#### T-074: Integration test — HITL interrupt/resume via LangGraph — **Not Started**
+- **Files:** `tests/integration/test_hitl_langgraph.py`
+- **What:**
+  - Full HITL cycle against real DB:
+    1. Invoke a session that triggers a HITL tool.
+    2. Confirm graph is paused at `wait_for_approval` node (checkpoint exists).
+    3. Confirm `approvals` row created **once** (not twice).
+    4. Call `resume()`.
+    5. Confirm tool executes, `jobs` row transitions to `completed`.
+  - Use `AsyncPostgresSaver` with test DB (not `MemorySaver`).
+- **Depends on:** T-071
+
+#### T-075: Integration test — session persistence and resumption — **Not Started**
+- **Files:** `tests/integration/test_session_persistence.py`
+- **What:**
+  - Simulate a mid-session pause (not HITL — e.g., process restart):
+    1. Start a planned_execution session, advance past `classify_intent`.
+    2. Discard the in-memory orchestrator instance.
+    3. Reconstruct `SessionOrchestrator` from scratch (simulates server restart).
+    4. Call `run()` with the same `session_id`.
+    5. Confirm the graph resumes from the last checkpointed node, not from
+       `classify_intent`.
+- **Depends on:** T-074
