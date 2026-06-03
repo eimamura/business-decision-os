@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 import asyncio
-import json
+import json as _json
 from typing import Any
 from uuid import UUID
 
 import structlog
+from langchain_core.runnables import RunnableConfig
+from langgraph.graph import END, START, StateGraph
+from typing_extensions import TypedDict
 
 from packages.agent.orchestrator.clarification import (
     build_clarification_event,
@@ -34,6 +37,26 @@ from packages.persistence.sessions_repo import DecisionSessionRepository
 _log = structlog.get_logger(__name__)
 
 
+# ---------------------------------------------------------------------------
+# OrchestratorState
+# ---------------------------------------------------------------------------
+
+
+class OrchestratorState(TypedDict):
+    session_id: str
+    query: SessionUserQuery
+    intent: SessionIntent | None
+    route: AgentRoute | None
+    result: SessionResponse | None
+    clarification_round: int
+    error: str | None
+
+
+# ---------------------------------------------------------------------------
+# SessionOrchestrator
+# ---------------------------------------------------------------------------
+
+
 class SessionOrchestrator:
     def __init__(
         self,
@@ -49,11 +72,12 @@ class SessionOrchestrator:
         self._sse_queue = sse_queue
         self._event_persister = event_persister
 
-    async def _push(self, event: dict[str, Any]) -> None:
+    async def _push(self, event: dict[str, Any], sse_queue: Any = None) -> None:
+        q = sse_queue if sse_queue is not None else self._sse_queue
         safe = json_safe(event)
-        if self._sse_queue is not None:
-            await self._sse_queue.put(safe)
-        if self._event_persister is not None:
+        if q is not None:
+            await q.put(safe)
+        if sse_queue is None and self._event_persister is not None:
             await self._event_persister(safe)
 
     def _query_text(self, query: SessionUserQuery) -> str:
@@ -61,17 +85,18 @@ class SessionOrchestrator:
             return f"[Conversation context: {query.conversation_context}]\n\n{query.text}"
         return query.text
 
-    def _schedule_status_update(self, session_id: UUID, status: str) -> None:
+    def _schedule_status_update(self, session_id: UUID | str, status: str) -> None:
         """Fire-and-forget DB status update; logs a warning on failure."""
+        sid = str(session_id)
 
         async def _persist() -> None:
             try:
-                await DecisionSessionRepository().update_status(str(session_id), status)
+                await DecisionSessionRepository().update_status(sid, status)
             except Exception as exc:
                 _log.warning(
                     "session status update failed",
                     target_status=status,
-                    session_id=str(session_id),
+                    session_id=sid,
                     error=str(exc),
                 )
 
@@ -117,7 +142,7 @@ class SessionOrchestrator:
                 LLMMessage(role="system", content=ROUTER_SYSTEM),
                 LLMMessage(
                     role="user",
-                    content=json.dumps(
+                    content=_json.dumps(
                         {
                             "query": self._query_text(query),
                             "intent": intent.model_dump(),
@@ -148,6 +173,237 @@ class SessionOrchestrator:
     def _validate_route(self, route: AgentRoute) -> None:
         validate_route(route)
 
+    # ------------------------------------------------------------------
+    # Graph nodes
+    # ------------------------------------------------------------------
+
+    async def _node_classify_intent(
+        self, state: OrchestratorState, config: RunnableConfig
+    ) -> dict[str, Any]:
+        session_id = UUID(state["session_id"])
+        sse_queue = (config.get("configurable") or {}).get("sse_queue")
+        # Use config sse_queue if provided
+        original_queue = self._sse_queue
+        if sse_queue is not None:
+            self._sse_queue = sse_queue
+        try:
+            intent = await self.classify_intent(state["query"], session_id)
+        finally:
+            self._sse_queue = original_queue
+        return {"intent": intent}
+
+    async def _node_handle_clarification(
+        self, state: OrchestratorState, config: RunnableConfig
+    ) -> dict[str, Any]:
+        """No-op node — routing logic is in the conditional edge."""
+        intent = state.get("intent")
+        if intent is None:
+            return {}
+        session_id = UUID(state["session_id"])
+        clarification_round: int = state.get("clarification_round", 0)
+
+        sse_queue = (config.get("configurable") or {}).get("sse_queue")
+        original_queue = self._sse_queue
+        if sse_queue is not None:
+            self._sse_queue = sse_queue
+        try:
+            if needs_clarification(intent.category, intent.goal_text):
+                if not clarification_exhausted(clarification_round):
+                    event = build_clarification_event(session_id, clarification_round + 1)
+                    await self._push(event)
+                    self._schedule_status_update(session_id, "completed")
+                    result = SessionResponse(
+                        mode="direct_chat",
+                        reply=event["message"],
+                        intent=intent,
+                        route=AgentRoute(
+                            mode="direct_chat",
+                            agents=[],
+                            requires_planning=False,
+                            requires_dag=False,
+                            rationale="clarification",
+                        ),
+                    )
+                    return {"result": result}
+        finally:
+            self._sse_queue = original_queue
+        return {}
+
+    async def _node_select_mode(
+        self, state: OrchestratorState, config: RunnableConfig
+    ) -> dict[str, Any]:
+        session_id = UUID(state["session_id"])
+        intent = state["intent"]
+        assert intent is not None
+
+        sse_queue = (config.get("configurable") or {}).get("sse_queue")
+        original_queue = self._sse_queue
+        if sse_queue is not None:
+            self._sse_queue = sse_queue
+        try:
+            route = await self.select_execution_mode(state["query"], intent, session_id)
+        finally:
+            self._sse_queue = original_queue
+        return {"route": route}
+
+    async def _node_run_direct_chat(
+        self, state: OrchestratorState, config: RunnableConfig
+    ) -> dict[str, Any]:
+        session_id = UUID(state["session_id"])
+        intent = state["intent"]
+        route = state["route"]
+        assert intent is not None
+        assert route is not None
+
+        sse_queue = (config.get("configurable") or {}).get("sse_queue")
+        original_queue = self._sse_queue
+        if sse_queue is not None:
+            self._sse_queue = sse_queue
+        try:
+            result = await run_direct_chat(self, session_id, state["query"], intent, route)
+            self._schedule_status_update(session_id, "completed")
+        finally:
+            self._sse_queue = original_queue
+        return {"result": result}
+
+    async def _node_run_sequential(
+        self, state: OrchestratorState, config: RunnableConfig
+    ) -> dict[str, Any]:
+        session_id = UUID(state["session_id"])
+        intent = state["intent"]
+        route = state["route"]
+        assert intent is not None
+        assert route is not None
+
+        sse_queue = (config.get("configurable") or {}).get("sse_queue")
+        original_queue = self._sse_queue
+        if sse_queue is not None:
+            self._sse_queue = sse_queue
+        try:
+            results = await _run_agents_in_order(
+                self, session_id, state["query"], route.agents, intent
+            )
+            result = await _synthesize_response(
+                self, session_id, state["query"], intent, route, results
+            )
+        finally:
+            self._sse_queue = original_queue
+        return {"result": result}
+
+    async def _node_run_planned(
+        self, state: OrchestratorState, config: RunnableConfig
+    ) -> dict[str, Any]:
+        session_id = UUID(state["session_id"])
+        intent = state["intent"]
+        route = state["route"]
+        assert intent is not None
+        assert route is not None
+
+        sse_queue = (config.get("configurable") or {}).get("sse_queue")
+        original_queue = self._sse_queue
+        if sse_queue is not None:
+            self._sse_queue = sse_queue
+        try:
+            result = await run_planned_execution(self, session_id, state["query"], intent, route)
+            self._schedule_status_update(session_id, "completed")
+        finally:
+            self._sse_queue = original_queue
+        return {"result": result}
+
+    async def _node_run_dag(
+        self, state: OrchestratorState, config: RunnableConfig
+    ) -> dict[str, Any]:
+        """Bridge node — calls run_dag_execution unchanged; T-068 upgrades the internals."""
+        session_id = UUID(state["session_id"])
+        intent = state["intent"]
+        route = state["route"]
+        assert intent is not None
+        assert route is not None
+
+        sse_queue = (config.get("configurable") or {}).get("sse_queue")
+        original_queue = self._sse_queue
+        if sse_queue is not None:
+            self._sse_queue = sse_queue
+        try:
+            result = await run_dag_execution(self, session_id, state["query"], intent, route)
+            self._schedule_status_update(session_id, "completed")
+        finally:
+            self._sse_queue = original_queue
+        return {"result": result}
+
+    # ------------------------------------------------------------------
+    # Conditional edges
+    # ------------------------------------------------------------------
+
+    def _edge_after_clarification(self, state: OrchestratorState) -> str:
+        """If a clarification result was set, we end. Otherwise continue to select_mode."""
+        if state.get("result") is not None:
+            return END
+        return "select_mode"
+
+    def _edge_after_select_mode(self, state: OrchestratorState) -> str:
+        route = state.get("route")
+        if route is None:
+            return END
+        mode = route.mode
+        if mode == "direct_chat":
+            return "run_direct_chat"
+        if mode in ("single_agent", "sequential_agents"):
+            return "run_sequential"
+        if mode == "planned_execution":
+            return "run_planned"
+        if mode == "dag_execution":
+            return "run_dag"
+        # Unknown mode — end
+        return END
+
+    # ------------------------------------------------------------------
+    # Graph builder
+    # ------------------------------------------------------------------
+
+    def _build_graph(self) -> Any:
+        sg: StateGraph = StateGraph(OrchestratorState)  # type: ignore[type-arg]
+
+        sg.add_node("classify_intent", self._node_classify_intent)
+        sg.add_node("handle_clarification", self._node_handle_clarification)
+        sg.add_node("select_mode", self._node_select_mode)
+        sg.add_node("run_direct_chat", self._node_run_direct_chat)
+        sg.add_node("run_sequential", self._node_run_sequential)
+        sg.add_node("run_planned", self._node_run_planned)
+        sg.add_node("run_dag", self._node_run_dag)
+
+        sg.add_edge(START, "classify_intent")
+        sg.add_edge("classify_intent", "handle_clarification")
+        sg.add_conditional_edges(
+            "handle_clarification",
+            self._edge_after_clarification,
+            {
+                END: END,
+                "select_mode": "select_mode",
+            },
+        )
+        sg.add_conditional_edges(
+            "select_mode",
+            self._edge_after_select_mode,
+            {
+                "run_direct_chat": "run_direct_chat",
+                "run_sequential": "run_sequential",
+                "run_planned": "run_planned",
+                "run_dag": "run_dag",
+                END: END,
+            },
+        )
+        sg.add_edge("run_direct_chat", END)
+        sg.add_edge("run_sequential", END)
+        sg.add_edge("run_planned", END)
+        sg.add_edge("run_dag", END)
+
+        return sg.compile()
+
+    # ------------------------------------------------------------------
+    # Public run()
+    # ------------------------------------------------------------------
+
     async def run(self, session_id: UUID, query: SessionUserQuery) -> SessionResponse:
         if isinstance(query, SessionGoal):
             query = SessionUserQuery(
@@ -162,44 +418,29 @@ class SessionOrchestrator:
             "timestamp": _iso_now(),
         })
 
+        clarification_round: int = query.metadata.get("clarification_round", 0)
+
+        initial_state: OrchestratorState = {
+            "session_id": str(session_id),
+            "query": query,
+            "intent": None,
+            "route": None,
+            "result": None,
+            "clarification_round": clarification_round,
+            "error": None,
+        }
+
+        config = {
+            "configurable": {
+                "thread_id": str(session_id),
+                "sse_queue": self._sse_queue,
+            }
+        }
+
+        graph = self._build_graph()
+
         try:
-            intent = await self.classify_intent(query, session_id)
-
-            clarification_round: int = query.metadata.get("clarification_round", 0)
-            if needs_clarification(intent.category, intent.goal_text):
-                if not clarification_exhausted(clarification_round):
-                    event = build_clarification_event(session_id, clarification_round + 1)
-                    await self._push(event)
-                    self._schedule_status_update(session_id, "completed")
-                    return SessionResponse(
-                        mode="direct_chat",
-                        reply=event["message"],
-                        intent=intent,
-                        route=AgentRoute(
-                            mode="direct_chat",
-                            agents=[],
-                            requires_planning=False,
-                            requires_dag=False,
-                            rationale="clarification",
-                        ),
-                    )
-                # round limit reached — fall through to direct_chat execution
-
-            route = await self.select_execution_mode(query, intent, session_id)
-            if route.mode == "direct_chat":
-                result = await run_direct_chat(self, session_id, query, intent, route)
-            elif route.mode == "single_agent":
-                results = await _run_agents_in_order(self, session_id, query, route.agents, intent)
-                result = await _synthesize_response(self, session_id, query, intent, route, results)
-            elif route.mode == "sequential_agents":
-                results = await _run_agents_in_order(self, session_id, query, route.agents, intent)
-                result = await _synthesize_response(self, session_id, query, intent, route, results)
-            elif route.mode == "planned_execution":
-                result = await run_planned_execution(self, session_id, query, intent, route)
-            elif route.mode == "dag_execution":
-                result = await run_dag_execution(self, session_id, query, intent, route)
-            else:
-                raise ValueError(f"unknown execution mode: {route.mode}")
+            final_state: dict[str, Any] = await graph.ainvoke(initial_state, config=config)
         except Exception as exc:
             self._schedule_status_update(session_id, "failed")
             await self._push({
@@ -210,8 +451,13 @@ class SessionOrchestrator:
                 "timestamp": _iso_now(),
             })
             raise
-        self._schedule_status_update(session_id, "completed")
-        return result
+
+        raw_result = final_state.get("result")
+        if raw_result is None:
+            raise RuntimeError("Orchestrator graph produced no result")
+        if not isinstance(raw_result, SessionResponse):
+            raise RuntimeError(f"Orchestrator graph returned unexpected type: {type(raw_result)}")
+        return raw_result
 
     async def resume(self, session_id: UUID, approval_id: UUID) -> SessionResponse:
         from packages.agent.orchestrator.result_builder import build_job_result_reply
