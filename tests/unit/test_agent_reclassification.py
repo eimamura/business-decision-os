@@ -201,7 +201,9 @@ def test_post_decision_200_for_approver(api_client: TestClient) -> None:
 def test_post_approval_creates_201(api_client: TestClient) -> None:
     from unittest.mock import AsyncMock, patch
     session_id = str(uuid4())
-    mock_record: dict = {"id": str(uuid4()), "session_id": session_id, "status": "pending", "actor": "dev-user"}
+    mock_record: dict = {
+        "id": str(uuid4()), "session_id": session_id, "status": "pending", "actor": "dev-user"
+    }
     with patch("apps.api.routers.approvals._approvals_repo") as mock_repo:
         mock_repo.create = AsyncMock(return_value=mock_record)
         mock_repo.create.__aenter__ = AsyncMock(return_value=mock_record)
@@ -232,3 +234,210 @@ def test_put_policies_returns_200(api_client: TestClient) -> None:
     data = response.json()
     assert data["budget_soft_limit_usd"] == 5.0
     assert data["budget_hard_limit_usd"] == 25.0
+
+
+# ---------------------------------------------------------------------------
+# T-073: SessionOrchestrator execution mode routing via conditional edges
+# ---------------------------------------------------------------------------
+#
+# These tests compile the StateGraph-based SessionOrchestrator with MemorySaver
+# and verify that each execution mode routes to the correct node.
+# They use the conditional edge functions directly to avoid full graph traversal
+# (which would require DB-backed repositories).
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_t073_session_orchestrator_compiles_with_memory_saver() -> None:
+    """SessionOrchestrator._build_graph() must compile successfully with MemorySaver."""
+    from langgraph.checkpoint.memory import MemorySaver
+
+    from packages.agent.llm import ScenarioStubClaudeClient
+    from packages.agent.orchestrator.session_orchestrator import SessionOrchestrator
+    from packages.memory import StubMemoryStore
+    from packages.tools import create_tool_registry
+
+    orchestrator = SessionOrchestrator(
+        llm_client=ScenarioStubClaudeClient(),
+        tool_registry=create_tool_registry(),
+        memory_store=StubMemoryStore(),
+    )
+    graph = orchestrator._build_graph(checkpointer=MemorySaver())
+    assert graph is not None
+
+
+@pytest.mark.parametrize(
+    "mode,expected_node",
+    [
+        ("direct_chat", "run_direct_chat"),
+        ("single_agent", "run_sequential"),
+        ("sequential_agents", "run_sequential"),
+        ("planned_execution", "run_planned"),
+        ("dag_execution", "run_dag"),
+    ],
+    ids=[
+        "direct_chat_routes_to_run_direct_chat",
+        "single_agent_routes_to_run_sequential",
+        "sequential_agents_routes_to_run_sequential",
+        "planned_execution_routes_to_run_planned",
+        "dag_execution_routes_to_run_dag",
+    ],
+)
+def test_t073_edge_after_select_mode_routes_correctly(mode: str, expected_node: str) -> None:
+    """_edge_after_select_mode must route each mode to the correct graph node."""
+    from packages.agent.llm import ScenarioStubClaudeClient
+    from packages.agent.orchestrator.models import AgentRoute
+    from packages.agent.orchestrator.session_orchestrator import (
+        OrchestratorState,
+        SessionOrchestrator,
+    )
+    from packages.memory import StubMemoryStore
+    from packages.tools import create_tool_registry
+
+    orchestrator = SessionOrchestrator(
+        llm_client=ScenarioStubClaudeClient(),
+        tool_registry=create_tool_registry(),
+        memory_store=StubMemoryStore(),
+    )
+
+    # Build a minimal OrchestratorState with a route that has the given mode.
+    # We need agents to satisfy validate_route:
+    #  - direct_chat: no agents
+    #  - single_agent: exactly one agent
+    #  - sequential_agents: one or more agents
+    #  - planned_execution / dag_execution: agents list is not validated (no constraint)
+    agents: list[str]
+    if mode == "direct_chat":
+        agents = []
+    else:
+        agents = ["demand"]
+
+    route = AgentRoute(
+        mode=mode,  # type: ignore[arg-type]
+        agents=agents,
+        requires_planning=mode == "planned_execution",
+        requires_dag=mode == "dag_execution",
+        rationale="test",
+    )
+
+    from packages.agent.orchestrator.models import SessionUserQuery
+    state: OrchestratorState = {
+        "session_id": str(uuid4()),
+        "query": SessionUserQuery(text="test"),
+        "intent": None,
+        "route": route,
+        "result": None,
+        "clarification_round": 0,
+        "error": None,
+    }
+
+    actual_node = orchestrator._edge_after_select_mode(state)
+    assert actual_node == expected_node, (
+        f"mode='{mode}': expected edge to '{expected_node}', got '{actual_node}'"
+    )
+
+
+def test_t073_edge_after_select_mode_unknown_mode_returns_end() -> None:
+    """An unknown mode must route to END rather than raising."""
+    from langgraph.graph import END
+
+    from packages.agent.llm import ScenarioStubClaudeClient
+    from packages.agent.orchestrator.models import AgentRoute, SessionUserQuery
+    from packages.agent.orchestrator.session_orchestrator import (
+        OrchestratorState,
+        SessionOrchestrator,
+    )
+    from packages.memory import StubMemoryStore
+    from packages.tools import create_tool_registry
+
+    orchestrator = SessionOrchestrator(
+        llm_client=ScenarioStubClaudeClient(),
+        tool_registry=create_tool_registry(),
+        memory_store=StubMemoryStore(),
+    )
+
+    route = AgentRoute(
+        mode="direct_chat",  # we override the mode field after construction
+        agents=[],
+        requires_planning=False,
+        requires_dag=False,
+        rationale="test",
+    )
+    # Manually override to an unknown mode (bypasses Pydantic validation)
+    object.__setattr__(route, "mode", "unknown_mode")
+
+    state: OrchestratorState = {
+        "session_id": str(uuid4()),
+        "query": SessionUserQuery(text="test"),
+        "intent": None,
+        "route": route,
+        "result": None,
+        "clarification_round": 0,
+        "error": None,
+    }
+
+    actual = orchestrator._edge_after_select_mode(state)
+    assert actual == END
+
+
+def test_t073_edge_after_select_mode_none_route_returns_end() -> None:
+    """When route is None, _edge_after_select_mode must return END."""
+    from langgraph.graph import END
+
+    from packages.agent.llm import ScenarioStubClaudeClient
+    from packages.agent.orchestrator.models import SessionUserQuery
+    from packages.agent.orchestrator.session_orchestrator import (
+        OrchestratorState,
+        SessionOrchestrator,
+    )
+    from packages.memory import StubMemoryStore
+    from packages.tools import create_tool_registry
+
+    orchestrator = SessionOrchestrator(
+        llm_client=ScenarioStubClaudeClient(),
+        tool_registry=create_tool_registry(),
+        memory_store=StubMemoryStore(),
+    )
+
+    state: OrchestratorState = {
+        "session_id": str(uuid4()),
+        "query": SessionUserQuery(text="test"),
+        "intent": None,
+        "route": None,
+        "result": None,
+        "clarification_round": 0,
+        "error": None,
+    }
+
+    actual = orchestrator._edge_after_select_mode(state)
+    assert actual == END
+
+
+def test_t073_session_orchestrator_graph_node_names() -> None:
+    """The compiled SessionOrchestrator graph must contain all expected node names."""
+    from langgraph.checkpoint.memory import MemorySaver
+
+    from packages.agent.llm import ScenarioStubClaudeClient
+    from packages.agent.orchestrator.session_orchestrator import SessionOrchestrator
+    from packages.memory import StubMemoryStore
+    from packages.tools import create_tool_registry
+
+    orchestrator = SessionOrchestrator(
+        llm_client=ScenarioStubClaudeClient(),
+        tool_registry=create_tool_registry(),
+        memory_store=StubMemoryStore(),
+    )
+    graph = orchestrator._build_graph(checkpointer=MemorySaver())
+    node_names = set(graph.nodes.keys())
+
+    expected = {
+        "classify_intent",
+        "handle_clarification",
+        "select_mode",
+        "run_direct_chat",
+        "run_sequential",
+        "run_planned",
+        "run_dag",
+    }
+    missing = expected - node_names
+    assert not missing, f"SessionOrchestrator graph missing nodes: {missing}"

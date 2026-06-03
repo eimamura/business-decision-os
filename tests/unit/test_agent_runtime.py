@@ -8,8 +8,7 @@ import pytest
 
 from packages.agent.llm import LLMMessage, LLMResponse, LLMUsage
 from packages.agent.orchestrator.models import SpecialistTask
-from packages.agent.runtime import AgentRuntime, SUMMARY_THRESHOLD
-
+from packages.agent.runtime import SUMMARY_THRESHOLD, AgentRuntime
 
 # ---------------------------------------------------------------------------
 # Helpers / fakes
@@ -426,9 +425,7 @@ async def test_t072_compress_history_reduces_messages_to_11() -> None:
             )
 
     llm = _RecordingLLMClientWithMessageCount([summary_resp, main_resp, verifier_resp])
-    runtime = _make_runtime(llm)
-    task = _make_task()
-    ctx = _FakeToolContext()
+    _make_runtime(llm)  # pre-warms import paths; actual test uses summarize_runtime below
 
     # Build initial state with 35 messages by injecting extra messages via a
     # custom run — we patch the graph's initial_state directly.
@@ -517,3 +514,173 @@ async def test_t072_compress_history_at_threshold_boundary_is_noop() -> None:
     assert len(llm._calls) == 0, (
         f"compress_history must make zero LLM calls at threshold, got {len(llm._calls)}"
     )
+
+
+# ---------------------------------------------------------------------------
+# T-073: LangGraph graph structure verification
+# ---------------------------------------------------------------------------
+
+
+def test_t073_graph_has_expected_nodes() -> None:
+    """AgentRuntime graph must contain exactly the expected set of nodes."""
+    from langgraph.checkpoint.memory import MemorySaver
+
+    llm = _RecordingLLMClient([])
+    runtime = _make_runtime(llm)
+    graph = runtime._build_graph(checkpointer=MemorySaver())
+
+    # LangGraph compiled graph exposes node names via .nodes or .graph
+    # Use the underlying graph object to inspect node names
+    node_names = set(graph.nodes.keys())
+
+    expected_nodes = {
+        "compress_history",
+        "call_model",
+        "execute_tools",
+        "prepare_hitl",
+        "wait_for_approval",
+        "verify_findings",
+    }
+    missing = expected_nodes - node_names
+    assert not missing, (
+        f"Graph is missing expected nodes: {missing}. Found: {node_names}"
+    )
+
+
+def test_t073_graph_also_has_revision_nodes() -> None:
+    """Graph must also contain the add_revision_message and call_model_final nodes."""
+    from langgraph.checkpoint.memory import MemorySaver
+
+    llm = _RecordingLLMClient([])
+    runtime = _make_runtime(llm)
+    graph = runtime._build_graph(checkpointer=MemorySaver())
+
+    node_names = set(graph.nodes.keys())
+    for name in ("add_revision_message", "call_model_final"):
+        assert name in node_names, (
+            f"Expected node '{name}' in graph, found: {node_names}"
+        )
+
+
+async def test_t073_specialist_result_shape_after_run() -> None:
+    """SpecialistResult returned by run() must have the correct shape."""
+    from packages.agent.orchestrator import SpecialistResult
+
+    llm = _RecordingLLMClient([_stop_response("Analysis complete."), _stop_response("pass")])
+    runtime = _make_runtime(llm)
+    task = _make_task()
+    ctx = _FakeToolContext()
+
+    result = await runtime.run(task, ctx)
+
+    assert isinstance(result, SpecialistResult)
+    assert result.task_id == task.task_id
+    assert isinstance(result.output, dict)
+    assert "text" in result.output
+    assert result.status in ("completed", "failed", "needs_input")
+    assert isinstance(result.tool_calls_made, list)
+    assert result.usage is not None
+    assert "input_tokens" in result.usage
+    assert "output_tokens" in result.usage
+    assert "cost_usd" in result.usage
+
+
+@pytest.mark.parametrize(
+    "verifier_text,expected_call_count",
+    [
+        ("needs_revision: minor issues found", 3),
+        ("pass: all good", 2),
+        ("blocked: fabricated data", 2),
+    ],
+    ids=["needs_revision_calls_model_twice", "pass_calls_model_once", "blocked_calls_model_once"],
+)
+async def test_t073_verify_findings_retry_call_counts(
+    verifier_text: str, expected_call_count: int
+) -> None:
+    """verify_findings retry behavior: needs_revision triggers a second call_model invocation."""
+    main_resp = _stop_response("Initial conclusion.")
+    verifier_resp = _stop_response(verifier_text)
+    retry_resp = _stop_response("Revised conclusion.")
+
+    responses = [main_resp, verifier_resp]
+    if expected_call_count == 3:
+        responses.append(retry_resp)
+
+    llm = _RecordingLLMClient(responses)
+    runtime = _make_runtime(llm)
+    task = _make_task()
+    ctx = _FakeToolContext()
+
+    result = await runtime.run(task, ctx)
+
+    assert result.status == "completed"
+    assert len(llm._calls) == expected_call_count, (
+        f"verifier='{verifier_text}': expected {expected_call_count} LLM calls, "
+        f"got {len(llm._calls)}"
+    )
+
+
+async def test_t073_compress_history_noop_below_threshold_zero_summarize_calls() -> None:
+    """When len(messages) <= SUMMARY_THRESHOLD, compress_history makes zero LLM calls
+    (the summarize LLM call is never made)."""
+    stop_resp = _stop_response("ok")
+    verifier_resp = _stop_response("pass")
+    llm = _RecordingLLMClient([stop_resp, verifier_resp])
+    runtime = _make_runtime(llm)
+
+    # Exactly 2 messages (system + user) — well below threshold
+    fake_state: Any = {
+        "messages": [
+            LLMMessage(role="system", content="system prompt"),
+            LLMMessage(role="user", content="query"),
+        ],
+        "response": None,
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "cost_usd": 0.0,
+        "tool_results": [],
+        "iteration": 0,
+        "status": "running",
+        "error": None,
+        "pending_hitl_approval_id": None,
+        "pending_hitl_job_id": None,
+        "compressed_messages": None,
+    }
+
+    result_dict = await runtime._compress_history_node(fake_state, {})  # type: ignore[arg-type]
+    assert result_dict == {}, "compress_history must be a no-op below threshold"
+    # No summarize calls made
+    assert len(llm._calls) == 0
+
+
+async def test_t073_compress_history_active_above_threshold_reduces_to_11() -> None:
+    """When len(messages) > SUMMARY_THRESHOLD, compressed_messages has at most 11 items."""
+    summary_resp = _stop_response("Compact summary.")
+    summarize_llm = _RecordingLLMClient([summary_resp])
+    runtime = _make_runtime(summarize_llm)
+
+    msg_count = SUMMARY_THRESHOLD + 5
+    fake_state: Any = {
+        "messages": [LLMMessage(role="user", content=f"msg {i}") for i in range(msg_count)],
+        "response": None,
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "cost_usd": 0.0,
+        "tool_results": [],
+        "iteration": 0,
+        "status": "running",
+        "error": None,
+        "pending_hitl_approval_id": None,
+        "pending_hitl_job_id": None,
+        "compressed_messages": None,
+    }
+
+    result_dict = await runtime._compress_history_node(fake_state, {})  # type: ignore[arg-type]
+
+    compressed = result_dict.get("compressed_messages")
+    assert compressed is not None, "compress_history must set compressed_messages above threshold"
+    assert len(compressed) <= 11, (
+        f"call_model must receive <= 11 messages after compression, got {len(compressed)}"
+    )
+    # Exactly one summarize call was made
+    assert len(summarize_llm._calls) == 1
