@@ -16,14 +16,13 @@ Orchestrator execution state. Written only by bdos-orchestrator.
 | P6 — Chat UI Stability (T-046 – T-054) | 2026-06-02 |
 | P7 — CI Quality & Memory Loop Validation (T-055 – T-058) | 2026-06-02 |
 | P8 — Mock Mode for Cost-Free UI Testing (T-059 – T-062) | 2026-06-02 |
+| P9 — LangGraph Migration (T-063 – T-075) | 2026-06-02 |
 
 ---
 
 ## Active Phase
 
-**P9 — LangGraph Migration** (Not Started — tasks defined 2026-06-02)
-ADR: `docs/adr/2026-06-02-langgraph-migration.md`
-Tasks: T-063 – T-075
+None.
 
 ---
 
@@ -79,15 +78,15 @@ Batch execution order:
 
 ## Active Lease
 
-P9-B2 T-068/T-069/T-072 (parallel) — App Builder — acquired 2026-06-02
+None.
 
 ## Last Completed Batch
 
-P9-B1 complete (2026-06-02): T-065 (AgentRuntime → StateGraph with call_model/execute_tools/verify_findings nodes), T-066 (HITL via interrupt(): prepare_hitl+wait_for_approval nodes, HITLPause removed). 470 unit tests pass.
+P9 complete (2026-06-02): All 13 tasks Done (T-063–T-075). LangGraph migration complete.
 
 ## Last Validation
 
-2026-06-02: uv run pytest tests/unit/ → 472 passed. make lint → exit 0. make typecheck → exit 0. P9-B0 complete.
+2026-06-02: 503 unit tests + 8 new integration tests pass. make lint → exit 0. make typecheck → exit 0. P9 complete.
 
 ## Blockers
 

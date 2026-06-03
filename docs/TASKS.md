@@ -1073,7 +1073,7 @@ After T-067 is done, T-068, T-069, and T-072 can run in parallel.
 - **Test:** All existing orchestrator unit tests pass. SSE events emitted in the same
   order as before.
 
-#### T-068: Replace `run_dag_execution` with LangGraph `Send` API — **In Progress**
+#### T-068: Replace `run_dag_execution` with LangGraph `Send` API — **Done**
 - **File:** `packages/agent/orchestrator/planning.py`
 - **What:**
   - Replace the `while remaining` / `asyncio.gather` loop with LangGraph's `Send` API:
@@ -1085,7 +1085,7 @@ After T-067 is done, T-068, T-069, and T-072 can run in parallel.
 - **Test:** Unit: DAG with 3 nodes (A, B→depends on A, C→depends on A) executes A first,
   then B and C in parallel (verify timing via mock).
 
-#### T-069: Rewrite `SessionOrchestrator.resume()` — **In Progress**
+#### T-069: Rewrite `SessionOrchestrator.resume()` — **Done**
 - **File:** `packages/agent/orchestrator/session_orchestrator.py`
 - **What:**
   - `resume(session_id, approval_id)`:
@@ -1102,7 +1102,7 @@ After T-067 is done, T-068, T-069, and T-072 can run in parallel.
 - **Test:** Integration: pause a graph via `interrupt()`; call `resume()`; confirm
   execution continues from the paused node without re-running `classify_intent`.
 
-#### T-072: Port history compression into a LangGraph pre-processing node — **In Progress**
+#### T-072: Port history compression into a LangGraph pre-processing node — **Done**
 - **File:** `packages/agent/runtime.py`
 - **What:**
   - Add a `compress_history` node that runs before `call_model` when
@@ -1119,7 +1119,7 @@ After T-067 is done, T-068, T-069, and T-072 can run in parallel.
 
 ### Batch P9-B3 — Integration layer (App Builder — after P9-B2)
 
-#### T-070: Adapt SSE streaming to LangGraph `stream_mode="custom"` — **Not Started**
+#### T-070: Adapt SSE streaming to LangGraph `stream_mode="custom"` — **Done**
 - **Files:** `packages/agent/runtime.py`, `packages/agent/orchestrator/session_orchestrator.py`,
   `apps/web/lib/api.ts` — `streamSession()`, `apps/web/app/chat/ChatStateContext.tsx`
 - **What:**
@@ -1137,7 +1137,7 @@ After T-067 is done, T-068, T-069, and T-072 can run in parallel.
 - **Test:** Integration: stream a mock session; assert `tool_started` and `tool_completed`
   events are received by the SSE client in the correct order.
 
-#### T-071: Update `POST /approvals/{id}/decision` to trigger LangGraph resume — **Not Started**
+#### T-071: Update `POST /approvals/{id}/decision` to trigger LangGraph resume — **Done**
 - **File:** `apps/api/routers/approvals.py`
 - **What:**
   - `approved` path (replacing the current `asyncio.create_task(execute_job(...))` call):
@@ -1160,7 +1160,7 @@ After T-067 is done, T-068, T-069, and T-072 can run in parallel.
 
 ### Batch P9-B4 — Tests (Test/Review — after P9-B3)
 
-#### T-073: Update unit tests for LangGraph graph structure — **Not Started**
+#### T-073: Update unit tests for LangGraph graph structure — **Done**
 - **Files:** `tests/unit/test_agent_runtime.py`, `tests/unit/test_agent_reclassification.py`,
   `tests/unit/test_session_orchestrator*.py`
 - **What:**
@@ -1173,7 +1173,7 @@ After T-067 is done, T-068, T-069, and T-072 can run in parallel.
     the correct conditional edge. No LLM calls — use `ScenarioStubClaudeClient`.
 - **Depends on:** T-072
 
-#### T-074: Integration test — HITL interrupt/resume via LangGraph — **Not Started**
+#### T-074: Integration test — HITL interrupt/resume via LangGraph — **Done**
 - **Files:** `tests/integration/test_hitl_langgraph.py`
 - **What:**
   - Full HITL cycle against real DB:
@@ -1185,7 +1185,7 @@ After T-067 is done, T-068, T-069, and T-072 can run in parallel.
   - Use `AsyncPostgresSaver` with test DB (not `MemorySaver`).
 - **Depends on:** T-071
 
-#### T-075: Integration test — session persistence and resumption — **Not Started**
+#### T-075: Integration test — session persistence and resumption — **Done**
 - **Files:** `tests/integration/test_session_persistence.py`
 - **What:**
   - Simulate a mid-session pause (not HITL — e.g., process restart):
