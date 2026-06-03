@@ -1,12 +1,15 @@
 from __future__ import annotations
 
+import asyncio
 from typing import Any, Literal
 from uuid import UUID
 
-from fastapi import APIRouter, Header, HTTPException, Query
+from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
+from apps.api.state import get_orchestrator
+from packages.agent.orchestrator import SessionOrchestrator
 from packages.persistence.approvals import ApprovalStatus, ApprovalTransition
 from packages.persistence.approvals_repo import ApprovalsRepository
 from packages.persistence.notifications_repo import NotificationsRepository
@@ -16,6 +19,15 @@ router = APIRouter(prefix="/api/v1/approvals", tags=["approvals"])
 
 _approvals_repo = ApprovalsRepository()
 _notifications_repo = NotificationsRepository()
+
+
+def get_orchestrator_dep() -> SessionOrchestrator:
+    """Dependency that returns a SessionOrchestrator for HITL resume operations.
+
+    No SSE broadcaster is injected — the orchestrator uses the persisted
+    LangGraph checkpoint state to resume the graph from the interrupt point.
+    """
+    return get_orchestrator(sse_queue=None)
 
 
 class DecisionBody(BaseModel):
@@ -55,6 +67,7 @@ async def post_decision(
     approval_id: UUID,
     body: DecisionBody,
     x_dev_user: str | None = Header(default=None),
+    orchestrator: SessionOrchestrator = Depends(get_orchestrator_dep),
 ) -> JSONResponse:
     if not await can_execute(action="approve_recommendation", actor=x_dev_user):
         raise HTTPException(
@@ -99,25 +112,14 @@ async def post_decision(
             except Exception:
                 pass  # non-blocking: session status is best-effort here
 
-        # Trigger job execution if this approval is linked to a job
-        try:
-            import asyncio as _asyncio
-
-            from packages.agent.job_executor import execute_job as _execute_job
-            from packages.persistence.jobs_repo import JobsRepository as _JobsRepo
-
-            _jr = _JobsRepo()
-            _job = await _jr.get_by_approval_id(approval_id)
-            if _job is not None:
-                _job_id_val = _job.get("id")
-                if _job_id_val is not None:
-                    _asyncio.create_task(
-                        _execute_job(
-                            UUID(_job_id_val) if not isinstance(_job_id_val, UUID) else _job_id_val
-                        )
-                    )
-        except Exception:
-            pass  # non-blocking: job dispatch failure must not fail the approval response
+        # Resume the LangGraph session so the graph drives job execution
+        if session_id_str:
+            try:
+                asyncio.create_task(
+                    orchestrator.resume(UUID(session_id_str), approval_id)
+                )
+            except Exception:
+                pass  # non-blocking: resume dispatch failure must not fail the approval response
 
     elif body.decision == "rejected" and isinstance(updated, dict):
         session_id_str = str(updated.get("session_id", ""))
