@@ -6,9 +6,9 @@ import type { ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import SessionsContext from "./SessionsContext";
 import { ChatStateProvider } from "./ChatStateContext";
-import { createSession, deleteSession, deleteAllSessions } from "@/lib/api";
+import { createSession, deleteSession } from "@/lib/api";
 import { queryKeys } from "@/lib/queryKeys";
-import { useSessions } from "@/features/sessions/hooks";
+import { useSessions, useDeleteAllSessions } from "@/features/sessions/hooks";
 import type { Session } from "@/types/chat";
 
 interface ChatLayoutProps {
@@ -23,6 +23,7 @@ export default function ChatLayout({ children }: ChatLayoutProps): React.ReactEl
   const [deleteError, setDeleteError] = useState<string | null>(null);
 
   const { data: fetchedSessions = [] } = useSessions();
+  const deleteAllMutation = useDeleteAllSessions();
 
   useEffect(() => {
     setSessions(fetchedSessions);
@@ -54,16 +55,18 @@ export default function ChatLayout({ children }: ChatLayoutProps): React.ReactEl
     const snapshot = sessions;
     setSessions([]);
     try {
-      await deleteAllSessions();
+      await new Promise<void>((resolve, reject) => {
+        deleteAllMutation.mutate(undefined, { onSuccess: () => resolve(), onError: (err) => reject(err) });
+      });
       router.push("/chat");
     } catch {
       setSessions(snapshot);
       setDeleteError("Failed to delete all sessions. Please try again.");
     }
-  }, [sessions, router]);
+  }, [sessions, router, deleteAllMutation]);
 
   return (
-    <SessionsContext.Provider value={{ sessions, setSessions, creating, onNewSession, onDelete, onDeleteAll, deleteError }}>
+    <SessionsContext.Provider value={{ sessions, setSessions, creating, onNewSession, onDelete, onDeleteAll, deleteAllPending: deleteAllMutation.isPending, deleteError }}>
       <ChatStateProvider>
         {children}
       </ChatStateProvider>

@@ -14,3 +14,7 @@ export async function createSession(goal: string): Promise<Session> {
     body: JSON.stringify({ goal }),
   });
 }
+
+export async function deleteAllSessions(): Promise<void> {
+  await apiFetch("/api/v1/sessions", { method: "DELETE" });
+}

@@ -14,6 +14,7 @@ interface ChatSidebarProps {
   creating: boolean;
   onDelete: (sessionId: string) => void;
   onDeleteAll?: () => void;
+  deleteAllPending?: boolean;
 }
 
 const NAV_ITEMS = [
@@ -119,6 +120,7 @@ export default function ChatSidebar({
   creating,
   onDelete,
   onDeleteAll,
+  deleteAllPending = false,
 }: ChatSidebarProps) {
   const pathname = usePathname();
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
@@ -187,8 +189,9 @@ export default function ChatSidebar({
               confirmClearAll ? (
                 <button
                   onClick={() => { setConfirmClearAll(false); onDeleteAll(); }}
+                  disabled={deleteAllPending}
                   title="Confirm clear all"
-                  className="text-[10px] text-red-500 dark:text-red-400 hover:text-red-600 dark:hover:text-red-300 transition-colors"
+                  className="text-[10px] text-red-500 dark:text-red-400 hover:text-red-600 dark:hover:text-red-300 disabled:opacity-40 transition-colors"
                 >
                   Sure?
                 </button>
@@ -196,10 +199,11 @@ export default function ChatSidebar({
                 <button
                   onClick={() => setConfirmClearAll(true)}
                   onBlur={() => setConfirmClearAll(false)}
+                  disabled={deleteAllPending}
                   title="Clear all sessions"
-                  className="text-[10px] text-muted dark:text-white/25 hover:text-red-500 dark:hover:text-red-400 transition-colors"
+                  className="text-[10px] text-muted dark:text-white/25 hover:text-red-500 dark:hover:text-red-400 disabled:opacity-40 transition-colors"
                 >
-                  Clear all
+                  {deleteAllPending ? "..." : "Clear all"}
                 </button>
               )
             )}

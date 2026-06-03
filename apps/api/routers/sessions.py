@@ -63,7 +63,7 @@ async def create_session(request: Request, body: CreateSessionRequest) -> dict[s
     goal = body.goal or ""
     sessions[session_id] = {
         "session_id": session_id,
-        "status": "active",
+        "status": "pending",
         "goal": goal,
         "title": None,
         "created_at": _iso_now(),
@@ -76,7 +76,7 @@ async def create_session(request: Request, body: CreateSessionRequest) -> dict[s
     except Exception:
         _log.warning("DB unavailable; skipping session persist for %s", session_id)
     created_at = sessions[session_id]["created_at"]
-    return {"session_id": session_id, "status": "active", "created_at": created_at}
+    return {"session_id": session_id, "status": "pending", "created_at": created_at}
 
 
 @router.get("")
@@ -91,7 +91,7 @@ async def list_sessions() -> list[dict[str, Any]]:
                 if sid not in sessions:
                     sessions[sid] = {
                         "session_id": sid,
-                        "status": row.get("status", "active"),
+                        "status": row.get("status", "pending"),
                         "goal": row.get("goal", ""),
                         "title": row.get("title"),
                         "created_at": str(row.get("created_at", "")),
@@ -100,7 +100,7 @@ async def list_sessions() -> list[dict[str, Any]]:
             return [
                 {
                     "session_id": str(r["id"]),
-                    "status": r.get("status", "active"),
+                    "status": r.get("status", "pending"),
                     "goal": r.get("goal", ""),
                     "title": r.get("title"),
                     "created_at": str(r.get("created_at", "")),
@@ -110,6 +110,13 @@ async def list_sessions() -> list[dict[str, Any]]:
     except Exception:
         pass
     return list(sessions.values())
+
+
+@router.delete("", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_all_sessions() -> None:
+    sessions.clear()
+    repo = DecisionSessionRepository()
+    await repo.delete_all_sessions()
 
 
 @router.delete("/{session_id}", status_code=204)
@@ -156,7 +163,7 @@ async def get_session(session_id: str) -> dict[str, Any]:
                 raise HTTPException(status_code=404, detail="Session not found")
             session = {
                 "session_id": session_id,
-                "status": row.get("status", "active"),
+                "status": row.get("status", "pending"),
                 "goal": row.get("goal", ""),
                 "title": row.get("title"),
                 "created_at": str(row.get("created_at", "")),
@@ -257,7 +264,7 @@ async def post_message(
                 raise HTTPException(status_code=404, detail="Session not found")
             sessions[session_id] = {
                 "session_id": session_id,
-                "status": db_session.get("status", "active"),
+                "status": db_session.get("status", "pending"),
                 "goal": db_session.get("goal", ""),
                 "title": db_session.get("title"),
                 "created_at": str(db_session.get("created_at", _iso_now())),

@@ -10,6 +10,7 @@ export interface SessionsContextValue {
   onNewSession: () => Promise<void>;
   onDelete: (sessionId: string) => Promise<void>;
   onDeleteAll: () => Promise<void>;
+  deleteAllPending: boolean;
   deleteError: string | null;
 }
 

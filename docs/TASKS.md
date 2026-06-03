@@ -2202,7 +2202,7 @@ stale sessions via a new API endpoint + UI control (T-087).
 - **Test:** Run `uv run pytest tests/e2e/ -v`; confirm that immediately after the test
   run, `GET /api/v1/sessions` returns 0 sessions that match the test goal strings.
 
-#### T-087: Add bulk-delete sessions endpoint + UI "Clear All" button
+#### T-087: Add bulk-delete sessions endpoint + UI "Clear All" button — **Done**
 - **Files:**
   - `apps/api/routers/sessions.py` — add `DELETE /api/v1/sessions`
   - `apps/web/features/sessions/api.ts` — add `deleteAllSessions()`
