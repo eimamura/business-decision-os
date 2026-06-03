@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import json as _json
 from typing import Any, cast
-from uuid import UUID
+from uuid import UUID, uuid4
 
 import structlog
 from langchain_core.runnables import RunnableConfig
@@ -195,9 +195,10 @@ class SessionOrchestrator:
             self._sse_queue = original_queue
         return {"intent": intent}
 
-    async def _node_ask_user(
+    async def _node_prepare_ask_user(
         self, state: OrchestratorState, config: RunnableConfig
     ) -> dict[str, Any]:
+        """LLM call + SSE emission. Side effects allowed here (before interrupt())."""
         intent = state.get("intent")
         if intent is None or not is_analytical_intent(intent.category):
             return {}
@@ -231,33 +232,45 @@ class SessionOrchestrator:
             parsed = _json_obj(response.text)
             needs_input: bool = bool(parsed.get("needs_input", False))
             question: str | None = parsed.get("question")
+            raw_suggestions: list[str] = parsed.get("suggestions") or []
         except Exception:
             return {}
 
         if not needs_input or not question:
             return {}
 
-        event = build_ask_user_event(session_id, question)
+        suggestions: list[str] = raw_suggestions[:3]
+        ask_user_id = str(uuid4())
+        event = build_ask_user_event(session_id, question, ask_user_id, suggestions)
         if sse_queue is not None:
             await sse_queue.put(json_safe(event))
         elif self._sse_queue is not None:
             await self._sse_queue.put(json_safe(event))
 
-        self._schedule_status_update(session_id, "completed")
+        self._schedule_status_update(session_id, "awaiting_input")
 
-        result = SessionResponse(
-            mode="direct_chat",
-            reply=question,
-            intent=intent,
-            route=AgentRoute(
-                mode="direct_chat",
-                agents=[],
-                requires_planning=False,
-                requires_dag=False,
-                rationale="ask_user",
-            ),
-        )
-        return {"result": result}
+        return {"ask_user_id": ask_user_id, "ask_user_question": question}
+
+    async def _node_wait_for_answer(
+        self, state: OrchestratorState, config: RunnableConfig
+    ) -> dict[str, Any]:
+        """Zero DB side effects — calls interrupt() only."""
+        if not state.get("ask_user_id"):
+            return {}  # non-analytical intent — pass through
+
+        from langgraph.types import interrupt
+
+        answer = interrupt({
+            "ask_user_id": state["ask_user_id"],
+            "question": state["ask_user_question"],
+        })
+        # answer is the value from Command(resume={"answer": "..."})
+        answer_text: str = ""
+        if isinstance(answer, dict):
+            answer_text = answer.get("answer", "")
+        elif isinstance(answer, str):
+            answer_text = answer
+        return {"ask_user_answer": answer_text}
 
     async def _node_select_mode(
         self, state: OrchestratorState, config: RunnableConfig
@@ -266,12 +279,21 @@ class SessionOrchestrator:
         intent = state["intent"]
         assert intent is not None
 
+        query = state["query"]
+        # Inject ask_user answer into conversation_context if present
+        if state.get("ask_user_answer"):
+            query = SessionUserQuery(
+                text=query.text,
+                conversation_context=f"User answered: {state['ask_user_answer']}",
+                weight_override_json=query.weight_override_json,
+            )
+
         sse_queue = (config.get("configurable") or {}).get("sse_queue")
         original_queue = self._sse_queue
         if sse_queue is not None:
             self._sse_queue = sse_queue
         try:
-            route = await self.select_execution_mode(state["query"], intent, session_id)
+            route = await self.select_execution_mode(query, intent, session_id)
         finally:
             self._sse_queue = original_queue
         return {"route": route}
@@ -365,11 +387,6 @@ class SessionOrchestrator:
     # Conditional edges
     # ------------------------------------------------------------------
 
-    def _edge_after_ask_user(self, state: OrchestratorState) -> str:
-        if state.get("result") is not None:
-            return END
-        return "select_mode"
-
     def _edge_after_select_mode(self, state: OrchestratorState) -> str:
         route = state.get("route")
         if route is None:
@@ -394,7 +411,8 @@ class SessionOrchestrator:
         sg: StateGraph = StateGraph(OrchestratorState)  # type: ignore[type-arg]
 
         sg.add_node("classify_intent", self._node_classify_intent)
-        sg.add_node("ask_user", self._node_ask_user)
+        sg.add_node("prepare_ask_user", self._node_prepare_ask_user)
+        sg.add_node("wait_for_answer", self._node_wait_for_answer)
         sg.add_node("select_mode", self._node_select_mode)
         sg.add_node("run_direct_chat", self._node_run_direct_chat)
         sg.add_node("run_sequential", self._node_run_sequential)
@@ -402,12 +420,9 @@ class SessionOrchestrator:
         sg.add_node("run_dag", self._node_run_dag)
 
         sg.add_edge(START, "classify_intent")
-        sg.add_edge("classify_intent", "ask_user")
-        sg.add_conditional_edges(
-            "ask_user",
-            self._edge_after_ask_user,
-            {END: END, "select_mode": "select_mode"},
-        )
+        sg.add_edge("classify_intent", "prepare_ask_user")
+        sg.add_edge("prepare_ask_user", "wait_for_answer")
+        sg.add_edge("wait_for_answer", "select_mode")
         sg.add_conditional_edges(
             "select_mode",
             self._edge_after_select_mode,
@@ -530,6 +545,15 @@ class SessionOrchestrator:
             })
             raise
 
+        # LangGraph 1.x: ainvoke() catches GraphInterrupt internally and returns a
+        # state dict containing an '__interrupt__' key instead of raising.
+        # Re-raise GraphInterrupt so callers can distinguish a paused graph from a
+        # completed one.
+        if "__interrupt__" in final_state:
+            from langgraph.errors import GraphInterrupt
+
+            raise GraphInterrupt(final_state["__interrupt__"])
+
         raw_result = final_state.get("result")
         if raw_result is None:
             raise RuntimeError("Orchestrator graph produced no result")
@@ -572,4 +596,38 @@ class SessionOrchestrator:
         result = result_state.get("result") or result_state.get("run_dag", {}).get("result")
         if result is None:
             raise RuntimeError(f"Graph resume produced no result for session {session_id}")
+        return cast(SessionResponse, result)
+
+    async def answer_ask_user(self, session_id: UUID, answer: str) -> SessionResponse:
+        """Resume a graph paused at wait_for_answer with the user's answer."""
+        from langgraph.types import Command
+
+        config: dict[str, Any] = {
+            "configurable": {
+                "thread_id": str(session_id),
+                "sse_queue": self._sse_queue,
+            }
+        }
+        graph = await self._get_graph()
+
+        try:
+            result_state: dict[str, Any] = {}
+            async for chunk in graph.astream(
+                Command(resume={"answer": answer}),
+                config=config,
+                stream_mode="updates",
+            ):
+                result_state.update(chunk)
+        except Exception as exc:
+            self._schedule_status_update(session_id, "failed")
+            await self._push({
+                "type": "error", "code": "ask_user_resume_failed",
+                "message": str(exc), "recoverable": False,
+                "timestamp": _iso_now(),
+            })
+            raise
+
+        result = result_state.get("result") or result_state.get("run_dag", {}).get("result")
+        if result is None:
+            raise RuntimeError(f"ask_user resume produced no result for session {session_id}")
         return cast(SessionResponse, result)

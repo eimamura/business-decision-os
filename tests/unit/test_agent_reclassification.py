@@ -432,7 +432,8 @@ def test_t073_session_orchestrator_graph_node_names() -> None:
 
     expected = {
         "classify_intent",
-        "handle_clarification",
+        "prepare_ask_user",
+        "wait_for_answer",
         "select_mode",
         "run_direct_chat",
         "run_sequential",

@@ -1685,7 +1685,7 @@ running agent requests input) is scoped to P14 and noted in the ADR as a future 
 
 ### Batch P13-B2 — Backend (App Builder — after T-091; T-092 and T-093 run in parallel)
 
-#### T-092: Split `_node_ask_user` → `prepare_ask_user` + `wait_for_answer`
+#### T-092: Split `_node_ask_user` → `prepare_ask_user` + `wait_for_answer` — **Done**
 - **File:** `packages/agent/orchestrator/session_orchestrator.py`
 - **Depends on:** T-091
 - **What:**
