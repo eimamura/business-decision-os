@@ -22,6 +22,7 @@ if TYPE_CHECKING:
 _log = structlog.get_logger(__name__)
 
 _MAX_ITERATIONS = 10
+SUMMARY_THRESHOLD = 30
 
 OutputBuilder = Callable[[dict[str, Any], Any], dict[str, Any]]
 
@@ -68,6 +69,34 @@ def _parse_verifier_status(text: str) -> str:
 
 
 # ---------------------------------------------------------------------------
+# History compression helper
+# ---------------------------------------------------------------------------
+
+
+async def _summarize_messages(messages: list[Any], llm_client: Any) -> str:
+    """Cheap LLM call to summarize a slice of conversation history."""
+    from packages.agent.llm import LLMMessage
+
+    text_content = "\n".join(
+        f"{m.role}: {m.content if isinstance(m.content, str) else '[tool call]'}"
+        for m in messages
+    )
+    response = await llm_client.complete(
+        messages=[
+            LLMMessage(role="system", content="Summarize this conversation history in 2-3 sentences."),
+            LLMMessage(role="user", content=text_content),
+        ],
+        tools=None,
+        temperature=0.0,
+        max_tokens=256,
+        prompt_cache=False,
+        specialist_role="orchestrator",
+        agent_step_id=None,
+    )
+    return response.text
+
+
+# ---------------------------------------------------------------------------
 # LangGraph state
 # ---------------------------------------------------------------------------
 
@@ -85,6 +114,9 @@ class AgentState(TypedDict):
     # HITL state — set by prepare_hitl, consumed by execute_tools
     pending_hitl_approval_id: str | None
     pending_hitl_job_id: str | None
+    # History compression — set by compress_history node; call_model prefers this over messages
+    # when not None. Uses None sentinel so operator.add accumulation is bypassed.
+    compressed_messages: list[Any] | None
 
 
 # ---------------------------------------------------------------------------
@@ -131,6 +163,9 @@ class AgentRuntime:
         task: SpecialistTask = (config.get("configurable") or {})["task"]
         llm_tools: list[LLMToolSpec] = (config.get("configurable") or {}).get("llm_tools", [])
 
+        # Prefer compressed_messages when the compress_history node has run
+        effective_messages: list[Any] = state.get("compressed_messages") or state["messages"]
+
         delays = [1, 4]
         last_exc: Exception | None = None
         response = None
@@ -144,7 +179,7 @@ class AgentRuntime:
                     model=getattr(self._llm_client, "_model", "?"),
                 )
                 response = await self._llm_client.complete(
-                    messages=state["messages"],
+                    messages=effective_messages,
                     tools=llm_tools if llm_tools else None,
                     temperature=0.0,
                     agent_step_id=task.task_id,
@@ -658,12 +693,47 @@ class AgentRuntime:
         return result
 
     # ------------------------------------------------------------------
+    # Node: compress_history
+    # ------------------------------------------------------------------
+
+    async def _compress_history_node(
+        self, state: AgentState, config: RunnableConfig  # noqa: ARG002
+    ) -> dict[str, Any]:
+        """Pre-processing node. When messages exceed SUMMARY_THRESHOLD, replace the
+        list with a summary message + the 10 most recent messages.
+
+        Zero LLM calls when len(messages) <= SUMMARY_THRESHOLD.
+        """
+        messages: list[Any] = state["messages"]
+        if len(messages) <= SUMMARY_THRESHOLD:
+            return {}  # no-op — do not set compressed_messages
+
+        oldest = messages[:-10]
+        recent = messages[-10:]
+
+        _log.info(
+            "compress_history: summarising %d messages",
+            len(oldest),
+            agent_role=self.role,
+        )
+        summary_text = await _summarize_messages(oldest, self._llm_client)
+
+        from packages.agent.llm import LLMMessage
+
+        summary_message = LLMMessage(
+            role="system",
+            content=f"[Conversation summary: {summary_text}]",
+        )
+        return {"compressed_messages": [summary_message] + recent}
+
+    # ------------------------------------------------------------------
     # Build the StateGraph
     # ------------------------------------------------------------------
 
     def _build_graph(self, checkpointer: Any) -> Any:
         sg: StateGraph = StateGraph(AgentState)  # type: ignore[type-arg]
 
+        sg.add_node("compress_history", self._compress_history_node)
         sg.add_node("call_model", self._call_model_node)
         sg.add_node("prepare_hitl", self._prepare_hitl_node)
         sg.add_node("wait_for_approval", self._wait_for_approval_node)
@@ -672,7 +742,8 @@ class AgentRuntime:
         sg.add_node("add_revision_message", self._add_revision_message_node)
         sg.add_node("call_model_final", self._call_model_final_node)
 
-        sg.add_edge(START, "call_model")
+        sg.add_edge(START, "compress_history")
+        sg.add_edge("compress_history", "call_model")
         sg.add_conditional_edges(
             "call_model",
             self._should_continue,
@@ -787,6 +858,7 @@ class AgentRuntime:
             "error": None,
             "pending_hitl_approval_id": None,
             "pending_hitl_job_id": None,
+            "compressed_messages": None,
         }
 
         final_state: dict[str, Any] = await graph.ainvoke(initial_state, config=run_config)
