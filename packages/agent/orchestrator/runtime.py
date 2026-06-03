@@ -47,36 +47,6 @@ def _make_agent(orchestrator: Any, agent_role: str) -> Any:
     raise ValueError(f"unknown agent role: {agent_role}")
 
 
-async def _run_specialist_with_retry(
-    orchestrator: Any,
-    specialist: Any,
-    task: SpecialistTask,
-    ctx: Any,
-) -> SpecialistResult:
-    delays = [1, 4]
-    last_exc: Exception | None = None
-    for attempt in range(3):
-        try:
-            return cast(SpecialistResult, await specialist.run(task, ctx))
-        except Exception as exc:
-            last_exc = exc
-            logger.warning(
-                "Agent %s attempt %d failed: %s",
-                getattr(specialist, "role", "?"),
-                attempt + 1,
-                exc,
-            )
-            if attempt < len(delays):
-                await asyncio.sleep(delays[attempt])
-    return SpecialistResult(
-        task_id=task.task_id,
-        output={},
-        tool_calls_made=[],
-        status="failed",
-        error=str(last_exc),
-    )
-
-
 async def _run_agent(
     orchestrator: Any,
     session_id: UUID,
@@ -129,7 +99,7 @@ async def _run_agent(
         allowed_tools=allowed_tools,
     )
     t0 = time.monotonic()
-    result = await _run_specialist_with_retry(orchestrator, agent, task, ctx)
+    result = cast(SpecialistResult, await agent.run(task, ctx))
     ended_at = datetime.now(timezone.utc)
 
     _usage = result.usage or {}

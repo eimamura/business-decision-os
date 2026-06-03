@@ -1,13 +1,19 @@
 from __future__ import annotations
 
+import asyncio
 import json
+import operator
 import re
 import time
 from datetime import datetime, timezone
-from decimal import Decimal
-from typing import TYPE_CHECKING, Any, Callable
+from typing import TYPE_CHECKING, Annotated, Any, Callable
 
 import structlog
+from langchain_core.runnables import RunnableConfig
+from langgraph.checkpoint.memory import MemorySaver
+from langgraph.graph import END, START, StateGraph
+from langgraph.types import interrupt
+from typing_extensions import TypedDict
 
 if TYPE_CHECKING:
     from packages.agent.orchestrator import SpecialistResult, SpecialistTask
@@ -61,6 +67,31 @@ def _parse_verifier_status(text: str) -> str:
     return "pass"
 
 
+# ---------------------------------------------------------------------------
+# LangGraph state
+# ---------------------------------------------------------------------------
+
+
+class AgentState(TypedDict):
+    messages: Annotated[list[Any], operator.add]  # accumulates LLMMessage objects
+    response: Any | None  # last LLMResponse; None until first call_model run
+    input_tokens: Annotated[int, operator.add]
+    output_tokens: Annotated[int, operator.add]
+    cost_usd: Annotated[float, operator.add]
+    tool_results: Annotated[list[dict[str, Any]], operator.add]
+    iteration: int
+    status: str  # "running" | "completed" | "error" | "blocked"
+    error: str | None
+    # HITL state — set by prepare_hitl, consumed by execute_tools
+    pending_hitl_approval_id: str | None
+    pending_hitl_job_id: str | None
+
+
+# ---------------------------------------------------------------------------
+# AgentRuntime
+# ---------------------------------------------------------------------------
+
+
 class AgentRuntime:
     def __init__(
         self,
@@ -80,28 +111,449 @@ class AgentRuntime:
         self._system_prompt = system_prompt or f"You are a {role} specialist."
         self._output_builder: OutputBuilder = output_builder or _default_output_builder(name)
 
-    async def _push(self, event: dict[str, Any]) -> None:
-        if self._sse_queue is not None:
+    # ------------------------------------------------------------------
+    # SSE helper — reads queue from config or falls back to constructor arg
+    # ------------------------------------------------------------------
+
+    async def _push(self, event: dict[str, Any], sse_queue: Any = None) -> None:
+        q = sse_queue if sse_queue is not None else self._sse_queue
+        if q is not None:
             from packages.agent.orchestrator.parsing import json_safe
-            await self._sse_queue.put(json_safe(event))
+            await q.put(json_safe(event))
 
-    async def _verify_findings(
-        self,
-        tool_results: dict[str, Any],
-        conclusion: str,
-        task_id: Any,
-    ) -> str:
+    # ------------------------------------------------------------------
+    # Node: call_model
+    # ------------------------------------------------------------------
+
+    async def _call_model_node(self, state: AgentState, config: RunnableConfig) -> dict[str, Any]:
+        from packages.agent.llm import LLMMessage, LLMToolSpec
+
+        task: SpecialistTask = (config.get("configurable") or {})["task"]
+        llm_tools: list[LLMToolSpec] = (config.get("configurable") or {}).get("llm_tools", [])
+
+        delays = [1, 4]
+        last_exc: Exception | None = None
+        response = None
+
+        for attempt in range(3):
+            try:
+                _log.info(
+                    "specialist calling LLM",
+                    agent_role=self.role,
+                    attempt=attempt,
+                    model=getattr(self._llm_client, "_model", "?"),
+                )
+                response = await self._llm_client.complete(
+                    messages=state["messages"],
+                    tools=llm_tools if llm_tools else None,
+                    temperature=0.0,
+                    agent_step_id=task.task_id,
+                    specialist_role=self.role,
+                )
+                break
+            except Exception as exc:
+                last_exc = exc
+                _log.warning(
+                    "LLM call attempt failed",
+                    agent_role=self.role,
+                    attempt=attempt + 1,
+                    error=str(exc),
+                )
+                if attempt < len(delays):
+                    await asyncio.sleep(delays[attempt])
+
+        if response is None:
+            return {
+                "status": "error",
+                "error": str(last_exc) if last_exc is not None else "LLM call failed",
+                "response": None,
+            }
+
+        _log.info(
+            "specialist LLM response received",
+            agent_role=self.role,
+            finish_reason=response.finish_reason,
+            tool_call_count=len(response.tool_calls),
+            model=response.model,
+        )
+
+        # Append the assistant response as content blocks to messages
+        new_messages: list[Any] = []
+        if response.tool_calls or response.finish_reason == "tool_use":
+            content_blocks: list[dict[str, Any]] = []
+            if response.text:
+                content_blocks.append({"type": "text", "text": response.text})
+            for call in response.tool_calls:
+                content_blocks.append({
+                    "type": "tool_use",
+                    "id": call["id"],
+                    "name": call["name"],
+                    "input": call.get("input", {}),
+                })
+            new_messages.append(LLMMessage(
+                role="assistant", content=response.text, content_blocks=content_blocks
+            ))
+
+        return {
+            "response": response,
+            "messages": new_messages,
+            "input_tokens": response.usage.input_tokens,
+            "output_tokens": response.usage.output_tokens,
+            "cost_usd": float(response.usage.total_cost_usd),
+            "iteration": state["iteration"] + 1,
+            "status": "running",
+        }
+
+    # ------------------------------------------------------------------
+    # Conditional edge: should_continue
+    # ------------------------------------------------------------------
+
+    def _should_continue(self, state: AgentState) -> str:
+        response = state.get("response")
+        if response is None:
+            return "verify_findings"
+        if not response.tool_calls or response.finish_reason == "stop":
+            return "verify_findings"
+        # Check if any pending HITL approval needs processing
+        if state.get("pending_hitl_approval_id") is not None:
+            return "prepare_hitl"
+        # Check if first tool call is HITL
+        for call in response.tool_calls:
+            tool = self._tool_registry.get(call["name"])
+            if tool is not None and getattr(tool, "safety_level", None) == "hitl":
+                return "prepare_hitl"
+        return "execute_tools"
+
+    # ------------------------------------------------------------------
+    # Node: prepare_hitl
+    # ------------------------------------------------------------------
+
+    async def _prepare_hitl_node(
+        self, state: AgentState, config: RunnableConfig
+    ) -> dict[str, Any]:
+        """Create DB rows for HITL approval and job. No interrupt here — only side effects."""
+        from uuid import UUID as _UUID
+        from uuid import uuid4 as _uuid4
+
+        from packages.persistence.approvals_repo import ApprovalsRepository
+
+        sse_queue = (config.get("configurable") or {}).get("sse_queue")
+        ctx: ToolContext = (config.get("configurable") or {})["ctx"]
+
+        response = state.get("response")
+        if response is None or not response.tool_calls:
+            return {}
+
+        # Find the first HITL tool call
+        hitl_call: dict[str, Any] | None = None
+        for call in response.tool_calls:
+            tool = self._tool_registry.get(call["name"])
+            if tool is not None and getattr(tool, "safety_level", None) == "hitl":
+                hitl_call = call
+                break
+
+        if hitl_call is None:
+            return {}
+
+        tool_input = hitl_call.get("input", {})
+
+        # Create approval row (DB side effect — safe here, not in wait_for_approval)
+        _repo = ApprovalsRepository()
+        try:
+            created = await _repo.create({
+                "session_id": str(ctx.session_id),
+                "status": "pending",
+                "actor": getattr(ctx, "actor", "orchestrator"),
+                "reason": f"HITL tool: {hitl_call['name']}",
+            })
+            _approval_id = str(created.get("id", _uuid4()))
+        except Exception:
+            _approval_id = str(_uuid4())
+
+        _job_id: str | None = None
+        _job_description: str = ""
+        if hitl_call["name"] == "job_dispatch":
+            from packages.persistence.jobs_repo import JobsRepository as _JobsRepo
+            _jr = _JobsRepo()
+            try:
+                _job = await _jr.create(
+                    session_id=ctx.session_id,
+                    job_type=tool_input.get("job_type", "unknown"),
+                    params=tool_input.get("params", {}),
+                    approval_id=_UUID(_approval_id),
+                )
+                _job_id = str(_job["id"])
+            except Exception:
+                pass
+            _job_description = tool_input.get("description", "")
+
+        # Emit awaiting_approval SSE event (informs session_orchestrator catch block is gone)
+        await self._push(
+            {
+                "type": "awaiting_approval",
+                "session_id": str(ctx.session_id),
+                "approval_id": _approval_id,
+                "tool_name": hitl_call["name"],
+                "tool_input": tool_input,
+                "job_id": _job_id,
+                "description": _job_description,
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+            },
+            sse_queue=sse_queue,
+        )
+
+        return {
+            "pending_hitl_approval_id": _approval_id,
+            "pending_hitl_job_id": _job_id,
+        }
+
+    # ------------------------------------------------------------------
+    # Node: wait_for_approval — ZERO DB side effects
+    # ------------------------------------------------------------------
+
+    async def _wait_for_approval_node(
+        self, state: AgentState, config: RunnableConfig
+    ) -> dict[str, Any]:
+        """Interrupt graph execution to wait for HITL approval.
+
+        CRITICAL: This node has ZERO DB writes.  LangGraph re-executes a node
+        from its beginning when the graph resumes after interrupt().  Any DB write
+        inside this node would execute twice.
         """
-        Make a single LLM call to verify that the agent's conclusion is grounded
-        in the actual tool results.
+        sse_queue = (config.get("configurable") or {}).get("sse_queue")
+        ctx: ToolContext = (config.get("configurable") or {})["ctx"]
 
-        Returns one of: "pass", "needs_revision", "blocked".
+        approval_id = state.get("pending_hitl_approval_id")
+        response = state.get("response")
+        tool_name: str = ""
+        tool_input: dict[str, Any] = {}
+
+        if response is not None and response.tool_calls:
+            for call in response.tool_calls:
+                tool = self._tool_registry.get(call["name"])
+                if tool is not None and getattr(tool, "safety_level", None) == "hitl":
+                    tool_name = call["name"]
+                    tool_input = call.get("input", {})
+                    break
+
+        # Emit session_paused SSE and update session status before interrupting
+        await self._push(
+            {
+                "type": "session_paused",
+                "session_id": str(ctx.session_id),
+                "approval_id": approval_id,
+                "tool_name": tool_name,
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+            },
+            sse_queue=sse_queue,
+        )
+
+        # interrupt() suspends execution here; resumes when Command(resume=...) is sent
+        interrupt({
+            "approval_id": approval_id,
+            "tool_name": tool_name,
+            "tool_input": tool_input,
+        })
+
+        # Execution resumes here after approval — graph continues to execute_tools
+        return {}
+
+    # ------------------------------------------------------------------
+    # Node: execute_tools
+    # ------------------------------------------------------------------
+
+    async def _execute_tools_node(
+        self, state: AgentState, config: RunnableConfig
+    ) -> dict[str, Any]:
+        from packages.agent.llm import LLMMessage
+        from packages.agent.orchestrator.parsing import json_safe
+
+        sse_queue = (config.get("configurable") or {}).get("sse_queue")
+        ctx: ToolContext = (config.get("configurable") or {})["ctx"]
+
+        response = state.get("response")
+        if response is None:
+            return {}
+
+        new_messages: list[Any] = []
+        new_tool_results: list[dict[str, Any]] = []
+
+        pending_job_id: str | None = state.get("pending_hitl_job_id")
+
+        for call in response.tool_calls:
+            tool = self._tool_registry.get(call["name"])
+            if tool is None:
+                continue
+
+            tool_call_id = call["id"]
+            tool_input = call.get("input", {})
+
+            # If this call has an approved HITL job, execute via execute_job (no duplicate rows)
+            if (
+                pending_job_id is not None
+                and getattr(tool, "safety_level", None) == "hitl"
+            ):
+                from uuid import UUID as _UUID
+
+                from packages.agent.job_executor import execute_job
+
+                tool_t0 = time.monotonic()
+                await self._push(
+                    {
+                        "type": "tool_started",
+                        "tool_name": call["name"],
+                        "tool_call_id": tool_call_id,
+                        "step_id": str(ctx.agent_step_id),
+                        "agent_role": self.role,
+                        "input": tool_input,
+                        "timestamp": datetime.now(timezone.utc).isoformat(),
+                    },
+                    sse_queue=sse_queue,
+                )
+                try:
+                    job_result = await execute_job(_UUID(pending_job_id), sse_queue=sse_queue)
+                    tool_duration_ms = int((time.monotonic() - tool_t0) * 1000)
+                    result_output: dict[str, Any] = job_result.get("result_json") or {}
+                    if isinstance(result_output, str):
+                        import json as _json
+                        result_output = _json.loads(result_output)
+                    new_tool_results.append({call["name"]: result_output})
+                    await self._push(
+                        {
+                            "type": "tool_completed",
+                            "tool_name": call["name"],
+                            "tool_call_id": tool_call_id,
+                            "agent_role": self.role,
+                            "duration_ms": tool_duration_ms,
+                            "output": result_output,
+                            "status": "success",
+                            "timestamp": datetime.now(timezone.utc).isoformat(),
+                        },
+                        sse_queue=sse_queue,
+                    )
+                    new_messages.append(LLMMessage(
+                        role="tool",
+                        content=json.dumps(json_safe(result_output)),
+                        tool_call_id=call["id"],
+                    ))
+                except Exception as exc:
+                    tool_duration_ms = int((time.monotonic() - tool_t0) * 1000)
+                    await self._push(
+                        {
+                            "type": "tool_completed",
+                            "tool_name": call["name"],
+                            "tool_call_id": tool_call_id,
+                            "agent_role": self.role,
+                            "duration_ms": tool_duration_ms,
+                            "status": "error",
+                            "error": str(exc),
+                            "timestamp": datetime.now(timezone.utc).isoformat(),
+                        },
+                        sse_queue=sse_queue,
+                    )
+                    raise
+                # Clear HITL job id after use
+                pending_job_id = None
+                continue
+
+            # Normal (non-HITL) tool execution
+            tool_t0 = time.monotonic()
+            await self._push(
+                {
+                    "type": "tool_started",
+                    "tool_name": call["name"],
+                    "tool_call_id": tool_call_id,
+                    "step_id": str(ctx.agent_step_id),
+                    "agent_role": self.role,
+                    "input": tool_input,
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                },
+                sse_queue=sse_queue,
+            )
+            try:
+                tool_result = await tool.handle(tool_input, ctx)
+                tool_duration_ms = int((time.monotonic() - tool_t0) * 1000)
+                tool_output = tool_result.output
+                executed_query = (
+                    tool_output.get("executed_query")
+                    if isinstance(tool_output, dict)
+                    else None
+                )
+                new_tool_results.append({call["name"]: tool_output})
+                await self._push(
+                    {
+                        "type": "tool_completed",
+                        "tool_name": call["name"],
+                        "tool_call_id": tool_call_id,
+                        "agent_role": self.role,
+                        "duration_ms": tool_duration_ms,
+                        "output": tool_output,
+                        "executed_query": executed_query,
+                        "status": "success",
+                        "timestamp": datetime.now(timezone.utc).isoformat(),
+                    },
+                    sse_queue=sse_queue,
+                )
+            except Exception as exc:
+                tool_duration_ms = int((time.monotonic() - tool_t0) * 1000)
+                await self._push(
+                    {
+                        "type": "tool_completed",
+                        "tool_name": call["name"],
+                        "tool_call_id": tool_call_id,
+                        "agent_role": self.role,
+                        "duration_ms": tool_duration_ms,
+                        "status": "error",
+                        "error": str(exc),
+                        "timestamp": datetime.now(timezone.utc).isoformat(),
+                    },
+                    sse_queue=sse_queue,
+                )
+                raise
+
+            new_messages.append(LLMMessage(
+                role="tool",
+                content=json.dumps(json_safe(tool_output)),
+                tool_call_id=call["id"],
+            ))
+
+        return {
+            "messages": new_messages,
+            "tool_results": new_tool_results,
+            # Clear HITL state after execution
+            "pending_hitl_job_id": None,
+            "pending_hitl_approval_id": None,
+        }
+
+    # ------------------------------------------------------------------
+    # Node: verify_findings
+    # ------------------------------------------------------------------
+
+    async def _verify_findings_node(
+        self, state: AgentState, config: RunnableConfig
+    ) -> dict[str, Any]:
+        """Single LLM call to verify the agent's conclusion against tool results.
+
+        Conditional exit:
+          "pass"           -> END
+          "needs_revision" -> call_model (one retry only, guarded by iteration count)
+          "blocked"        -> END with blocked status
         """
         from packages.agent.llm import LLMMessage
 
+        ctx: ToolContext = (config.get("configurable") or {})["ctx"]
+
+        response = state.get("response")
+        conclusion = response.text if response is not None else ""
+
+        # Flatten tool_results list of dicts into a single dict for the prompt
+        merged_tool_results: dict[str, Any] = {}
+        for item in state.get("tool_results") or []:
+            merged_tool_results.update(item)
+
         tool_results_summary = "\n".join(
             f"  {name}: {json.dumps(result, default=str)[:300]}"
-            for name, result in tool_results.items()
+            for name, result in merged_tool_results.items()
         ) or "  (no tool calls made)"
 
         verifier_content = _VERIFIER_PROMPT.format(
@@ -109,36 +561,153 @@ class AgentRuntime:
             conclusion=conclusion[:2000],
         )
 
-        verifier_messages: list[LLMMessage] = [
+        verifier_messages: list[Any] = [
             LLMMessage(role="user", content=verifier_content),
         ]
 
         _log.info("running verify_findings", agent_role=self.role)
         try:
-            response = await self._llm_client.complete(
+            verifier_response = await self._llm_client.complete(
                 messages=verifier_messages,
                 tools=None,
                 temperature=0.0,
                 max_tokens=256,
-                agent_step_id=task_id,
+                agent_step_id=ctx.agent_step_id,
                 specialist_role=self.role,
             )
+            verify_status = _parse_verifier_status(verifier_response.text)
         except Exception:
             _log.exception(
                 "verify_findings LLM call failed; defaulting to pass",
                 agent_role=self.role,
             )
-            return "pass"
+            verify_status = "pass"
 
-        status = _parse_verifier_status(response.text)
-        _log.info("verify_findings complete", agent_role=self.role, verify_status=status)
-        return status
+        _log.info(
+            "verify_findings complete",
+            agent_role=self.role,
+            verify_status=verify_status,
+        )
+
+        if verify_status == "blocked":
+            return {"status": "blocked"}
+
+        if verify_status == "needs_revision":
+            # Store the verify status in status field temporarily
+            # The conditional edge reads this to decide whether to retry
+            return {"status": "needs_revision"}
+
+        # "pass"
+        return {"status": "completed"}
+
+    # ------------------------------------------------------------------
+    # Conditional edge after verify_findings
+    # ------------------------------------------------------------------
+
+    def _after_verify(self, state: AgentState) -> str:
+        status = state.get("status", "completed")
+        if status == "needs_revision":
+            # Only retry once — check iteration count against a threshold
+            # Each verify_findings that triggers a retry adds a revision user message
+            # We guard by checking that we haven't already retried once
+            # State "needs_revision" is only set once; second verify will be "pass"/"blocked"
+            return "revise"
+        return END
+
+    # ------------------------------------------------------------------
+    # Node: add_revision_message
+    # ------------------------------------------------------------------
+
+    async def _add_revision_message_node(
+        self, state: AgentState, config: RunnableConfig
+    ) -> dict[str, Any]:
+        from packages.agent.llm import LLMMessage
+
+        revision_msg = LLMMessage(
+            role="user",
+            content=(
+                "Your previous response may not be fully grounded in the tool results. "
+                "Please review the tool results above and revise your answer, "
+                "ensuring every claim is supported by what the tools actually returned."
+            ),
+        )
+        return {
+            "messages": [revision_msg],
+            "status": "running",
+        }
+
+    # ------------------------------------------------------------------
+    # Conditional edge after add_revision_message
+    # ------------------------------------------------------------------
+
+    def _after_revision(self, state: AgentState) -> str:
+        # After revision, go back to call_model then skip verify (one retry only)
+        return "call_model_final"
+
+    # ------------------------------------------------------------------
+    # Node: call_model_final (retry after needs_revision — no second verify)
+    # ------------------------------------------------------------------
+
+    async def _call_model_final_node(
+        self, state: AgentState, config: RunnableConfig
+    ) -> dict[str, Any]:
+        """Retry LLM call after needs_revision. No subsequent verify_findings."""
+        result = await self._call_model_node(state, config)
+        # Mark as completed immediately — no second verify pass
+        result["status"] = "completed"
+        return result
+
+    # ------------------------------------------------------------------
+    # Build the StateGraph
+    # ------------------------------------------------------------------
+
+    def _build_graph(self, checkpointer: Any) -> Any:
+        sg: StateGraph = StateGraph(AgentState)  # type: ignore[type-arg]
+
+        sg.add_node("call_model", self._call_model_node)
+        sg.add_node("prepare_hitl", self._prepare_hitl_node)
+        sg.add_node("wait_for_approval", self._wait_for_approval_node)
+        sg.add_node("execute_tools", self._execute_tools_node)
+        sg.add_node("verify_findings", self._verify_findings_node)
+        sg.add_node("add_revision_message", self._add_revision_message_node)
+        sg.add_node("call_model_final", self._call_model_final_node)
+
+        sg.add_edge(START, "call_model")
+        sg.add_conditional_edges(
+            "call_model",
+            self._should_continue,
+            {
+                "verify_findings": "verify_findings",
+                "execute_tools": "execute_tools",
+                "prepare_hitl": "prepare_hitl",
+            },
+        )
+        sg.add_edge("prepare_hitl", "wait_for_approval")
+        sg.add_edge("wait_for_approval", "execute_tools")
+        sg.add_edge("execute_tools", "call_model")
+        sg.add_conditional_edges(
+            "verify_findings",
+            self._after_verify,
+            {
+                "revise": "add_revision_message",
+                END: END,
+            },
+        )
+        sg.add_edge("add_revision_message", "call_model_final")
+        sg.add_edge("call_model_final", END)
+
+        return sg.compile(checkpointer=checkpointer)
+
+    # ------------------------------------------------------------------
+    # Public run() — preserves existing public interface
+    # ------------------------------------------------------------------
 
     async def run(
         self,
         task: "SpecialistTask",
         ctx: "ToolContext",
         max_iterations: int | None = None,
+        checkpointer: Any = None,
     ) -> "SpecialistResult":
         from packages.agent.llm import LLMMessage, LLMToolSpec
         from packages.agent.orchestrator import SpecialistResult
@@ -147,9 +716,6 @@ class AgentRuntime:
         schema = get_schema_context()
 
         # T-008: 3-block prompt caching
-        # Block 1: static base prompt (cacheable — changes only when system_prompt changes)
-        # Block 2: schema context (cacheable — changes rarely)
-        # Block 3: dynamic context (per-request — not cached)
         system_blocks: list[dict[str, Any]] = [
             {
                 "type": "text",
@@ -186,216 +752,74 @@ class AgentRuntime:
             for t in tool_objects
         ]
 
-        tool_calls_made: list[Any] = []
-        tool_results: dict[str, Any] = {}
-        last_response: Any = None
-        _total_input_tokens = 0
-        _total_output_tokens = 0
-        _total_cost_usd: Decimal = Decimal("0")
-
-        _verify_findings_done = False
-
-        _iteration_limit = max_iterations if max_iterations is not None else _MAX_ITERATIONS
-
-        async def _run_tool_loop(messages: list[LLMMessage]) -> list[LLMMessage]:
-            nonlocal last_response, _total_input_tokens, _total_output_tokens, _total_cost_usd
-
-            for _ in range(_iteration_limit):
-                _log.info(
-                    "specialist calling LLM",
-                    agent_role=self.role,
-                    model=getattr(self._llm_client, "_model", "?"),
-                )
-                response = await self._llm_client.complete(
-                    messages=messages,
-                    tools=llm_tools if llm_tools else None,
-                    temperature=0.0,
-                    agent_step_id=task.task_id,
-                    specialist_role=self.role,
-                )
-                last_response = response
-                _total_input_tokens += response.usage.input_tokens
-                _total_output_tokens += response.usage.output_tokens
-                _total_cost_usd += response.usage.total_cost_usd
-                _log.info(
-                    "specialist LLM response received",
-                    agent_role=self.role,
-                    finish_reason=response.finish_reason,
-                    tool_call_count=len(response.tool_calls),
-                    model=response.model,
-                )
-
-                if not response.tool_calls or response.finish_reason == "stop":
-                    break
-
-                content_blocks: list[dict[str, Any]] = []
-                if response.text:
-                    content_blocks.append({"type": "text", "text": response.text})
-                for call in response.tool_calls:
-                    content_blocks.append({
-                        "type": "tool_use",
-                        "id": call["id"],
-                        "name": call["name"],
-                        "input": call.get("input", {}),
-                    })
-                messages.append(LLMMessage(
-                    role="assistant", content=response.text, content_blocks=content_blocks
-                ))
-
-                for call in response.tool_calls:
-                    tool = self._tool_registry.get(call["name"])
-                    if tool is not None:
-                        tool_call_id = call["id"]
-                        tool_input = call.get("input", {})
-
-                        # HITL intercept: pause execution and request human approval
-                        if getattr(tool, "safety_level", None) == "hitl":
-                            from uuid import UUID as _UUID
-                            from uuid import uuid4 as _uuid4
-
-                            from packages.agent.orchestrator.hitl import HITLPause
-                            from packages.persistence.approvals_repo import ApprovalsRepository
-
-                            _repo = ApprovalsRepository()
-                            try:
-                                created = await _repo.create({
-                                    "session_id": str(ctx.session_id),
-                                    "status": "pending",
-                                    "actor": ctx.actor,
-                                    "reason": f"HITL tool: {call['name']}",
-                                })
-                                _approval_id = str(created.get("id", _uuid4()))
-                            except Exception:
-                                _approval_id = str(_uuid4())
-
-                            _job_id: str | None = None
-                            _job_description: str = ""
-                            if call["name"] == "job_dispatch":
-                                from packages.persistence.jobs_repo import (
-                                    JobsRepository as _JobsRepo,
-                                )
-                                _jr = _JobsRepo()
-                                try:
-                                    _job = await _jr.create(
-                                        session_id=ctx.session_id,
-                                        job_type=tool_input.get("job_type", "unknown"),
-                                        params=tool_input.get("params", {}),
-                                        approval_id=_UUID(_approval_id),
-                                    )
-                                    _job_id = str(_job["id"])
-                                except Exception:
-                                    pass
-                                _job_description = tool_input.get("description", "")
-
-                            await self._push({
-                                "type": "awaiting_approval",
-                                "session_id": str(ctx.session_id),
-                                "approval_id": _approval_id,
-                                "tool_name": call["name"],
-                                "tool_input": tool_input,
-                                "job_id": _job_id,
-                                "description": _job_description,
-                                "timestamp": datetime.now(timezone.utc).isoformat(),
-                            })
-                            raise HITLPause(
-                                approval_id=_approval_id,
-                                tool_name=call["name"],
-                                tool_input=tool_input,
-                            )
-
-                        tool_t0 = time.monotonic()
-                        await self._push({
-                            "type": "tool_started",
-                            "tool_name": call["name"],
-                            "tool_call_id": tool_call_id,
-                            "step_id": str(ctx.agent_step_id),
-                            "agent_role": self.role,
-                            "input": tool_input,
-                            "timestamp": datetime.now(timezone.utc).isoformat(),
-                        })
-                        try:
-                            tool_result = await tool.handle(tool_input, ctx)
-                            tool_duration_ms = int((time.monotonic() - tool_t0) * 1000)
-                            tool_calls_made.append(ctx.agent_step_id)
-                            tool_results[call["name"]] = tool_result.output
-                            executed_query = (
-                                tool_result.output.get("executed_query")
-                                if isinstance(tool_result.output, dict)
-                                else None
-                            )
-                            await self._push({
-                                "type": "tool_completed",
-                                "tool_name": call["name"],
-                                "tool_call_id": tool_call_id,
-                                "agent_role": self.role,
-                                "duration_ms": tool_duration_ms,
-                                "output": tool_result.output,
-                                "executed_query": executed_query,
-                                "status": "success",
-                                "timestamp": datetime.now(timezone.utc).isoformat(),
-                            })
-                        except Exception as exc:
-                            tool_duration_ms = int((time.monotonic() - tool_t0) * 1000)
-                            await self._push({
-                                "type": "tool_completed",
-                                "tool_name": call["name"],
-                                "tool_call_id": tool_call_id,
-                                "agent_role": self.role,
-                                "duration_ms": tool_duration_ms,
-                                "status": "error",
-                                "error": str(exc),
-                                "timestamp": datetime.now(timezone.utc).isoformat(),
-                            })
-                            raise
-                        from packages.agent.orchestrator.parsing import json_safe
-                        messages.append(LLMMessage(
-                            role="tool",
-                            content=json.dumps(json_safe(tool_result.output)),
-                            tool_call_id=call["id"],
-                        ))
-
-            return messages
-
-        # Build the initial message list with 3-block system prompt
-        messages: list[LLMMessage] = [
+        initial_messages: list[Any] = [
             LLMMessage(role="system", content="", content_blocks=system_blocks),
             LLMMessage(role="user", content=task.instruction),
         ]
 
-        messages = await _run_tool_loop(messages)
+        if checkpointer is None:
+            checkpointer = MemorySaver()
 
-        # T-007: verify_findings step
-        # Derive conclusion text from the last LLM response
-        conclusion = last_response.text if last_response else ""
-        verify_status = await self._verify_findings(tool_results, conclusion, task.task_id)
+        import uuid
+        thread_id = str(uuid.uuid4())
 
-        if verify_status == "needs_revision" and not _verify_findings_done:
-            _verify_findings_done = True
-            _log.info(
-                "verify_findings=needs_revision; retrying tool loop once",
-                agent_role=self.role,
-            )
-            # Re-append a user message asking the agent to revise
-            messages.append(
-                LLMMessage(
-                    role="user",
-                    content=(
-                        "Your previous response may not be fully grounded in the tool results. "
-                        "Please review the tool results above and revise your answer, "
-                        "ensuring every claim is supported by what the tools actually returned."
-                    ),
-                )
-            )
-            messages = await _run_tool_loop(messages)
+        graph = self._build_graph(checkpointer)
+
+        run_config: dict[str, Any] = {
+            "configurable": {
+                "thread_id": thread_id,
+                "task": task,
+                "ctx": ctx,
+                "llm_tools": llm_tools,
+                "sse_queue": self._sse_queue,
+            }
+        }
+
+        initial_state: AgentState = {
+            "messages": initial_messages,
+            "response": None,
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "cost_usd": 0.0,
+            "tool_results": [],
+            "iteration": 0,
+            "status": "running",
+            "error": None,
+            "pending_hitl_approval_id": None,
+            "pending_hitl_job_id": None,
+        }
+
+        final_state: dict[str, Any] = await graph.ainvoke(initial_state, config=run_config)
+
+        # Reconstruct tool_results dict from the accumulated list of dicts
+        merged_tool_results: dict[str, Any] = {}
+        for item in final_state.get("tool_results") or []:
+            merged_tool_results.update(item)
+
+        last_response = final_state.get("response")
+        run_status = final_state.get("status", "completed")
+
+        # Map internal graph status to SpecialistResult status
+        specialist_status: str
+        if run_status in ("completed", "blocked"):
+            specialist_status = "completed"
+        elif run_status == "error":
+            specialist_status = "failed"
+        else:
+            specialist_status = "completed"
+
+        # Collect tool_calls_made from context — approximate using step_id repeated per tool result
+        tool_calls_made = [ctx.agent_step_id] * len(merged_tool_results)
 
         return SpecialistResult(
             task_id=task.task_id,
-            output=self._output_builder(tool_results, last_response),
+            output=self._output_builder(merged_tool_results, last_response),
             tool_calls_made=tool_calls_made,
-            status="completed",
+            status=specialist_status,  # type: ignore[arg-type]
+            error=final_state.get("error"),
             usage={
-                "input_tokens": _total_input_tokens,
-                "output_tokens": _total_output_tokens,
-                "cost_usd": float(_total_cost_usd),
+                "input_tokens": final_state.get("input_tokens", 0),
+                "output_tokens": final_state.get("output_tokens", 0),
+                "cost_usd": final_state.get("cost_usd", 0.0),
             },
         )
