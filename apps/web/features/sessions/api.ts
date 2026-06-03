@@ -18,3 +18,11 @@ export async function createSession(goal: string): Promise<Session> {
 export async function deleteAllSessions(): Promise<void> {
   await apiFetch("/api/v1/sessions", { method: "DELETE" });
 }
+
+export async function submitAskUserAnswer(sessionId: string, answer: string): Promise<unknown> {
+  return apiFetch(`/api/v1/sessions/${sessionId}/answer`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ answer }),
+  });
+}

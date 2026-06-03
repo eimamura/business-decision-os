@@ -88,15 +88,6 @@ export async function fetchMessages(sessionId: string): Promise<ChatMessage[]> {
 
 type MessageRole = "user" | "assistant";
 
-function invalidSseEvent(): SseEvent {
-  return {
-    type: "error",
-    code: "invalid_sse_event",
-    message: "Invalid SSE event received.",
-    recoverable: true,
-    timestamp: new Date().toISOString(),
-  };
-}
 
 export async function fetchSessionEvents(sessionId: string): Promise<SseEvent[]> {
   try {
@@ -201,7 +192,9 @@ export async function streamSession(
           try {
             const parsed: unknown = JSON.parse(data);
             const event = SseEventSchema.safeParse(parsed);
-            yield event.success ? event.data : invalidSseEvent();
+            if (event.success) yield event.data;
+            // unknown event types are silently ignored so future backend additions
+            // don't surface as UI errors
           } catch {
             // skip malformed blocks
           }

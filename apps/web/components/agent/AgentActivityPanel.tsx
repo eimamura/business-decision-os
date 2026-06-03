@@ -7,7 +7,7 @@ import type { SessionUsage, SseEvent } from "@/types/chat";
 import type { AgentStep, AgentStepStatus } from "@/types/workspace";
 import EvidenceSources from "./EvidenceSources";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+const API_BASE = "";
 
 // ---- SSE parsing ----
 
@@ -273,7 +273,7 @@ export default function AgentActivityPanel({ sessionId, usage }: Props): React.R
     seenKeysRef.current = new Set();
 
     function connect(): void {
-      const url = new URL(`${API_BASE}/api/v1/sessions/${sessionId}/stream`);
+      const url = new URL(`${API_BASE}/api/v1/sessions/${sessionId}/stream`, window.location.origin);
       if (lastEventIdRef.current) {
         url.searchParams.set("last_event_id", lastEventIdRef.current);
       }

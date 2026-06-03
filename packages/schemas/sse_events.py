@@ -133,8 +133,9 @@ class AwaitingApprovalEvent(BaseModel):
 class AskUserRequiredEvent(BaseModel):
     type: Literal["ask_user_required"] = "ask_user_required"
     session_id: str
-    ask_user_id: str          # NEW — UUID identifying this specific ask-user interrupt
+    ask_user_id: str
     question: str
+    suggestions: list[str] = []
     timestamp: str
 
 

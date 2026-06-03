@@ -104,8 +104,8 @@ def _make_orchestrator(llm_client: Any) -> SessionOrchestrator:
 
 
 @pytest.mark.asyncio
-async def test_run_success_calls_active_then_completed() -> None:
-    """On a successful run, update_status must be called with 'active' then 'completed'."""
+async def test_run_success_calls_running_then_completed() -> None:
+    """On a successful run, update_status must be called with 'running' then 'completed'."""
     orchestrator = _make_orchestrator(DirectChatLLMClient())
     session_id = uuid4()
     query = SessionUserQuery(text="hello")
@@ -123,16 +123,16 @@ async def test_run_success_calls_active_then_completed() -> None:
 
     calls = [call.args for call in mock_repo.update_status.call_args_list]
     statuses = [c[1] for c in calls]  # second positional arg is the status string
-    assert "active" in statuses, f"Expected 'active' in status calls, got: {statuses}"
+    assert "running" in statuses, f"Expected 'running' in status calls, got: {statuses}"
     assert "completed" in statuses, f"Expected 'completed' in status calls, got: {statuses}"
-    assert statuses.index("active") < statuses.index("completed"), (
-        "'active' must precede 'completed'"
+    assert statuses.index("running") < statuses.index("completed"), (
+        "'running' must precede 'completed'"
     )
 
 
 @pytest.mark.asyncio
-async def test_run_failure_calls_active_then_failed() -> None:
-    """When run() raises, update_status must be called with 'active' then 'failed'."""
+async def test_run_failure_calls_running_then_failed() -> None:
+    """When run() raises, update_status must be called with 'running' then 'failed'."""
     orchestrator = _make_orchestrator(FailingLLMClient())
     session_id = uuid4()
     query = SessionUserQuery(text="hello")
@@ -150,7 +150,7 @@ async def test_run_failure_calls_active_then_failed() -> None:
 
     calls = [call.args for call in mock_repo.update_status.call_args_list]
     statuses = [c[1] for c in calls]
-    assert "active" in statuses, f"Expected 'active' in status calls, got: {statuses}"
+    assert "running" in statuses, f"Expected 'running' in status calls, got: {statuses}"
     assert "failed" in statuses, f"Expected 'failed' in status calls, got: {statuses}"
     assert "completed" not in statuses, (
         "'completed' must NOT be called when run() raises"

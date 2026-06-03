@@ -611,13 +611,10 @@ class SessionOrchestrator:
         graph = await self._get_graph()
 
         try:
-            result_state: dict[str, Any] = {}
-            async for chunk in graph.astream(
+            final_state: dict[str, Any] = await graph.ainvoke(
                 Command(resume={"answer": answer}),
                 config=config,
-                stream_mode="updates",
-            ):
-                result_state.update(chunk)
+            )
         except Exception as exc:
             self._schedule_status_update(session_id, "failed")
             await self._push({
@@ -627,7 +624,7 @@ class SessionOrchestrator:
             })
             raise
 
-        result = result_state.get("result") or result_state.get("run_dag", {}).get("result")
+        result = final_state.get("result")
         if result is None:
             raise RuntimeError(f"ask_user resume produced no result for session {session_id}")
         return cast(SessionResponse, result)

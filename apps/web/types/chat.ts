@@ -1,4 +1,4 @@
-export type MessageRole = "user" | "assistant" | "tool" | "job_approval" | "job_files";
+export type MessageRole = "user" | "assistant" | "tool" | "job_approval" | "job_files" | "ask_user";
 
 export interface ChatMessage {
   id: string;
@@ -20,6 +20,10 @@ export interface ChatMessage {
   jobParams?: Record<string, unknown>;
   // job_files message fields (role === "job_files")
   jobFiles?: ReadonlyArray<{ readonly file_name: string; readonly download_url: string }>;
+  // ask_user message fields (role === "ask_user")
+  askUserId?: string;
+  askUserQuestion?: string;
+  askUserSuggestions?: readonly string[];
 }
 
 export interface Session {

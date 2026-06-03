@@ -34,7 +34,7 @@ export default function ChatPage({ params }: ChatPageProps) {
     [sessionId, setSessions],
   );
 
-  const { messages, isSending, usage, isLoadingMessages, loadMessages, sendMessage, submitFeedback } = useChat(
+  const { messages, isSending, usage, isLoadingMessages, loadMessages, sendMessage, submitFeedback, appendAssistantReply } = useChat(
     sessionId,
     onTitleGenerated,
   );
@@ -162,7 +162,13 @@ export default function ChatPage({ params }: ChatPageProps) {
               ) : (
                 <div className="space-y-4">
                   {messages.map((msg) => (
-                    <MessageBubble key={msg.id} message={msg} onFeedback={submitFeedback} />
+                    <MessageBubble
+                      key={msg.id}
+                      message={msg}
+                      sessionId={sessionId}
+                      onFeedback={submitFeedback}
+                      onAskUserAnswered={appendAssistantReply}
+                    />
                   ))}
                   <div ref={messagesEndRef} />
                 </div>

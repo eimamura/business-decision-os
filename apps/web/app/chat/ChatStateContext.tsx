@@ -39,6 +39,7 @@ interface ChatStateContextValue {
     onTitleGenerated?: (title: string) => void,
   ) => Promise<void>;
   submitFeedback: (sessionId: string, messageId: string, feedback: 1 | -1) => Promise<void>;
+  appendAssistantReply: (sessionId: string, reply: string) => void;
 }
 
 const ChatStateContext = createContext<ChatStateContextValue | null>(null);
@@ -262,6 +263,30 @@ export function ChatStateProvider({ children }: { children: ReactNode }): React.
               void queryClient.invalidateQueries({ queryKey: ["jobs"] });
             }
 
+            if (event.type === "ask_user_required") {
+              const askUserMsg: ChatMessage = {
+                id: crypto.randomUUID(),
+                role: "ask_user",
+                content: "",
+                askUserId: event.ask_user_id,
+                askUserQuestion: event.question,
+                askUserSuggestions: event.suggestions,
+                created_at: new Date().toISOString(),
+              };
+              updateSession(sessionId, (prev) => {
+                const idx = prev.messages.findIndex((m) => m.id === assistantId);
+                const msgs =
+                  idx === -1
+                    ? [...prev.messages, askUserMsg]
+                    : [
+                        ...prev.messages.slice(0, idx),
+                        askUserMsg,
+                        ...prev.messages.slice(idx),
+                      ];
+                return { ...prev, messages: msgs };
+              });
+            }
+
             if (event.type === "error") {
               updateSession(sessionId, (prev) => ({
                 ...prev,
@@ -362,9 +387,25 @@ export function ChatStateProvider({ children }: { children: ReactNode }): React.
     [updateSession],
   );
 
+  const appendAssistantReply = useCallback(
+    (sessionId: string, reply: string): void => {
+      const msg: ChatMessage = {
+        id: crypto.randomUUID(),
+        role: "assistant",
+        content: reply,
+        created_at: new Date().toISOString(),
+      };
+      updateSession(sessionId, (prev) => ({
+        ...prev,
+        messages: [...prev.messages, msg],
+      }));
+    },
+    [updateSession],
+  );
+
   return (
     <ChatStateContext.Provider
-      value={{ getSessionState, loadMessages, sendMessage, submitFeedback }}
+      value={{ getSessionState, loadMessages, sendMessage, submitFeedback, appendAssistantReply }}
     >
       {children}
     </ChatStateContext.Provider>

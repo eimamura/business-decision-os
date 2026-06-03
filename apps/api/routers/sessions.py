@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from typing import Any, AsyncGenerator
 from uuid import UUID, uuid4
 
-from fastapi import APIRouter, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
@@ -19,7 +19,7 @@ from apps.api.state import (
     sessions,
 )
 from packages.agent.history import compress_history
-from packages.agent.orchestrator import SessionResponse, SessionUserQuery
+from packages.agent.orchestrator import SessionOrchestrator, SessionResponse, SessionUserQuery
 from packages.agent.rate_limiter import RateLimitExceeded, check_rate_limit
 from packages.memory import ShortTermMemory
 from packages.persistence.llm_usage_repo import LlmUsageRepository
@@ -49,6 +49,10 @@ class FeedbackRequest(BaseModel):
 
 class UpdateTitleRequest(BaseModel):
     title: str
+
+
+class AskUserAnswerRequest(BaseModel):
+    answer: str
 
 
 class SessionUsageResponse(BaseModel):
@@ -405,3 +409,20 @@ async def stream_session(session_id: str) -> StreamingResponse:
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
+
+
+def _get_orchestrator_for_answer() -> SessionOrchestrator:
+    return get_orchestrator(sse_queue=None)
+
+
+@router.post(
+    "/{session_id}/answer",
+    status_code=status.HTTP_200_OK,
+    response_model=SessionResponse,
+)
+async def submit_ask_user_answer(
+    session_id: UUID,
+    body: AskUserAnswerRequest,
+    orchestrator: SessionOrchestrator = Depends(_get_orchestrator_for_answer),
+) -> SessionResponse:
+    return await orchestrator.answer_ask_user(session_id, body.answer)

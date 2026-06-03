@@ -17,6 +17,10 @@ Orchestrator execution state. Written only by bdos-orchestrator.
 | P7 — CI Quality & Memory Loop Validation (T-055 – T-058) | 2026-06-02 |
 | P8 — Mock Mode for Cost-Free UI Testing (T-059 – T-062) | 2026-06-02 |
 | P9 — LangGraph Migration (T-063 – T-075) | 2026-06-02 |
+| P10 — Web UI Server State Standardisation (T-076 – T-080) | 2026-06-03 |
+| P11 — AskUser: Pre-execution Information Gathering (T-083 – T-085) | 2026-06-03 |
+| P12 — Test Session Pollution Fix (T-086 – T-087) | 2026-06-03 |
+| P13 — AskUser: interrupt()-based Mid-Execution Gathering (T-088 – T-099) | 2026-06-03 |
 
 ---
 
@@ -82,11 +86,11 @@ None.
 
 ## Last Completed Batch
 
-P9 complete (2026-06-02): All 13 tasks Done (T-063–T-075). LangGraph migration complete.
+P13 (2026-06-03): T-088–T-099 Done. AskUser migrated to LangGraph interrupt()/resume. prepare_ask_user + wait_for_answer nodes added. suggestion chips in UI. 512 unit tests pass, 11 skipped. lint + typecheck exit 0.
 
 ## Last Validation
 
-2026-06-02: 503 unit tests + 8 new integration tests pass. make lint → exit 0. make typecheck → exit 0. P9 complete.
+2026-06-03: P13 AskUser interrupt() migration. uv run pytest tests/unit/ -q → 512 passed, 11 skipped. make lint → all checks passed. make typecheck → no issues in 139 source files.
 
 ## Blockers
 

@@ -10,6 +10,7 @@ import type { ChatMessage } from "@/types/chat";
 import AnalysisCard, { isAnalysisCard } from "./analysis/AnalysisCard";
 import FeedbackBar from "./FeedbackBar";
 import JobApprovalCard from "./JobApprovalCard";
+import { AskUserInput } from "./AskUserInput";
 
 interface SyntaxHighlighterProps {
   language: string;
@@ -49,7 +50,9 @@ const DynamicSyntaxHighlighter = dynamic<SyntaxHighlighterProps>(
 
 interface MessageBubbleProps {
   message: ChatMessage;
+  sessionId?: string;
   onFeedback?: (messageId: string, feedback: 1 | -1) => void;
+  onAskUserAnswered?: (reply: string) => void;
 }
 
 const markdownComponents: Components = {
@@ -183,7 +186,32 @@ function SqlQueryBubble({ message }: { message: ChatMessage }) {
   );
 }
 
-export default function MessageBubble({ message, onFeedback }: MessageBubbleProps): React.JSX.Element {
+export default function MessageBubble({ message, sessionId, onFeedback, onAskUserAnswered }: MessageBubbleProps): React.JSX.Element {
+  if (message.role === "ask_user") {
+    const onAnswered = (result: unknown): void => {
+      const reply = (result as { reply?: string } | undefined)?.reply;
+      if (reply && onAskUserAnswered) {
+        onAskUserAnswered(reply);
+      }
+    };
+    return (
+      <div className="flex justify-start">
+        <div className="w-7 h-7 rounded-full bg-[#0c0c14] flex items-center justify-center mr-3 mt-1 shrink-0 border border-indigo-900/40">
+          <span className="text-[10px] text-indigo-400">?</span>
+        </div>
+        <div className="max-w-[78%] w-full">
+          <AskUserInput
+            sessionId={sessionId ?? ""}
+            askUserId={message.askUserId ?? ""}
+            question={message.askUserQuestion ?? ""}
+            suggestions={message.askUserSuggestions ?? []}
+            onAnswered={onAnswered}
+          />
+        </div>
+      </div>
+    );
+  }
+
   if (message.role === "job_approval") {
     return (
       <div className="flex justify-start">

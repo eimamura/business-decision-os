@@ -71,6 +71,17 @@ def test_build_ask_user_event_has_timestamp() -> None:
     assert len(event["timestamp"]) > 0
 
 
+def test_build_ask_user_event_with_suggestions() -> None:
+    suggestions = ["Last 30 days", "Q1 2025", "Last 12 months"]
+    event = build_ask_user_event(_SESSION_ID, "What date range?", "ask-id-6", suggestions)
+    assert event["suggestions"] == ["Last 30 days", "Q1 2025", "Last 12 months"]
+
+
+def test_build_ask_user_event_without_suggestions_defaults_empty() -> None:
+    event = build_ask_user_event(_SESSION_ID, "What date range?", "ask-id-7", None)
+    assert event["suggestions"] == []
+
+
 # ---------------------------------------------------------------------------
 # Orchestrator _node_ask_user — mock LLM tests
 # ---------------------------------------------------------------------------

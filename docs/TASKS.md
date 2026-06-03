@@ -1768,7 +1768,7 @@ running agent requests input) is scoped to P14 and noted in the ADR as a future 
   - `test_prepare_ask_user_passthrough_for_non_analytical`: `chat` intent → `ask_user_id` not set →
     `wait_for_answer` passes through immediately to `select_mode`.
 
-#### T-093: Implement `SessionOrchestrator.answer_ask_user()`
+#### T-093: Implement `SessionOrchestrator.answer_ask_user()` — **Done**
 - **File:** `packages/agent/orchestrator/session_orchestrator.py`
 - **Depends on:** T-091
 - **What:**
@@ -1813,7 +1813,7 @@ running agent requests input) is scoped to P14 and noted in the ADR as a future 
 
 ### Batch P13-B3 — API endpoint (App Builder — after P13-B2)
 
-#### T-094: `POST /api/v1/sessions/{session_id}/answer`
+#### T-094: `POST /api/v1/sessions/{session_id}/answer` — **Done**
 - **File:** `apps/api/routers/sessions.py` (extend existing sessions router)
 - **Depends on:** T-092, T-093
 - **What:**
@@ -1860,7 +1860,7 @@ running agent requests input) is scoped to P14 and noted in the ADR as a future 
 
 ### Batch P13-B4 — Frontend (App Builder — after T-094)
 
-#### T-095: Inline answer input for `ask_user_required` SSE events
+#### T-095: Inline answer input for `ask_user_required` SSE events — **Done**
 - **Files:**
   - `apps/web/components/AskUserInput.tsx` (new)
   - `apps/web/app/chat/ChatStateContext.tsx` — handle `ask_user_required` event
@@ -1915,7 +1915,7 @@ running agent requests input) is scoped to P14 and noted in the ADR as a future 
 
 ### Batch P13-B5 — Tests (Test/Review — after P13-B4)
 
-#### T-096: Unit tests — interrupt/resume cycle with MemorySaver
+#### T-096: Unit tests — interrupt/resume cycle with MemorySaver — **Done**
 - **File:** `tests/unit/test_ask_user_interrupt.py` (new)
 - **Depends on:** T-092, T-093
 - **What:**
@@ -1940,7 +1940,7 @@ running agent requests input) is scoped to P14 and noted in the ADR as a future 
 
   No Docker, no DB, no LLM API calls.
 
-#### T-097: Playwright E2E — inline answer input
+#### T-097: Playwright E2E — inline answer input — **Done**
 - **File:** `tests/e2e/playwright/ask_user_flow.spec.ts` (new)
 - **Depends on:** T-095, T-096, T-099 (chip `data-testid` assertions require T-099 to be done),
   T-088 (`ScenarioStubClaudeClient` must support `MOCK_ASK_USER=true` — see T-088 note below)
@@ -1994,7 +1994,7 @@ suggestions as quick-reply chips alongside a free-text input. Clicking a chip pr
 the text input (user can edit before submitting). The free-text input is always present as
 the fallback.
 
-#### T-098: Extend `ASK_USER_SYSTEM` + `AskUserRequiredEvent` with `suggestions`
+#### T-098: Extend `ASK_USER_SYSTEM` + `AskUserRequiredEvent` with `suggestions` — **Done**
 - **Files:**
   - `packages/agent/orchestrator/prompts.py` — extend `ASK_USER_SYSTEM`
   - `packages/agent/orchestrator/ask_user.py` — extend `build_ask_user_event` signature
@@ -2067,7 +2067,7 @@ the fallback.
   - Unit: LLM returns 5 suggestions → `_node_prepare_ask_user` clamps to 3.
   - `make codegen && git diff --exit-code packages/schemas-ts/` exits 0.
 
-#### T-099: `AskUserInput` — 3 suggestion chips + free-text input
+#### T-099: `AskUserInput` — 3 suggestion chips + free-text input — **Done**
 - **File:** `apps/web/components/AskUserInput.tsx` — amends T-095's component definition
 - **Depends on:** T-098 (SSE event must carry `suggestions` field), T-095 (base component)
 - **What:**

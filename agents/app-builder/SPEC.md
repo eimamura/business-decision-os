@@ -10,7 +10,7 @@ Implement application code: FastAPI backend, Next.js frontend, and all Python pa
 - Work stub-first: schema-conformant trivial implementation first, real logic per phase schedule
 - Maintain all public interface contracts exactly as defined in `docs/DESIGN.md`
 - Record `llm_usage` inside `LLMClient` middleware; write `tool_calls` + `audit_log` per tool call in the same transaction
-- Generate `packages/schemas-ts/` via codegen after any Pydantic schema change
+- **SSE schema invariant:** `packages/schemas/sse_events.py` is the Single Source of Truth for all SSE event types. After any change to that file (add/modify/remove a model or the `SseEvent` union), run `make codegen` to regenerate `packages/schemas-ts/src/sse-events.ts`. Never hand-edit the generated file.
 
 ### Per-Phase Focus
 
@@ -45,7 +45,7 @@ Implement application code: FastAPI backend, Next.js frontend, and all Python pa
 
 - Source code in `apps/` and `packages/`
 - Updated `docs/TASKS.md` task statuses (`In Progress` → `Done`)
-- `packages/schemas-ts/` regenerated after any Pydantic schema change
+- `packages/schemas-ts/src/sse-events.ts` regenerated (via `make codegen`) after any change to `packages/schemas/sse_events.py`
 
 ## Process
 
@@ -89,7 +89,7 @@ config/            Read only; update only with ADR
 data/sample/       Operational CSVs only (NOT ground_truth/)
 ```
 
-`packages/schemas-ts/` is generated — do not hand-edit it.
+`packages/schemas-ts/src/sse-events.ts` is auto-generated from `packages/schemas/sse_events.py` — do not hand-edit it. Run `make codegen` to regenerate.
 
 ## Public Interface Rules
 
@@ -121,7 +121,7 @@ Before marking any task Done:
 - [ ] `uv run pytest tests/unit` passes with zero failures
 - [ ] `uv run pytest tests/integration` passes with zero failures
 - [ ] Every public interface method returns a non-501 response (real or schema-conformant stub)
-- [ ] `make codegen` produces no diff in `packages/schemas-ts/`
+- [ ] `make codegen` exits 0 and produces no diff in `packages/schemas-ts/src/sse-events.ts` (run `git diff --exit-code packages/schemas-ts/` after codegen)
 - [ ] No raw DB rows appear in any LLM prompt path (spot-checked)
 
 ## Done Criteria

@@ -15,12 +15,14 @@ export function useChat(
   loadMessages: () => Promise<void>;
   sendMessage: (text: string) => Promise<void>;
   submitFeedback: (messageId: string, feedback: 1 | -1) => Promise<void>;
+  appendAssistantReply: (reply: string) => void;
 } {
   const {
     getSessionState,
     loadMessages: ctxLoadMessages,
     sendMessage: ctxSendMessage,
     submitFeedback: ctxSubmitFeedback,
+    appendAssistantReply: ctxAppendReply,
   } = useChatStateContext();
 
   const state = getSessionState(sessionId);
@@ -40,6 +42,11 @@ export function useChat(
     [ctxSubmitFeedback, sessionId],
   );
 
+  const appendAssistantReply = useCallback(
+    (reply: string) => ctxAppendReply(sessionId, reply),
+    [ctxAppendReply, sessionId],
+  );
+
   return {
     messages: state.messages,
     isSending: state.isSending,
@@ -48,5 +55,6 @@ export function useChat(
     loadMessages,
     sendMessage,
     submitFeedback,
+    appendAssistantReply,
   };
 }

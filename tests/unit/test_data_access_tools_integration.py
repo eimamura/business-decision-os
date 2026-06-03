@@ -39,7 +39,13 @@ async def reset_db_pool():
     singleton in packages/persistence/db.py is bound to the event loop in which
     it was created, so it becomes invalid across tests. Resetting it forces
     recreation in the current loop.
+
+    Also skips at runtime when DATABASE_URL is absent — the module-level
+    _needs_db marker only checks at collection time, so we need a runtime guard
+    too (e.g. when the unit-test conftest deletes DATABASE_URL via monkeypatch).
     """
+    if not os.environ.get("DATABASE_URL"):
+        pytest.skip("requires DATABASE_URL")
     import packages.persistence.db as db_module
     db_module._pool = None
     yield

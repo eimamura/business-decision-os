@@ -132,6 +132,7 @@ export const AskUserRequiredEventSchema = z.object({
   session_id: z.string(),
   ask_user_id: z.string(),
   question: z.string(),
+  suggestions: z.array(z.string()),
   timestamp: z.string(),
 });
 

@@ -1,4 +1,4 @@
-.PHONY: migrate seed generate-data build test lint typecheck dev dev-api dev-web dev-compose dev-up dev-down dev-logs dev-ps dev-smoke
+.PHONY: migrate seed generate-data codegen build test lint typecheck dev dev-api dev-web dev-compose dev-up dev-down dev-logs dev-ps dev-smoke
 
 WEB_PORT ?= 3002
 API_PORT ?= 8002
@@ -56,3 +56,9 @@ lint:
 
 typecheck:
 	uv run mypy packages/ apps/api/
+
+codegen:
+	uv run python scripts/generate_sse_schemas.py
+	@echo "Verifying no TS compile errors after codegen..."
+	cd apps/web && npx tsc --noEmit
+	@echo "codegen OK"
