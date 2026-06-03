@@ -1,7 +1,19 @@
 import { SseEventSchema } from "@/types/chat";
 import type { ChatMessage, Session, SessionUsage, SseEvent } from "@/types/chat";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+export async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
+  const res = await fetch(path, {
+    ...options,
+    headers: {
+      "X-Dev-User": "dev-user",
+      ...options?.headers,
+    },
+  });
+  if (!res.ok) throw new Error(`API error: ${res.status} ${path}`);
+  return res.json() as Promise<T>;
+}
+
+const API_BASE = "";
 
 const DEV_HEADERS: Record<string, string> = {
   "Content-Type": "application/json",

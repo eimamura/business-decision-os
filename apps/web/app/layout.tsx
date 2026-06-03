@@ -3,6 +3,7 @@ import { Inter } from "next/font/google";
 import { ReactNode } from "react";
 import MockModeBanner from "@/components/MockModeBanner";
 import ThemeToggle from "@/components/ThemeToggle";
+import { Providers } from "@/app/providers";
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
 
@@ -41,13 +42,15 @@ export default function RootLayout({ children }: { children: ReactNode }) {
       <body
         className={`${inter.variable} font-sans min-h-screen bg-background text-foreground antialiased`}
       >
-        <MockModeBanner />
-        <div className="relative">
-          <div className="fixed top-3 right-3 z-50">
-            <ThemeToggle />
+        <Providers>
+          <MockModeBanner />
+          <div className="relative">
+            <div className="fixed top-3 right-3 z-50">
+              <ThemeToggle />
+            </div>
+            {children}
           </div>
-          {children}
-        </div>
+        </Providers>
       </body>
     </html>
   );
