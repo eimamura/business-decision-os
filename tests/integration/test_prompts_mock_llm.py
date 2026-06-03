@@ -28,7 +28,6 @@ from packages.agent.orchestrator import (
     SessionOrchestrator,
     SessionUserQuery,
 )
-from packages.agent.orchestrator.hitl import HITLPause
 from packages.agent.orchestrator.models import AgentRoute
 from packages.agent.orchestrator.routing import validate_route
 from packages.memory import StubMemoryStore
@@ -460,9 +459,8 @@ async def test_chat_intent_without_goal_emits_clarification_event() -> None:
 
 @_SKIP_NO_DB
 async def test_hitl_tool_raises_pause_and_session_set_to_awaiting_approval() -> None:
-    """When the LLM requests a hitl tool, SessionOrchestrator must catch HITLPause
-    and return a response with requires_approval=True; session status becomes
-    'awaiting_approval'."""
+    """When the LLM requests a hitl tool, prepare_hitl node sets session status to
+    'awaiting_approval' and the graph pauses at wait_for_approval via interrupt()."""
     approval_id = str(uuid4())
 
     hitl_tool: Any = _make_recording_tool("request_approval", "hitl", _InvocationRecorder())
