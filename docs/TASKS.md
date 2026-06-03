@@ -956,7 +956,7 @@ node whose state is checkpointed before `interrupt()` is reached.
 
 ### Batch P9-B0 — Dependencies & DB migration (Infra — prerequisite for all)
 
-#### T-063: Add LangGraph dependencies — **Not Started**
+#### T-063: Add LangGraph dependencies — **Done**
 - **File:** `pyproject.toml` (api workspace)
 - **What:**
   - Add `langgraph==1.2.4` and `langgraph-checkpoint-postgres` to the API package
@@ -965,7 +965,7 @@ node whose state is checkpointed before `interrupt()` is reached.
   - Confirm `import langgraph` succeeds inside the Docker container.
 - **Test:** `uv run python -c "import langgraph; print(langgraph.__version__)"` exits 0.
 
-#### T-064: DB migration — `langgraph_checkpoints` schema — **Not Started**
+#### T-064: DB migration — `langgraph_checkpoints` schema — **Done**
 - **File:** `apps/api/app/main.py` (lifespan)
 - **What:**
   - Call `await AsyncPostgresSaver.setup()` once inside the `@asynccontextmanager` lifespan
@@ -982,7 +982,7 @@ node whose state is checkpointed before `interrupt()` is reached.
 
 ### Batch P9-B1 — Specialist runtime (App Builder — after P9-B0)
 
-#### T-065: Rewrite `AgentRuntime` as LangGraph `StateGraph` — **Not Started**
+#### T-065: Rewrite `AgentRuntime` as LangGraph `StateGraph` — **Done**
 - **Files:** `packages/agent/runtime.py`
 - **What:** Replace the `_run_tool_loop` / `_verify_findings` imperative loop with a
   `StateGraph` containing three nodes:
@@ -1010,7 +1010,7 @@ node whose state is checkpointed before `interrupt()` is reached.
 - **Test:** All existing `tests/unit/test_agent_runtime.py` assertions pass with the new
   graph structure. Use `MemorySaver` as checkpointer in tests.
 
-#### T-066: Rewrite HITL using `interrupt()` — **Not Started**
+#### T-066: Rewrite HITL using `interrupt()` — **Done**
 - **Files:** `packages/agent/runtime.py`, `packages/agent/orchestrator/hitl.py`
 - **What:**
   - Remove `HITLPause` exception class.
@@ -1046,7 +1046,7 @@ node whose state is checkpointed before `interrupt()` is reached.
 **Internal sequencing within B2:** T-067 must complete first (all other B2 tasks depend on it).
 After T-067 is done, T-068, T-069, and T-072 can run in parallel.
 
-#### T-067: Rewrite `SessionOrchestrator` execution routing as `StateGraph` — **Not Started**
+#### T-067: Rewrite `SessionOrchestrator` execution routing as `StateGraph` — **Done**
 - **Files:** `packages/agent/orchestrator/session_orchestrator.py`,
   `packages/agent/orchestrator/runtime.py`
 - **What:**
@@ -1073,7 +1073,7 @@ After T-067 is done, T-068, T-069, and T-072 can run in parallel.
 - **Test:** All existing orchestrator unit tests pass. SSE events emitted in the same
   order as before.
 
-#### T-068: Replace `run_dag_execution` with LangGraph `Send` API — **Not Started**
+#### T-068: Replace `run_dag_execution` with LangGraph `Send` API — **In Progress**
 - **File:** `packages/agent/orchestrator/planning.py`
 - **What:**
   - Replace the `while remaining` / `asyncio.gather` loop with LangGraph's `Send` API:
@@ -1085,7 +1085,7 @@ After T-067 is done, T-068, T-069, and T-072 can run in parallel.
 - **Test:** Unit: DAG with 3 nodes (A, B→depends on A, C→depends on A) executes A first,
   then B and C in parallel (verify timing via mock).
 
-#### T-069: Rewrite `SessionOrchestrator.resume()` — **Not Started**
+#### T-069: Rewrite `SessionOrchestrator.resume()` — **In Progress**
 - **File:** `packages/agent/orchestrator/session_orchestrator.py`
 - **What:**
   - `resume(session_id, approval_id)`:
@@ -1102,7 +1102,7 @@ After T-067 is done, T-068, T-069, and T-072 can run in parallel.
 - **Test:** Integration: pause a graph via `interrupt()`; call `resume()`; confirm
   execution continues from the paused node without re-running `classify_intent`.
 
-#### T-072: Port history compression into a LangGraph pre-processing node — **Not Started**
+#### T-072: Port history compression into a LangGraph pre-processing node — **In Progress**
 - **File:** `packages/agent/runtime.py`
 - **What:**
   - Add a `compress_history` node that runs before `call_model` when

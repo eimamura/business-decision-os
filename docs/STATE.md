@@ -79,17 +79,15 @@ Batch execution order:
 
 ## Active Lease
 
-None.
+P9-B2 T-068/T-069/T-072 (parallel) — App Builder — acquired 2026-06-02
 
 ## Last Completed Batch
 
-P8 Batch 2 complete (2026-06-02): T-061, T-062 Done. All P8 tasks complete.
-P9 task definition complete (2026-06-02): T-063–T-075 defined. Implementation not yet started.
-P9 task validation complete (2026-06-02): 9 issues resolved — see TASKS.md P9 section.
+P9-B1 complete (2026-06-02): T-065 (AgentRuntime → StateGraph with call_model/execute_tools/verify_findings nodes), T-066 (HITL via interrupt(): prepare_hitl+wait_for_approval nodes, HITLPause removed). 470 unit tests pass.
 
 ## Last Validation
 
-2026-06-02: uv run pytest tests/unit/ → 472 passed. All P7–P8 tasks complete. CI now includes TypeScript type check and production build steps.
+2026-06-02: uv run pytest tests/unit/ → 472 passed. make lint → exit 0. make typecheck → exit 0. P9-B0 complete.
 
 ## Blockers
 
