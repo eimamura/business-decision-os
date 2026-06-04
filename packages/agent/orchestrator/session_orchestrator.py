@@ -533,8 +533,18 @@ class SessionOrchestrator:
                     "duration_ms": duration_ms, "status": "ok", "meta": meta,
                 })
 
-        # Inject captured interrupt into final_state so run() can detect and re-raise
+        # LangGraph does not emit on_chain_end for the interrupted node — emit a
+        # synthetic end event so the execution trace remains consistent (start/end pairs).
         if interrupt_chunk is not None:
+            for orphan_run_id, t0 in node_start_times.items():
+                duration_ms = int((time.monotonic() - t0) * 1000)
+                await self._push({
+                    "type": "graph_node", "event": "end",
+                    "kind": "orchestrator", "name": "wait_for_answer",
+                    "run_id": orphan_run_id, "timestamp": _iso_now(),
+                    "duration_ms": duration_ms, "status": "interrupted",
+                    "meta": {"model_name": _get_orchestrator_model_name(self._llm_client)},
+                })
             fs: dict[str, Any] = dict(final_state) if isinstance(final_state, dict) else {}
             fs["__interrupt__"] = interrupt_chunk
             return fs

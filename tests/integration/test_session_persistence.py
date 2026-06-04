@@ -93,6 +93,17 @@ class _TrackingDirectChatClient:
         # direct_chat response
         return _llm_response("Hello! How can I assist you today?")
 
+    async def stream(
+        self,
+        messages: list[LLMMessage],
+        tools: Any = None,
+        **kwargs: Any,
+    ) -> Any:
+        async def _gen() -> Any:
+            yield {"event": "text_delta", "data": "Hello! How can I assist you today?"}
+            yield {"event": "done", "data": ""}
+        return _gen()
+
 
 def _make_orchestrator(
     llm_client: Any,
@@ -214,6 +225,17 @@ async def test_session_persistence_checkpoint_survives_orchestrator_disposal() -
                 request_id=str(uuid4()),
                 latency_ms=0,
             )
+
+        async def stream(
+            self,
+            messages: list[LLMMessage],
+            tools: Any = None,
+            **kwargs: Any,
+        ) -> Any:
+            async def _gen() -> Any:
+                yield {"event": "text_delta", "data": "Hello!"}
+                yield {"event": "done", "data": ""}
+            return _gen()
 
     llm_client = _TrackingClient()
 
