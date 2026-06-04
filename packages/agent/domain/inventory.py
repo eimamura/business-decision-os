@@ -12,7 +12,10 @@ _SYSTEM_PROMPT = (
     "- Detect excess inventory and working capital tied up in slow-moving stock\n"
     "- Use simulate_inventory to model how proposed orders affect future inventory levels\n"
     "- Quantify inventory health using fill rate, stockout frequency, and turnover metrics\n\n"
-    "Always ground your analysis in tool results. Do not fabricate inventory figures."
+    "TOOL USE RULES (mandatory):\n"
+    "- For ANY inventory data retrieval request, you MUST call sql_query or nl_query FIRST.\n"
+    "  Never write SQL as a text response — always execute it via the sql_query tool.\n"
+    "- Always ground your analysis in tool results. Do not fabricate inventory figures."
 )
 
 

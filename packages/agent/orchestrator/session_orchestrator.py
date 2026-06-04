@@ -328,6 +328,8 @@ class SessionOrchestrator:
         result = await _synthesize_response(
             self, session_id, _query, intent, route, results
         )
+        await self._push({"type": "response_ready", "mode": route.mode, "timestamp": _iso_now()})
+        self._schedule_status_update(session_id, "completed")
         return {"result": result}
 
     async def _node_run_planned(
@@ -341,6 +343,7 @@ class SessionOrchestrator:
 
         _query = SessionUserQuery.model_validate(state["query"])
         result = await run_planned_execution(self, session_id, _query, intent, route)
+        await self._push({"type": "response_ready", "mode": route.mode, "timestamp": _iso_now()})
         self._schedule_status_update(session_id, "completed")
         return {"result": result}
 
@@ -356,6 +359,7 @@ class SessionOrchestrator:
 
         _query = SessionUserQuery.model_validate(state["query"])
         result = await run_dag_execution(self, session_id, _query, intent, route)
+        await self._push({"type": "response_ready", "mode": route.mode, "timestamp": _iso_now()})
         self._schedule_status_update(session_id, "completed")
         return {"result": result}
 

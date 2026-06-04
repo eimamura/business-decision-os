@@ -28,6 +28,10 @@ export interface LlmUsageRow {
   total_cost_usd: number;
   latency_ms: number | null;
   created_at: string;
+  step_type: string;
+  prompt_messages_json: string | null;
+  response_text: string | null;
+  tool_calls_json: string | null;
 }
 
 export async function getAgentSteps(): Promise<AgentStep[]> {
@@ -36,8 +40,11 @@ export async function getAgentSteps(): Promise<AgentStep[]> {
   return (data as { items?: AgentStep[] }).items ?? [];
 }
 
-export async function getLlmUsage(): Promise<LlmUsageRow[]> {
-  const data = await apiFetch<LlmUsageRow[] | { items?: LlmUsageRow[] }>("/api/v1/admin/llm-usage");
+export async function getLlmUsage(limit?: number): Promise<LlmUsageRow[]> {
+  const url = limit !== undefined
+    ? `/api/v1/admin/llm-usage?limit=${limit}`
+    : "/api/v1/admin/llm-usage";
+  const data = await apiFetch<LlmUsageRow[] | { items?: LlmUsageRow[] }>(url);
   if (Array.isArray(data)) return data;
   return (data as { items?: LlmUsageRow[] }).items ?? [];
 }

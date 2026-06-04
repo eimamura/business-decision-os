@@ -14,6 +14,7 @@ export const queryKeys = {
   usage: {
     steps: ["usage", "steps"] as const,
     llm: ["usage", "llm"] as const,
+    llmCalls: ["usage", "llm-calls"] as const,
   },
   settings: { groundTruth: ["settings", "ground-truth"] as const },
   scenarios: { detail: (sessionId: string) => ["scenarios", sessionId] as const },

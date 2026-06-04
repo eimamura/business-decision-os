@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { SlidersHorizontal, ChevronDown, Mic, BrainCircuit } from "lucide-react";
 import ExecutionPanel from "@/components/agent/ExecutionPanel";
+import LlmCallsPanel from "@/components/agent/LlmCallsPanel";
 import QuickActionGrid from "@/components/analysis/QuickActionGrid";
 import MessageBubble from "@/components/chat/MessageBubble";
 import { ExecutionProgressPanel } from "@/components/ExecutionProgressPanel";
@@ -23,6 +24,7 @@ export default function ChatPage({ params }: ChatPageProps) {
   const { sessions, setSessions, creating, onNewSession, onDelete, onDeleteAll, deleteAllPending } = useSessionsContext();
   const [input, setInput] = useState("");
   const [showActivity, setShowActivity] = useState(true);
+  const [showLlmCalls, setShowLlmCalls] = useState(false);
   const [scenarioModalOpen, setScenarioModalOpen] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -55,6 +57,7 @@ export default function ChatPage({ params }: ChatPageProps) {
       if ((e.metaKey || e.ctrlKey) && e.key === ".") {
         e.preventDefault();
         setShowActivity((p) => !p);
+        setShowLlmCalls(false);
       }
     }
     window.addEventListener("keydown", handleKey);
@@ -110,16 +113,28 @@ export default function ChatPage({ params }: ChatPageProps) {
               </h1>
             </div>
           )}
-          <button
-            onClick={() => setShowActivity((p) => !p)}
-            className={`text-xs px-3 py-1.5 rounded-md border font-medium transition-all ${
-              showActivity
-                ? "bg-indigo-600 text-white border-indigo-600 dark:bg-indigo-500 dark:border-indigo-500"
-                : "bg-transparent text-muted dark:text-white/40 border-border dark:border-white/10 hover:text-foreground dark:hover:text-white/70 hover:border-muted dark:hover:border-white/20"
-            }`}
-          >
-            Execution Trace <kbd className="ml-1 opacity-50 font-mono">⌘.</kbd>
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => { setShowActivity((p) => !p); setShowLlmCalls(false); }}
+              className={`text-xs px-3 py-1.5 rounded-md border font-medium transition-all ${
+                showActivity
+                  ? "bg-indigo-600 text-white border-indigo-600 dark:bg-indigo-500 dark:border-indigo-500"
+                  : "bg-transparent text-muted dark:text-white/40 border-border dark:border-white/10 hover:text-foreground dark:hover:text-white/70 hover:border-muted dark:hover:border-white/20"
+              }`}
+            >
+              Execution Trace <kbd className="ml-1 opacity-50 font-mono">⌘.</kbd>
+            </button>
+            <button
+              onClick={() => { setShowLlmCalls((p) => !p); setShowActivity(false); }}
+              className={`text-xs px-3 py-1.5 rounded-md border font-medium transition-all ${
+                showLlmCalls
+                  ? "bg-indigo-600 text-white border-indigo-600 dark:bg-indigo-500 dark:border-indigo-500"
+                  : "bg-transparent text-muted dark:text-white/40 border-border dark:border-white/10 hover:text-foreground dark:hover:text-white/70 hover:border-muted dark:hover:border-white/20"
+              }`}
+            >
+              LLM Calls
+            </button>
+          </div>
         </header>
 
         <main className="flex-1 flex min-h-0">
@@ -246,6 +261,11 @@ export default function ChatPage({ params }: ChatPageProps) {
           {showActivity && (
             <div className="w-80 shrink-0 border-l border-border dark:border-white/8 bg-surface dark:bg-[#0B1020] overflow-hidden flex flex-col custom-scrollbar">
               <ExecutionPanel sessionId={sessionId} />
+            </div>
+          )}
+          {showLlmCalls && (
+            <div className="w-80 shrink-0 border-l border-border dark:border-white/8 bg-surface dark:bg-[#0B1020] overflow-hidden flex flex-col">
+              <LlmCallsPanel />
             </div>
           )}
         </main>

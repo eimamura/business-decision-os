@@ -37,7 +37,9 @@ demand, inventory, replenishment, procurement, supplier, production, logistics,
 data_engineer, simulation_optimizer, evaluator, anomaly_detector
 
 Cost rules (follow strictly):
-- Prefer direct_chat for greetings, chitchat, and simple factual lookups.
+- Prefer direct_chat for greetings and chitchat ONLY — never for supply chain data lookups.
+- Supply chain data lookups (e.g., "get inventory counts", "show demand for SKU-X") always
+  require a specialist agent; use single_agent even when the request looks simple.
 - Prefer single_agent or sequential_agents for most analytical tasks.
 - Use planned_execution only when the task has 3+ distinct steps whose sequencing
   is unclear upfront.

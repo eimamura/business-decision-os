@@ -55,7 +55,7 @@ function StepIcon({ status }: { status: GraphNodeStatus }): React.ReactElement {
     case "running":
       return (
         <span className="shrink-0 w-5 h-5 rounded-full bg-indigo-500/15 border border-indigo-500/30 flex items-center justify-center">
-          <span className="inline-block w-2 h-2 rounded-full bg-indigo-400 animate-pulse" />
+          <span className="inline-block w-3 h-3 rounded-full border-2 border-indigo-400/30 border-t-indigo-400 animate-spin" />
         </span>
       );
   }

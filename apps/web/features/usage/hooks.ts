@@ -9,7 +9,11 @@ export function useAgentSteps(): UseQueryResult<AgentStep[]> {
 }
 
 export function useLlmUsage(): UseQueryResult<LlmUsageRow[]> {
-  return useQuery({ queryKey: queryKeys.usage.llm, queryFn: getLlmUsage });
+  return useQuery({ queryKey: queryKeys.usage.llm, queryFn: () => getLlmUsage() });
+}
+
+export function useLlmCalls(): UseQueryResult<LlmUsageRow[]> {
+  return useQuery({ queryKey: queryKeys.usage.llmCalls, queryFn: () => getLlmUsage(100) });
 }
 
 export function useDeleteAllUsage(): UseMutationResult<void, Error, void> {

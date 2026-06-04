@@ -272,7 +272,11 @@ async def list_llm_usage(limit: int = 500) -> list[dict[str, Any]]:
                     lu.cache_write_tokens,
                     lu.total_cost_usd,
                     lu.latency_ms,
-                    lu.created_at
+                    lu.created_at,
+                    ast.step_type,
+                    lu.prompt_messages_json,
+                    lu.response_text,
+                    lu.tool_calls_json
                 FROM llm_usage lu
                 JOIN agent_steps ast ON ast.id = lu.agent_step_id
                 JOIN decision_sessions ds ON ds.id = ast.session_id
@@ -296,6 +300,10 @@ async def list_llm_usage(limit: int = 500) -> list[dict[str, Any]]:
                 "total_cost_usd": float(r["total_cost_usd"]),
                 "latency_ms": r["latency_ms"],
                 "created_at": r["created_at"].isoformat() if r["created_at"] else None,
+                "step_type": r["step_type"],
+                "prompt_messages_json": r["prompt_messages_json"],
+                "response_text": r["response_text"],
+                "tool_calls_json": r["tool_calls_json"],
             }
             for r in rows
         ]

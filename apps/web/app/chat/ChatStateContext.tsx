@@ -17,6 +17,41 @@ import { queryKeys } from "@/lib/queryKeys";
 import type { AgentNodeState, AgentNodeToolCall, ChatMessage, SessionUsage, SseEvent } from "@/types/chat";
 import type { GraphRunNode } from "@/types/workspace";
 
+/**
+ * Inspects persisted session events and returns a synthetic ask_user ChatMessage if the
+ * session is currently paused waiting for user input (awaiting_input is the last terminal
+ * event and there is no response_ready after it).
+ */
+function _extractPendingAskUser(
+  events: SseEvent[],
+  existingMessages: ChatMessage[],
+): ChatMessage | null {
+  if (existingMessages.some((m) => m.role === "ask_user")) return null;
+
+  let lastAskUser: Extract<SseEvent, { type: "ask_user_required" }> | null = null;
+  let lastAwaitingInputTs: string | null = null;
+  let lastResponseReadyTs: string | null = null;
+
+  for (const ev of events) {
+    if (ev.type === "ask_user_required") lastAskUser = ev;
+    if (ev.type === "awaiting_input") lastAwaitingInputTs = ev.timestamp;
+    if (ev.type === "response_ready") lastResponseReadyTs = ev.timestamp;
+  }
+
+  if (!lastAskUser || !lastAwaitingInputTs) return null;
+  if (lastResponseReadyTs && lastResponseReadyTs > lastAwaitingInputTs) return null;
+
+  return {
+    id: lastAskUser.ask_user_id,
+    role: "ask_user",
+    content: "",
+    askUserId: lastAskUser.ask_user_id,
+    askUserQuestion: lastAskUser.question,
+    askUserSuggestions: lastAskUser.suggestions,
+    created_at: lastAskUser.timestamp,
+  };
+}
+
 const AGENT_DISPLAY_NAMES: Record<string, string> = {
   demand: "Demand Analyst",
   inventory: "Inventory Specialist",
@@ -139,77 +174,112 @@ export function ChatStateProvider({ children }: { children: ReactNode }): React.
     [],
   );
 
+  /** Rebuild a GraphRunNode map from persisted session events. */
+  const _hydrateGraphRunFromEvents = useCallback(
+    (sessionId: string, events: SseEvent[]): void => {
+      const nodeMap = new Map<string, GraphRunNode>();
+      let sessionStartedAt: string | null = null;
+      let sessionEndedAt: string | null = null;
+      let lastTerminalWasAwaitingInput = false;
+      for (const ev of events) {
+        if (ev.type === "response_ready") {
+          sessionEndedAt = ev.timestamp;
+          lastTerminalWasAwaitingInput = false;
+          continue;
+        }
+        if (ev.type === "awaiting_input") {
+          lastTerminalWasAwaitingInput = true;
+          continue;
+        }
+        if (ev.type !== "graph_node") continue;
+        if (ev.event === "start") {
+          if (!sessionStartedAt) sessionStartedAt = ev.timestamp;
+          nodeMap.set(ev.run_id, {
+            runId: ev.run_id,
+            parentRunId: ev.parent_run_id ?? undefined,
+            kind: ev.kind,
+            name: ev.name,
+            status: "running",
+            startedAt: ev.timestamp,
+          });
+        } else {
+          const existing = nodeMap.get(ev.run_id);
+          nodeMap.set(ev.run_id, {
+            ...(existing ?? {
+              runId: ev.run_id,
+              parentRunId: ev.parent_run_id ?? undefined,
+              kind: ev.kind,
+              name: ev.name,
+              startedAt: ev.timestamp,
+              status: "running" as const,
+            }),
+            status: ev.status === "error" ? "failed" : "completed",
+            completedAt: ev.timestamp,
+            durationMs: ev.duration_ms ?? undefined,
+            meta: ev.meta != null && Object.keys(ev.meta).length > 0 ? ev.meta : undefined,
+            output: ev.output ?? undefined,
+            tokenCost: ev.token_cost
+              ? {
+                  inputTokens: ev.token_cost.input_tokens,
+                  outputTokens: ev.token_cost.output_tokens,
+                  costUsd: ev.token_cost.cost_usd,
+                }
+              : undefined,
+          });
+        }
+      }
+      // When session paused at awaiting_input, LangGraph's interrupt() skips on_chain_end
+      // for the interrupted node — so it stays "running" in the map. Promote to "completed".
+      if (lastTerminalWasAwaitingInput) {
+        for (const [id, node] of nodeMap) {
+          if (node.status === "running") nodeMap.set(id, { ...node, status: "completed" });
+        }
+      }
+
+      // Only hydrate from DB when the session is not actively streaming events via SSE.
+      // If isSending is true, the SSE stream is the authoritative source and DB hydration
+      // would race against in-flight SSE events.
+      if ((nodeMap.size > 0 || sessionEndedAt !== null) && !isSendingRef.current[sessionId]) {
+        updateSession(sessionId, (prev) => ({
+          ...prev,
+          graphRun: Array.from(nodeMap.values()),
+          sessionStartedAt: sessionStartedAt ?? prev.sessionStartedAt,
+          sessionEndedAt: sessionEndedAt ?? prev.sessionEndedAt,
+        }));
+      }
+    },
+    [updateSession],
+  );
+
   const loadMessages = useCallback(
     async (sessionId: string): Promise<void> => {
+      // Skip message loading when a send is already in flight to avoid overwriting
+      // optimistic UI state (the in-flight assistant bubble, etc.).
       if (isSendingRef.current[sessionId]) return;
+
       updateSession(sessionId, (prev) => ({ ...prev, isLoadingMessages: true }));
       try {
-        const fetched = await fetchMessages(sessionId);
+        // Fetch messages and events in parallel so we can inject a pending ask_user bubble
+        // (stored only in events, not in the messages table) before updating state.
+        const [fetched, events] = await Promise.all([
+          fetchMessages(sessionId),
+          fetchSessionEvents(sessionId).catch((): SseEvent[] => []),
+        ]);
+
+        _hydrateGraphRunFromEvents(sessionId, events);
+
         if (fetched.length > 0) {
           titleSetRef.current[sessionId] = true;
         }
-        updateSession(sessionId, { messages: fetched, isLoadingMessages: false });
+
+        const pendingAskUser = _extractPendingAskUser(events, fetched);
+        const messages = pendingAskUser ? [...fetched, pendingAskUser] : fetched;
+        updateSession(sessionId, { messages, isLoadingMessages: false });
       } catch {
         updateSession(sessionId, (prev) => ({ ...prev, isLoadingMessages: false }));
       }
-      fetchSessionEvents(sessionId)
-        .then((events) => {
-          const nodeMap = new Map<string, GraphRunNode>();
-          let sessionStartedAt: string | null = null;
-          let sessionEndedAt: string | null = null;
-          for (const ev of events) {
-            if (ev.type === "response_ready") {
-              sessionEndedAt = ev.timestamp;
-              continue;
-            }
-            if (ev.type !== "graph_node") continue;
-            if (ev.event === "start") {
-              if (!sessionStartedAt) sessionStartedAt = ev.timestamp;
-              nodeMap.set(ev.run_id, {
-                runId: ev.run_id,
-                parentRunId: ev.parent_run_id ?? undefined,
-                kind: ev.kind,
-                name: ev.name,
-                status: "running",
-                startedAt: ev.timestamp,
-              });
-            } else {
-              const existing = nodeMap.get(ev.run_id);
-              nodeMap.set(ev.run_id, {
-                ...(existing ?? {
-                  runId: ev.run_id,
-                  parentRunId: ev.parent_run_id ?? undefined,
-                  kind: ev.kind,
-                  name: ev.name,
-                  startedAt: ev.timestamp,
-                  status: "running" as const,
-                }),
-                status: ev.status === "error" ? "failed" : "completed",
-                completedAt: ev.timestamp,
-                durationMs: ev.duration_ms ?? undefined,
-                meta:
-                  ev.meta != null && Object.keys(ev.meta).length > 0 ? ev.meta : undefined,
-                output: ev.output ?? undefined,
-                tokenCost: ev.token_cost
-                  ? {
-                      inputTokens: ev.token_cost.input_tokens,
-                      outputTokens: ev.token_cost.output_tokens,
-                      costUsd: ev.token_cost.cost_usd,
-                    }
-                  : undefined,
-              });
-            }
-          }
-          updateSession(sessionId, (prev) => ({
-            ...prev,
-            graphRun: Array.from(nodeMap.values()),
-            sessionStartedAt,
-            sessionEndedAt,
-          }));
-        })
-        .catch(() => undefined);
     },
-    [updateSession],
+    [updateSession, _hydrateGraphRunFromEvents],
   );
 
   const _handleGraphNodeEvent = useCallback(
@@ -496,6 +566,13 @@ export function ChatStateProvider({ children }: { children: ReactNode }): React.
               updateSession(sessionId, (prev) => ({
                 ...prev,
                 messages: prev.messages.filter((m) => m.id !== assistantId),
+                // LangGraph's interrupt() skips on_chain_end for the interrupted node,
+                // so wait_for_answer (and any other running node) never receives a
+                // graph_node end event. Transition all still-running nodes to "completed"
+                // so the spinner doesn't spin indefinitely.
+                graphRun: prev.graphRun.map((n) =>
+                  n.status === "running" ? { ...n, status: "completed" as const } : n,
+                ),
               }));
               break;
             }
@@ -617,9 +694,9 @@ export function ChatStateProvider({ children }: { children: ReactNode }): React.
         ...prev,
         messages: [...prev.messages, assistantMsg],
         isSending: true,
-        graphRun: [],
-        sessionStartedAt: null,
-        sessionEndedAt: null,
+        // Do NOT clear graphRun here — the trace from the first execution half
+        // (classify_intent → prepare_ask_user → wait_for_answer) should remain
+        // visible while the resumed graph continues running.
       }));
 
       try {
