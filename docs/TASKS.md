@@ -84,21 +84,21 @@ P25 — Tool Scenario E2E Validation & Playwright Session Cleanup
 
 Dependencies: none
 
-### Batch B-02 — Tool Scenario Modal & Chat Bubble Playwright Tests (Test/Review) — Not Started
+### Batch B-02 — Tool Scenario Modal & Chat Bubble Playwright Tests (Test/Review) — Done
 
 | Task | Description | Status |
 |---|---|---|
-| T-155 | `tool_scenario_modal.spec.ts` — verify modal opens, 5 category tabs visible, clicking a scenario card fills textarea with the prompt and closes modal | Not Started |
-| T-156 | `tool_scenario_bubbles_mock.spec.ts` — mocked SSE (no backend) test verifying each category produces a non-empty assistant bubble (no error bubble, no empty bubble) | Not Started |
-| T-157 | `hitl_scenario_bubbles_mock.spec.ts` — Ask User full cycle (question bubble → answer → result bubble) + Job Dispatch (approval card → approve → status change) using mocked SSE | Not Started |
+| T-155 | `tool_scenario_modal.spec.ts` — verify modal opens, 5 category tabs visible, clicking a scenario card fills textarea with the prompt and closes modal | Done |
+| T-156 | `tool_scenario_bubbles_mock.spec.ts` — mocked SSE (no backend) test verifying each category produces a non-empty assistant bubble (no error bubble, no empty bubble) | Done |
+| T-157 | `hitl_scenario_bubbles_mock.spec.ts` — Ask User full cycle (question bubble → answer → result bubble) + Job Dispatch (approval card → approve → status change) using mocked SSE | Done |
 
 Dependencies: B-01
 
-### Batch B-03 — Integration Test Coverage Gaps (Test/Review) — Not Started
+### Batch B-03 — Integration Test Coverage Gaps (Test/Review) — Done
 
 | Task | Description | Status |
 |---|---|---|
-| T-158 | `tests/integration/test_scenario_coverage.py` — integration tests for catalog / schema / quality / multi-SKU forecast / scenario-comparison intents using mock LLM | Not Started |
-| T-159 | Integration tests for all 6 Ask User HITL modal variants (vague→ask, fully-specified→no ask, warehouse given→ask, SKU-no-period→ask, etc.) | Not Started |
+| T-158 | `tests/integration/test_scenario_coverage.py` — integration tests for catalog / schema / quality / multi-SKU forecast / scenario-comparison intents using mock LLM | Done |
+| T-159 | Integration tests for all 6 Ask User HITL modal variants (vague→ask, fully-specified→no ask, warehouse given→ask, SKU-no-period→ask, etc.) | Done |
 
 Dependencies: none (parallel-eligible with B-02)
