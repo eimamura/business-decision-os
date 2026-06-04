@@ -398,33 +398,33 @@ Dependencies: B-01, B-02
 
 **Goal:** Add 4 inventory calculation tools to InventoryAgent so it can quantify stockout risk, excess inventory, days-of-inventory, and available-to-promise — going beyond raw SQL queries.
 
-### Batch B-01 — Inventory calculation tools (App Builder) — Not Started
+### Batch B-01 — Inventory calculation tools (App Builder) — Done
 
 | Task | Description | Status |
 |---|---|---|
-| T-235 | `CalculateDaysOfInventoryTool` — `packages/tools/inventory_doi_tool.py`: `calculate_days_of_inventory(sku_id, warehouse_id?)` → on_hand_qty, avg_daily_demand, days_of_inventory, reorder_signal (bool) | Not Started |
-| T-236 | `CalculateStockoutRiskTool` — `packages/tools/inventory_stockout_risk_tool.py`: `calculate_stockout_risk(sku_id, horizon_days)` → on_hand, demand_forecast, incoming_supply, projected_ending_stock, stockout_date_estimate, risk_level | Not Started |
-| T-237 | `CalculateExcessInventoryRiskTool` — `packages/tools/inventory_excess_tool.py`: `calculate_excess_inventory_risk(sku_id, lookback_days?)` → on_hand, avg_daily_demand, excess_units, excess_days, excess_risk_level | Not Started |
-| T-238 | `GetAvailableToPromiseTool` — `packages/tools/inventory_atp_tool.py`: `get_available_to_promise(sku_id, warehouse_id?)` → on_hand, on_order_incoming, atp_units, atp_date_horizon | Not Started |
+| T-235 | `CalculateDaysOfInventoryTool` — `packages/tools/inventory_doi_tool.py`: `calculate_days_of_inventory(sku_id, warehouse_id?)` → on_hand_qty, avg_daily_demand, days_of_inventory, reorder_signal (bool) | Done |
+| T-236 | `CalculateStockoutRiskTool` — `packages/tools/inventory_stockout_risk_tool.py`: `calculate_stockout_risk(sku_id, horizon_days)` → on_hand, demand_forecast, incoming_supply, projected_ending_stock, stockout_date_estimate, risk_level | Done |
+| T-237 | `CalculateExcessInventoryRiskTool` — `packages/tools/inventory_excess_tool.py`: `calculate_excess_inventory_risk(sku_id, lookback_days?)` → on_hand, avg_daily_demand, excess_units, excess_days, excess_risk_level | Done |
+| T-238 | `GetAvailableToPromiseTool` — `packages/tools/inventory_atp_tool.py`: `get_available_to_promise(sku_id, warehouse_id?)` → on_hand, on_order_incoming, atp_units, atp_date_horizon | Done |
 
 Dependencies: none
 
-### Batch B-02 — Wiring + system prompt update (App Builder) — Not Started
+### Batch B-02 — Wiring + system prompt update (App Builder) — Done
 
 | Task | Description | Status |
 |---|---|---|
-| T-239 | Add 4 new tool names to `"inventory"` allowlist in `packages/tools/base.py`; register in `create_tool_registry()` in `packages/tools/__init__.py` | Not Started |
-| T-240 | Update `_SYSTEM_PROMPT` in `packages/agent/domain/inventory.py` — add TOOL USE RULES section naming the 4 new tools; add "call calculate_stockout_risk first for any shortage analysis" instruction | Not Started |
+| T-239 | Add 4 new tool names to `"inventory"` allowlist in `packages/tools/base.py`; register in `create_tool_registry()` in `packages/tools/__init__.py` | Done |
+| T-240 | Update `_SYSTEM_PROMPT` in `packages/agent/domain/inventory.py` — add TOOL USE RULES section naming the 4 new tools; add "call calculate_stockout_risk first for any shortage analysis" instruction | Done |
 
 Dependencies: B-01
 
-### Batch B-03 — Unit tests (Test/Review) — Not Started
+### Batch B-03 — Unit tests (Test/Review) — Done
 
 | Task | Description | Status |
 |---|---|---|
-| T-241 | Unit tests for `CalculateDaysOfInventoryTool` and `GetAvailableToPromiseTool` (mock DB) | Not Started |
-| T-242 | Unit tests for `CalculateStockoutRiskTool` and `CalculateExcessInventoryRiskTool` (mock DB) | Not Started |
-| T-243 | `make test-unit` + `make lint` + `make typecheck` | Not Started |
+| T-241 | Unit tests for `CalculateDaysOfInventoryTool` and `GetAvailableToPromiseTool` (mock DB) | Done |
+| T-242 | Unit tests for `CalculateStockoutRiskTool` and `CalculateExcessInventoryRiskTool` (mock DB) | Done |
+| T-243 | `make test-unit` + `make lint` + `make typecheck` | Done |
 
 Dependencies: B-01, B-02
 

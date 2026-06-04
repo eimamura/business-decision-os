@@ -23,6 +23,10 @@ from packages.tools.finance_scenario_tool import CompareCostScenariosTool
 from packages.tools.finance_stockout_cost_tool import CalculateStockoutCostImpactTool
 from packages.tools.forecast_accuracy_tool import ForecastAccuracyTool
 from packages.tools.forecast_tool import ForecastTool
+from packages.tools.inventory_atp_tool import GetAvailableToPromiseTool
+from packages.tools.inventory_doi_tool import CalculateDaysOfInventoryTool
+from packages.tools.inventory_excess_tool import CalculateExcessInventoryRiskTool
+from packages.tools.inventory_stockout_risk_tool import CalculateStockoutRiskTool
 from packages.tools.job_dispatch_tool import JobDispatchTool
 from packages.tools.nl_query_tool import NlQueryTool
 from packages.tools.optimizer_tool import OptimizerTool
@@ -69,6 +73,10 @@ __all__ = [
     "AnalyzeSupplyLeadTimeTool",
     "GetOpenSupplyOrdersTool",
     "AnalyzeSupplyRiskTool",
+    "GetAvailableToPromiseTool",
+    "CalculateDaysOfInventoryTool",
+    "CalculateExcessInventoryRiskTool",
+    "CalculateStockoutRiskTool",
     "TableSchemaReaderTool",
     "TrainForecastTool",
     "create_tool_registry",
@@ -111,4 +119,8 @@ def create_tool_registry(
     registry.register(CalculateStockoutCostImpactTool(db_session=db_session))
     registry.register(CalculateExpediteCostTool(db_session=db_session))
     registry.register(CompareCostScenariosTool(db_session=db_session))
+    registry.register(CalculateDaysOfInventoryTool(db_session=db_session))
+    registry.register(CalculateStockoutRiskTool(db_session=db_session))
+    registry.register(CalculateExcessInventoryRiskTool(db_session=db_session))
+    registry.register(GetAvailableToPromiseTool(db_session=db_session))
     return registry

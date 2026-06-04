@@ -14,20 +14,18 @@ P0–P23 (T-001–T-146) all Done. See `docs/archive/v3/STATE.md` for per-phase 
 
 ## Active Phase
 
-P34 — Inventory Agent Enhancement
+P35 — S&OP Agent & Orchestration
 
 ## Active Lease
 
-P34-B-01 — Inventory calculation tools (running)
+P35-B-01 — SopAgent class + "sop" intent (running)
 
 ## Last Completed
 
-P33-B-03 — Unit tests for all 4 finance tools (2026-06-04)
-- `make test-unit` → 639 passed, 11 skipped (exit 0)
+P34 — Inventory Agent Enhancement: ALL BATCHES DONE (2026-06-04)
+- `make test-unit` → 658 passed, 11 skipped (exit 0)
 - `make lint` → All checks passed (exit 0)
-- `make typecheck` → 160 source files, no issues (exit 0)
-
-P33 — Finance Impact Agent: ALL BATCHES DONE
+- `make typecheck` → 164 source files, no issues (exit 0)
 
 ## Blockers
 

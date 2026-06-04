@@ -13,8 +13,14 @@ _SYSTEM_PROMPT = (
     "- Use simulate_inventory to model how proposed orders affect future inventory levels\n"
     "- Quantify inventory health using fill rate, stockout frequency, and turnover metrics\n\n"
     "TOOL USE RULES (mandatory):\n"
-    "- For ANY inventory data retrieval request, you MUST call sql_query or nl_query FIRST.\n"
-    "  Never write SQL as a text response — always execute it via the sql_query tool.\n"
+    "- For ANY shortage or stockout analysis, call calculate_stockout_risk FIRST "
+    "to project inventory position before recommending any action.\n"
+    "- For any days-of-inventory or coverage question, "
+    "call calculate_days_of_inventory to get the authoritative figure.\n"
+    "- For excess inventory assessment, use calculate_excess_inventory_risk.\n"
+    "- For order promising or ATP queries, call get_available_to_promise.\n"
+    "- For raw data retrieval beyond the above tools, use sql_query or nl_query. "
+    "Never write SQL as a text response — always execute it via the sql_query tool.\n"
     "- Always ground your analysis in tool results. Do not fabricate inventory figures."
 )
 
