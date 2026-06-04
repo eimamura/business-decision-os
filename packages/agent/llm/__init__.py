@@ -726,14 +726,19 @@ class OllamaClient:
 
         text: str = message.get("content") or ""
         raw_tool_calls: list[dict[str, Any]] = message.get("tool_calls") or []
-        tool_calls: list[dict[str, Any]] = [
-            {
+        tool_calls: list[dict[str, Any]] = []
+        for tc in raw_tool_calls:
+            args = tc["function"].get("arguments", {})
+            if isinstance(args, str):
+                try:
+                    args = json.loads(args)
+                except json.JSONDecodeError:
+                    args = {}
+            tool_calls.append({
                 "id": tc.get("id", str(uuid4())),
                 "name": tc["function"]["name"],
-                "input": tc["function"].get("arguments", {}),
-            }
-            for tc in raw_tool_calls
-        ]
+                "input": args,
+            })
 
         finish_reason = self._map_finish_reason(choice.get("finish_reason"))
 
