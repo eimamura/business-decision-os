@@ -25,10 +25,25 @@ Three tiers, with different infrastructure requirements:
 - One logical assertion per test; use `pytest.raises(ExcType)` as a context manager for expected exceptions
 - Parametrize repetitive cases with `@pytest.mark.parametrize`
 
-## External HTTP / LLM Calls
+## Zero-Network Rule in Unit Tests
 
-- All outbound HTTP and LLM calls must be wrapped in vcrpy cassettes
+Unit tests must never make real network calls. The `tests/unit/conftest.py` autouse fixture blocks:
+
+- `anthropic.AsyncAnthropic` message creation
+- `httpx.AsyncHTTPTransport` (real HTTP connections; ASGI transport is still allowed)
+
+Tests that need LLM responses must use `StubClaudeClient` or `unittest.mock`.
+
+## External HTTP / LLM Calls (Integration)
+
+- All outbound HTTP and LLM calls in integration tests must be wrapped in vcrpy cassettes
 - Never record cassettes against production endpoints with real credentials
+- The `vcr_config` fixture in `tests/integration/conftest.py` sets:
+  - `cassette_library_dir`: `tests/cassettes/` — committed to the repository
+  - `record_mode`: `none` — playback only in CI; use `VCR_RECORD=new` to record locally
+  - `match_on`: `["uri", "method", "body"]` — strict matching catches prompt changes
+  - `filter_headers`: `["Authorization", "x-api-key"]` — API keys scrubbed before saving
+- To reduce API costs during development, set `TEST_MODEL=claude-haiku-4-5-20251001`
 
 ## FastAPI Testing
 

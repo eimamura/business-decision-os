@@ -22,11 +22,13 @@ export default function ChatLayout({ children }: ChatLayoutProps): React.ReactEl
   const [creating, setCreating] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
 
-  const { data: fetchedSessions = [] } = useSessions();
+  const { data: fetchedSessions } = useSessions();
   const deleteAllMutation = useDeleteAllSessions();
 
   useEffect(() => {
-    setSessions(fetchedSessions);
+    if (fetchedSessions !== undefined) {
+      setSessions(fetchedSessions);
+    }
   }, [fetchedSessions]);
 
   const onNewSession = useCallback(async (): Promise<void> => {

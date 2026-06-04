@@ -4,15 +4,17 @@ from typing import AsyncGenerator
 
 import pytest
 
+VCR_CONFIG: dict = {  # type: ignore[type-arg]
+    "cassette_library_dir": "tests/cassettes",
+    "record_mode": "none",
+    "match_on": ["uri", "method", "body"],
+    "filter_headers": ["Authorization", "x-api-key"],
+}
+
 
 @pytest.fixture(scope="session")
 def vcr_config() -> dict:  # type: ignore[type-arg]
-    return {
-        "cassette_library_dir": "tests/cassettes",
-        "record_mode": "none",
-        "match_on": ["uri", "method", "body"],
-        "filter_headers": ["Authorization", "x-api-key"],
-    }
+    return VCR_CONFIG
 
 
 def _api_is_up() -> bool:

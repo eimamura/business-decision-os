@@ -1,38 +1,14 @@
 from __future__ import annotations
 
 import asyncio
-from decimal import Decimal
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
-from packages.agent.llm import LLMMessage, LLMResponse, LLMUsage
+from packages.agent.llm import LLMMessage, LLMResponse
 from packages.agent.orchestrator.models import SpecialistTask
 from packages.agent.runtime import AgentRuntime
-
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
-
-def _make_usage() -> LLMUsage:
-    return LLMUsage(
-        input_tokens=5,
-        output_tokens=3,
-        total_cost_usd=Decimal("0"),
-    )
-
-
-def _stop_response(text: str = "Done.") -> LLMResponse:
-    return LLMResponse(
-        text=text,
-        tool_calls=[],
-        finish_reason="stop",
-        usage=_make_usage(),
-        model="claude-sonnet-4-6-test",
-        request_id=str(uuid4()),
-        latency_ms=1,
-    )
+from tests.unit.helpers import RecordingLLMClient, make_llm_usage, make_stop_response
 
 
 def _tool_use_response(tool_name: str, tool_input: dict[str, Any]) -> LLMResponse:
@@ -41,31 +17,11 @@ def _tool_use_response(tool_name: str, tool_input: dict[str, Any]) -> LLMRespons
         text="",
         tool_calls=[{"id": call_id, "name": tool_name, "input": tool_input}],
         finish_reason="tool_use",
-        usage=_make_usage(),
+        usage=make_llm_usage(),
         model="claude-sonnet-4-6-test",
         request_id=str(uuid4()),
         latency_ms=1,
     )
-
-
-class _RecordingLLMClient:
-    def __init__(self, responses: list[LLMResponse]) -> None:
-        self._responses = list(responses)
-        self._model = "claude-sonnet-4-6-mock"
-
-    async def complete(
-        self,
-        messages: list[LLMMessage],
-        tools: Any = None,
-        temperature: float = 0.0,
-        max_tokens: int = 4096,
-        prompt_cache: bool = True,
-        agent_step_id: Any = None,
-        specialist_role: Any = None,
-    ) -> LLMResponse:
-        if not self._responses:
-            return _stop_response("fallback")
-        return self._responses.pop(0)
 
 
 class _FakeReadOnlyTool:
@@ -181,9 +137,9 @@ async def test_t070_tool_events_pushed_to_config_sse_queue() -> None:
     config_queue: asyncio.Queue[Any] = asyncio.Queue()
     constructor_queue: asyncio.Queue[Any] = asyncio.Queue()
 
-    llm = _RecordingLLMClient([
+    llm = RecordingLLMClient([
         _tool_use_response("sql_query", {}),
-        _stop_response("Query complete."),
+        make_stop_response("Query complete."),
     ])
     registry = _FakeToolRegistry([_FakeReadOnlyTool()])
 
@@ -247,7 +203,7 @@ async def test_t070_hitl_events_pushed_to_config_sse_queue() -> None:
     config_queue: asyncio.Queue[Any] = asyncio.Queue()
 
     tool_input = {"action_summary": "Critical action"}
-    llm = _RecordingLLMClient([_tool_use_response("request_approval", tool_input)])
+    llm = RecordingLLMClient([_tool_use_response("request_approval", tool_input)])
     registry = _FakeToolRegistry([_FakeHITLTool()])
 
     runtime = AgentRuntime(
@@ -306,9 +262,9 @@ async def test_t070_no_sse_queue_in_config_does_not_crash() -> None:
 
     from packages.agent.llm import LLMToolSpec
 
-    llm = _RecordingLLMClient([
+    llm = RecordingLLMClient([
         _tool_use_response("sql_query", {}),
-        _stop_response("Done."),
+        make_stop_response("Done."),
     ])
     registry = _FakeToolRegistry([_FakeReadOnlyTool()])
 

@@ -1,62 +1,14 @@
 from __future__ import annotations
 
-from decimal import Decimal
 from typing import Any
 from uuid import uuid4
 
 import pytest
 
-from packages.agent.llm import LLMMessage, LLMResponse, LLMUsage
+from packages.agent.llm import LLMMessage, LLMResponse
 from packages.agent.orchestrator.models import SpecialistTask
 from packages.agent.runtime import SUMMARY_THRESHOLD, AgentRuntime
-
-# ---------------------------------------------------------------------------
-# Helpers / fakes
-# ---------------------------------------------------------------------------
-
-def _make_usage() -> LLMUsage:
-    return LLMUsage(
-        input_tokens=10,
-        output_tokens=5,
-        total_cost_usd=Decimal("0"),
-    )
-
-
-def _stop_response(text: str = "The analysis shows demand is stable.") -> LLMResponse:
-    return LLMResponse(
-        text=text,
-        tool_calls=[],
-        finish_reason="stop",
-        usage=_make_usage(),
-        model="claude-sonnet-4-6-test",
-        request_id=str(uuid4()),
-        latency_ms=1,
-    )
-
-
-class _RecordingLLMClient:
-    """A mock LLM client that records every `complete()` call and returns
-    pre-configured responses in order."""
-
-    def __init__(self, responses: list[LLMResponse]) -> None:
-        self._responses = list(responses)
-        self._calls: list[list[LLMMessage]] = []
-        self._model = "claude-sonnet-4-6-mock"
-
-    async def complete(
-        self,
-        messages: list[LLMMessage],
-        tools: Any = None,
-        temperature: float = 0.0,
-        max_tokens: int = 4096,
-        prompt_cache: bool = True,
-        agent_step_id: Any = None,
-        specialist_role: Any = None,
-    ) -> LLMResponse:
-        self._calls.append(list(messages))
-        if not self._responses:
-            return _stop_response("fallback")
-        return self._responses.pop(0)
+from tests.unit.helpers import RecordingLLMClient, make_stop_response
 
 
 class _FakeTool:
@@ -126,7 +78,7 @@ async def test_t008_system_message_has_three_content_blocks() -> None:
     """The first complete() call must receive a system LLMMessage whose
     content_blocks has exactly 3 elements with the correct cache_control
     values (ephemeral on blocks 0 and 1, absent on block 2)."""
-    llm = _RecordingLLMClient([_stop_response()])
+    llm = RecordingLLMClient([make_stop_response()])
     runtime = _make_runtime(llm)
     task = _make_task()
     ctx = _FakeToolContext()
@@ -168,7 +120,7 @@ async def test_t008_system_message_has_three_content_blocks() -> None:
 
 async def test_t008_system_block_texts_are_correct_types() -> None:
     """Each block must be a dict with at least 'type' and 'text' keys."""
-    llm = _RecordingLLMClient([_stop_response()])
+    llm = RecordingLLMClient([make_stop_response()])
     runtime = _make_runtime(llm)
     task = _make_task()
     ctx = _FakeToolContext()
@@ -199,11 +151,11 @@ async def test_t007_needs_revision_retries_loop_once() -> None:
     #   2. Verifier LLM call        -> "needs_revision: some issues found"
     #   3. Retry tool loop LLM call -> stop response (revised conclusion)
     # Total: 3 LLM calls
-    main_response = _stop_response("Demand is trending upward based on analysis.")
-    verifier_response = _stop_response("needs_revision: conclusion overstates the data")
-    retry_response = _stop_response("Demand is stable based on the SQL results.")
+    main_response = make_stop_response("Demand is trending upward based on analysis.")
+    verifier_response = make_stop_response("needs_revision: conclusion overstates the data")
+    retry_response = make_stop_response("Demand is stable based on the SQL results.")
 
-    llm = _RecordingLLMClient([main_response, verifier_response, retry_response])
+    llm = RecordingLLMClient([main_response, verifier_response, retry_response])
     runtime = _make_runtime(llm)
     task = _make_task()
     ctx = _FakeToolContext()
@@ -221,10 +173,10 @@ async def test_t007_needs_revision_retries_loop_once() -> None:
 
 async def test_t007_pass_does_not_retry() -> None:
     """When the verifier returns 'pass', no retry happens — only 2 LLM calls total."""
-    main_response = _stop_response("Demand is stable.")
-    verifier_response = _stop_response("pass: conclusion is well-grounded")
+    main_response = make_stop_response("Demand is stable.")
+    verifier_response = make_stop_response("pass: conclusion is well-grounded")
 
-    llm = _RecordingLLMClient([main_response, verifier_response])
+    llm = RecordingLLMClient([main_response, verifier_response])
     runtime = _make_runtime(llm)
     task = _make_task()
     ctx = _FakeToolContext()
@@ -241,10 +193,10 @@ async def test_t007_pass_does_not_retry() -> None:
 async def test_t007_blocked_does_not_retry() -> None:
     """When the verifier returns 'blocked', the loop does NOT retry — runtime
     still returns a completed result (blocked is not an error, it continues)."""
-    main_response = _stop_response("Demand is stable.")
-    verifier_response = _stop_response("blocked: fabricated data detected")
+    main_response = make_stop_response("Demand is stable.")
+    verifier_response = make_stop_response("blocked: fabricated data detected")
 
-    llm = _RecordingLLMClient([main_response, verifier_response])
+    llm = RecordingLLMClient([main_response, verifier_response])
     runtime = _make_runtime(llm)
     task = _make_task()
     ctx = _FakeToolContext()
@@ -269,11 +221,11 @@ async def test_t007_needs_revision_only_retries_once() -> None:
       3. Retry tool loop call -> stop response (final — no second verifier call)
     Total: 3 LLM calls.
     """
-    main_response = _stop_response("Demand is stable.")
-    verifier_response = _stop_response("needs_revision: missing detail")
-    retry_response = _stop_response("Here is the revised answer.")
+    main_response = make_stop_response("Demand is stable.")
+    verifier_response = make_stop_response("needs_revision: missing detail")
+    retry_response = make_stop_response("Here is the revised answer.")
 
-    llm = _RecordingLLMClient([main_response, verifier_response, retry_response])
+    llm = RecordingLLMClient([main_response, verifier_response, retry_response])
     runtime = _make_runtime(llm)
     task = _make_task()
     ctx = _FakeToolContext()
@@ -310,7 +262,7 @@ async def test_t007_verifier_failure_defaults_to_pass() -> None:
             call_count += 1
             if call_count == 1:
                 # Main loop call — succeeds
-                return _stop_response("Demand is stable.")
+                return make_stop_response("Demand is stable.")
             # Verifier call — raises
             raise RuntimeError("LLM API error")
 
@@ -338,9 +290,9 @@ async def test_output_builder_receives_final_response() -> None:
         captured["text"] = response.text if response else ""
         return {"text": captured["text"]}
 
-    llm = _RecordingLLMClient([
-        _stop_response("Final answer from agent."),
-        _stop_response("pass"),
+    llm = RecordingLLMClient([
+        make_stop_response("Final answer from agent."),
+        make_stop_response("pass"),
     ])
     runtime = AgentRuntime(
         name="test",
@@ -368,9 +320,9 @@ async def test_t072_compress_history_noop_below_threshold() -> None:
     # 2 system/user initial messages + SUMMARY_THRESHOLD - 2 extra user messages
     # equals exactly SUMMARY_THRESHOLD total — no compression should occur.
     # We expect: 1 main LLM call + 1 verifier call = 2 total.
-    stop_resp = _stop_response("All good.")
-    verifier_resp = _stop_response("pass: well-grounded")
-    llm = _RecordingLLMClient([stop_resp, verifier_resp])
+    stop_resp = make_stop_response("All good.")
+    verifier_resp = make_stop_response("pass: well-grounded")
+    llm = RecordingLLMClient([stop_resp, verifier_resp])
     runtime = _make_runtime(llm)
     task = _make_task()
     ctx = _FakeToolContext()
@@ -391,11 +343,11 @@ async def test_t072_compress_history_reduces_messages_to_11() -> None:
     #   1. compress_history summarization call (35 - 10 = 25 oldest messages)
     #   2. call_model call (receives compressed_messages: 11 messages)
     #   3. verify_findings call
-    summary_resp = _stop_response("Summary of 25 messages.")
-    main_resp = _stop_response("Final conclusion based on compressed context.")
-    verifier_resp = _stop_response("pass")
+    summary_resp = make_stop_response("Summary of 25 messages.")
+    main_resp = make_stop_response("Final conclusion based on compressed context.")
+    verifier_resp = make_stop_response("pass")
 
-    class _RecordingLLMClientWithMessageCount(_RecordingLLMClient):
+    class RecordingLLMClientWithMessageCount(RecordingLLMClient):
         """Also records the message count for each call."""
 
         def __init__(self, responses: list[LLMResponse]) -> None:
@@ -423,7 +375,7 @@ async def test_t072_compress_history_reduces_messages_to_11() -> None:
                 specialist_role=specialist_role,
             )
 
-    llm = _RecordingLLMClientWithMessageCount([summary_resp, main_resp, verifier_resp])
+    llm = RecordingLLMClientWithMessageCount([summary_resp, main_resp, verifier_resp])
     _make_runtime(llm)  # pre-warms import paths; actual test uses summarize_runtime below
 
     # Build initial state with 35 messages by injecting extra messages via a
@@ -457,7 +409,7 @@ async def test_t072_compress_history_reduces_messages_to_11() -> None:
     }
 
     # Use a fresh single-response summarization LLM to avoid consuming responses.
-    summarize_llm = _RecordingLLMClient([_stop_response("Compact summary of early messages.")])
+    summarize_llm = RecordingLLMClient([make_stop_response("Compact summary of early messages.")])
     summarize_runtime = _make_runtime(summarize_llm)
 
     # Invoke the node directly (config is not used by compress_history).
@@ -479,9 +431,9 @@ async def test_t072_compress_history_reduces_messages_to_11() -> None:
 
 async def test_t072_compress_history_at_threshold_boundary_is_noop() -> None:
     """Exactly SUMMARY_THRESHOLD messages must NOT trigger compression."""
-    stop_resp = _stop_response("done")
-    verifier_resp = _stop_response("pass")
-    llm = _RecordingLLMClient([stop_resp, verifier_resp])
+    stop_resp = make_stop_response("done")
+    verifier_resp = make_stop_response("pass")
+    llm = RecordingLLMClient([stop_resp, verifier_resp])
 
     # Test the node directly
     runtime = _make_runtime(llm)
@@ -524,7 +476,7 @@ def test_t073_graph_has_expected_nodes() -> None:
     """AgentRuntime graph must contain exactly the expected set of nodes."""
     from langgraph.checkpoint.memory import MemorySaver
 
-    llm = _RecordingLLMClient([])
+    llm = RecordingLLMClient([])
     runtime = _make_runtime(llm)
     graph = runtime._build_graph(checkpointer=MemorySaver())
 
@@ -550,7 +502,7 @@ def test_t073_graph_also_has_revision_nodes() -> None:
     """Graph must also contain the add_revision_message and call_model_final nodes."""
     from langgraph.checkpoint.memory import MemorySaver
 
-    llm = _RecordingLLMClient([])
+    llm = RecordingLLMClient([])
     runtime = _make_runtime(llm)
     graph = runtime._build_graph(checkpointer=MemorySaver())
 
@@ -565,7 +517,7 @@ async def test_t073_specialist_result_shape_after_run() -> None:
     """SpecialistResult returned by run() must have the correct shape."""
     from packages.agent.orchestrator import SpecialistResult
 
-    llm = _RecordingLLMClient([_stop_response("Analysis complete."), _stop_response("pass")])
+    llm = RecordingLLMClient([make_stop_response("Analysis complete."), make_stop_response("pass")])
     runtime = _make_runtime(llm)
     task = _make_task()
     ctx = _FakeToolContext()
@@ -597,15 +549,15 @@ async def test_t073_verify_findings_retry_call_counts(
     verifier_text: str, expected_call_count: int
 ) -> None:
     """verify_findings retry behavior: needs_revision triggers a second call_model invocation."""
-    main_resp = _stop_response("Initial conclusion.")
-    verifier_resp = _stop_response(verifier_text)
-    retry_resp = _stop_response("Revised conclusion.")
+    main_resp = make_stop_response("Initial conclusion.")
+    verifier_resp = make_stop_response(verifier_text)
+    retry_resp = make_stop_response("Revised conclusion.")
 
     responses = [main_resp, verifier_resp]
     if expected_call_count == 3:
         responses.append(retry_resp)
 
-    llm = _RecordingLLMClient(responses)
+    llm = RecordingLLMClient(responses)
     runtime = _make_runtime(llm)
     task = _make_task()
     ctx = _FakeToolContext()
@@ -622,9 +574,9 @@ async def test_t073_verify_findings_retry_call_counts(
 async def test_t073_compress_history_noop_below_threshold_zero_summarize_calls() -> None:
     """When len(messages) <= SUMMARY_THRESHOLD, compress_history makes zero LLM calls
     (the summarize LLM call is never made)."""
-    stop_resp = _stop_response("ok")
-    verifier_resp = _stop_response("pass")
-    llm = _RecordingLLMClient([stop_resp, verifier_resp])
+    stop_resp = make_stop_response("ok")
+    verifier_resp = make_stop_response("pass")
+    llm = RecordingLLMClient([stop_resp, verifier_resp])
     runtime = _make_runtime(llm)
 
     # Exactly 2 messages (system + user) — well below threshold
@@ -654,8 +606,8 @@ async def test_t073_compress_history_noop_below_threshold_zero_summarize_calls()
 
 async def test_t073_compress_history_active_above_threshold_reduces_to_11() -> None:
     """When len(messages) > SUMMARY_THRESHOLD, compressed_messages has at most 11 items."""
-    summary_resp = _stop_response("Compact summary.")
-    summarize_llm = _RecordingLLMClient([summary_resp])
+    summary_resp = make_stop_response("Compact summary.")
+    summarize_llm = RecordingLLMClient([summary_resp])
     runtime = _make_runtime(summarize_llm)
 
     msg_count = SUMMARY_THRESHOLD + 5

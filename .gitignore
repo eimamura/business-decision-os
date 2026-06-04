@@ -100,6 +100,9 @@ lcov.info
 .LSOverride
 Thumbs.db
 
+# Claude Code
+.claude/worktrees/
+
 # Temp
 *.tmp
 *.temp

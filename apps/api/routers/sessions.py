@@ -14,8 +14,10 @@ from pydantic import BaseModel
 from apps.api.state import (
     Broadcaster,
     broadcasters,
+    get_or_create_broadcaster_event,
     get_orchestrator,
     make_event_persister,
+    notify_broadcaster_ready,
     sessions,
 )
 from packages.agent.history import compress_history
@@ -294,6 +296,7 @@ async def post_message(
 
     queue = Broadcaster()
     broadcasters[session_id] = queue
+    notify_broadcaster_ready(session_id)
 
     conversation_context: str | None = None
     try:
@@ -407,17 +410,22 @@ async def get_session_usage(session_id: str) -> SessionUsageResponse:
 @router.get("/{session_id}/stream")
 async def stream_session(session_id: str) -> StreamingResponse:
     async def event_generator() -> AsyncGenerator[str, None]:
-        max_wait = 300
-        elapsed = 0
-        while elapsed < max_wait:
-            broadcaster = broadcasters.get(session_id)
-            if broadcaster:
-                break
+        # Wait for the broadcaster to be created (notified when POST /messages or
+        # POST /answer stores it). Use asyncio.Event so we wake up immediately
+        # instead of sleeping in a 1-second polling loop — critical for fast
+        # LLM stubs (MOCK_LLM=true) where the background task can complete before
+        # the first poll interval ends.
+        ready_event = get_or_create_broadcaster_event(session_id)
+        broadcaster = broadcasters.get(session_id)
+        if broadcaster is None:
             yield ": heartbeat\n\n"
-            await asyncio.sleep(1.0)
-            elapsed += 1
-        else:
-            return
+            try:
+                await asyncio.wait_for(ready_event.wait(), timeout=300)
+            except asyncio.TimeoutError:
+                return
+            broadcaster = broadcasters.get(session_id)
+            if broadcaster is None:
+                return
 
         sub_queue = broadcaster.subscribe()
         try:
@@ -452,8 +460,11 @@ async def submit_ask_user_answer(
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
 
-    queue = Broadcaster()
-    broadcasters[session_id_str] = queue
+    queue = broadcasters.get(session_id_str)
+    if queue is None:
+        queue = Broadcaster()
+        broadcasters[session_id_str] = queue
+        notify_broadcaster_ready(session_id_str)
 
     orchestrator = get_orchestrator(queue)
     orchestrator._event_persister = make_event_persister(session_id_str)

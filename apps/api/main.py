@@ -78,7 +78,13 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         async with AsyncPostgresSaver.from_conn_string(psycopg_url) as saver:
             await saver.setup()
 
+    from apps.api import state
+
+    await state.init_shared_pool()
+
     yield
+
+    await state.close_shared_pool()
 
 
 app = FastAPI(title="Business Decision OS API", version="0.1.0", lifespan=lifespan)

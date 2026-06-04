@@ -37,9 +37,19 @@ vi.mock("react-markdown", () => ({
   ),
 }));
 
+// Mock AskUserInput to avoid complex import chains.
+vi.mock("@/components/AskUserInput", () => ({
+  AskUserInput: () => <div data-testid="ask-user-input" />,
+}));
+
+// Mock JobApprovalCard to avoid complex import chains.
+vi.mock("@/components/JobApprovalCard", () => ({
+  default: () => <div data-testid="job-approval-card" />,
+}));
+
 // Dynamically import after mocks are set up.
 const { default: MessageBubble } = await import(
-  "@/components/MessageBubble"
+  "@/components/chat/MessageBubble"
 );
 
 import type { ChatMessage } from "@/types/chat";

@@ -1,4 +1,4 @@
-"""T-074: Integration test — HITL interrupt/resume via LangGraph.
+"""T-074: Unit test — HITL interrupt/resume via LangGraph.
 
 Full HITL cycle using MemorySaver (no real DB required).  Verifies:
 1. Graph suspends at wait_for_approval with __interrupt__ in the state.
@@ -9,38 +9,19 @@ Full HITL cycle using MemorySaver (no real DB required).  Verifies:
 
 from __future__ import annotations
 
-from decimal import Decimal
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
-from packages.agent.llm import LLMMessage, LLMResponse, LLMToolSpec, LLMUsage
+from packages.agent.llm import LLMMessage, LLMResponse, LLMToolSpec
 from packages.agent.orchestrator.models import SpecialistTask
 from packages.agent.runtime import AgentRuntime, AgentState
+from tests.unit.helpers import make_llm_usage, make_stop_response
+
 
 # ---------------------------------------------------------------------------
 # Helpers / fakes
 # ---------------------------------------------------------------------------
-
-
-def _make_usage() -> LLMUsage:
-    return LLMUsage(
-        input_tokens=10,
-        output_tokens=5,
-        total_cost_usd=Decimal("0"),
-    )
-
-
-def _stop_response(text: str = "Done.") -> LLMResponse:
-    return LLMResponse(
-        text=text,
-        tool_calls=[],
-        finish_reason="stop",
-        usage=_make_usage(),
-        model="claude-sonnet-4-6-test",
-        request_id=str(uuid4()),
-        latency_ms=1,
-    )
 
 
 def _tool_use_response(tool_name: str, tool_input: dict[str, Any]) -> LLMResponse:
@@ -49,7 +30,7 @@ def _tool_use_response(tool_name: str, tool_input: dict[str, Any]) -> LLMRespons
         text="",
         tool_calls=[{"id": call_id, "name": tool_name, "input": tool_input}],
         finish_reason="tool_use",
-        usage=_make_usage(),
+        usage=make_llm_usage(),
         model="claude-sonnet-4-6-test",
         request_id=str(uuid4()),
         latency_ms=1,
@@ -77,7 +58,7 @@ class _SequenceLLMClient:
         self.call_count += 1
         if self._responses:
             return self._responses.pop(0)
-        return _stop_response("fallback")
+        return make_stop_response("fallback")
 
 
 class _FakeHITLTool:
@@ -328,7 +309,7 @@ async def test_hitl_resume_calls_execute_job() -> None:
 
     llm = _SequenceLLMClient([
         _tool_use_response("job_dispatch", tool_input),
-        _stop_response("Simulation job dispatched successfully."),
+        make_stop_response("Simulation job dispatched successfully."),
     ])
     registry = _FakeToolRegistry([_FakeJobDispatchTool()])
     runtime = AgentRuntime(
@@ -477,7 +458,7 @@ async def test_hitl_handle_never_called_on_resume() -> None:
 
     llm = _SequenceLLMClient([
         _tool_use_response("job_dispatch", tool_input),
-        _stop_response("Action completed."),
+        make_stop_response("Action completed."),
     ])
     registry = _FakeToolRegistry([_SentinelJobDispatchTool()])
     runtime = AgentRuntime(

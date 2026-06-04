@@ -468,7 +468,7 @@ Do **not** duplicate the avatar circle markup — always delegate layout to `Bub
 
 ## Public Interfaces
 
-The following interfaces may not change signature without an ADR filed in `docs/adr/`.
+The following interfaces may not change signature without an ADR filed in `docs/ADR/`.
 An interface change that is not backed by an ADR will be rejected at code review.
 
 | Interface | Location |

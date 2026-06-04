@@ -8,7 +8,7 @@ from collections.abc import Callable
 from typing import Any
 from uuid import UUID
 
-from packages.agent.llm import ClaudeClient, LLMUsage
+from packages.agent.llm import LLMUsage, create_llm_client
 from packages.agent.orchestrator import SessionOrchestrator
 from packages.agent.runner import AcaJobsRunner, CeleryJobRunner, InProcessJobRunner
 from packages.memory import PgVectorMemoryStore, StubMemoryStore
@@ -19,6 +19,35 @@ from packages.tools import create_tool_registry
 logger = logging.getLogger(__name__)
 
 sessions: dict[str, dict[str, Any]] = {}
+
+_shared_pool: Any = None
+
+
+async def init_shared_pool() -> None:
+    global _shared_pool
+    database_url = os.environ.get("DATABASE_URL", "")
+    if not database_url:
+        return
+    from psycopg import AsyncConnection
+    from psycopg.rows import dict_row
+    from psycopg_pool import AsyncConnectionPool
+
+    psycopg_url = database_url.replace("postgresql+asyncpg://", "postgresql://")
+    pool: AsyncConnectionPool[AsyncConnection[dict[str, Any]]] = AsyncConnectionPool(
+        psycopg_url,
+        max_size=5,
+        kwargs={"autocommit": True, "prepare_threshold": 0, "row_factory": dict_row},
+        open=False,
+    )
+    await pool.open()
+    _shared_pool = pool
+
+
+async def close_shared_pool() -> None:
+    global _shared_pool
+    if _shared_pool is not None:
+        await _shared_pool.close()
+        _shared_pool = None
 
 
 class Broadcaster:
@@ -44,6 +73,21 @@ class Broadcaster:
 
 
 broadcasters: dict[str, Broadcaster] = {}
+
+# Per-session asyncio.Event, set when a broadcaster is first stored for the session.
+# Allows /stream to wake up instantly instead of polling with a fixed sleep interval.
+broadcaster_ready: dict[str, asyncio.Event] = {}
+
+
+def get_or_create_broadcaster_event(session_id: str) -> asyncio.Event:
+    if session_id not in broadcaster_ready:
+        broadcaster_ready[session_id] = asyncio.Event()
+    return broadcaster_ready[session_id]
+
+
+def notify_broadcaster_ready(session_id: str) -> None:
+    """Call after storing a Broadcaster in broadcasters[session_id]."""
+    get_or_create_broadcaster_event(session_id).set()
 
 
 def _build_runner() -> AcaJobsRunner | InProcessJobRunner | CeleryJobRunner:
@@ -117,11 +161,11 @@ def make_event_persister(session_id: str) -> Callable[[dict[str, Any]], Any]:
 
 
 def get_orchestrator(sse_queue: Any | None = None) -> SessionOrchestrator:
-    api_key = os.environ.get("ANTHROPIC_API_KEY", "")
-    if not api_key:
-        raise RuntimeError("ANTHROPIC_API_KEY is not set — add it to .env")
-    llm_client = ClaudeClient(api_key=api_key, usage_writer=_real_usage_writer)
+    llm_client = create_llm_client(usage_writer=_real_usage_writer)
     runner = _build_runner()
     tool_registry = create_tool_registry(runner=runner, llm_client=llm_client)
     memory_store = _build_memory_store()
-    return SessionOrchestrator(llm_client, tool_registry, memory_store, sse_queue)
+    return SessionOrchestrator(
+        llm_client, tool_registry, memory_store, sse_queue,
+        checkpoint_pool=_shared_pool,
+    )

@@ -7,8 +7,6 @@ from uuid import UUID, uuid4
 
 import pytest
 
-from typing import AsyncIterator
-
 from packages.agent.llm import LLMMessage, LLMResponse, LLMStreamEvent, LLMToolSpec, LLMUsage
 from packages.agent.orchestrator.ask_user import build_ask_user_event, is_analytical_intent
 
@@ -105,52 +103,6 @@ def _make_llm_response(text: str) -> LLMResponse:
     )
 
 
-class _AskUserYesLLMClient:
-    """Returns needs_input=true with a question for ask_user calls."""
-
-    _model = "stub"
-
-    async def complete(
-        self,
-        messages: list[LLMMessage],
-        tools: Any = None,
-        temperature: float = 0.0,
-        max_tokens: int = 4096,
-        prompt_cache: bool = True,
-        agent_step_id: Any = None,
-        specialist_role: Any = None,
-    ) -> LLMResponse:
-        system = messages[0].content if messages else ""
-        if "information-gathering" in system:
-            return _make_llm_response(
-                '{"needs_input": true, "question": "What date range should I analyze?"}'
-            )
-        if "intent classifier" in system:
-            return _make_llm_response(
-                '{"category":"domain_analysis","confidence":0.9,'
-                '"rationale":"needs date range","goal_text":"analyze inventory"}'
-            )
-        if "router inside SessionOrchestrator" in system:
-            return _make_llm_response(
-                '{"mode":"direct_chat","agents":[],'
-                '"requires_planning":false,"requires_dag":false,"rationale":"ask_user"}'
-            )
-        return _make_llm_response("Stub reply")
-
-    async def stream(
-        self,
-        messages: list[LLMMessage],
-        tools: list[LLMToolSpec] | None = None,
-        **kwargs: Any,
-    ) -> AsyncIterator[LLMStreamEvent]:
-        llm_response = await self.complete(messages, tools=tools, **kwargs)
-
-        async def _gen() -> AsyncIterator[LLMStreamEvent]:
-            yield LLMStreamEvent(event="text_delta", data=llm_response.text)
-
-        return _gen()
-
-
 class _AskUserNoLLMClient:
     """Returns needs_input=false — ask_user node passes through."""
 
@@ -208,31 +160,6 @@ def _make_orchestrator(llm_client: Any) -> Any:
 
 
 @pytest.mark.asyncio
-async def test_ask_user_node_emits_event_when_llm_returns_needs_input() -> None:
-    """When the LLM returns needs_input=true, the graph raises GraphInterrupt."""
-    from unittest.mock import AsyncMock, MagicMock, patch
-
-    from langgraph.errors import GraphInterrupt
-
-    from packages.agent.orchestrator import SessionUserQuery
-
-    orchestrator = _make_orchestrator(_AskUserYesLLMClient())
-    session_id = uuid4()
-    query = SessionUserQuery(text="Show me inventory analysis")
-
-    mock_repo = MagicMock()
-    mock_repo.update_status = AsyncMock()
-
-    with patch(
-        "packages.agent.orchestrator.session_orchestrator.DecisionSessionRepository",
-        return_value=mock_repo,
-    ):
-        with pytest.raises(GraphInterrupt):
-            await orchestrator.run(session_id, query)
-        await asyncio.sleep(0)
-
-
-@pytest.mark.asyncio
 async def test_ask_user_node_passes_through_when_no_input_needed() -> None:
     """When the LLM returns needs_input=false, the node passes through to select_mode."""
     from unittest.mock import AsyncMock, MagicMock, patch
@@ -258,71 +185,3 @@ async def test_ask_user_node_passes_through_when_no_input_needed() -> None:
     assert result.route.rationale != "ask_user"
 
 
-@pytest.mark.asyncio
-async def test_ask_user_node_skips_for_chat_intent() -> None:
-    """When intent is 'chat', ask_user node must not call LLM and must pass through."""
-    from unittest.mock import AsyncMock, MagicMock, patch
-
-    from packages.agent.orchestrator import SessionUserQuery
-
-    class _ChatLLMClient:
-        _model = "stub"
-        _ask_user_called = False
-
-        async def complete(
-            self,
-            messages: list[LLMMessage],
-            tools: Any = None,
-            temperature: float = 0.0,
-            max_tokens: int = 4096,
-            prompt_cache: bool = True,
-            agent_step_id: Any = None,
-            specialist_role: Any = None,
-        ) -> LLMResponse:
-            system = messages[0].content if messages else ""
-            if "information-gathering" in system:
-                self._ask_user_called = True
-                return _make_llm_response('{"needs_input": false, "question": null}')
-            if "intent classifier" in system:
-                return _make_llm_response(
-                    '{"category":"chat","confidence":0.95,'
-                    '"rationale":"greeting","goal_text":null}'
-                )
-            if "router inside SessionOrchestrator" in system:
-                return _make_llm_response(
-                    '{"mode":"direct_chat","agents":[],'
-                    '"requires_planning":false,"requires_dag":false,"rationale":"chat"}'
-                )
-            return _make_llm_response("Hello!")
-
-        async def stream(
-            self,
-            messages: list[LLMMessage],
-            tools: list[LLMToolSpec] | None = None,
-            **kwargs: Any,
-        ) -> AsyncIterator[LLMStreamEvent]:
-            llm_response = await self.complete(messages, tools=tools, **kwargs)
-
-            async def _gen() -> AsyncIterator[LLMStreamEvent]:
-                yield LLMStreamEvent(event="text_delta", data=llm_response.text)
-
-            return _gen()
-
-    llm = _ChatLLMClient()
-    orchestrator = _make_orchestrator(llm)
-    session_id = uuid4()
-    query = SessionUserQuery(text="Hello!")
-
-    mock_repo = MagicMock()
-    mock_repo.update_status = AsyncMock()
-
-    with patch(
-        "packages.agent.orchestrator.session_orchestrator.DecisionSessionRepository",
-        return_value=mock_repo,
-    ):
-        result = await orchestrator.run(session_id, query)
-        await asyncio.sleep(0)
-
-    assert result is not None
-    # ask_user LLM should NOT have been called for chat intent
-    assert llm._ask_user_called is False

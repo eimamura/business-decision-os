@@ -14,31 +14,7 @@ from packages.agent.orchestrator.models import (
     SpecialistTask,
 )
 from packages.agent.runtime import AgentRuntime
-
-
-# ---------------------------------------------------------------------------
-# Helpers / fakes
-# ---------------------------------------------------------------------------
-
-
-def _make_usage() -> LLMUsage:
-    return LLMUsage(
-        input_tokens=10,
-        output_tokens=5,
-        total_cost_usd=Decimal("0"),
-    )
-
-
-def _stop_response(text: str = "Done.") -> LLMResponse:
-    return LLMResponse(
-        text=text,
-        tool_calls=[],
-        finish_reason="stop",
-        usage=_make_usage(),
-        model="claude-sonnet-4-6-test",
-        request_id=str(uuid4()),
-        latency_ms=1,
-    )
+from tests.unit.helpers import RecordingLLMClient, make_llm_usage, make_stop_response
 
 
 def _tool_use_response(tool_name: str, tool_input: dict[str, Any]) -> LLMResponse:
@@ -48,33 +24,11 @@ def _tool_use_response(tool_name: str, tool_input: dict[str, Any]) -> LLMRespons
         text="",
         tool_calls=[{"id": call_id, "name": tool_name, "input": tool_input}],
         finish_reason="tool_use",
-        usage=_make_usage(),
+        usage=make_llm_usage(),
         model="claude-sonnet-4-6-test",
         request_id=str(uuid4()),
         latency_ms=1,
     )
-
-
-class _RecordingLLMClient:
-    """Returns pre-configured responses in order."""
-
-    def __init__(self, responses: list[LLMResponse]) -> None:
-        self._responses = list(responses)
-        self._model = "claude-sonnet-4-6-mock"
-
-    async def complete(
-        self,
-        messages: list[LLMMessage],
-        tools: Any = None,
-        temperature: float = 0.0,
-        max_tokens: int = 4096,
-        prompt_cache: bool = True,
-        agent_step_id: Any = None,
-        specialist_role: Any = None,
-    ) -> LLMResponse:
-        if not self._responses:
-            return _stop_response("fallback")
-        return self._responses.pop(0)
 
 
 class _FakeHITLTool:
@@ -181,7 +135,7 @@ async def test_agent_runtime_hitl_tool_suspends_with_interrupt() -> None:
     interrupt() — the __interrupt__ key appears in the state output and
     tool.handle() is never called."""
     tool_input = {"action_summary": "Reorder 1000 units of SKU-A"}
-    llm = _RecordingLLMClient([
+    llm = RecordingLLMClient([
         _tool_use_response("request_approval", tool_input),
     ])
     registry = _FakeToolRegistry([_FakeHITLTool()])
@@ -271,7 +225,7 @@ async def test_agent_runtime_hitl_handle_never_called() -> None:
             raise AssertionError("should not be called")
 
     tool_input = {"action_summary": "Send order to supplier"}
-    llm = _RecordingLLMClient([_tool_use_response("request_approval", tool_input)])
+    llm = RecordingLLMClient([_tool_use_response("request_approval", tool_input)])
     registry = _FakeToolRegistry([_SentinelHITLTool()])
     runtime = _make_runtime(llm, registry)
     task = _make_task()
@@ -342,9 +296,9 @@ async def test_agent_runtime_hitl_handle_never_called() -> None:
 async def test_agent_runtime_read_only_tool_does_not_interrupt() -> None:
     """read_only tools must proceed normally without interrupting."""
     tool_input: dict[str, Any] = {}
-    llm = _RecordingLLMClient([
+    llm = RecordingLLMClient([
         _tool_use_response("sql_query", tool_input),
-        _stop_response("Query complete"),
+        make_stop_response("Query complete"),
     ])
     registry = _FakeToolRegistry([_FakeReadOnlyTool()])
     runtime = _make_runtime(llm, registry)
@@ -364,7 +318,7 @@ async def test_agent_runtime_hitl_approval_id_from_repo() -> None:
     expected_id = "approval-from-db-001"
     tool_input = {"action_summary": "Critical action"}
 
-    llm = _RecordingLLMClient([_tool_use_response("request_approval", tool_input)])
+    llm = RecordingLLMClient([_tool_use_response("request_approval", tool_input)])
     registry = _FakeToolRegistry([_FakeHITLTool()])
     runtime = _make_runtime(llm, registry)
     task = _make_task()
@@ -433,7 +387,7 @@ async def test_agent_runtime_hitl_fallback_uuid_on_repo_error() -> None:
     non-empty UUID fallback as the approval_id."""
     tool_input = {"action_summary": "Action with DB error"}
 
-    llm = _RecordingLLMClient([_tool_use_response("request_approval", tool_input)])
+    llm = RecordingLLMClient([_tool_use_response("request_approval", tool_input)])
     registry = _FakeToolRegistry([_FakeHITLTool()])
     runtime = _make_runtime(llm, registry)
     task = _make_task()
@@ -537,7 +491,7 @@ async def test_session_orchestrator_awaiting_approval_status_via_sse() -> None:
     sse_queue: asyncio.Queue[Any] = asyncio.Queue()
 
     tool_input = {"action_summary": "Approve something"}
-    llm = _RecordingLLMClient([_tool_use_response("request_approval", tool_input)])
+    llm = RecordingLLMClient([_tool_use_response("request_approval", tool_input)])
     registry = _FakeToolRegistry([_FakeHITLTool()])
 
     runtime = AgentRuntime(

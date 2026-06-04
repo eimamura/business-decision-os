@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { SlidersHorizontal, ChevronDown, Mic, BrainCircuit } from "lucide-react";
 import ExecutionPanel from "@/components/agent/ExecutionPanel";
 import QuickActionGrid from "@/components/analysis/QuickActionGrid";
-import MessageBubble from "@/components/MessageBubble";
+import MessageBubble from "@/components/chat/MessageBubble";
 import { ExecutionProgressPanel } from "@/components/ExecutionProgressPanel";
 import { useChat } from "@/hooks/useChat";
 import ChatSidebar from "@/components/ChatSidebar";

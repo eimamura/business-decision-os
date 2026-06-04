@@ -25,7 +25,6 @@ Own infrastructure, Docker, CI/CD, Makefile, and seed scripts. Keep the local st
 - Task batch from the Orchestrator (infra task IDs, phase scope)
 - `docs/DESIGN.md §Deployment Design` — Terraform pipeline and Azure layout
 - `docs/DESIGN.md §Compute Platform for Heavy Workloads` — which workload runs where per phase
-- `docs/DEVELOPMENT.md` — local stack conventions and DATABASE_URL rules
 
 ## Outputs
 
@@ -36,11 +35,10 @@ Own infrastructure, Docker, CI/CD, Makefile, and seed scripts. Keep the local st
 ## Process
 
 1. Read assigned tasks in `docs/TASKS.md`
-2. Check `docs/DEVELOPMENT.md` for conventions before changing Makefile or compose
-3. Make infrastructure change
-4. Run smoke checks (see below) before marking task Done
-5. Update `docs/TASKS.md` status
-6. Hand off to **Test/Review** for final phase sign-off
+2. Make infrastructure change
+3. Run smoke checks (see below) before marking task Done
+4. Update `docs/TASKS.md` status
+5. Hand off to **Test/Review** for final phase sign-off
 
 ## Required Reading (before every session)
 
@@ -52,10 +50,8 @@ Read only when relevant:
 
 | Task type | Also read |
 |---|---|
-| Docker / Compose changes | `docs/DEVELOPMENT.md §Local Stack` |
 | Terraform / Azure changes | `docs/DESIGN.md §Deployment Design` |
 | Worker / heavy workloads | `docs/DESIGN.md §Compute Platform for Heavy Workloads` |
-| Makefile / seed scripts | `docs/DEVELOPMENT.md §Makefile targets, DATABASE_URL` |
 
 ## Tool Usage Rules
 

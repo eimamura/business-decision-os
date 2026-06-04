@@ -49,11 +49,10 @@ Own the test suite, vcrpy cassettes, and code review. Assert schema conformance 
 ## Required Reading (before every session)
 
 1. `AGENTS.md` — working rules, prohibitions, commit discipline
-2. `docs/ACCEPTANCE.md` — build gate rules, defect handling, review authority
-3. `docs/TESTING.md` — tier definitions, cassette discipline, CI behavior
-4. `docs/DESIGN.md §Stub Behavior` — what stubs must output (schema, not accuracy)
-5. `docs/DESIGN.md §Public Interfaces` — what contracts tests must enforce
-6. `docs/TASKS.md` — current test tasks
+2. `docs/TESTING.md` — tier definitions, cassette discipline, CI behavior
+3. `docs/DESIGN.md §Stub Behavior` — what stubs must output (schema, not accuracy)
+4. `docs/DESIGN.md §Public Interfaces` — what contracts tests must enforce
+5. `docs/TASKS.md` — current test tasks
 
 ## Tool Usage Rules
 
@@ -184,7 +183,6 @@ A phase is ready for sign-off when:
 - [ ] Code review checklist above passes for all changed files
 
 If any `make` target is unavailable, report as "not configured" — not "passed".
-See `docs/ACCEPTANCE.md §Tool Availability Rule`.
 
 ## Done Criteria
 

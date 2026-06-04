@@ -23,9 +23,7 @@ from packages.agent.orchestrator import (
 from packages.persistence.approvals import ApprovalTransition
 
 EXPECTED_SESSION_STREAM_EVENTS = [
-    "query_received",
-    "intent_classified",
-    "execution_mode_selected",
+    "graph_node",
     "response_ready",
     "done",
 ]
@@ -135,8 +133,8 @@ async def test_contract_session_message_uses_user_query_and_streams_new_taxonomy
             captured["query"] = query
             while not self.queue._subs:  # wait for stream subscriber to attach
                 await asyncio.sleep(0.005)
-            for event_type in EXPECTED_SESSION_STREAM_EVENTS[:-1]:
-                await self.queue.put({"type": event_type})
+            await self.queue.put({"type": "graph_node", "event": "start", "node_name": "run_direct_chat"})
+            await self.queue.put({"type": "response_ready"})
             intent = SessionIntent(
                 category="question_answering",
                 confidence=0.99,
@@ -243,8 +241,8 @@ async def test_contract_decisions_streams_new_taxonomy_and_done_reply(
             captured["session_id"] = session_id
             captured["query"] = query
             await asyncio.sleep(0.05)  # yield so stream subscriber can attach
-            for event_type in EXPECTED_SESSION_STREAM_EVENTS[:-1]:
-                await self.queue.put({"type": event_type})
+            await self.queue.put({"type": "graph_node", "event": "start", "node_name": "synthesize"})
+            await self.queue.put({"type": "response_ready"})
             intent = SessionIntent(
                 category="decision_support",
                 confidence=0.99,

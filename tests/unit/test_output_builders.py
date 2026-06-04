@@ -12,53 +12,9 @@ from packages.agent.cross_domain.simulation_optimizer import (
 from packages.agent.llm import LLMMessage, LLMResponse, LLMUsage
 from packages.agent.orchestrator.models import SpecialistTask
 from packages.agent.runtime import AgentRuntime, _default_output_builder
+from tests.unit.helpers import RecordingLLMClient, make_llm_usage, make_stop_response
 
 # Unit tests for T-006: output builder extraction from AgentRuntime.
-
-
-# ---------------------------------------------------------------------------
-# Helpers / fakes
-# ---------------------------------------------------------------------------
-
-
-def _make_usage() -> LLMUsage:
-    return LLMUsage(
-        input_tokens=10,
-        output_tokens=5,
-        total_cost_usd=Decimal("0"),
-    )
-
-
-def _stop_response(text: str = "done") -> LLMResponse:
-    return LLMResponse(
-        text=text,
-        tool_calls=[],
-        finish_reason="stop",
-        usage=_make_usage(),
-        model="claude-sonnet-4-6-test",
-        request_id=str(uuid4()),
-        latency_ms=1,
-    )
-
-
-class _RecordingLLMClient:
-    def __init__(self, responses: list[LLMResponse]) -> None:
-        self._responses = list(responses)
-        self._model = "claude-sonnet-4-6-mock"
-
-    async def complete(
-        self,
-        messages: list[LLMMessage],
-        tools: Any = None,
-        temperature: float = 0.0,
-        max_tokens: int = 4096,
-        prompt_cache: bool = True,
-        agent_step_id: Any = None,
-        specialist_role: Any = None,
-    ) -> LLMResponse:
-        if not self._responses:
-            return _stop_response("fallback")
-        return self._responses.pop(0)
 
 
 class _FakeToolRegistry:
@@ -146,7 +102,7 @@ def test_default_output_builder_none_response_gives_empty_text() -> None:
 
 async def test_agent_runtime_default_builder_produces_text_and_specialist() -> None:
     """AgentRuntime with no custom output_builder should include 'text' and 'specialist'."""
-    llm = _RecordingLLMClient([_stop_response("Analysis complete."), _stop_response("pass")])
+    llm = RecordingLLMClient([make_stop_response("Analysis complete."), make_stop_response("pass")])
     runtime = AgentRuntime(
         name="generic_agent",
         role="inventory",
@@ -165,7 +121,7 @@ async def test_agent_runtime_default_builder_produces_text_and_specialist() -> N
 async def test_agent_runtime_default_builder_no_simulation_branching() -> None:
     """AgentRuntime with role='simulation_optimizer' but no custom output_builder
     must NOT produce {'candidates': ...} — it should use the default builder."""
-    llm = _RecordingLLMClient([_stop_response("No candidates here."), _stop_response("pass")])
+    llm = RecordingLLMClient([make_stop_response("No candidates here."), make_stop_response("pass")])
     runtime = AgentRuntime(
         name="sim_agent",
         role="simulation_optimizer",
@@ -315,15 +271,15 @@ async def test_simulation_optimizer_agent_returns_candidates() -> None:
             }
         ],
         finish_reason="tool_use",
-        usage=_make_usage(),
+        usage=make_llm_usage(),
         model="claude-sonnet-4-6-test",
         request_id=str(uuid4()),
         latency_ms=1,
     )
-    final_response = _stop_response("Optimization done.")
-    verifier_response = _stop_response("pass")
+    final_response = make_stop_response("Optimization done.")
+    verifier_response = make_stop_response("pass")
 
-    llm = _RecordingLLMClient([tool_call_response, final_response, verifier_response])
+    llm = RecordingLLMClient([tool_call_response, final_response, verifier_response])
 
     agent = SimulationOptimizerAgent(
         llm_client=llm,

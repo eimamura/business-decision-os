@@ -257,9 +257,23 @@ class ScenarioStubClaudeClient:
 
         system_text = self._collect_system_text(messages)
 
-        if "category" in system_text or "intent" in system_text:
+        if "information-gathering" in system_text:
+            if os.environ.get("MOCK_ASK_USER", "").lower() == "true":
+                response_text = json.dumps({
+                    "needs_input": True,
+                    "question": "What date range should I analyze?",
+                    "suggestions": ["Last 30 days", "Q1 2025", "Last 12 months"],
+                })
+            else:
+                response_text = json.dumps({"needs_input": False, "question": None, "suggestions": None})
+        elif "intent classifier" in system_text or "category" in system_text:
+            category = (
+                "domain_analysis"
+                if os.environ.get("MOCK_ASK_USER", "").lower() == "true"
+                else "lookup"
+            )
             response_text = json.dumps({
-                "category": "lookup",
+                "category": category,
                 "confidence": 0.95,
                 "rationale": "Mock mode",
                 "goal_text": "mock goal",
@@ -267,7 +281,7 @@ class ScenarioStubClaudeClient:
         elif "route" in system_text or "primary_role" in system_text:
             response_text = json.dumps({
                 "mode": "single_agent",
-                "primary_role": "data_engineer",
+                "agents": ["data_engineer"],
                 "rationale": "Mock stub",
             })
         elif "verify" in system_text or "findings" in system_text:
@@ -275,14 +289,6 @@ class ScenarioStubClaudeClient:
                 "status": "pass",
                 "rationale": "Mock mode — no verification performed",
             })
-        elif "information-gathering" in system_text:
-            if os.environ.get("MOCK_ASK_USER", "").lower() == "true":
-                response_text = json.dumps({
-                    "needs_input": True,
-                    "question": "What date range should I analyze?",
-                })
-            else:
-                response_text = json.dumps({"needs_input": False, "question": None})
         else:
             response_text = "Mock mode response — no LLM cost incurred."
 

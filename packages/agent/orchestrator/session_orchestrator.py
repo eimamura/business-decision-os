@@ -95,12 +95,14 @@ class SessionOrchestrator:
         memory_store: Any,
         sse_queue: Any | None = None,
         event_persister: Any | None = None,
+        checkpoint_pool: Any | None = None,
     ) -> None:
         self._llm_client = llm_client
         self._tool_registry = tool_registry
         self._memory_store = memory_store
         self._sse_queue = sse_queue
         self._event_persister = event_persister
+        self._checkpoint_pool = checkpoint_pool
         self._graph: Any = None  # lazily initialised by _get_graph()
 
     async def _push(self, event: dict[str, Any], sse_queue: Any = None) -> None:
@@ -421,32 +423,37 @@ class SessionOrchestrator:
 
         import os
 
-        database_url = os.environ.get("DATABASE_URL", "")
-        if database_url:
+        if self._checkpoint_pool is not None:
             from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
-            from psycopg import AsyncConnection
-            from psycopg.rows import dict_row
-            from psycopg_pool import AsyncConnectionPool
 
-            psycopg_url = database_url.replace("postgresql+asyncpg://", "postgresql://")
-            pool: AsyncConnectionPool[AsyncConnection[dict[str, Any]]] = (
-                AsyncConnectionPool(
-                    psycopg_url,
-                    max_size=5,
-                    kwargs={
-                        "autocommit": True,
-                        "prepare_threshold": 0,
-                        "row_factory": dict_row,
-                    },
-                    open=False,
-                )
-            )
-            await pool.open()
-            checkpointer: Any = AsyncPostgresSaver(conn=pool)
+            checkpointer: Any = AsyncPostgresSaver(conn=self._checkpoint_pool)
         else:
-            from langgraph.checkpoint.memory import MemorySaver
+            database_url = os.environ.get("DATABASE_URL", "")
+            if database_url:
+                from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
+                from psycopg import AsyncConnection
+                from psycopg.rows import dict_row
+                from psycopg_pool import AsyncConnectionPool
 
-            checkpointer = MemorySaver()
+                psycopg_url = database_url.replace("postgresql+asyncpg://", "postgresql://")
+                pool: AsyncConnectionPool[AsyncConnection[dict[str, Any]]] = (
+                    AsyncConnectionPool(
+                        psycopg_url,
+                        max_size=5,
+                        kwargs={
+                            "autocommit": True,
+                            "prepare_threshold": 0,
+                            "row_factory": dict_row,
+                        },
+                        open=False,
+                    )
+                )
+                await pool.open()
+                checkpointer = AsyncPostgresSaver(conn=pool)
+            else:
+                from langgraph.checkpoint.memory import MemorySaver
+
+                checkpointer = MemorySaver()
 
         self._graph = self._build_graph(checkpointer=checkpointer)
         return self._graph

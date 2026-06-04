@@ -36,7 +36,9 @@ async def test_route_detection_returns_agent_route_json() -> None:
     resp = await client.complete(msgs)
     data = json.loads(resp.text)
     assert data["mode"] == "single_agent"
-    assert "primary_role" in data
+    # Bug 3 fix: stub now returns "agents" list (matches AgentRoute model), not "primary_role"
+    assert "agents" in data
+    assert len(data["agents"]) == 1
 
 
 @pytest.mark.asyncio

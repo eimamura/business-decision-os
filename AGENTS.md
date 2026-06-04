@@ -4,7 +4,7 @@ Canonical instruction file for AI coding agents working on this repository.
 
 ## Project Purpose
 
-Build the **Business Decision OS** — an agent with a simulatable learning model. The LLM acts as control tower, not calculation engine. Domain: supply chain end-to-end optimization. See `docs/PRODUCT_SPEC.md` for the full goal and `docs/DESIGN.md` for architecture.
+Build the **Business Decision OS** — an agent with a simulatable learning model. The LLM acts as control tower, not calculation engine. Domain: supply chain end-to-end optimization. See `docs/DESIGN.md` for architecture and design decisions.
 
 ## Terminology: Two Kinds of "Agent"
 
@@ -40,10 +40,9 @@ This project uses a SPEC-centered Claude Code architecture. Your full execution 
 
 ## Required Reading (in order)
 
-1. `docs/PRODUCT_SPEC.md` — what to build and why
-2. `docs/DESIGN.md` — architecture, components, data flow, public interfaces
-3. `docs/TASKS.md` — implementation tasks with priorities and phases
-4. `docs/DECISIONS.md` — lightweight daily decision log; why key decisions were made
+1. `docs/DESIGN.md` — architecture, components, data flow, public interfaces
+2. `docs/TASKS.md` — implementation tasks with priorities and phases
+3. `docs/DECISIONS.md` — lightweight daily decision log; why key decisions were made
 
 Read these before any task. Do not start implementation without them in context.
 
@@ -54,12 +53,12 @@ Two tiers of decision documentation:
 | File | Role | Weight | Examples |
 |---|---|---|---|
 | `docs/DECISIONS.md` | Lightweight daily decision log | Light | "UI is English-only", "Use Postgres" |
-| `docs/ADR/` | Formal records of important architectural decisions | Heavy | "Why Temporal instead of Celery" |
+| `docs/adr/` | Formal records of important architectural decisions | Heavy | "Why Temporal instead of Celery" |
 
 **Rule of thumb:**
 - Write everything in `docs/DECISIONS.md` first — it is the inbox for in-flight judgments.
-- Promote to `docs/ADR/` when the decision is architectural, affects public interfaces, or requires future accountability ("Why did we do this?").
-- `docs/DECISIONS.md` = working notes. `docs/ADR/` = design case law.
+- Promote to `docs/adr/` when the decision is architectural, affects public interfaces, or requires future accountability ("Why did we do this?").
+- `docs/DECISIONS.md` = working notes. `docs/adr/` = design case law.
 
 ## Prohibitions
 
@@ -115,8 +114,7 @@ Agent commit boundary: `git add` + `git commit` only. Never `git push` or `gh pr
 
 - Working rules (stubs, cost discipline, approvals, multi-agent constraints): `agents/*/SPEC.md`
 - ADR triggers, authorship rules, TASKS.md write authority: `agents/orchestrator/SPEC.md`
-- Local dev, Makefile, DATABASE_URL: `docs/DEVELOPMENT.md`
-- Test tiers, cassettes, CI: `docs/TESTING.md`
+- Test tiers, cassettes, CI: `.claude/rules/testing.md` (SSoT); operational How-to: `docs/TESTING.md`
 
 ## When in Doubt
 

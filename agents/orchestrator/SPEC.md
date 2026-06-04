@@ -52,7 +52,7 @@ Each Orchestrator turn follows this sequence:
 9. **Update state**:
    - If checks pass: mark batch `Done` in `docs/TASKS.md`; update `docs/STATE.md` Last Completed Batch + Last Validation; clear Active Lease
    - If blocked: mark batch `Blocked` in `docs/TASKS.md`; record blocker in `docs/STATE.md`; clear Active Lease
-   - If a quality gate failure persists after the responsible agent's fix attempt: register a Defect Task in `docs/TASKS.md` per `docs/ACCEPTANCE.md §Defect Handling Rule` (required fields: defect id, status, severity, reproduction command, observed error, expected result, suspected area, owner, acceptance criteria). The phase cannot advance while any related Defect Task remains open.
+   - If a quality gate failure persists after the responsible agent's fix attempt: register a Defect Task in `docs/TASKS.md` with fields: defect id, status, severity, reproduction command, observed error, expected result, suspected area, owner, acceptance criteria. The phase cannot advance while any related Defect Task remains open.
 10. **Emit proof output**: Print evidence items (see Proof Output below)
 
 **Batch granularity rule:**

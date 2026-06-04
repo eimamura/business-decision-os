@@ -14,18 +14,11 @@ from packages.agent.llm import LLMMessage, LLMResponse, LLMStreamEvent, LLMToolS
 from packages.agent.orchestrator import SessionOrchestrator, SessionUserQuery
 from packages.memory import StubMemoryStore
 from packages.tools import create_tool_registry
+from tests.unit.helpers import make_llm_usage
 
 # ---------------------------------------------------------------------------
 # Helpers / fakes
 # ---------------------------------------------------------------------------
-
-
-def _make_usage() -> LLMUsage:
-    return LLMUsage(
-        input_tokens=0,
-        output_tokens=0,
-        total_cost_usd=Decimal("0"),
-    )
 
 
 def _llm_response(text: str) -> LLMResponse:
@@ -33,7 +26,7 @@ def _llm_response(text: str) -> LLMResponse:
         text=text,
         tool_calls=[],
         finish_reason="stop",
-        usage=_make_usage(),
+        usage=make_llm_usage(input_tokens=0, output_tokens=0),
         model="stub",
         request_id=str(uuid4()),
         latency_ms=0,
