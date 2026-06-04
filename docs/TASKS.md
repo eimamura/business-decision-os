@@ -38,6 +38,7 @@ Full task history for P0–P23 is archived at `docs/archive/v3/TASKS.md`.
 | P24 — Ollama Local LLM Provider | T-147–T-152 | 2026-06-04 |
 | P25 — Tool Scenario E2E Validation & Session Cleanup | T-153–T-159 | 2026-06-04 |
 | P26 — SSE/Broadcaster Bug Fixes | T-160–T-166 | 2026-06-04 |
+| P27 — Model Name in Execution Trace Nodes | T-167–T-171 | 2026-06-04 |
 
 ---
 
@@ -139,3 +140,35 @@ Dependencies: none
 | T-166 | 既存ユニットテスト全通過確認（`make test-unit`） | Done |
 
 Dependencies: B-01, B-02, B-03
+
+---
+
+## P27 — Model Name in Execution Trace Nodes
+
+**Goal:** Include `model_name` in `meta` of every orchestrator/agent `graph_node` SSE event, and render a small model badge per node in the ExecutionPanel side panel.
+
+### Batch B-01 — Backend: emit model_name in graph_node meta (App Builder) — Done
+
+| Task | Description | Status |
+|---|---|---|
+| T-167 | `session_orchestrator.py`: add `model_name` to `meta` in orchestrator-level graph_node start/end events via `getattr(_llm_client, "_orchestrator_model", None) or getattr(_llm_client, "_model", None)` | Done |
+| T-168 | `runtime.py` `_run_agent()`: add `model_name` to `meta` in agent-level graph_node start/end events via `getattr(orchestrator._llm_client, "_model", None)` | Done |
+
+Dependencies: none
+
+### Batch B-02 — Frontend: display model name in ExecutionPanel (App Builder) — Done
+
+| Task | Description | Status |
+|---|---|---|
+| T-169 | `ExecutionPanel.tsx`: for orchestrator/agent kind nodes, render `meta.model_name` as a small monospace badge below the node label when present | Done |
+
+Dependencies: B-01
+
+### Batch B-03 — Tests (Test/Review) — Done
+
+| Task | Description | Status |
+|---|---|---|
+| T-170 | Unit test: `_run_agent` includes `model_name` in agent graph_node meta | Done |
+| T-171 | Vitest: `ExecutionPanel` renders model badge when `meta.model_name` is set | Done |
+
+Dependencies: B-01, B-02
