@@ -114,19 +114,19 @@ Dependencies: none (parallel-eligible with B-02)
 
 Dependencies: none
 
-### Batch B-02 — Backend abort race: stale run silently dropped (App Builder) — Not Started
+### Batch B-02 — Backend abort race: stale run silently dropped (App Builder) — Done
 
 | Task | Description | Status |
 |---|---|---|
-| T-163 | `state.py` に `session_run_ids: dict[str, str]` を追加し、`POST /messages` の `_run_and_signal` 内の各 `queue.put()` 前に run_id チェックを実施。セッション削除時にも run_id をクリーンアップ | Not Started |
+| T-163 | `state.py` に `session_run_ids: dict[str, str]` を追加し、`POST /messages` の `_run_and_signal` 内の各 `queue.put()` 前に run_id チェックを実施。セッション削除時にも run_id をクリーンアップ | Done |
 
 Dependencies: B-01
 
-### Batch B-03 — Frontend: sendAskUserAnswer missing invalidateQueries (App Builder) — Not Started
+### Batch B-03 — Frontend: sendAskUserAnswer missing invalidateQueries (App Builder) — Done
 
 | Task | Description | Status |
 |---|---|---|
-| T-164 | `sendAskUserAnswer` の `done` ハンドラに `queryClient.invalidateQueries({ queryKey: queryKeys.sessions.all })` を追加 | Not Started |
+| T-164 | `sendAskUserAnswer` の `done` ハンドラに `queryClient.invalidateQueries({ queryKey: queryKeys.sessions.all })` を追加 | Done |
 
 Dependencies: none
 

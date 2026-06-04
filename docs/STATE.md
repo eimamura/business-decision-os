@@ -22,7 +22,7 @@ None
 
 ## Last Completed
 
-P26-B-01 — Backend quick fixes: memory leak + error-path done + SSE error break (2026-06-04)
+P26-B-02+B-03 — Abort race fix (session_run_ids) + sendAskUserAnswer invalidateQueries (2026-06-04)
 - `make test-unit` → 535 passed, 11 skipped (exit 0)
 - `make lint` → All checks passed
 - `make typecheck` → 140 source files, no issues

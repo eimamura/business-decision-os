@@ -721,6 +721,7 @@ export function ChatStateProvider({ children }: { children: ReactNode }): React.
               fetchSessionUsage(sessionId)
                 .then((usage) => updateSession(sessionId, (prev) => ({ ...prev, usage })))
                 .catch(() => undefined);
+              void queryClient.invalidateQueries({ queryKey: queryKeys.sessions.all });
               hasStreamedRef.current[sessionId] = false;
               break;
             }

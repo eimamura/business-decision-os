@@ -19,6 +19,7 @@ from apps.api.state import (
     get_orchestrator,
     make_event_persister,
     notify_broadcaster_ready,
+    session_run_ids,
     sessions,
 )
 from packages.agent.history import compress_history
@@ -124,6 +125,7 @@ async def delete_all_sessions() -> None:
     sessions.clear()
     broadcasters.clear()
     broadcaster_ready.clear()
+    session_run_ids.clear()
     repo = DecisionSessionRepository()
     await repo.delete_all_sessions()
 
@@ -133,6 +135,7 @@ async def delete_session(session_id: str) -> None:
     sessions.pop(session_id, None)
     broadcasters.pop(session_id, None)
     broadcaster_ready.pop(session_id, None)
+    session_run_ids.pop(session_id, None)
     try:
         repo = DecisionSessionRepository()
         deleted = await repo.delete_session(session_id)
@@ -320,6 +323,9 @@ async def post_message(
     orchestrator = get_orchestrator(queue)
     orchestrator._event_persister = make_event_persister(session_id)
 
+    run_id = str(uuid4())
+    session_run_ids[session_id] = run_id
+
     async def _run_and_signal() -> None:
         from langgraph.errors import GraphInterrupt
 
@@ -345,6 +351,8 @@ async def post_message(
                 pass
         except Exception as exc:
             _log.exception("Orchestrator failed for session %s: %s", session_id, exc)
+            if session_run_ids.get(session_id) != run_id:
+                return  # Superseded by a newer run — drop this event
             await queue.put({
                 "type": "error",
                 "code": "orchestration_failed",
@@ -353,6 +361,8 @@ async def post_message(
                 "timestamp": _iso_now(),
             })
         finally:
+            if session_run_ids.get(session_id) != run_id:
+                return  # Superseded by a newer run — drop this event
             if interrupted:
                 # Signal the SSE stream to close cleanly; the ask_user card is the response.
                 await queue.put({

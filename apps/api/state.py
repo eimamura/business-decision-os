@@ -78,6 +78,10 @@ broadcasters: dict[str, Broadcaster] = {}
 # Allows /stream to wake up instantly instead of polling with a fixed sleep interval.
 broadcaster_ready: dict[str, asyncio.Event] = {}
 
+# Tracks the most-recent run_id per session. A background task whose run_id no longer
+# matches has been superseded by a newer POST /messages and must drop its events.
+session_run_ids: dict[str, str] = {}
+
 
 def get_or_create_broadcaster_event(session_id: str) -> asyncio.Event:
     if session_id not in broadcaster_ready:
