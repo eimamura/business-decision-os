@@ -17,21 +17,6 @@ Implement application code: FastAPI backend, Next.js frontend, and all Python pa
 - Record `llm_usage` inside `LLMClient` middleware; write `tool_calls` + `audit_log` per tool call in the same transaction
 - **SSE schema invariant:** `packages/schemas/sse_events.py` is the Single Source of Truth for all SSE event types. After any change to that file (add/modify/remove a model or the `SseEvent` union), run `make codegen` to regenerate `packages/schemas-ts/src/sse-events.ts`. Never hand-edit the generated file.
 
-### Per-Phase Focus
-
-| Phase | Work |
-|---|---|
-| 0 | Protocol classes + Pydantic schemas + KPI formulas + migration 0001 + repository stubs |
-| 1 | ClaudeClient, Orchestrator loop, 4 PromptBasedSpecialists, all tools (SQL/Approval/Audit real; Forecast/Sim/Opt stubs), Evaluator, MemoryStore stub, Chat + full UI |
-| 2 | Replace Simulation stub with real InventorySimulator; wire ACA JobRunner |
-| 3 | Replace Optimization stub with OR-Tools CP-SAT optimizer; wire ACA JobRunner |
-| 4 | Revision loop, budget interceptor in LLMClient, Settings/Policies screen |
-| 5 | Swap InProcessJobRunner → CeleryJobRunner (callers unchanged) |
-| 6 | Predictor implementation (scikit-learn); realtime inference in FastAPI |
-| 7 | MemoryStore stub → pgvector retrieval; weight-vector hooks in Orchestrator |
-| 8 | Risk-classified auto-execution policy in Approval flow |
-| 9 | Split Domain Expert into 5 specialists; swap to AgentBasedSpecialist |
-
 ## Non-Responsibilities
 
 - Infrastructure changes: `infra/`, `.github/workflows/`, `Makefile`, `apps/*/Dockerfile`
@@ -99,7 +84,7 @@ packages/simulation/
 packages/optimization/
 packages/prediction/
 packages/memory/
-config/            Read only; update only with ADR
+config/            Read-only. Changes require a prior ADR (risk thresholds, weight defaults, SQL allowlist, llm_pricing); Orchestrator arbitrates.
 data/sample/       Operational CSVs only (NOT ground_truth/)
 ```
 
@@ -120,20 +105,16 @@ These signatures are locked. **Any change requires an ADR before coding:**
 
 ## Constraints
 
+> Universal prohibitions (secrets, ground_truth, public interfaces without ADR, LLMClient bypass, smart stubs, approvals mutation, per-KPI collapse, etc.) → **AGENTS.md §Prohibitions**
+
 - Never touch `infra/`, `infra/compose/`, `.github/workflows/`, `Makefile`, `apps/*/Dockerfile`
 - Never query tables outside the SQL Tool allowlist: `sku_master`, `inventory`, `demand_history`, `supply`, `cost`, `customers`
-- Never read `data/sample/ground_truth/`
-- Never collapse per-KPI scores into a single weighted total inside the Evaluator
-- Never mutate a closed `approvals` row — create a new row with `parent_approval_id`
-- Never call the Anthropic SDK directly — always go through `LLMClient`
 - `temperature=0` everywhere
-- Smart stubs are forbidden — trivial and schema-conformant only
 
 ## Quality Gates
 
 Before marking any task Done:
 - [ ] `uv run pytest tests/unit` passes with zero failures
-- [ ] `uv run pytest tests/integration` passes with zero failures
 - [ ] Every public interface method returns a non-501 response (real or schema-conformant stub)
 - [ ] `make codegen` exits 0 and produces no diff in `packages/schemas-ts/src/sse-events.ts` (run `git diff --exit-code packages/schemas-ts/` after codegen)
 - [ ] No raw DB rows appear in any LLM prompt path (spot-checked)

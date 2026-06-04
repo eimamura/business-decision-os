@@ -74,63 +74,19 @@ tests/
   unit/          Pure function tests (no DB, no HTTP)
   integration/   DB + API tests (Postgres required)
   e2e/           Playwright tests (full stack required)
+  cassettes/     vcrpy HTTP interaction recordings
 
 data/fixtures/
   scenarios/     YAML input/expected-output pairs per decision scenario
-  cassettes/     vcrpy HTTP interaction recordings
 ```
 
 May read any file in the project. May write only to `tests/` and `data/fixtures/`.
 
-## Stub Conformance Pattern
+## Stub Conformance and Unit Test Scope
 
-```python
-def test_stub_returns_correct_schema():
-    result = stub.run(valid_input)
-    assert isinstance(result, ExpectedOutputType)
-    # For Optimization:
-    assert len(result.candidates) >= 3
-    # Do NOT assert numerical values
-```
+→ See `docs/TESTING.md §Stub Conformance` for the per-stub assertion table (including `ScenarioStubClaudeClient` JSON shape).
 
-Required assertions per stub:
-
-| Stub | Required assertion |
-|---|---|
-| Forecast Tool | `ForecastOutput` shape: `model_version`, `forecasts: list[DailyForecast]` |
-| Simulation Tool | `SimulationOutput` shape: `kpi_scores: list[KpiScore]`, `horizon_days` |
-| Optimization Tool | `OptimizationOutput` shape: `candidates: list[Candidate]`, `len(candidates) >= 3` |
-| MemoryStore.search | Returns `[]` (empty list, correct type) |
-| ScenarioStubClaudeClient | `complete()` returns `LLMResponse`; `text` is JSON with shape determined by system prompt keywords: intent/category → `{"category", "confidence", "rationale", "goal_text"}`; route/primary_role → `{"mode", "primary_role", "rationale"}`; verify/findings → `{"status", "rationale"}`; default → plain string. Do NOT assert specific field values. |
-
-## Per-Phase Test Focus
-
-> **Numbering note:** The "Phase" column below uses the 0–9 domain capability deployment scale
-> (future capability milestones). This is distinct from the `P0`–`P8` implementation priority
-> labels used in `docs/TASKS.md` (which track completed work batches). Do not conflate them:
-> a test task filed under `P7` in TASKS.md does not correspond to "Phase 7" in this table.
-
-| Phase | Test/Review Work |
-|---|---|
-| 0 | Schema conformance tests for all stubs; migration smoke test; audit hash chain test |
-| 1 | Full stub conformance suite; Orchestrator step sequence integration test; E2E core flow |
-| 2 | Simulation stub → real: replace conformance test with behavior test (kpi_scores range checks) |
-| 3 | Optimization stub → real: assert `len(candidates) >= 3`; Pareto feasibility assertions |
-| 4 | Approval state machine transitions; revision creates new row with `parent_approval_id` |
-| 5 | Celery worker integration test; job status polling test |
-| 6 | Predictor integration test (inference latency < 500ms via API) |
-| 7 | MemoryStore retrieval: assert non-empty results after write; pgvector cosine similarity test |
-| 8 | Auto-execution policy: risk-classified approval bypass path |
-| 9 | AgentBasedSpecialist: assert 5 specialists invoked per orchestrator run |
-
-## Unit Test Scope
-
-- KPI formula correctness (`packages/knowledge/kpi.py`)
-- Risk classification (3-tier thresholds from `config/risk_thresholds.yaml`)
-- Sample data generator: seed-42 determinism, NULL rate ≈ 2%, seasonal amplitude > 0.3
-- Approval state machine transitions
-- Audit hash chain: each row's `audit_hash` depends on `prev_audit_hash`
-- Pydantic ↔ Zod schema parity (CI equivalence check)
+→ See `docs/TESTING.md §Unit Test Scope` for the unit test coverage checklist.
 
 ## Integration Test Scope
 
@@ -175,9 +131,10 @@ After App Builder or Infra/DevOps commits:
 
 ## Constraints
 
+> Universal prohibitions (secrets, ground_truth, public interfaces without ADR, etc.) → **AGENTS.md §Prohibitions**
+
 - Never edit files in `apps/`, `packages/`, `infra/`, `scripts/`, `config/`
 - Never edit production code to make a test pass — file a bug for App Builder to fix
-- Never read `data/sample/ground_truth/`
 - `temperature=0` always — any non-determinism is a bug
 
 ## Quality Gates
@@ -217,7 +174,7 @@ A phase is done when:
 
 ### Failure handling
 - If a test fails due to a flaky environment (e.g. DB not seeded): document and retry once; if it persists, escalate to Infra/DevOps
-- If a cassette is stale (recorded against an old schema): re-record with `RECORD_MODE=new_episodes`; never delete the cassette without re-recording
+- If a cassette is stale (recorded against an old schema): re-record with `VCR_RECORD=new`; never delete the cassette without re-recording
 - If App Builder does not fix a filed bug within the same phase: escalate the blocker to Orchestrator to re-prioritize
 
 Never unilaterally mark a phase Done — only the Orchestrator updates docs/TASKS.md phase status.

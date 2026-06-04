@@ -56,7 +56,9 @@ Each Orchestrator turn follows this sequence:
 5. **Select next batch**: Pick the first `Not Started` batch whose dependencies are all `Done`
 6. **Scoped handoff**: Send to one specialist — batch task IDs + relevant `docs/DESIGN.md` interface section only (not full docs)
 7. **Await specialist result**: Receive completion report or structured blocker
-8. **Run Test/Review**: Spawn `bdos-test-review` to run relevant checks (unit test / build / lint) — every turn, not only at phase end
+8. **Run Test/Review** (two modes):
+   - **Batch check** (every batch): Spawn `bdos-test-review` for lightweight validation — `uv run pytest tests/unit -q && make lint && make typecheck`. Must pass before marking batch `Done`.
+   - **Phase sign-off** (once, when all batches are `Done`): Spawn `bdos-test-review` for full Quality Gates — integration tests, E2E, `make build`. Phase does not advance until sign-off received.
 9. **Update state**:
    - If checks pass: mark batch `Done` in `docs/TASKS.md`; update `docs/STATE.md` Last Completed Batch + Last Validation; clear Active Lease
    - If blocked: mark batch `Blocked` in `docs/TASKS.md`; record blocker in `docs/STATE.md`; clear Active Lease
@@ -67,11 +69,6 @@ Each Orchestrator turn follows this sequence:
 - 1 batch = 1 deliverable (scaffold, migration, CI pipeline, etc.)
 - Too small: individual files or folder creation → merge into batch
 - Too large: entire phase → split into batches with clear dependencies
-
-**Write authority split:**
-- Specialists MAY update their own assigned task rows (`In Progress` / `Done` / blocking notes).
-- Specialists MUST NOT update phase-level batch status, mark a batch `Blocked`, or write to `docs/STATE.md` — those belong to Orchestrator only.
-- Specialists report completion or blockers to Orchestrator; Orchestrator applies the phase-level state change.
 
 ## Proof Output (for `/goal` evaluator)
 
@@ -87,7 +84,7 @@ The `/goal` evaluator reads only what appears in the conversation transcript. Ev
   - output: <relevant lines>
 
 **Phase progress:**
-<paste grep output: grep "B0[0-9]" docs/TASKS.md | grep -v "Not Started">
+<paste batch status rows from docs/TASKS.md — exclude "Not Started" rows>
 
 **STATE.md snapshot:**
   - Active Lease: None
@@ -111,6 +108,7 @@ When all batches are Done, also emit:
 3. `docs/STATE.md` — current execution state
 4. `docs/DESIGN.md` §Public Interfaces — only the section relevant to the next batch
 5. `docs/DECISIONS.md` — rationale for key decisions (check for relevant prior decisions only)
+6. `docs/TESTING.md` — tier definitions and quality gate commands (needed to evaluate Test/Review results)
 
 ## TASKS.md and STATE.md Write Authority
 
@@ -142,88 +140,13 @@ Each ADR must include: background, candidates considered, decision, rationale, t
 
 ## Constraints
 
-- Never modify public interface signatures without first drafting an ADR
 - Never mark a task Done without confirming the corresponding artifact exists and tests pass
 - Phase 0 and Phase 1 must complete in order before any other phase begins
 - Phases 2–9 are reorderable based on business priority — always confirm all dependencies of the target phase are met before starting; check `docs/DECISIONS.md` and `docs/TASKS.md` for current order
 
 ## Design Improvement Loop
 
-Use this loop when a design deficiency is discovered in an **already-completed phase** — through conversation, code review, or runtime observation. This is an amendment to the standard Phase Loop, not a new phase.
-
-### Trigger Conditions
-
-A Design Improvement is warranted when **all** of the following hold:
-- The target phase is already `Done` in `docs/TASKS.md`
-- The problem is a design deficiency (coupling, missing abstraction, incorrect separation of concerns)
-- The fix requires code changes beyond a trivial bug fix
-
-Do **not** use this loop for: runtime bugs (use Defect Task), new product features (use a new Phase), or infra-only changes (route directly to Infra/DevOps).
-
-### Step-by-Step Process
-
-1. **Identify and classify**
-
-   Determine whether the improvement touches a public interface:
-
-   | Change type | ADR required? |
-   |---|---|
-   | `JobSpec.kind` Literal addition | Yes — `JobRunner` public interface |
-   | `Predictor` Protocol signature change | Yes — public interface |
-   | Internal implementation swap (e.g. `LinearRegressionPredictor` → `TrainedModelPredictor`) | No — same Protocol |
-   | New `kind` value in existing `JobSpec` | Yes |
-
-2. **Draft ADR (if required)**
-
-   Before touching code, author `docs/adr/YYYY-MM-DD-<slug>.md`.
-   Required sections: Context, Decision, Rationale, Trade-offs, Consequences (affected interfaces and files).
-   Append a one-line entry to `docs/DECISIONS.md`.
-
-3. **Add amendment task to `docs/TASKS.md`**
-
-   Orchestrator (sole writer) appends to the relevant completed phase section:
-
-   ```
-   | T-XXXX | <short description> | Medium | Not Started |
-   ```
-
-   Task ID format: continue the phase's numeric sequence (e.g., Phase 6 Done has T-6004 → add T-6005).
-
-4. **Acquire lease**
-
-   Set `docs/STATE.md` Active Lease = `T-XXXX` before spawning specialist.
-
-5. **Scoped handoff to App Builder**
-
-   Include:
-   - Task ID and description
-   - ADR reference (if authored)
-   - The specific `docs/DESIGN.md` §Public Interfaces subsection relevant to the change
-   - Constraint: do not change the public interface Protocol itself unless ADR explicitly approves it
-
-6. **Await result and run Test/Review**
-
-   Same quality gate as the standard loop:
-   `uv run pytest tests/unit/ -q && make lint && make typecheck && make build`
-
-7. **Update state**
-
-   - Pass: mark `T-XXXX` as `Done` in `docs/TASKS.md`; update `docs/STATE.md` Last Completed + Last Validation; clear Active Lease
-   - Blocked: mark `Blocked`; record blocker; clear Active Lease
-
-8. **Emit proof output**
-
-   Use the standard Proof Output block (see §Proof Output).
-
-### Example: Forecast Training/Inference Separation (Phase 6 Amendment)
-
-| Step | Action |
-|---|---|
-| Classify | `JobSpec.kind` gets new value `"train_forecast"` → ADR required |
-| ADR | `docs/adr/2026-05-20-forecast-training-job.md` — separating offline training from online inference |
-| Task | T-6005 added to Phase 6 section of TASKS.md |
-| Handoff | App Builder: add `kind="train_forecast"` to `JobSpec`; implement `TrainedModelPredictor`; keep `Predictor` Protocol unchanged |
-| No change | `ForecastTool` — already depends only on `Predictor` Protocol |
+See `docs/ORCHESTRATOR.md §Design Improvement Loop` for the full process, classification table, and example.
 
 ---
 
@@ -293,17 +216,3 @@ When two agents disagree or a handoff is rejected:
 - If Test/Review reports failing Quality Gates: do not advance the phase; return the specific issues to the responsible agent (App Builder or Infra)
 - If two phases have a dependency conflict under reordering: resolve via ADR before proceeding; document the resolution in `docs/DECISIONS.md`
 
-## Phase Sequence
-
-| Phase | Primary Agent | Support Agents |
-|---|---|---|
-| 0 — Foundation | Infra/DevOps | App Builder (schemas + stubs) |
-| 1 — MVP | App Builder | Infra (Docker), Test/Review |
-| 2 — Real Simulator | App Builder | Infra (ACA Jobs), Test/Review |
-| 3 — Real Optimizer | App Builder | Infra (ACA Jobs), Test/Review |
-| 4 — Approval + Budget | App Builder | Test/Review |
-| 5 — Job Queue | Infra/DevOps | App Builder (JobRunner swap) |
-| 6 — Predictor | App Builder | Infra (Databricks) |
-| 7 — Memory Loop | App Builder | Test/Review |
-| 8 — Semi-Autonomous | App Builder | Infra (Lakehouse) |
-| 9 — Specialist Split | App Builder | Test/Review |

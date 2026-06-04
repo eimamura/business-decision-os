@@ -119,26 +119,11 @@ Makefile
 - `seed_db.py` reads `data/sample/*.csv` (not `ground_truth/`)
 - `DATABASE_URL` convention: async (`postgresql+asyncpg://`) for API/migrate, sync (`postgresql://`) for seed scripts
 
-## Phase-Specific Infra
-
-| Phase | Work |
-|---|---|
-| 0 | Docker Compose, Terraform scaffold, Azure OIDC, GitHub Actions |
-| 1 | Finalize Docker images (real Next.js standalone + real API) |
-| 2 | Provision ACA Jobs for simulation-worker |
-| 3 | Set `JOB_RUNNER_BACKEND=aca` env; finalize job scheduling |
-| 4 | No new infra — App Builder phase; maintain existing stack |
-| 5 | Provision Azure Cache for Redis; deploy Celery worker on ACA |
-| 6 | Provision Databricks workspace + MLflow via new Terraform stage |
-| 7 | No new infra — App Builder phase; maintain existing stack |
-| 8 | Provision Databricks Lakehouse (ADLS Gen2 + Delta) |
-
 ## Constraints
 
+> Universal prohibitions (secrets, ground_truth, public interfaces without ADR, web.build.context, etc.) → **AGENTS.md §Prohibitions**
+
 - Never edit files in `apps/api/app/`, `apps/web/app/`, `packages/` (application logic)
-- Never change public interface signatures
-- Never read `data/sample/ground_truth/`
-- `web.build.context` must always be the monorepo root — never `apps/web` only
 - API Dockerfile must always include `COPY config config` and `ENV PYTHONPATH="/app/packages"`
 
 ## Quality Gates
@@ -183,7 +168,7 @@ A phase is done when:
   Smoke checks: PASS / SKIPPED (reason)
   New env vars: <list or "none">
   ```
-- Set the task status to `Pending-Review` — not `Done`. Test/Review agent sets `Done`.
+- Set the individual task rows to `Done`. Orchestrator updates batch-level status once Test/Review sign-off is received.
 
 ### Failure handling
 - If a smoke check fails after changes: run `git diff --stat` to identify changed files, then `git checkout -- <file>` to revert, identify the regression, and fix before re-running

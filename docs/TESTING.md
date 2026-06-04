@@ -54,3 +54,39 @@ TEST_MODEL=claude-haiku-4-5-20251001 uv run pytest tests/integration/ -x
 ```
 
 See `.env.example` for the full variable reference.
+
+---
+
+## Stub Conformance
+
+Pattern:
+
+```python
+def test_stub_returns_correct_schema():
+    result = stub.run(valid_input)
+    assert isinstance(result, ExpectedOutputType)
+    # For Optimization:
+    assert len(result.candidates) >= 3
+    # Do NOT assert numerical values
+```
+
+Required assertions per stub:
+
+| Stub | Required assertion |
+|---|---|
+| Forecast Tool | `ForecastOutput` shape: `model_version`, `forecasts: list[DailyForecast]` |
+| Simulation Tool | `SimulationOutput` shape: `kpi_scores: list[KpiScore]`, `horizon_days` |
+| Optimization Tool | `OptimizationOutput` shape: `candidates: list[Candidate]`, `len(candidates) >= 3` |
+| MemoryStore.search | Returns `[]` (empty list, correct type) |
+| ScenarioStubClaudeClient | `complete()` returns `LLMResponse`; `text` is JSON with shape determined by system prompt keywords: intent/category → `{"category", "confidence", "rationale", "goal_text"}`; route/primary_role → `{"mode", "primary_role", "rationale"}`; verify/findings → `{"status", "rationale"}`; default → plain string. Do NOT assert specific field values. |
+
+---
+
+## Unit Test Scope
+
+- KPI formula correctness (`packages/knowledge/kpi.py`)
+- Risk classification (3-tier thresholds from `config/risk_thresholds.yaml`)
+- Sample data generator: seed-42 determinism, NULL rate ≈ 2%, seasonal amplitude > 0.3
+- Approval state machine transitions
+- Audit hash chain: each row's `audit_hash` depends on `prev_audit_hash`
+- Pydantic ↔ Zod schema parity (CI equivalence check)

@@ -77,6 +77,7 @@ The following are explicitly forbidden across all agents:
 - Collapsing per-KPI scores into a single weighted total inside the Evaluator.
 - Smart stubs that approximate real behavior instead of conforming to the schema contract.
 - Fail-silent fallbacks for external service clients: missing config (API keys, packages) MUST raise `RuntimeError` at the call site, not silently degrade to a stub or no-op.
+- Self-certifying phase completion — Test/Review must verify before any phase is marked Done.
 - Force-pushing to `main`; direct pushes to `main`; non-linear history.
 - Using `--no-verify` or skipping commit hooks without explicit ADR justification.
 - Using a plain HTTP stub for the web container; `compose web.build.context` must be the monorepo root.
