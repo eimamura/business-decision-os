@@ -31,7 +31,9 @@ This project uses a skill-centered Claude Code architecture. Your full execution
 | `bdos-orchestrator` | `.claude/skills/bdos-orchestrator/SKILL.md` | sonnet | Plan, decompose, route |
 | `bdos-app-builder` | `.claude/skills/bdos-app-builder/SKILL.md` | sonnet | Implement app code |
 | `bdos-infra` | `.claude/skills/bdos-infra/SKILL.md` | sonnet | Infrastructure, CI/CD |
-| `bdos-test-review` | `.claude/skills/bdos-test-review/SKILL.md` | sonnet | Tests, code review |
+| `bdos-test-review`      | `.claude/skills/bdos-test-review/SKILL.md`   | sonnet | Tests, code review              |
+| `failure-analyst`       | `.claude/skills/analyze-failure/SKILL.md`    | sonnet | Post-defect root cause analysis |
+| `prevention-architect`  | `.claude/skills/harden-system/SKILL.md`      | sonnet | Recurring pattern → prevention  |
 
 **Invocation:**
 - Skill (human): `/bdos-orchestrator plan <PhaseX>` or `/bdos-orchestrator run <PhaseX>` — plan a new phase (full context) or execute an already-planned phase (lean context).
@@ -116,6 +118,7 @@ Agent commit boundary: `git add` + `git commit` only. Never `git push` or `gh pr
 - Working rules (stubs, cost discipline, approvals, multi-agent constraints): `.claude/skills/bdos-*/SKILL.md`
 - ADR triggers, authorship rules, TASKS.md write authority: `.claude/skills/bdos-orchestrator/SKILL.md`
 - Test tiers, cassettes, CI: `.claude/rules/testing.md` (SSoT); operational How-to: `docs/TESTING.md`
+- Failure pattern log and prevention lever policy: `docs/failure-patterns.md`, `docs/prevention-policy.md`
 
 ## When in Doubt
 

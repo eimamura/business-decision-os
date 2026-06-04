@@ -126,6 +126,10 @@ Defect IDs are D-001, D-002, … (repository-wide sequence; never reused).
 The phase cannot advance while any Defect in the current phase has `Status: Open`.
 Orchestrator marks the block `Resolved` once Test/Review confirms the Acceptance criterion passes.
 
+**After marking Resolved:**
+Invoke `/analyze-failure <D-NNN>` to record the root cause in `docs/failure-patterns.md`.
+If the pattern reaches Count 2, `/harden-system <FP-NNN>` must be invoked before the next phase begins.
+
 ---
 
 ## Agent Conflict Protocol
