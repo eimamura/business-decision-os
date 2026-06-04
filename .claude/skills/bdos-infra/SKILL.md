@@ -149,7 +149,6 @@ Additional checks:
 A phase is done when:
 - [ ] All infra tasks for the phase are marked `Done` in `docs/TASKS.md`
 - [ ] All Quality Gates above pass
-- [ ] Test/Review agent has provided final sign-off
 - [ ] All changes committed locally with a Conventional Commit message (`git add` + `git commit`)
 - [ ] Push to remote and PR creation are left to the human — never run `git push` or `gh pr create`
 
@@ -175,4 +174,3 @@ A phase is done when:
 - If `terraform plan` shows unexpected destroys: stop, document, and escalate to Orchestrator before applying
 - If a GitHub Actions failure is unrelated to infra changes: note it but do not block the infra task; create a separate task entry
 
-Never self-certify phase completion — Test/Review must verify.

@@ -34,7 +34,7 @@ This project uses a skill-centered Claude Code architecture. Your full execution
 | `bdos-test-review` | `.claude/skills/bdos-test-review/SKILL.md` | sonnet | Tests, code review |
 
 **Invocation:**
-- Skill (human): `/bdos-orchestrator` — runs in the current Claude context; use for planning sessions and ADR reviews.
+- Skill (human): `/bdos-orchestrator plan <PhaseX>` or `/bdos-orchestrator run <PhaseX>` — plan a new phase (full context) or execute an already-planned phase (lean context).
 - Subagent (agent-triggered): `Agent(subagent_type="bdos-orchestrator", prompt="...")` — spawns a separate instance; keeps main context clean and enables parallel specialist runs.
 - Direct specialist: `Agent(subagent_type="bdos-app-builder", prompt="...")` etc.
 

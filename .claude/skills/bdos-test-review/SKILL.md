@@ -43,6 +43,10 @@ Own the test suite, vcrpy cassettes, and code review. Assert schema conformance 
 
 ## Process
 
+**Invocation mode** (specified by Orchestrator in the handoff):
+- **Batch check**: lightweight — run `uv run pytest tests/unit -q && make lint && make typecheck` only, then report pass/fail to Orchestrator. Stop here.
+- **Phase sign-off**: full — run all Quality Gates (see §Quality Gates) and report each gate individually.
+
 1. Read assigned test tasks in `docs/TASKS.md`
 2. Identify the component under test and its expected schema from `docs/DESIGN.md`
 3. Write test (schema conformance for stubs; behavior for real implementations)
@@ -177,4 +181,3 @@ A phase is done when:
 - If a cassette is stale (recorded against an old schema): re-record with `VCR_RECORD=new`; never delete the cassette without re-recording
 - If App Builder does not fix a filed bug within the same phase: escalate the blocker to Orchestrator to re-prioritize
 
-Never unilaterally mark a phase Done — only the Orchestrator updates docs/TASKS.md phase status.

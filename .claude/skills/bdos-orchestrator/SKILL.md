@@ -5,8 +5,9 @@ description: Orchestrator for Business Decision OS. Use for any BDOS work — pl
 
 # Orchestrator / Planner — SKILL
 
-- **Interactive (in-context)**: invoke `/bdos-orchestrator` — the current Claude instance acts as orchestrator
-- **Autonomous (subagent)**: `Agent(subagent_type="bdos-orchestrator", prompt="...")` — spawns a separate instance; main context stays clean
+- **Interactive — Plan**: `/bdos-orchestrator plan <PhaseX>` — design a phase, produce TASKS.md batches (full context)
+- **Interactive — Run**: `/bdos-orchestrator run <PhaseX>` — execute an already-planned phase (lean context)
+- **Autonomous**: `Agent(subagent_type="bdos-orchestrator", prompt="run <PhaseX>")` — spawns a separate instance; main context stays clean
 
 ## Purpose
 
@@ -45,24 +46,49 @@ Plan and coordinate implementation work across phases. Read all project docs, de
 - New entries appended to `docs/DECISIONS.md`
 - Turn output with **proof items for `/goal` evaluator** (see Proof Output below)
 
-## Process (Loop Model — 1 turn = 1 atomic batch)
+## Required Reading
+
+**Plan mode** — read before planning a new phase:
+1. `AGENTS.md` — working rules and prohibitions
+2. `docs/DESIGN.md` §Public Interfaces — normative contracts for the phase scope
+3. `docs/DECISIONS.md` — prior decisions (scan for relevance)
+4. `docs/TESTING.md` — quality gate commands
+5. `docs/TASKS.md` — check for existing tasks or phase history
+
+**Run mode** — read before executing a phase loop:
+1. `AGENTS.md` — working rules and prohibitions
+2. `docs/TASKS.md` — current batch statuses
+3. `docs/STATE.md` — current execution state
+4. `docs/TESTING.md` — quality gate commands
+
+If an escalation during Run requires design judgment: also read `docs/DESIGN.md` §relevant section and `docs/DECISIONS.md` §relevant entries.
+
+## Process — Run Mode (Loop Model — 1 turn = 1 atomic batch)
+
+**On session start — stale lease check:**
+Before the loop, if `docs/STATE.md` Active Lease is already set (stale from a prior crash):
+1. Log "Stale lease detected: <batch ID>"
+2. Clear Active Lease in `docs/STATE.md`
+3. Check that batch's status in `docs/TASKS.md`:
+   - `Not Started` or `In Progress` → batch was interrupted; it will be re-selected at step 4
+   - `Done` → lease was stale after a completed batch; continue normally
 
 Each Orchestrator turn follows this sequence:
 
 1. **Read state**: Read `docs/TASKS.md` and `docs/STATE.md`
 2. **Check for completion**: If all target-phase batches are `Done` → emit proof output and stop
-3. **Check for escalation**: If any batch has been `Blocked` twice → escalate to human and stop
-4. **Acquire lease**: Set `docs/STATE.md` Active Lease = next batch ID before spawning
-5. **Select next batch**: Pick the first `Not Started` batch whose dependencies are all `Done`
+3. **Check for escalation**: If any batch has `Blocked Count` = 2 in `docs/TASKS.md` → escalate to human and stop
+4. **Select next batch**: Pick the first `Not Started` batch whose dependencies are all `Done`
+5. **Acquire lease**: Set `docs/STATE.md` Active Lease = selected batch ID
 6. **Scoped handoff**: Send to one specialist — batch task IDs + relevant `docs/DESIGN.md` interface section only (not full docs)
 7. **Await specialist result**: Receive completion report or structured blocker
 8. **Run Test/Review** (two modes):
    - **Batch check** (every batch): Spawn `bdos-test-review` for lightweight validation — `uv run pytest tests/unit -q && make lint && make typecheck`. Must pass before marking batch `Done`.
    - **Phase sign-off** (once, when all batches are `Done`): Spawn `bdos-test-review` for full Quality Gates — integration tests, E2E, `make build`. Phase does not advance until sign-off received.
 9. **Update state**:
-   - If checks pass: mark batch `Done` in `docs/TASKS.md`; update `docs/STATE.md` Last Completed Batch + Last Validation; clear Active Lease
-   - If blocked: mark batch `Blocked` in `docs/TASKS.md`; record blocker in `docs/STATE.md`; clear Active Lease
-   - If a quality gate failure persists after the responsible agent's fix attempt: register a Defect Task in `docs/TASKS.md` with fields: defect id, status, severity, reproduction command, observed error, expected result, suspected area, owner, acceptance criteria. The phase cannot advance while any related Defect Task remains open.
+   - If checks pass: mark batch `Done` in `docs/TASKS.md`; update `docs/STATE.md` Last Completed; clear Active Lease
+   - If blocked: mark batch `Blocked` in `docs/TASKS.md`; increment `Blocked Count`; record blocker in `docs/STATE.md`; clear Active Lease
+   - If a quality gate failure persists after the responsible agent's fix attempt: register a Defect Task under the relevant batch in `docs/TASKS.md` — see `docs/ORCHESTRATOR.md §Defect Task Format`. The phase cannot advance while any Defect Task is Open.
 10. **Emit proof output**: Print evidence items (see Proof Output below)
 
 **Batch granularity rule:**
@@ -75,7 +101,7 @@ Each Orchestrator turn follows this sequence:
 The `/goal` evaluator reads only what appears in the conversation transcript. Every turn must end with this block so the evaluator has evidence to judge:
 
 ```
-## Turn Summary
+## Proof Output
 
 **Batch completed:** <batch ID and name>
 **Validation:**
@@ -100,15 +126,6 @@ When all batches are Done, also emit:
   - git diff --stat: <output>
   - No Blocked or In Progress remaining: <grep proof>
 ```
-
-## Required Reading (before every session)
-
-1. `AGENTS.md` — working rules and prohibitions
-2. `docs/TASKS.md` — current batch statuses for the target phase
-3. `docs/STATE.md` — current execution state
-4. `docs/DESIGN.md` §Public Interfaces — only the section relevant to the next batch
-5. `docs/DECISIONS.md` — rationale for key decisions (check for relevant prior decisions only)
-6. `docs/TESTING.md` — tier definitions and quality gate commands (needed to evaluate Test/Review results)
 
 ## TASKS.md and STATE.md Write Authority
 
@@ -142,7 +159,7 @@ Each ADR must include: background, candidates considered, decision, rationale, t
 
 - Never mark a task Done without confirming the corresponding artifact exists and tests pass
 - Phase 0 and Phase 1 must complete in order before any other phase begins
-- Phases 2–9 are reorderable based on business priority — always confirm all dependencies of the target phase are met before starting; check `docs/DECISIONS.md` and `docs/TASKS.md` for current order
+- Subsequent phases are reorderable based on business priority; always confirm all dependencies are met before starting — check `docs/DECISIONS.md` and `docs/TASKS.md`
 
 ## Design Improvement Loop
 
@@ -150,14 +167,14 @@ See `docs/ORCHESTRATOR.md §Design Improvement Loop` for the full process, class
 
 ---
 
-## Quality Gates
+## Quality Gates *(Plan mode)*
 
 Before producing a plan:
 - [ ] All required docs read in the current session
 - [ ] No known unresolved blocker from the previous phase
 - [ ] Any required ADRs identified and listed in the plan output
 
-## Done Criteria
+## Done Criteria *(Plan mode)*
 
 A planning session is done when:
 - [ ] Implementation plan output produced with batches, dependencies, and agent assignments
@@ -165,7 +182,7 @@ A planning session is done when:
 - [ ] Any new decisions appended to docs/DECISIONS.md
 - [ ] Any required ADR files created
 
-## Planning Output Format
+## Planning Output Format — Plan Mode
 
 ```
 ## Phase X — [Name]
@@ -195,24 +212,7 @@ Escalate to the user (do not attempt to resolve autonomously) when:
 
 Escalation message must include: the blocker description, what was already attempted, and a concrete question for the user.
 
-## Agent Conflict Protocol
+## Agent Conflict Protocol and Handoff Rules
 
-When two agents disagree or a handoff is rejected:
-
-1. **Specialist rejects Orchestrator task**: Specialist returns a rejection with reason; Orchestrator re-evaluates the task scope, resolves the conflict (or escalates to user), and re-issues.
-2. **App Builder ↔ Infra conflict** (e.g., missing env var, Dockerfile disagreement): the agent that discovered the gap files a blocking note in `docs/TASKS.md` and notifies Orchestrator. Orchestrator assigns the fix to the correct owner.
-3. **Test/Review vs. App Builder disagreement** (bug vs. design intent): Test/Review files the issue with expected and actual behavior. App Builder must either fix or author an ADR explaining the intent. Orchestrator arbitrates if unresolved after one round.
-4. **ADR authorship**: Domain experts (App Builder, Infra) may create a draft ADR at `docs/adr/DRAFT-YYYY-MM-DD-<slug>.md` when they need a design decision to unblock implementation. The Orchestrator reviews the draft, removes the `DRAFT-` prefix to confirm, and appends a summary to `docs/DECISIONS.md`. The Orchestrator authors ADRs directly when the decision spans multiple agents or requires product-level judgment.
-
-## Handoff Rules
-
-### Handing off to specialist agents
-- **App Builder**: include task IDs, relevant `docs/DESIGN.md` sections (Public Interfaces, Stub Behavior), phase scope, ADR dependencies
-- **Infra/DevOps**: include task IDs, relevant `docs/DESIGN.md §Deployment Design` sections, phase scope
-- **Test/Review**: include task IDs, list of components to test, phase scope, which stubs are expected vs. real
-
-### Failure handling
-- If a specialist reports a blocker (missing ADR, unresolved dependency): pause the phase, resolve the blocker first, then re-issue the task
-- If Test/Review reports failing Quality Gates: do not advance the phase; return the specific issues to the responsible agent (App Builder or Infra)
-- If two phases have a dependency conflict under reordering: resolve via ADR before proceeding; document the resolution in `docs/DECISIONS.md`
+See `docs/ORCHESTRATOR.md §Agent Conflict Protocol` and `§Handoff Rules`.
 

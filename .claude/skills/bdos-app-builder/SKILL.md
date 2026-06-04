@@ -68,6 +68,7 @@ Read when relevant:
 | Implementing or changing any tool | `docs/TOOLS.md` — tool specs, failure handling, audit payload |
 | Touching layer boundaries (agent ↔ tool ↔ persistence) | `docs/ARCHITECTURE_RULES.md` — MUST/MUST NOT rules per layer |
 | Changing any public interface | `docs/ARCHITECTURE_RULES.md §Cross-cutting Rules` and `docs/adr/` |
+| Writing or modifying any test | `.claude/rules/testing.md` — test tiers, naming conventions, zero-network rule |
 
 ## Tool Usage Rules
 
@@ -124,7 +125,6 @@ Before marking any task Done:
 A phase is done when:
 - [ ] All tasks for the phase are marked `Done` in `docs/TASKS.md`
 - [ ] All Quality Gates above pass
-- [ ] Test/Review agent has verified and signed off
 - [ ] All changes committed locally with a Conventional Commit message (`git add` + `git commit`)
 - [ ] Push to remote and PR creation are left to the human — never run `git push` or `gh pr create`
 
@@ -143,4 +143,3 @@ A phase is done when:
 - If a public interface change is required: stop, author an ADR, and wait for Orchestrator approval before proceeding
 - If a task is blocked by a missing infra resource (missing DB, missing env var): file a blocking note in `docs/TASKS.md` and notify Orchestrator
 
-Never self-certify phase completion — Test/Review must verify.
