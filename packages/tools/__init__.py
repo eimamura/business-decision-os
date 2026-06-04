@@ -17,6 +17,10 @@ from packages.tools.demand_seasonality_tool import DemandSeasonalityTool
 from packages.tools.demand_segment_tool import DemandSegmentTool
 from packages.tools.demand_trend_tool import DemandTrendTool
 from packages.tools.evaluator_tool import EvaluatorTool
+from packages.tools.finance_expedite_cost_tool import CalculateExpediteCostTool
+from packages.tools.finance_holding_cost_tool import CalculateHoldingCostImpactTool
+from packages.tools.finance_scenario_tool import CompareCostScenariosTool
+from packages.tools.finance_stockout_cost_tool import CalculateStockoutCostImpactTool
 from packages.tools.forecast_accuracy_tool import ForecastAccuracyTool
 from packages.tools.forecast_tool import ForecastTool
 from packages.tools.job_dispatch_tool import JobDispatchTool
@@ -24,6 +28,11 @@ from packages.tools.nl_query_tool import NlQueryTool
 from packages.tools.optimizer_tool import OptimizerTool
 from packages.tools.simulation_tool import SimulationTool
 from packages.tools.sql_tool import SqlQueryTool
+from packages.tools.supply_days_tool import CalculateDaysOfSupplyTool
+from packages.tools.supply_gap_tool import CalculateSupplyGapTool
+from packages.tools.supply_lead_time_tool import AnalyzeSupplyLeadTimeTool
+from packages.tools.supply_open_orders_tool import GetOpenSupplyOrdersTool
+from packages.tools.supply_risk_tool import AnalyzeSupplyRiskTool
 from packages.tools.table_schema_reader_tool import TableSchemaReaderTool
 from packages.tools.train_forecast_tool import TrainForecastTool
 
@@ -44,6 +53,10 @@ __all__ = [
     "DemandSeasonalityTool",
     "DemandTrendTool",
     "EvaluatorTool",
+    "CalculateExpediteCostTool",
+    "CalculateHoldingCostImpactTool",
+    "CompareCostScenariosTool",
+    "CalculateStockoutCostImpactTool",
     "ForecastAccuracyTool",
     "ForecastTool",
     "JobDispatchTool",
@@ -51,6 +64,11 @@ __all__ = [
     "OptimizerTool",
     "SimulationTool",
     "SqlQueryTool",
+    "CalculateDaysOfSupplyTool",
+    "CalculateSupplyGapTool",
+    "AnalyzeSupplyLeadTimeTool",
+    "GetOpenSupplyOrdersTool",
+    "AnalyzeSupplyRiskTool",
     "TableSchemaReaderTool",
     "TrainForecastTool",
     "create_tool_registry",
@@ -84,4 +102,13 @@ def create_tool_registry(
     registry.register(DemandDriversTool(db_session=db_session))
     registry.register(DemandSegmentTool(db_session=db_session))
     registry.register(DemandCompareTool(db_session=db_session))
+    registry.register(GetOpenSupplyOrdersTool(db_session=db_session))
+    registry.register(CalculateSupplyGapTool(db_session=db_session))
+    registry.register(AnalyzeSupplyLeadTimeTool(db_session=db_session))
+    registry.register(CalculateDaysOfSupplyTool(db_session=db_session))
+    registry.register(AnalyzeSupplyRiskTool(db_session=db_session))
+    registry.register(CalculateHoldingCostImpactTool(db_session=db_session))
+    registry.register(CalculateStockoutCostImpactTool(db_session=db_session))
+    registry.register(CalculateExpediteCostTool(db_session=db_session))
+    registry.register(CompareCostScenariosTool(db_session=db_session))
     return registry

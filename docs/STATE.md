@@ -14,36 +14,23 @@ P0–P23 (T-001–T-146) all Done. See `docs/archive/v3/STATE.md` for per-phase 
 
 ## Active Phase
 
-None (P31 complete)
+P33 — Finance Impact Agent
 
 ## Active Lease
 
-None
+P33-B-03 — Unit tests for finance tools
 
 ## Last Completed
 
-P31-B-04 — Unit tests for all 8 demand analysis tools (2026-06-04)
-- `make test-unit` → 615 passed, 11 skipped (exit 0)
+P32-B-03 — Unit tests for all 5 supply analysis tools (2026-06-04)
+- `make test-unit` → 627 passed, 11 skipped (exit 0)
 - `make lint` → All checks passed (exit 0)
-- `make typecheck` → 149 source files, no issues (exit 0)
-- `make test-unit` → 587 passed, 11 skipped (exit 0)
-- `make test-unit` → 584 passed, 11 skipped (exit 0)
-- `make lint` → All checks passed (exit 0)
-- `make typecheck` → 141 source files, no issues (exit 0)
-- `make build` → Build OK (exit 0)
-- `make test-unit` → 554 passed, 11 skipped (exit 0)
-- `make lint` → All checks passed
-- `make typecheck` → 140 source files, no issues
-- `npx vitest run` → 56 tests passed (exit 0)
-- `make test-unit` → 544 passed, 11 skipped (exit 0)
-- `make lint` → All checks passed
-- `make typecheck` → 140 source files, no issues
-- `make test-unit` → 535 passed, 11 skipped (exit 0)
-- `make lint` → All checks passed
-- `make typecheck` → 140 source files, no issues
-- T-160: delete_session/delete_all_sessions now clears broadcasters + broadcaster_ready
-- T-161: _run_resume_and_signal finally always sends done (even on error)
-- T-162: SSE event_generator breaks on "error" events
+- `make typecheck` → 160 source files, no issues (exit 0)
+
+P32 — Supply Planning Agent: ALL BATCHES DONE
+
+P33-B-02 — Finance Impact Agent wiring complete (2026-06-04)
+- `make test-unit` → 627 passed, 11 skipped (exit 0)
 
 ## Blockers
 

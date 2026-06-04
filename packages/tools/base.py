@@ -26,6 +26,17 @@ _ROLE_TOOL_ALLOWLIST: dict[str, list[str]] = {
         "analyze_seasonality", "analyze_demand_drivers",
         "segment_demand", "compare_demand_periods",
     ],
+    "supply_planning": [
+        "sql_query", "nl_query",
+        "get_open_supply_orders", "calculate_supply_gap",
+        "analyze_supply_lead_time", "calculate_days_of_supply",
+        "analyze_supply_risk",
+    ],
+    "finance_impact": [
+        "sql_query", "nl_query",
+        "calculate_holding_cost_impact", "calculate_stockout_cost_impact",
+        "calculate_expedite_cost", "compare_cost_scenarios",
+    ],
     "inventory": ["sql_query", "nl_query", "simulate_inventory"],
     "replenishment": ["sql_query", "nl_query", "simulate_inventory", "optimize_replenishment"],
     "procurement": ["sql_query", "nl_query"],

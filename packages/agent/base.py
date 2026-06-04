@@ -21,6 +21,8 @@ SpecialistRole = Literal[
     "replenishment",
     "supplier",
     "logistics",
+    "supply_planning",
+    "finance_impact",
 ]
 
 

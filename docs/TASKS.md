@@ -312,3 +312,147 @@ Dependencies: B-01, B-02
 | T-209 | `make test-unit` full pass + `make lint` + `make typecheck` | Done |
 
 Dependencies: B-01, B-02, B-03
+
+---
+
+## P32 — Supply Planning Agent
+
+**Goal:** Add `SupplyPlanningAgent` domain agent with 5 supply analysis tools that assess supply feasibility against demand forecasts using existing `supply_orders`, `inventory_snapshot`, and `demand_history` tables.
+
+### Batch B-01 — SupplyPlanningAgent class + supply analysis tools (App Builder) — Done
+
+| Task | Description | Status |
+|---|---|---|
+| T-210 | `SupplyPlanningAgent` — `packages/agent/domain/supply_planning.py`: role="supply_planning", system prompt covering supply gap analysis, lead time, supplier risk; analysis-first like DemandAgent | Done |
+| T-211 | `GetOpenSupplyOrdersTool` — `packages/tools/supply_open_orders_tool.py`: `get_open_supply_orders(sku_id?, status_filter)` → orders list with sku_id, supplier_id, quantity, expected_arrival, days_until_arrival | Done |
+| T-212 | `CalculateSupplyGapTool` — `packages/tools/supply_gap_tool.py`: `calculate_supply_gap(sku_id, horizon_days)` → on_hand, incoming_qty, forecast_demand, gap_units, gap_pct, risk_level (low/medium/high) | Done |
+| T-213 | `AnalyzeSupplyLeadTimeTool` — `packages/tools/supply_lead_time_tool.py`: `analyze_supply_lead_time(sku_id?, lookback_days)` → avg_lead_time_days, min_lead_time_days, max_lead_time_days, lead_time_std, supplier_count | Done |
+| T-214 | `CalculateDaysOfSupplyTool` — `packages/tools/supply_days_tool.py`: `calculate_days_of_supply(sku_id)` → on_hand_qty, avg_daily_demand, days_of_supply, stockout_date_estimate | Done |
+| T-215 | `AnalyzeSupplyRiskTool` — `packages/tools/supply_risk_tool.py`: `analyze_supply_risk(sku_id, horizon_days)` → risk_score (0–1), risk_level, gap_risk, lead_time_risk, concentration_risk (supplier HHI), top_risk_factors list | Done |
+
+Dependencies: none
+
+### Batch B-02 — Wiring + ADR (App Builder) — Done
+
+| Task | Description | Status |
+|---|---|---|
+| T-216 | ADR `docs/adr/2026-06-04-sop-specialist-roles.md` — document addition of supply_planning, finance_impact, sop to SpecialistRole Literal and DOMAIN_AGENT_ROLES | Done |
+| T-217 | Add `"supply_planning"` to `SpecialistRole` Literal in `packages/agent/base.py`; add to `DOMAIN_AGENT_ROLES` set and `VALID_AGENT_ROLES` in `packages/agent/orchestrator/roles.py`; add `SupplyPlanningAgent` to `packages/agent/domain/__init__.py` `create_domain_agents()` | Done |
+| T-218 | Add `"supply_planning"` allowlist in `packages/tools/base.py`: `["sql_query", "nl_query", "get_open_supply_orders", "calculate_supply_gap", "analyze_supply_lead_time", "calculate_days_of_supply", "analyze_supply_risk"]`; register 5 new tools in `packages/tools/__init__.py` `create_tool_registry()` | Done |
+| T-219 | Add supply_planning to `"lookup"`, `"domain_analysis"`, `"cross_domain_analysis"` allowed_agent_roles in `packages/agent/orchestrator/intent_registry.py` | Done |
+
+Dependencies: B-01
+
+### Batch B-03 — Unit tests (Test/Review) — Done
+
+| Task | Description | Status |
+|---|---|---|
+| T-220 | Unit tests for `GetOpenSupplyOrdersTool` — pending orders, empty result, DB error (mock DB) | Done |
+| T-221 | Unit tests for `CalculateSupplyGapTool` — shortage detected, surplus detected, zero forecast (mock DB) | Done |
+| T-222 | Unit tests for `AnalyzeSupplyLeadTimeTool`, `CalculateDaysOfSupplyTool`, `AnalyzeSupplyRiskTool` (mock DB) | Done |
+| T-223 | `make test-unit` + `make lint` + `make typecheck` | Done |
+
+Dependencies: B-01, B-02
+
+---
+
+## P33 — Finance Impact Agent
+
+**Goal:** Add `FinanceImpactAgent` domain agent with 4 cost-impact tools using existing `cost_master` and `inventory_snapshot` tables. Revenue analysis (requiring a price table) is deferred to a future phase.
+
+### Batch B-01 — FinanceImpactAgent class + finance tools (App Builder) — Done
+
+| Task | Description | Status |
+|---|---|---|
+| T-224 | `FinanceImpactAgent` — `packages/agent/domain/finance_impact.py`: role="finance_impact", system prompt covering cost impact analysis, holding/stockout/ordering costs, scenario comparison; note revenue analysis requires price data not yet in schema | Done |
+| T-225 | `CalculateHoldingCostImpactTool` — `packages/tools/finance_holding_cost_tool.py`: `calculate_holding_cost_impact(sku_id, excess_units)` → unit_holding_cost, total_holding_cost, annualized_holding_cost, holding_cost_pct_of_value | Done |
+| T-226 | `CalculateStockoutCostImpactTool` — `packages/tools/finance_stockout_cost_tool.py`: `calculate_stockout_cost_impact(sku_id, shortage_units)` → unit_stockout_cost, total_stockout_cost, opportunity_cost_estimate | Done |
+| T-227 | `CalculateExpediteCostTool` — `packages/tools/finance_expedite_cost_tool.py`: `calculate_expedite_cost(sku_id, expedite_units, expedite_multiplier?)` → base_ordering_cost, expedite_premium, total_expedite_cost, cost_vs_stockout_comparison | Done |
+| T-228 | `CompareCostScenariosTool` — `packages/tools/finance_scenario_tool.py`: `compare_cost_scenarios(sku_id, shortage_units, horizon_days)` → scenarios list [{name, total_cost, cost_components}] covering: do_nothing, full_expedite, partial_fulfill; recommended_scenario | Done |
+
+Dependencies: none (parallel-eligible with P32 B-01)
+
+### Batch B-02 — Wiring (App Builder) — Done
+
+| Task | Description | Status |
+|---|---|---|
+| T-229 | Add `"finance_impact"` to `SpecialistRole` Literal in `packages/agent/base.py`; add to `DOMAIN_AGENT_ROLES`; add `FinanceImpactAgent` to `packages/agent/domain/__init__.py` `create_domain_agents()` | Done |
+| T-230 | Add `"finance_impact"` allowlist in `packages/tools/base.py`: `["sql_query", "nl_query", "calculate_holding_cost_impact", "calculate_stockout_cost_impact", "calculate_expedite_cost", "compare_cost_scenarios"]`; register 4 tools in `packages/tools/__init__.py` | Done |
+| T-231 | Add finance_impact to `"lookup"`, `"domain_analysis"`, `"cross_domain_analysis"`, `"decision_support"` allowed_agent_roles in `intent_registry.py` | Done |
+
+Dependencies: B-01
+
+### Batch B-03 — Unit tests (Test/Review) — Not Started
+
+| Task | Description | Status |
+|---|---|---|
+| T-232 | Unit tests for `CalculateHoldingCostImpactTool` and `CalculateStockoutCostImpactTool` — positive costs, zero excess/shortage, missing cost_master row (mock DB) | Not Started |
+| T-233 | Unit tests for `CalculateExpediteCostTool` and `CompareCostScenariosTool` — expedite premium calc, scenario ordering, recommended_scenario field (mock DB) | Not Started |
+| T-234 | `make test-unit` + `make lint` + `make typecheck` | Not Started |
+
+Dependencies: B-01, B-02
+
+---
+
+## P34 — Inventory Agent Enhancement
+
+**Goal:** Add 4 inventory calculation tools to InventoryAgent so it can quantify stockout risk, excess inventory, days-of-inventory, and available-to-promise — going beyond raw SQL queries.
+
+### Batch B-01 — Inventory calculation tools (App Builder) — Not Started
+
+| Task | Description | Status |
+|---|---|---|
+| T-235 | `CalculateDaysOfInventoryTool` — `packages/tools/inventory_doi_tool.py`: `calculate_days_of_inventory(sku_id, warehouse_id?)` → on_hand_qty, avg_daily_demand, days_of_inventory, reorder_signal (bool) | Not Started |
+| T-236 | `CalculateStockoutRiskTool` — `packages/tools/inventory_stockout_risk_tool.py`: `calculate_stockout_risk(sku_id, horizon_days)` → on_hand, demand_forecast, incoming_supply, projected_ending_stock, stockout_date_estimate, risk_level | Not Started |
+| T-237 | `CalculateExcessInventoryRiskTool` — `packages/tools/inventory_excess_tool.py`: `calculate_excess_inventory_risk(sku_id, lookback_days?)` → on_hand, avg_daily_demand, excess_units, excess_days, excess_risk_level | Not Started |
+| T-238 | `GetAvailableToPromiseTool` — `packages/tools/inventory_atp_tool.py`: `get_available_to_promise(sku_id, warehouse_id?)` → on_hand, on_order_incoming, atp_units, atp_date_horizon | Not Started |
+
+Dependencies: none
+
+### Batch B-02 — Wiring + system prompt update (App Builder) — Not Started
+
+| Task | Description | Status |
+|---|---|---|
+| T-239 | Add 4 new tool names to `"inventory"` allowlist in `packages/tools/base.py`; register in `create_tool_registry()` in `packages/tools/__init__.py` | Not Started |
+| T-240 | Update `_SYSTEM_PROMPT` in `packages/agent/domain/inventory.py` — add TOOL USE RULES section naming the 4 new tools; add "call calculate_stockout_risk first for any shortage analysis" instruction | Not Started |
+
+Dependencies: B-01
+
+### Batch B-03 — Unit tests (Test/Review) — Not Started
+
+| Task | Description | Status |
+|---|---|---|
+| T-241 | Unit tests for `CalculateDaysOfInventoryTool` and `GetAvailableToPromiseTool` (mock DB) | Not Started |
+| T-242 | Unit tests for `CalculateStockoutRiskTool` and `CalculateExcessInventoryRiskTool` (mock DB) | Not Started |
+| T-243 | `make test-unit` + `make lint` + `make typecheck` | Not Started |
+
+Dependencies: B-01, B-02
+
+---
+
+## P35 — S&OP Agent & Orchestration
+
+**Goal:** Add `SopAgent` as the S&OP synthesis agent and a new "sop" intent that routes the SessionOrchestrator through a sequential demand→inventory→supply_planning→finance_impact→sop plan, enabling full S&OP cycle in one session.
+
+### Batch B-01 — SopAgent class + "sop" intent (App Builder) — Not Started
+
+| Task | Description | Status |
+|---|---|---|
+| T-244 | `SopAgent` — `packages/agent/domain/sop.py`: role="sop", system prompt that synthesizes multi-agent outputs into a final S&OP recommendation covering demand/inventory/supply/finance dimensions; outputs structured decision with reason + next_actions | Not Started |
+| T-245 | Add `"sop"` to `SpecialistRole` Literal in `packages/agent/base.py`; add to `DOMAIN_AGENT_ROLES`; add `SopAgent` to `packages/agent/domain/__init__.py` `create_domain_agents()` | Not Started |
+| T-246 | Add `"sop"` allowlist in `packages/tools/base.py`: `["sql_query", "nl_query"]`; update `packages/agent/orchestrator/roles.py` `DOMAIN_AGENT_ROLES` | Not Started |
+| T-247 | Add `"sop"` intent to `INTENT_REGISTRY` in `packages/agent/orchestrator/intent_registry.py` — plan_prompt instructs sequential demand→inventory→supply_planning→finance_impact→sop flow; allowed_agent_roles includes all 5 | Not Started |
+
+Dependencies: P32 Done, P33 Done, P34 Done
+
+### Batch B-02 — Tests (Test/Review) — Not Started
+
+| Task | Description | Status |
+|---|---|---|
+| T-248 | Unit test: `SopAgent` instantiates with role="sop"; `_SYSTEM_PROMPT` references structured recommendation output | Not Started |
+| T-249 | Unit test: `INTENT_REGISTRY["sop"]` exists; `allowed_agent_roles` contains all 5 S&OP agents; `max_tool_calls` ≥ 25 | Not Started |
+| T-250 | Unit test: `SpecialistRole` Literal includes "supply_planning", "finance_impact", "sop"; `DOMAIN_AGENT_ROLES` contains all three | Not Started |
+| T-251 | `make test-unit` + `make lint` + `make typecheck` | Not Started |
+
+Dependencies: B-01
+
