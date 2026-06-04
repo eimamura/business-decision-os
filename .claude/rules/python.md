@@ -1,10 +1,15 @@
+---
+paths:
+  - "**/*.py"
+---
+
 # Python Rules
 
 Standards for Python 3.11+ code.
 
 ## Imports and Module Structure
 
-- Start every module with `from __future__ import annotations` (PEP 563 deferred evaluation)
+- Start every module with `from __future__ import annotations` (PEP 563 deferred evaluation); empty or import-only `__init__.py` files are exempt
 - Import order: stdlib → third-party → local; isort/ruff `I` rule enforces this
 - No star imports (`from x import *`)
 

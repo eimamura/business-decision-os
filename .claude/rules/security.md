@@ -5,7 +5,6 @@ Standards that apply across all layers of the stack.
 ## Secrets
 
 - No hardcoded secrets, passwords, or API keys anywhere in source code
-- Missing required env vars: raise `RuntimeError` at the call site — never silently degrade
 - Never commit `.env` files; commit only `.env.example` with placeholder values
 - Mask secrets in logs: log only a short prefix followed by `...`
 

@@ -31,7 +31,7 @@ Plan and coordinate implementation work across phases. Read all project docs, de
 
 ## Outputs
 
-- Updated `docs/TASKS.md` batch status (Orchestrator is the **sole writer**)
+- Updated `docs/TASKS.md` phase-level status (`Not Started → Done / Blocked`) — Orchestrator is the **sole writer** of phase status and batch blocking; specialists update their own individual task rows
 - Updated `docs/STATE.md` (Orchestrator is the **sole writer**)
 - New ADR files under `docs/adr/YYYY-MM-DD-*.md` when needed
 - New entries appended to `docs/DECISIONS.md`
@@ -60,7 +60,10 @@ Each Orchestrator turn follows this sequence:
 - Too small: individual files or folder creation → merge into batch
 - Too large: entire phase → split into batches with clear dependencies
 
-**Specialists never write to `docs/TASKS.md` or `docs/STATE.md`.** They report results to Orchestrator only.
+**Write authority split:**
+- Specialists MAY update their own assigned task rows (`In Progress` / `Done` / blocking notes).
+- Specialists MUST NOT update phase-level batch status, mark a batch `Blocked`, or write to `docs/STATE.md` — those belong to Orchestrator only.
+- Specialists report completion or blockers to Orchestrator; Orchestrator applies the phase-level state change.
 
 ## Proof Output (for `/goal` evaluator)
 
@@ -103,14 +106,13 @@ When all batches are Done, also emit:
 
 ## TASKS.md and STATE.md Write Authority
 
-Single writer rule: **Orchestrator is the sole writer** of both `docs/TASKS.md` and `docs/STATE.md`.
-
 | File | Who writes | What they write |
 |---|---|---|
-| `docs/TASKS.md` | Orchestrator only | Batch status: Not Started → Done / Blocked |
-| `docs/STATE.md` | Orchestrator only | Active lease, last completed batch, validation results, blockers |
+| `docs/TASKS.md` — phase/batch status | **Orchestrator only** | `Not Started → Done / Blocked`; new Defect Task rows |
+| `docs/TASKS.md` — individual task rows | Specialists | `In Progress / Done`; blocking notes on their assigned rows |
+| `docs/STATE.md` | **Orchestrator only** | Active lease, last completed batch, validation results, blockers |
 
-Specialists report results in their output. They do not write to either file.
+Specialists update only their own assigned task rows. They MUST NOT change batch-level status, mark a batch `Blocked`, or write to `docs/STATE.md` — report blockers to Orchestrator instead.
 
 ## ADR Triggers
 

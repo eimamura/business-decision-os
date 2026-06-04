@@ -1,3 +1,10 @@
+---
+paths:
+  - "**/Dockerfile*"
+  - "**/compose.yaml"
+  - "infra/**"
+---
+
 # Docker Compose V2 Rules
 
 ## Compose File
@@ -28,8 +35,7 @@
 
 - Stage 1 (`builder`): install all dependencies including dev tools
 - Stage 2 (`runtime`): copy only the built artifacts; install production deps only
-- Final image runs as a non-root user
-- No `--privileged` containers
+- Container security constraints (non-root user, no `--privileged`): see `security.md §Containers`
 
 ## Workers
 

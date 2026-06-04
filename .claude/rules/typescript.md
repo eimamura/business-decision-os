@@ -1,3 +1,10 @@
+---
+paths:
+  - "apps/web/**/*.ts"
+  - "apps/web/**/*.tsx"
+  - "packages/schemas-ts/**"
+---
+
 # TypeScript Rules
 
 ## Compiler

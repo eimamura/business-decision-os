@@ -1,3 +1,8 @@
+---
+paths:
+  - "apps/api/**/*.py"
+---
+
 # FastAPI Rules
 
 ## Routers
@@ -10,7 +15,7 @@
 ## Error Handling
 
 - Client errors: `raise HTTPException(status_code=..., detail="...")`
-- Never expose internal stack traces or implementation details in `detail`
+- Stack traces and internal state must not appear in `detail` — see `security.md §API Error Responses`
 
 ## Dependency Injection
 

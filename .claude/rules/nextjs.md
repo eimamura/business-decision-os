@@ -1,3 +1,8 @@
+---
+paths:
+  - "apps/web/**"
+---
+
 # Next.js Rules
 
 Standards for Next.js 13+ App Router.

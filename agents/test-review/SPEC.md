@@ -48,11 +48,18 @@ Own the test suite, vcrpy cassettes, and code review. Assert schema conformance 
 
 ## Required Reading (before every session)
 
+Always read:
 1. `AGENTS.md` — working rules, prohibitions, commit discipline
 2. `docs/TESTING.md` — tier definitions, cassette discipline, CI behavior
 3. `docs/DESIGN.md §Stub Behavior` — what stubs must output (schema, not accuracy)
 4. `docs/DESIGN.md §Public Interfaces` — what contracts tests must enforce
 5. `docs/TASKS.md` — current test tasks
+
+Read when relevant:
+
+| Task type | Also read |
+|---|---|
+| Code review across layer boundaries | `docs/ARCHITECTURE_RULES.md` — MUST/MUST NOT rules per layer |
 
 ## Tool Usage Rules
 

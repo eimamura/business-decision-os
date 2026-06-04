@@ -64,11 +64,20 @@ Implement application code: FastAPI backend, Next.js frontend, and all Python pa
 
 ## Required Reading (before every session)
 
+Always read:
 1. `AGENTS.md` — working rules and prohibitions
 2. `docs/DESIGN.md §Public Interfaces` — normative signatures; never change without ADR
 3. `docs/DESIGN.md §Stub Behavior` — Day-1 stub contracts
 4. `docs/DESIGN.md §Monorepo Layout` — what goes where
 5. `docs/TASKS.md` — current phase tasks
+
+Read when relevant:
+
+| Task type | Also read |
+|---|---|
+| Implementing or changing any tool | `docs/TOOLS.md` — tool specs, failure handling, audit payload |
+| Touching layer boundaries (agent ↔ tool ↔ persistence) | `docs/ARCHITECTURE_RULES.md` — MUST/MUST NOT rules per layer |
+| Changing any public interface | `docs/ARCHITECTURE_RULES.md §Cross-cutting Rules` and `docs/adr/` |
 
 ## Tool Usage Rules
 

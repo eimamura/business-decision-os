@@ -18,7 +18,7 @@ Three tiers, with different infrastructure requirements:
 
 ## pytest
 
-- `asyncio_mode = "auto"` is set globally — do not add `@pytest.mark.asyncio` per test
+- `asyncio_mode = "auto"` is set globally — do not add `@pytest.mark.asyncio` per test; **remove it if you find it in existing tests**
 - Test file naming: `test_<module>.py`
 - Test function naming: `test_<subject>_<condition>_<expected_outcome>`
 - Fixtures: define in the nearest `conftest.py`; default to function scope; justify session scope explicitly
@@ -32,7 +32,7 @@ Unit tests must never make real network calls. The `tests/unit/conftest.py` auto
 - `anthropic.AsyncAnthropic` message creation
 - `httpx.AsyncHTTPTransport` (real HTTP connections; ASGI transport is still allowed)
 
-Tests that need LLM responses must use `StubClaudeClient` or `unittest.mock`.
+Tests that need LLM responses must use `StubClaudeClient`, `ScenarioStubClaudeClient` (scenario-aware variant), or `unittest.mock`. Both stubs live in `packages/agent/llm/__init__.py`.
 
 ## External HTTP / LLM Calls (Integration)
 
