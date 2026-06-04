@@ -35,12 +35,39 @@ Full task history for P0–P23 is archived at `docs/archive/v3/TASKS.md`.
 | P21 — Chat Bubble Component Refactor | T-135–T-138 | 2026-06-03 |
 | P22 — Test Coverage Gaps | T-139–T-140 | 2026-06-03 |
 | P23 — Test Suite Rationalization | T-141–T-146 | 2026-06-03 |
+| P24 — Ollama Local LLM Provider | T-147–T-152 | 2026-06-04 |
 
 ---
 
 ## Active Phase
 
 None.
+
+---
+
+## P24 — Ollama Local LLM Provider
+
+**Goal:** Add `OllamaClient` behind `LLM_PROVIDER=ollama` so developers can use qwen2.5-coder:7b locally without Anthropic API costs. `LLMClient` protocol signature is unchanged.
+
+### Batch B-01 — OllamaClient + env config (App Builder) — Done
+
+| Task | Description | Status |
+|---|---|---|
+| T-147 | ADR docs/adr/2026-06-04-ollama-local-llm-provider.md | Done |
+| T-148 | OllamaClient class in packages/agent/llm/__init__.py | Done |
+| T-149 | create_llm_client() LLM_PROVIDER=ollama branch | Done |
+| T-150 | .env.example: LLM_PROVIDER, OLLAMA_BASE_URL, OLLAMA_MODEL | Done |
+
+Dependencies: none
+
+### Batch B-02 — Tests (Test/Review) — Done
+
+| Task | Description | Status |
+|---|---|---|
+| T-151 | OllamaClient unit tests (mock httpx) | Done |
+| T-152 | Existing unit tests pass | Done |
+
+Dependencies: B-01
 
 ---
 

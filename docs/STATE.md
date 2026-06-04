@@ -18,11 +18,13 @@ None.
 
 ## Active Lease
 
-None. (Active Lease is always scoped within an Active Phase — set to the batch ID before each specialist spawn, cleared after the batch is Done or Blocked.)
+None.
 
 ## Last Completed
 
-P23 — Test Suite Rationalization (2026-06-03)
+P24 — Ollama Local LLM Provider (2026-06-04)
+- `uv run pytest tests/unit -q` → 535 passed, 11 skipped (exit 0)
+- `make typecheck` → exit 0 (140 source files, no issues)
 - `uv run pytest tests/unit/ -q` → 528 passed, 11 skipped (exit 0)
 - `cd apps/web && npx vitest run` → 53 passed (exit 0)
 - `npx tsc --noEmit -p apps/web/tsconfig.json` → exit 0

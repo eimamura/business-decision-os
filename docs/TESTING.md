@@ -53,6 +53,27 @@ Override the default name with `@pytest.mark.vcr("custom-cassette-name.yaml")`.
 TEST_MODEL=claude-haiku-4-5-20251001 uv run pytest tests/integration/ -x
 ```
 
+### Local LLM (Ollama) — zero API cost
+
+Ollama runs as a systemd service on this machine — no manual startup needed.
+Port 11434 does not conflict with Docker Compose (API: 8002, web: 3002, DB: 5432, Redis: 6379).
+
+```bash
+# Verify it's up
+curl -s http://localhost:11434/api/tags | python3 -m json.tool
+
+# First time only: pull the model
+ollama pull qwen2.5-coder:7b
+```
+
+Then set in `.env`:
+
+```
+LLM_PROVIDER=ollama
+```
+
+`OLLAMA_BASE_URL` defaults to `http://localhost:11434` and `OLLAMA_MODEL` defaults to `qwen2.5-coder:7b`. See `.env.example` for overrides.
+
 See `.env.example` for the full variable reference.
 
 ---

@@ -100,6 +100,13 @@ Each Orchestrator turn follows this sequence:
    - If checks pass: mark batch `Done` in `docs/TASKS.md`; update `docs/STATE.md` Last Completed; clear Active Lease
    - If blocked: mark batch `Blocked` in `docs/TASKS.md`; increment `Blocked Count`; record blocker in `docs/STATE.md`; clear Active Lease
    - If a quality gate failure persists after the responsible agent's fix attempt: register a Defect Task under the relevant batch in `docs/TASKS.md` — see `docs/ORCHESTRATOR.md §Defect Task Format`. The phase cannot advance while any Defect Task is Open.
+9a. **Commit batch changes** (only when checks pass — skip if blocked):
+   - `git add` each file that was created or modified in this batch (use `git diff --name-only` + `git ls-files --others --exclude-standard` to enumerate; never use `git add -A`)
+   - Determine the primary scope from the changed paths using the scope table in `AGENTS.md §Commit Convention`
+   - Commit message format: `feat(<scope>): complete <batch-id> — <one-line batch description>`
+   - Include `Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>` trailer
+   - After phase sign-off (all batches Done): also commit the final `docs/TASKS.md` + `docs/STATE.md` + `docs/DECISIONS.md` updates with message `chore(docs): mark P<nn> Done`
+   - Never `git push`; never `gh pr create` — those are the human's responsibility (see `AGENTS.md §Commit Convention`)
 10. **Emit proof output**: Print evidence items (see Proof Output below)
 
 **Batch granularity rule:**
