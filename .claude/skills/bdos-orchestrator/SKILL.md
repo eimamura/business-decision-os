@@ -1,13 +1,17 @@
 ---
 name: bdos-orchestrator
-description: Orchestrator for Business Decision OS. Use for any BDOS work — planning phases, decomposing tasks, routing to specialist agents (app-builder, infra, test-review), updating docs/TASKS.md, or authoring ADRs. Can run interactively in the current context or be spawned as a subagent via Agent(subagent_type="bdos-orchestrator").
+description: Orchestrator for Business Decision OS. Use for any BDOS work — translating requirements into tasks, planning phases, executing autonomously, routing to specialist agents (app-builder, infra, test-review), updating docs/TASKS.md, or authoring ADRs. When the user describes a requirement or feature, use intake mode to define tasks and run end-to-end without waiting for human prompts between steps.
 ---
 
 # Orchestrator / Planner — SKILL
 
-- **Interactive — Plan**: `/bdos-orchestrator plan <PhaseX>` — design a phase, produce TASKS.md batches (full context)
+- **Interactive — Intake**: `/bdos-orchestrator intake <description>` — translate a requirement into TASKS.md, then plan and run automatically end-to-end
+- **Interactive — Execute**: `/bdos-orchestrator execute <PhaseX>` — plan + run in one shot (no human step between)
+- **Interactive — Plan**: `/bdos-orchestrator plan <PhaseX>` — design a phase only, produce TASKS.md batches (full context); human triggers run separately
 - **Interactive — Run**: `/bdos-orchestrator run <PhaseX>` — execute an already-planned phase (lean context)
-- **Autonomous**: `Agent(subagent_type="bdos-orchestrator", prompt="run <PhaseX>")` — spawns a separate instance; main context stays clean
+- **Autonomous**: `Agent(subagent_type="bdos-orchestrator", prompt="intake <description>")` — spawns a separate instance; main context stays clean
+
+**Default mode when user gives a requirement or feature request: `intake`.**
 
 ## Purpose
 
@@ -47,6 +51,13 @@ Plan and coordinate implementation work across phases. Read all project docs, de
 - Turn output with **proof items for `/goal` evaluator** (see Proof Output below)
 
 ## Required Reading
+
+**Intake mode** — read before translating requirements into tasks:
+1. `AGENTS.md` — working rules and prohibitions
+2. `docs/DESIGN.md` — full context (requirements need full architectural understanding)
+3. `docs/DECISIONS.md` — prior decisions; avoid contradicting settled choices
+4. `docs/TASKS.md` — existing phases and T-NNN sequence (to continue numbering)
+5. `docs/STATE.md` — current execution state and any active blockers
 
 **Plan mode** — read before planning a new phase:
 1. `AGENTS.md` — working rules and prohibitions
@@ -95,6 +106,69 @@ Each Orchestrator turn follows this sequence:
 - 1 batch = 1 deliverable (scaffold, migration, CI pipeline, etc.)
 - Too small: individual files or folder creation → merge into batch
 - Too large: entire phase → split into batches with clear dependencies
+
+## Pre-flight Ambiguity Check
+
+Apply at the start of **intake** and **plan** modes before any TASKS.md write.
+
+**Proceed autonomously when all of these hold:**
+- Scope is clear enough to state "done when X" for each deliverable
+- No change to public interfaces (`LLMClient`, `Tool`, `JobRunner`, `MemoryStore`, `Orchestrator`, `Specialist`)
+- No schema migrations that drop or alter existing data
+- All phase dependencies are `Done` in `docs/TASKS.md`
+
+**Use AskUserQuestion when any of these are true:**
+- Acceptance criteria cannot be inferred — ask: "What does done look like for this?"
+- The requirement touches a public interface but the new signature is unspecified — ask: "What should the interface look like after this change?"
+- The scope spans multiple unrelated areas without a stated priority — ask: "Which part should be tackled first?"
+- A required dependency phase is not `Done` — ask: "Phase Pnn must complete first. Should we proceed with that instead?"
+
+**Rule:** ask only what is necessary to start. Maximum 2–3 targeted questions per AskUserQuestion call. Do not ask about implementation details that specialist agents can resolve autonomously.
+
+---
+
+## Process — Intake Mode
+
+Translates a free-form requirement into TASKS.md, then immediately runs end-to-end.
+
+1. **Pre-flight check** (see §Pre-flight Ambiguity Check) — if ambiguous, AskUserQuestion before proceeding
+2. **Read current state**: `docs/TASKS.md`, `docs/STATE.md`, `docs/DESIGN.md`, `docs/DECISIONS.md`
+3. **Assign phase number**: next available Pnn after the last entry in `docs/TASKS.md`
+4. **Decompose into batches**: apply the same granularity rules as Plan mode (1 batch = 1 deliverable)
+5. **Write phase to TASKS.md**: append new phase section with batches and T-NNN task rows (continue repository-wide sequence)
+6. **If an ADR is required** (public interface change, technology swap): draft it before proceeding to step 7
+7. **Proceed to run loop**: immediately begin Run Mode process for the newly created phase — do not wait for human confirmation
+
+**Intake output format** (printed before starting the run loop):
+
+```
+## Intake: Phase Pnn — [Name]
+
+Goal: <one sentence>
+
+### Batch B-01 — [Topic] (Agent: App Builder | Infra | Test/Review)
+- T-NNN: description
+Dependencies: none
+
+### Batch B-02 ...
+
+### ADRs required: <list | none>
+
+→ Starting run loop now.
+```
+
+## Process — Execute Mode
+
+`execute <PhaseX>` is plan + run in sequence with no human step between:
+
+1. Run Plan mode for PhaseX (full context read, TASKS.md updated)
+2. Immediately proceed to Run mode loop without waiting for human confirmation
+3. Apply all the same quality gates, proof output, and escalation rules as standalone run
+
+Use when PhaseX already exists in `docs/TASKS.md` but has no batches yet (unplanned phase).
+If PhaseX is already planned, prefer `run <PhaseX>` directly.
+
+---
 
 ## Proof Output (for `/goal` evaluator)
 
@@ -203,6 +277,18 @@ Dependencies: none | Batch N
 
 ## User Escalation Criteria
 
+### Pre-flight (before starting — use AskUserQuestion)
+
+Stop and ask before writing any TASKS.md entry when:
+- Acceptance criteria cannot be inferred from the description
+- Requirement touches a public interface but the new signature is unspecified
+- Scope spans multiple unrelated areas with no stated priority
+- A required dependency phase is not `Done`
+
+Ask only what is necessary to start. Max 2–3 questions. Do not ask about implementation details.
+
+### Mid-execution (during run loop — stop and escalate to user)
+
 Escalate to the user (do not attempt to resolve autonomously) when:
 
 - A blocker has been returned by the same specialist agent twice with no progress
@@ -211,6 +297,8 @@ Escalate to the user (do not attempt to resolve autonomously) when:
 - Any action under "When in Doubt" in `AGENTS.md` applies (destructive git ops, schema migrations that drop data, API contract changes)
 
 Escalation message must include: the blocker description, what was already attempted, and a concrete question for the user.
+
+**Default bias: proceed autonomously.** Ask only when the above conditions are met. Do not ask for confirmation of routine decisions (implementation approach, library choice, file structure) — those are for specialist agents to resolve.
 
 ## Agent Conflict Protocol and Handoff Rules
 
