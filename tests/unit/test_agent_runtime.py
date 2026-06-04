@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import json
 from typing import Any
+from unittest.mock import AsyncMock
 from uuid import uuid4
 
 import pytest
@@ -8,7 +10,7 @@ import pytest
 from packages.agent.llm import LLMMessage, LLMResponse
 from packages.agent.orchestrator.models import SpecialistTask
 from packages.agent.runtime import SUMMARY_THRESHOLD, AgentRuntime
-from tests.unit.helpers import RecordingLLMClient, make_stop_response
+from tests.unit.helpers import RecordingLLMClient, make_stop_response, make_tool_call_response
 
 
 class _FakeTool:
@@ -635,3 +637,95 @@ async def test_t073_compress_history_active_above_threshold_reduces_to_11() -> N
     )
     # Exactly one summarize call was made
     assert len(summarize_llm._calls) == 1
+
+
+# ---------------------------------------------------------------------------
+# P30-B-01: execute_tools node — tool_call path
+# ---------------------------------------------------------------------------
+
+
+class _RecordingFakeTool:
+    name = "sql_query"
+    description = "Run SQL"
+    input_schema: dict[str, Any] = {}
+
+    def __init__(self) -> None:
+        self.handle = AsyncMock(return_value=_make_tool_result({"rows": [{"sku": "A", "qty": 10}]}))
+
+
+def _make_tool_result(output: dict[str, Any]) -> Any:
+    from packages.tools.base import ToolResult
+    return ToolResult(output=output, audit_payload={})
+
+
+class _FailingTool:
+    name = "sql_query"
+    description = "Run SQL"
+    input_schema: dict[str, Any] = {}
+
+    async def handle(self, input: dict[str, Any], ctx: Any) -> Any:
+        raise RuntimeError("tool failed")
+
+
+async def test_execute_tools_tool_call_handle_is_called_and_result_fed_to_next_llm() -> None:
+    tool = _RecordingFakeTool()
+    registry = _FakeToolRegistry([tool])
+
+    llm = RecordingLLMClient([
+        make_tool_call_response("sql_query", {"query": "SELECT 1"}),
+        make_stop_response("Tool result processed."),
+        make_stop_response("pass"),
+    ])
+    runtime = _make_runtime(llm, tool_registry=registry)
+    task = _make_task()
+    ctx = _FakeToolContext()
+
+    result = await runtime.run(task, ctx)
+
+    assert result.status == "completed"
+    assert len(llm._calls) == 3
+
+    tool.handle.assert_called_once()
+
+    second_call_messages = llm._calls[1]
+    tool_messages = [m for m in second_call_messages if m.role == "tool"]
+    assert len(tool_messages) == 1
+    assert tool_messages[0].tool_call_id == "call_001"
+
+    payload = json.loads(tool_messages[0].content)
+    assert payload == {"rows": [{"sku": "A", "qty": 10}]}
+
+
+async def test_execute_tools_unknown_tool_skips_handle_and_no_tool_message_added() -> None:
+    registry = _FakeToolRegistry([])
+
+    llm = RecordingLLMClient([
+        make_tool_call_response("nonexistent_tool", {}),
+        make_stop_response("Skipped unknown tool."),
+        make_stop_response("pass"),
+    ])
+    runtime = _make_runtime(llm, tool_registry=registry)
+    task = _make_task()
+    ctx = _FakeToolContext()
+
+    result = await runtime.run(task, ctx)
+
+    assert result.status == "completed"
+
+    second_call_messages = llm._calls[1]
+    tool_messages = [m for m in second_call_messages if m.role == "tool"]
+    assert tool_messages == []
+
+
+async def test_execute_tools_failing_tool_propagates_exception() -> None:
+    registry = _FakeToolRegistry([_FailingTool()])
+
+    llm = RecordingLLMClient([
+        make_tool_call_response("sql_query", {}),
+    ])
+    runtime = _make_runtime(llm, tool_registry=registry)
+    task = _make_task()
+    ctx = _FakeToolContext()
+
+    with pytest.raises(RuntimeError, match="tool failed"):
+        await runtime.run(task, ctx)

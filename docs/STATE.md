@@ -14,7 +14,7 @@ P0–P23 (T-001–T-146) all Done. See `docs/archive/v3/STATE.md` for per-phase 
 
 ## Active Phase
 
-None (P29 complete)
+None (P30 complete)
 
 ## Active Lease
 
@@ -22,7 +22,8 @@ None
 
 ## Last Completed
 
-P29-B-03 — Tests for prompt/response persistence in llm_usage (2026-06-04)
+P30-B-01 — AgentRuntime execute_tools unit tests (2026-06-04)
+- `make test-unit` → 587 passed, 11 skipped (exit 0)
 - `make test-unit` → 584 passed, 11 skipped (exit 0)
 - `make lint` → All checks passed (exit 0)
 - `make typecheck` → 141 source files, no issues (exit 0)

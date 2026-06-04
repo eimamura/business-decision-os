@@ -242,3 +242,21 @@ Dependencies: B-01
 | T-186 | Existing unit tests pass (`make test-unit`) | Done |
 
 Dependencies: B-02
+
+---
+
+## P30 — AgentRuntime execute_tools Unit Tests
+
+**Goal:** `AgentRuntime` の `execute_tools` ノードで LLM が `tool_call` を返した際にツールの `handle()` が実際に呼ばれ、結果が次の LLM 呼び出しにフィードバックされることをユニットテストで保護する。
+
+### Batch B-01 — Tests (Test/Review) — Done
+
+| Task | Description | Status |
+|---|---|---|
+| T-187 | `tests/unit/helpers.py` に `make_tool_call_response()` ヘルパーを追加 | Done |
+| T-188 | execute_tools パス: LLM が tool_call → `handle()` 呼び出し → ツール結果が `tool` role メッセージとして次の LLM 呼び出しに送られる | Done |
+| T-189 | ツールが ToolRegistry に見つからない場合はスキップ | Done |
+| T-190 | ツール実行が例外を投げた場合は例外が伝播する | Done |
+| T-191 | `make test-unit` 全通過確認 | Done |
+
+Dependencies: none
