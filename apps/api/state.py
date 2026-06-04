@@ -50,18 +50,47 @@ async def close_shared_pool() -> None:
         _shared_pool = None
 
 
+_TERMINAL_EVENT_TYPES = frozenset({"done", "error", "awaiting_input"})
+_BROADCASTER_BUFFER_MAX = 1000
+
+
 class Broadcaster:
-    """Fan-out pub/sub so multiple /stream connections each get every event."""
+    """Fan-out pub/sub so multiple /stream connections each get every event.
+
+    Replay buffer: events are buffered until a terminal event (done / error /
+    awaiting_input) is delivered.  A subscriber that joins *after* some events
+    have already been emitted (the common case when the SSE client registers
+    slightly after the background task starts) receives all buffered events
+    immediately on subscribe(), so the execution trace is always complete.
+    """
 
     def __init__(self) -> None:
         self._subs: list[Queue[dict[str, Any]]] = []
+        self._buffer: list[dict[str, Any]] = []
 
     async def put(self, event: dict[str, Any]) -> None:
+        # Buffer the event so late subscribers can replay it.
+        if len(self._buffer) < _BROADCASTER_BUFFER_MAX:
+            self._buffer.append(event)
+
         for q in self._subs:
             await q.put(event)
 
+        # After a terminal event, clear the buffer entirely so the next SSE
+        # subscription (for a subsequent answer or new message) does not replay
+        # a stale terminal event from the previous run.  Subscribers that were
+        # already connected during the run receive the terminal event live via
+        # their queue; they do not need it in the buffer.
+        if event.get("type") in _TERMINAL_EVENT_TYPES:
+            self._buffer = []
+
     def subscribe(self) -> Queue[dict[str, Any]]:
         q: Queue[dict[str, Any]] = Queue()
+        # Replay any buffered events synchronously before adding to subscribers.
+        # This is safe: subscribe() is called from an async context, but Queue.put_nowait
+        # is non-blocking and always succeeds for an unbounded Queue.
+        for buffered in self._buffer:
+            q.put_nowait(buffered)
         self._subs.append(q)
         return q
 
