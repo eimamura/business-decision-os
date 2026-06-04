@@ -2,6 +2,26 @@
 
 Standards for pytest, vcrpy, and Playwright.
 
+## How to Run Tests (mandatory)
+
+Always use `make` targets. Never invoke `pytest`, `npx playwright test`, or `npx vitest` directly.
+
+| Command | What it runs | Prerequisites |
+|---|---|---|
+| `make test-unit` | `pytest tests/unit` | none |
+| `make test-integration` | `pytest tests/integration` | `docker compose up -d db` |
+| `make test-e2e` | `pytest tests/e2e` | API server running |
+| `make test-playwright` | Playwright browser E2E | `make dev-up` |
+| `make test` | all Python tiers | varies |
+
+**Playwright must always go through `make test-playwright`.** Running `npx playwright test`
+directly fails because:
+1. `@playwright/test` is installed under `apps/web/node_modules/` but spec files live in
+   `tests/e2e/playwright/` — Node module resolution breaks without `NODE_PATH`.
+2. The Makefile sets `WEB_URL` and `NEXT_PUBLIC_API_URL` to match the configured ports
+   (`WEB_PORT=3002`, `API_PORT=8002`). Skipping the Makefile points Playwright at the
+   wrong ports.
+
 ## Test Tiers
 
 Three tiers, with different infrastructure requirements:

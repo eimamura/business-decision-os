@@ -75,6 +75,7 @@ const ASK_USER_DONE_ONLY_STREAM = [
 const JOB_APPROVAL_STREAM = [
   {
     type: "awaiting_approval",
+    session_id: JOB_SESSION,
     tool_name: "job_dispatch",
     approval_id: "approval-001",
     job_id: "job-001",
@@ -83,9 +84,9 @@ const JOB_APPROVAL_STREAM = [
     timestamp: NOW,
   },
   {
-    type: "awaiting_input",
+    type: "done",
     session_id: JOB_SESSION,
-    ask_user_id: "",
+    reply: "",
     timestamp: NOW,
   },
 ]

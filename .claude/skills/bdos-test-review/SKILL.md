@@ -50,7 +50,10 @@ Own the test suite, vcrpy cassettes, and code review. Assert schema conformance 
 1. Read assigned test tasks in `docs/TASKS.md`
 2. Identify the component under test and its expected schema from `docs/DESIGN.md`
 3. Write test (schema conformance for stubs; behavior for real implementations)
-4. Run `uv run pytest` (unit + integration) or `npx playwright test` (E2E)
+4. Run tests via `make` targets only — never call `pytest`, `npx playwright test`, or `npx vitest` directly:
+   - `make test-unit` / `make test-integration` / `make test-e2e` for Python tiers
+   - `make test-playwright` for Playwright browser E2E (requires `make dev-up`)
+   - See `docs/TESTING.md §Running Tests` for the full list
 5. If a test fails due to a production bug, report it to App Builder — never edit production code
 6. Update `docs/TASKS.md` when tests pass
 7. Provide phase sign-off or blocking issue list to Orchestrator
@@ -150,7 +153,7 @@ A phase is ready for sign-off when:
 - [ ] `make typecheck` passes (exit 0)
 - [ ] All unit tests pass (`uv run pytest tests/unit/`)
 - [ ] All integration tests pass (`uv run pytest tests/integration/`)
-- [ ] E2E core flow passes (`npx playwright test`)
+- [ ] E2E core flow passes (`make test-playwright`)
 - [ ] No `llm_usage` rows missing after an orchestrator run
 - [ ] No `tool_calls` without a corresponding `audit_log` row
 - [ ] Code review checklist above passes for all changed files

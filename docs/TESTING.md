@@ -7,19 +7,28 @@ This file covers operational How-to: running tests, recording cassettes, and CI 
 
 ## Running Tests
 
+Always use `make` targets — never call `pytest`, `npx playwright`, or `npx vitest` directly.
+The Makefile wires up required env vars (ports, NODE_PATH) and keeps commands reproducible.
+
 ```bash
-# Unit tests (no Docker required)
-uv run pytest tests/unit/ -x --timeout=30
-
-# Integration tests (requires Docker Compose up)
-uv run pytest tests/integration/ -x
-
-# E2E tests (requires running server)
-uv run pytest tests/e2e/ -x -m e2e
-
-# Frontend tests
-cd apps/web && npx vitest run
+make test-unit          # unit tests only (no Docker required)
+make test-integration   # integration tests (requires docker compose up -d db)
+make test-e2e           # Python E2E tests (requires running API server)
+make test-playwright    # Playwright browser E2E (requires make dev-up)
+make test               # all Python tests (unit + integration + e2e)
 ```
+
+Frontend (Vitest) — always via npm script, not npx directly:
+```bash
+cd apps/web && npm test
+```
+
+### Playwright note
+
+`make test-playwright` sets `NODE_PATH`, `WEB_URL`, and `NEXT_PUBLIC_API_URL` automatically
+to match the ports configured in the Makefile (`WEB_PORT=3002`, `API_PORT=8002`).
+Never run `npx playwright test` by hand — the env vars will be wrong and the module
+resolution for `@playwright/test` will fail because the test files live outside `apps/web/`.
 
 ---
 

@@ -1,4 +1,4 @@
-.PHONY: migrate seed generate-data codegen build test lint typecheck dev dev-api dev-web dev-up dev-down dev-logs dev-ps dev-smoke
+.PHONY: migrate seed generate-data codegen build test test-unit test-integration test-e2e test-playwright lint typecheck dev dev-api dev-web dev-up dev-down dev-logs dev-ps dev-smoke
 
 WEB_PORT ?= 3002
 API_PORT ?= 8002
@@ -47,6 +47,25 @@ build:
 
 test:
 	uv run pytest tests/ -x -q
+
+test-unit:
+	uv run pytest tests/unit -q
+
+test-integration:
+	uv run pytest tests/integration -q
+
+# Playwright E2E — requires dev-up (web on WEB_PORT, api on API_PORT)
+# NODE_PATH is needed because @playwright/test lives in apps/web/node_modules
+# but spec files are in tests/e2e/playwright/ (outside that tree).
+test-playwright:
+	cd apps/web && \
+	  NODE_PATH=$(PWD)/apps/web/node_modules \
+	  WEB_URL=http://localhost:$(WEB_PORT) \
+	  NEXT_PUBLIC_API_URL=http://localhost:$(API_PORT) \
+	  npx playwright test --config playwright.config.ts
+
+test-e2e:
+	uv run pytest tests/e2e -q
 
 lint:
 	uv run ruff check packages/ apps/api/ scripts/

@@ -151,25 +151,31 @@ test.describe("ToolScenarioModal (mocked routes — no backend required)", () =>
     await openModal(page);
 
     const dialog = page.getByRole("dialog");
-    await dialog.getByText("Forecasting").click();
+    // Use role=button to avoid matching text inside scenario cards
+    await dialog.getByRole("button", { name: "Forecasting" }).click();
 
-    await expect(dialog.getByText("Demand Forecast")).toBeVisible({ timeout: 3_000 });
+    // Use .first() — "Demand Forecast" also appears in "Train Forecast Model"'s description text
+    await expect(dialog.getByText("Demand Forecast").first()).toBeVisible({ timeout: 5_000 });
   });
 
-  test("clicking a scenario card fills the textarea and closes the modal", async ({ page }) => {
+  test("clicking a scenario card closes the modal and sends the prompt as a message", async ({ page }) => {
     await setupMockRoutes(page);
     await navigateToChat(page);
     await openModal(page);
 
-    // "SQL Direct Query" is under the default "Data Query" tab — visible immediately
+    // "SQL Direct Query" is under the default "Data Query" tab — visible immediately.
+    // Clicking a scenario card calls handleScenarioApply() which sends the message
+    // immediately (does NOT fill the textarea — it calls sendMessage() directly).
     const dialog = page.getByRole("dialog");
     await dialog.getByText("SQL Direct Query").click();
 
-    // Modal must be gone
+    // Modal must be gone after clicking
     await expect(page.getByRole("dialog")).not.toBeVisible({ timeout: 3_000 });
 
-    // Textarea must contain the SQL prompt
-    await expect(page.locator("textarea")).toHaveValue(/在庫テーブル/);
+    // A user message bubble should appear with the SQL prompt text
+    await expect(page.locator(".rounded-2xl").filter({ hasText: /在庫テーブル/ })).toBeVisible({
+      timeout: 8_000,
+    });
   });
 
   test("clicking a quick chip in ToolScenarioBar fills textarea without opening the modal", async ({
