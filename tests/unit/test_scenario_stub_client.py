@@ -84,5 +84,6 @@ def test_create_llm_client_mock_llm_false_requires_api_key(
 ) -> None:
     monkeypatch.delenv("MOCK_LLM", raising=False)
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.delenv("LLM_PROVIDER", raising=False)
     with pytest.raises(RuntimeError, match="ANTHROPIC_API_KEY"):
         create_llm_client()

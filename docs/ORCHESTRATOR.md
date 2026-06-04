@@ -107,7 +107,13 @@ Do **not** use this loop for: runtime bugs (use Defect Task), new product featur
 
 ## Defect Task Format
 
-When a quality gate failure persists after the responsible agent's fix attempt, append a Defect block directly under the relevant batch heading in `docs/TASKS.md`:
+Register a Defect Task in **any** of these situations:
+
+- A quality gate failure persists after the responsible agent's first fix attempt.
+- A test or runtime failure is discovered in an already-completed phase (i.e., not caught during normal phase execution).
+- A `fix(...)` commit is required in a phase after Test/Review sign-off was already given.
+
+In all cases, append a Defect block directly under the relevant batch heading in `docs/TASKS.md`:
 
 ```
 #### Defect: D-NNN

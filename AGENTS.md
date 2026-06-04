@@ -80,6 +80,9 @@ The following are explicitly forbidden across all agents:
 - Smart stubs that approximate real behavior instead of conforming to the schema contract.
 - Fail-silent fallbacks for external service clients: missing config (API keys, packages) MUST raise `RuntimeError` at the call site, not silently degrade to a stub or no-op.
 - Self-certifying phase completion — Test/Review must verify before any phase is marked Done.
+- Fixing a test or quality gate failure that was discovered in a completed phase, or that persists after a specialist's first fix attempt, without first registering it as a D-NNN Defect Task in `docs/TASKS.md`. Ad-hoc `fix(...)` commits are not a substitute for the Defect Task workflow.
+- Marking a D-NNN Defect Task `Resolved` without immediately invoking `/analyze-failure D-NNN` to record the root cause in `docs/failure-patterns.md`.
+- Advancing to the next phase while any Defect Task in the current phase has `Status: Open`.
 - Force-pushing to `main`; direct pushes to `main`; non-linear history.
 - Using `--no-verify` or skipping commit hooks without explicit ADR justification.
 - Using a plain HTTP stub for the web container; `compose web.build.context` must be the monorepo root.

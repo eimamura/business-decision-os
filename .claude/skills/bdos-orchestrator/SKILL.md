@@ -99,7 +99,7 @@ Each Orchestrator turn follows this sequence:
 9. **Update state**:
    - If checks pass: mark batch `Done` in `docs/TASKS.md`; update `docs/STATE.md` Last Completed; clear Active Lease
    - If blocked: mark batch `Blocked` in `docs/TASKS.md`; increment `Blocked Count`; record blocker in `docs/STATE.md`; clear Active Lease
-   - If a quality gate failure persists after the responsible agent's fix attempt: register a Defect Task under the relevant batch in `docs/TASKS.md` — see `docs/ORCHESTRATOR.md §Defect Task Format`. The phase cannot advance while any Defect Task is Open.
+   - If a quality gate failure persists after the responsible agent's fix attempt, OR if a test/runtime failure is discovered after sign-off was already given: register a Defect Task under the relevant batch in `docs/TASKS.md` — see `docs/ORCHESTRATOR.md §Defect Task Format`. After marking a Defect Task Resolved, immediately invoke `/analyze-failure D-NNN`. The phase cannot advance while any Defect Task is Open.
 9a. **Commit batch changes** (only when checks pass — skip if blocked):
    - `git add` each file that was created or modified in this batch (use `git diff --name-only` + `git ls-files --others --exclude-standard` to enumerate; never use `git add -A`)
    - Determine the primary scope from the changed paths using the scope table in `AGENTS.md §Commit Convention`

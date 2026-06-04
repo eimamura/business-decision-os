@@ -13,6 +13,10 @@ def _block_network_in_unit_tests(monkeypatch: pytest.MonkeyPatch) -> None:
       - httpx.AsyncHTTPTransport (real TCP connections; ASGI transport is unaffected)
       - LangGraph AsyncPostgresSaver (forces MemorySaver; prevents pool-exhaustion across tests)
     """
+    # Default to Ollama so tests don't accidentally hit the Anthropic API.
+    # Tests that explicitly exercise the anthropic code path must delenv LLM_PROVIDER.
+    monkeypatch.setenv("LLM_PROVIDER", "ollama")
+
     # Force LangGraph to use MemorySaver in all unit tests by suppressing DATABASE_URL.
     # Without this, _get_graph() creates an AsyncConnectionPool per test; running hundreds
     # of tests exhausts the postgres connection limit and causes intermittent failures.

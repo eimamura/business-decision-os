@@ -41,6 +41,38 @@ services:
     command: ["/bin/sh", "-c", "cd /app/apps/api && /app/.venv/bin/alembic upgrade head"]
     restart: "no"
 
+  ollama:
+    image: ollama/ollama:latest
+    volumes:
+      - ollama_data:/root/.ollama
+    ports:
+      - "${OLLAMA_PORT:-11435}:11434"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    healthcheck:
+      test: ["CMD-SHELL", "ollama list || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  ollama-init:
+    image: ollama/ollama:latest
+    depends_on:
+      ollama:
+        condition: service_healthy
+    volumes:
+      - ollama_data:/root/.ollama
+    environment:
+      OLLAMA_HOST: http://ollama:11434
+    entrypoint: ["ollama", "pull", "${OLLAMA_MODEL:-qwen2.5-coder:7b}"]
+    restart: "no"
+
   api:
     build:
       context: ../..
@@ -52,6 +84,8 @@ services:
         condition: service_healthy
       migrator:
         condition: service_completed_successfully
+      ollama-init:
+        condition: service_completed_successfully
     environment:
       DATABASE_URL: postgresql+asyncpg://bdos:bdos_dev@db:5432/bdos
       APP_ENV: dev
@@ -60,6 +94,9 @@ services:
       CELERY_BROKER_URL: redis://redis:6379/0
       CELERY_RESULT_BACKEND: redis://redis:6379/0
       JOB_RUNNER_BACKEND: celery
+      LLM_PROVIDER: ${LLM_PROVIDER:-anthropic}
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://ollama:11434}
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen2.5-coder:7b}
     volumes:
       - ../../apps/api:/app/apps/api
       - ../../packages:/app/packages
@@ -85,12 +122,17 @@ services:
         condition: service_healthy
       migrator:
         condition: service_completed_successfully
+      ollama-init:
+        condition: service_completed_successfully
     environment:
       DATABASE_URL: postgresql+asyncpg://bdos:bdos_dev@db:5432/bdos
       APP_ENV: dev
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
       CELERY_BROKER_URL: redis://redis:6379/0
       CELERY_RESULT_BACKEND: redis://redis:6379/0
+      LLM_PROVIDER: ${LLM_PROVIDER:-anthropic}
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://ollama:11434}
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen2.5-coder:7b}
     volumes:
       - ../../apps/api:/app/apps/api
       - ../../packages:/app/packages
@@ -158,3 +200,4 @@ services:
 
 volumes:
   postgres_data:
+  ollama_data:

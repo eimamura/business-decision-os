@@ -17,6 +17,15 @@ def vcr_config() -> dict:  # type: ignore[type-arg]
     return VCR_CONFIG
 
 
+@pytest.fixture(autouse=True)
+def _set_ollama_provider(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Default LLM_PROVIDER to ollama so integration tests never hit the Anthropic API.
+
+    Tests that explicitly exercise the anthropic code path must delenv LLM_PROVIDER.
+    """
+    monkeypatch.setenv("LLM_PROVIDER", "ollama")
+
+
 def _api_is_up() -> bool:
     import httpx
     try:
