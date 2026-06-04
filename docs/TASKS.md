@@ -97,3 +97,44 @@ Dependencies: B-01
 | T-159 | Integration tests for all 6 Ask User HITL modal variants (vague→ask, fully-specified→no ask, warehouse given→ask, SKU-no-period→ask, etc.) | Done |
 
 Dependencies: none (parallel-eligible with B-02)
+
+---
+
+## P26 — SSE/Broadcaster Bug Fixes
+
+**Goal:** 調査で発見した SSE/Broadcaster 周辺の5件の潜在バグ（メモリリーク・エラー時ハング・abort競合・UI更新漏れ）をすべて修正し、ユニットテストで保護する。
+
+### Batch B-01 — Backend quick fixes: memory leak + error-path done + SSE error break (App Builder) — Done
+
+| Task | Description | Status |
+|---|---|---|
+| T-160 | `delete_session` / `delete_all_sessions` で `broadcasters` / `broadcaster_ready` をクリーンアップ | Done |
+| T-161 | `_run_resume_and_signal` の finally で response が None でも常に `done` を送信 | Done |
+| T-162 | SSE `event_generator` の break 条件に `"error"` を追加 | Done |
+
+Dependencies: none
+
+### Batch B-02 — Backend abort race: stale run silently dropped (App Builder) — Not Started
+
+| Task | Description | Status |
+|---|---|---|
+| T-163 | `state.py` に `session_run_ids: dict[str, str]` を追加し、`POST /messages` の `_run_and_signal` 内の各 `queue.put()` 前に run_id チェックを実施。セッション削除時にも run_id をクリーンアップ | Not Started |
+
+Dependencies: B-01
+
+### Batch B-03 — Frontend: sendAskUserAnswer missing invalidateQueries (App Builder) — Not Started
+
+| Task | Description | Status |
+|---|---|---|
+| T-164 | `sendAskUserAnswer` の `done` ハンドラに `queryClient.invalidateQueries({ queryKey: queryKeys.sessions.all })` を追加 | Not Started |
+
+Dependencies: none
+
+### Batch B-04 — Tests (Test/Review) — Not Started
+
+| Task | Description | Status |
+|---|---|---|
+| T-165 | broadcaster cleanup・run_id stale drop・SSE error break に対するユニットテスト | Not Started |
+| T-166 | 既存ユニットテスト全通過確認（`make test-unit`） | Not Started |
+
+Dependencies: B-01, B-02, B-03

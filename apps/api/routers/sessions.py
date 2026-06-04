@@ -13,6 +13,7 @@ from pydantic import BaseModel
 
 from apps.api.state import (
     Broadcaster,
+    broadcaster_ready,
     broadcasters,
     get_or_create_broadcaster_event,
     get_orchestrator,
@@ -121,6 +122,8 @@ async def list_sessions() -> list[dict[str, Any]]:
 @router.delete("", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_all_sessions() -> None:
     sessions.clear()
+    broadcasters.clear()
+    broadcaster_ready.clear()
     repo = DecisionSessionRepository()
     await repo.delete_all_sessions()
 
@@ -128,6 +131,8 @@ async def delete_all_sessions() -> None:
 @router.delete("/{session_id}", status_code=204)
 async def delete_session(session_id: str) -> None:
     sessions.pop(session_id, None)
+    broadcasters.pop(session_id, None)
+    broadcaster_ready.pop(session_id, None)
     try:
         repo = DecisionSessionRepository()
         deleted = await repo.delete_session(session_id)
@@ -294,9 +299,11 @@ async def post_message(
     except Exception:
         _log.warning("DB unavailable; skipping user message persist for %s", session_id)
 
-    queue = Broadcaster()
-    broadcasters[session_id] = queue
-    notify_broadcaster_ready(session_id)
+    queue = broadcasters.get(session_id)
+    if queue is None:
+        queue = Broadcaster()
+        broadcasters[session_id] = queue
+        notify_broadcaster_ready(session_id)
 
     conversation_context: str | None = None
     try:
@@ -433,7 +440,7 @@ async def stream_session(session_id: str) -> StreamingResponse:
                 try:
                     event = await asyncio.wait_for(sub_queue.get(), timeout=30.0)
                     yield f"data: {json.dumps(event)}\n\n"
-                    if event.get("type") in ("done", "awaiting_input"):
+                    if event.get("type") in ("done", "awaiting_input", "error"):
                         break
                 except asyncio.TimeoutError:
                     yield ": keepalive\n\n"
@@ -486,19 +493,22 @@ async def submit_ask_user_answer(
                 "timestamp": _iso_now(),
             })
         finally:
+            reply = (
+                response.reply if response is not None else "Processing failed. Please try again."
+            )
             if response is not None:
-                reply = response.reply
                 session.setdefault("messages", []).append({
                     "role": "assistant",
                     "content": reply,
                     "created_at": _iso_now(),
                 })
-                await queue.put({
-                    "type": "done",
-                    "session_id": session_id_str,
-                    "reply": reply,
-                    "timestamp": _iso_now(),
-                })
+            await queue.put({
+                "type": "done",
+                "session_id": session_id_str,
+                "reply": reply,
+                "timestamp": _iso_now(),
+            })
+            if response is not None:
                 try:
                     await repo.add_message(session_id_str, role="assistant", content=reply)
                 except Exception:

@@ -266,7 +266,9 @@ class ScenarioStubClaudeClient:
                     "suggestions": ["Last 30 days", "Q1 2025", "Last 12 months"],
                 })
             else:
-                response_text = json.dumps({"needs_input": False, "question": None, "suggestions": None})
+                response_text = json.dumps(
+                    {"needs_input": False, "question": None, "suggestions": None}
+                )
         elif "intent classifier" in system_text or "category" in system_text:
             category = (
                 "domain_analysis"
@@ -823,7 +825,9 @@ def create_llm_client(
 
 
 class BudgetedClaudeClient:
-    def __init__(self, inner: ClaudeClient | ScenarioStubClaudeClient | OllamaClient, guard: BudgetGuard) -> None:
+    def __init__(
+        self, inner: ClaudeClient | ScenarioStubClaudeClient | OllamaClient, guard: BudgetGuard
+    ) -> None:
         self._inner = inner
         self._guard = guard
 

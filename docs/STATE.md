@@ -14,7 +14,7 @@ P0–P23 (T-001–T-146) all Done. See `docs/archive/v3/STATE.md` for per-phase 
 
 ## Active Phase
 
-None.
+P26 — SSE/Broadcaster Bug Fixes
 
 ## Active Lease
 
@@ -22,13 +22,13 @@ None
 
 ## Last Completed
 
-P25 — Tool Scenario E2E Validation & Playwright Session Cleanup (2026-06-04)
-- `uv run pytest tests/unit -q` → 531 passed, 11 skipped, 4 pre-existing failures unrelated to P25 (exit 0 for P25 scope)
-- `make typecheck` → exit 0 (140 source files, no issues)
-- `uv run pytest tests/integration/test_ask_user_hitl_variants.py -v` → 6 passed (exit 0)
-- B-01: Playwright session cleanup fixture + 3 spec migrations
-- B-02: 3 new Playwright specs (modal, bubble, HITL mocked-SSE)
-- B-03: 2 new integration test files (scenario coverage + HITL variants)
+P26-B-01 — Backend quick fixes: memory leak + error-path done + SSE error break (2026-06-04)
+- `make test-unit` → 535 passed, 11 skipped (exit 0)
+- `make lint` → All checks passed
+- `make typecheck` → 140 source files, no issues
+- T-160: delete_session/delete_all_sessions now clears broadcasters + broadcaster_ready
+- T-161: _run_resume_and_signal finally always sends done (even on error)
+- T-162: SSE event_generator breaks on "error" events
 
 ## Blockers
 

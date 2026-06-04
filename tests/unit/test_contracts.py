@@ -218,12 +218,26 @@ async def test_contract_session_message_error_still_terminates_with_done(
     )
     assert send_response.status_code == 200
 
-    events = await _read_session_stream(client, session_id)
+    # With T-162, the SSE stream breaks on "error" so the stream terminates
+    # as soon as the error event arrives.  "done" is still enqueued by the
+    # finally block in _run_and_signal but the consumer has already closed.
+    events: list[dict[str, Any]] = []
+    async with client.stream("GET", f"/api/v1/sessions/{session_id}/stream") as response:
+        assert response.status_code == 200
+        async for line in response.aiter_lines():
+            if not line.startswith("data:"):
+                continue
+            event = json.loads(line[len("data:"):].strip())
+            events.append(event)
+            # Stream closes on either "error" or "done" (T-162).
+            if event.get("type") in ("error", "done"):
+                break
+
     event_types = [event["type"] for event in events]
 
     assert "error" in event_types
-    assert events[-1]["type"] == "done"
-    assert events[-1]["reply"] == "Processing failed. Please try again."
+    assert events[-1]["type"] == "error"
+    assert events[-1]["code"] == "orchestration_failed"
 
 
 async def test_contract_decisions_streams_new_taxonomy_and_done_reply(
@@ -302,5 +316,7 @@ def test_contract_missing_anthropic_key_raises_runtime_error(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.delenv("LLM_PROVIDER", raising=False)
+    monkeypatch.delenv("MOCK_LLM", raising=False)
     with pytest.raises(RuntimeError, match="ANTHROPIC_API_KEY"):
         create_llm_client()
