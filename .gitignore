@@ -19,13 +19,11 @@ build/
 .coverage
 coverage.xml
 htmlcov/
-*.log
 pip-wheel-metadata/
 
 # uv
 .venv/
 .python-version
-uv.lock
 
 # Node
 node_modules/
@@ -71,6 +69,8 @@ override.tf.json
 *.swp
 *.swo
 .DS_Store
+.AppleDouble
+.LSOverride
 Thumbs.db
 
 # Secrets / env
@@ -85,21 +85,12 @@ Thumbs.db
 # Logs
 logs/
 *.log
-npm-debug.log*
 
 # Coverage
-htmlcov/
-.coverage
-coverage.xml
 lcov.info
 .nyc_output/
 
 # OS
-.DS_Store
-.AppleDouble
-.LSOverride
-Thumbs.db
-
 # Claude Code
 .claude/worktrees/
 

@@ -1,4 +1,4 @@
-.PHONY: migrate seed generate-data codegen build test lint typecheck dev dev-api dev-web dev-compose dev-up dev-down dev-logs dev-ps dev-smoke
+.PHONY: migrate seed generate-data codegen build test lint typecheck dev dev-api dev-web dev-up dev-down dev-logs dev-ps dev-smoke
 
 WEB_PORT ?= 3002
 API_PORT ?= 8002
@@ -15,9 +15,6 @@ dev-web:
 dev:
 	@echo "Starting API on :$(API_PORT) and Web on :$(WEB_PORT) ..."
 	@$(MAKE) dev-api & $(MAKE) dev-web
-
-dev-compose:
-	$(COMPOSE) up --build
 
 dev-up:
 	$(COMPOSE) up --build
