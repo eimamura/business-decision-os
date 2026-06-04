@@ -93,4 +93,65 @@ test.describe("Chat flow", () => {
       expect(href).not.toContain("undefined");
     }
   });
+
+  test("clear all sessions requires confirmation and calls DELETE /api/v1/admin/sessions", async ({
+    page,
+    createdSessionIds,
+  }) => {
+    // Create two sessions so the sidebar shows the "Clear all" button
+    const [r1, r2] = await Promise.all([
+      page.request.post(`${API_BASE}/api/v1/sessions`, {
+        data: { goal: "Clear-all test A" },
+        headers: { "X-Dev-User": "dev-user" },
+      }),
+      page.request.post(`${API_BASE}/api/v1/sessions`, {
+        data: { goal: "Clear-all test B" },
+        headers: { "X-Dev-User": "dev-user" },
+      }),
+    ]);
+    const s1 = await r1.json() as { session_id: string };
+    const s2 = await r2.json() as { session_id: string };
+    // Pushed as fallback; cleared below if the delete-all succeeds
+    createdSessionIds.push(s1.session_id, s2.session_id);
+
+    await page.goto(`/chat/${s1.session_id}`);
+    await expect(page.locator("textarea")).toBeVisible();
+
+    // "Clear all" button should be visible in the sidebar
+    await expect(page.getByTitle("Clear all sessions")).toBeVisible();
+
+    // First click: shows "Sure?" confirmation — does NOT delete yet
+    await page.getByTitle("Clear all sessions").click();
+    await expect(page.getByText("Sure?")).toBeVisible();
+
+    // Verify the sessions still exist (no premature deletion)
+    const checkRes = await page.request.get(`${API_BASE}/api/v1/sessions`, {
+      headers: { "X-Dev-User": "dev-user" },
+    });
+    const sessionsBefore = await checkRes.json() as { session_id: string }[];
+    expect(sessionsBefore.some((s) => s.session_id === s1.session_id)).toBe(true);
+
+    // Second click: "Sure?" triggers the actual DELETE
+    // deleteAllSessions() calls DELETE /api/v1/sessions (no /admin prefix)
+    const deleteResponsePromise = page.waitForResponse(
+      (res) =>
+        /\/api\/v1\/sessions$/.test(res.url()) && res.request().method() === "DELETE",
+    );
+    await page.getByText("Sure?").click();
+
+    const deleteResponse = await deleteResponsePromise;
+    expect(deleteResponse.status()).toBe(204);
+
+    // After delete-all succeeds, layout calls router.push("/chat") which navigates
+    // away from the current /chat/{uuid} page. Wait for a URL that no longer contains
+    // s1's session ID (the current /chat/{uuid} pattern would resolve immediately).
+    await page.waitForURL((url) => !url.href.includes(s1.session_id), { timeout: 10_000 });
+
+    // Sessions were deleted — clear the cleanup list to suppress 404 warnings
+    createdSessionIds.splice(0, createdSessionIds.length);
+
+    // Verify the deleted sessions no longer appear in the sidebar
+    const deletedId = s1.session_id;
+    await expect(page.locator(`a[href*="${deletedId}"]`)).not.toBeVisible({ timeout: 5_000 });
+  });
 });
