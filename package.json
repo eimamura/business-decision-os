@@ -5,19 +5,5 @@
   "workspaces": [
     "apps/web",
     "packages/schemas-ts"
-  ],
-  "scripts": {
-    "prepare": "husky"
-  },
-  "devDependencies": {
-    "@commitlint/cli": "^19.0.0",
-    "@commitlint/config-conventional": "^19.0.0",
-    "cz-conventional-changelog": "^3.3.0",
-    "husky": "^9.0.0"
-  },
-  "config": {
-    "commitizen": {
-      "path": "cz-conventional-changelog"
-    }
-  }
+  ]
 }
