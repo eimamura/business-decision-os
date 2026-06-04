@@ -36,6 +36,7 @@ Full task history for P0–P23 is archived at `docs/archive/v3/TASKS.md`.
 | P22 — Test Coverage Gaps | T-139–T-140 | 2026-06-03 |
 | P23 — Test Suite Rationalization | T-141–T-146 | 2026-06-03 |
 | P24 — Ollama Local LLM Provider | T-147–T-152 | 2026-06-04 |
+| P25 — Tool Scenario E2E Validation & Session Cleanup | T-153–T-159 | 2026-06-04 |
 
 ---
 
@@ -62,12 +63,6 @@ Dependencies: none
 | T-152 | Existing unit tests pass | Done |
 
 Dependencies: B-01
-
----
-
-## Active Phase
-
-P25 — Tool Scenario E2E Validation & Playwright Session Cleanup
 
 ---
 

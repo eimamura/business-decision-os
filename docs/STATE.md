@@ -14,7 +14,7 @@ P0–P23 (T-001–T-146) all Done. See `docs/archive/v3/STATE.md` for per-phase 
 
 ## Active Phase
 
-P25 — Tool Scenario E2E Validation & Playwright Session Cleanup
+None.
 
 ## Active Lease
 
