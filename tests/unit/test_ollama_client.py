@@ -258,3 +258,149 @@ async def test_ollama_client_complete_truncates_long_prompt_messages() -> None:
         await client.complete(messages)
 
     assert len(captured_usage["usage"].prompt_messages_json) <= _PROMPT_MESSAGES_MAX_LEN
+
+
+async def test_ollama_client_complete_populates_tool_calls_json() -> None:
+    """OllamaClient.complete() serializes tool calls into LLMUsage.tool_calls_json."""
+    import json
+    from packages.agent.llm import OllamaClient
+
+    json_body = {
+        "id": "resp-tc",
+        "choices": [
+            {
+                "message": {
+                    "content": "",
+                    "tool_calls": [
+                        {
+                            "id": "tc-1",
+                            "function": {"name": "my_tool", "arguments": {"key": "val"}},
+                        }
+                    ],
+                },
+                "finish_reason": "tool_calls",
+            }
+        ],
+        "usage": {"prompt_tokens": 5, "completion_tokens": 2},
+    }
+    mock_response = _make_response(200, json_body)
+    mock_client = _make_mock_client(mock_response)
+
+    captured_usage: dict = {}
+
+    async def _fake_writer(
+        session_id, agent_step_id, specialist_role, provider, model, usage
+    ) -> None:
+        captured_usage["usage"] = usage
+
+    client = OllamaClient(usage_writer=_fake_writer)
+    with patch("httpx.AsyncClient", return_value=mock_client):
+        await client.complete(_minimal_messages())
+
+    usage = captured_usage["usage"]
+    parsed = json.loads(usage.tool_calls_json)
+    assert isinstance(parsed, list)
+    assert len(parsed) == 1
+    assert parsed[0]["name"] == "my_tool"
+    assert parsed[0]["input"] == {"key": "val"}
+
+
+async def test_ollama_client_error_path_does_not_call_usage_writer() -> None:
+    """OllamaClient raises RuntimeError on HTTP error without calling usage_writer."""
+    from packages.agent.llm import OllamaClient
+
+    mock_client = AsyncMock()
+    mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+    mock_client.__aexit__ = AsyncMock(return_value=False)
+    mock_client.post = AsyncMock(side_effect=httpx.HTTPError("connection refused"))
+
+    writer_calls: list = []
+
+    async def _fake_writer(
+        session_id, agent_step_id, specialist_role, provider, model, usage
+    ) -> None:
+        writer_calls.append(usage)
+
+    client = OllamaClient(usage_writer=_fake_writer)
+    with patch("httpx.AsyncClient", return_value=mock_client):
+        with pytest.raises(RuntimeError):
+            await client.complete(_minimal_messages())
+
+    assert writer_calls == [], "usage_writer must not be called on HTTP error"
+
+
+async def test_ollama_client_complete_truncates_long_response_text() -> None:
+    """OllamaClient.complete() caps response_text at _RESPONSE_TEXT_MAX_LEN chars."""
+    from packages.agent.llm import LLMMessage, OllamaClient, _RESPONSE_TEXT_MAX_LEN
+
+    long_response = "r" * 100_000
+
+    json_body = {
+        "id": "resp-rt",
+        "choices": [
+            {
+                "message": {"content": long_response, "tool_calls": None},
+                "finish_reason": "stop",
+            }
+        ],
+        "usage": {},
+    }
+    mock_response = _make_response(200, json_body)
+    mock_client = _make_mock_client(mock_response)
+
+    captured_usage: dict = {}
+
+    async def _fake_writer(
+        session_id, agent_step_id, specialist_role, provider, model, usage
+    ) -> None:
+        captured_usage["usage"] = usage
+
+    client = OllamaClient(usage_writer=_fake_writer)
+    with patch("httpx.AsyncClient", return_value=mock_client):
+        await client.complete([LLMMessage(role="user", content="hi")])
+
+    assert len(captured_usage["usage"].response_text) <= _RESPONSE_TEXT_MAX_LEN
+
+
+async def test_ollama_client_complete_truncates_long_tool_calls_json() -> None:
+    """OllamaClient.complete() caps tool_calls_json at _TOOL_CALLS_MAX_LEN chars."""
+    import json
+    from packages.agent.llm import LLMMessage, OllamaClient, _TOOL_CALLS_MAX_LEN
+
+    # Build a tool call with a very large argument value
+    many_tool_calls = [
+        {
+            "id": f"tc-{i}",
+            "function": {"name": "big_tool", "arguments": {"data": "z" * 1_000}},
+        }
+        for i in range(50)
+    ]
+
+    json_body = {
+        "id": "resp-tclj",
+        "choices": [
+            {
+                "message": {
+                    "content": "",
+                    "tool_calls": many_tool_calls,
+                },
+                "finish_reason": "tool_calls",
+            }
+        ],
+        "usage": {},
+    }
+    mock_response = _make_response(200, json_body)
+    mock_client = _make_mock_client(mock_response)
+
+    captured_usage: dict = {}
+
+    async def _fake_writer(
+        session_id, agent_step_id, specialist_role, provider, model, usage
+    ) -> None:
+        captured_usage["usage"] = usage
+
+    client = OllamaClient(usage_writer=_fake_writer)
+    with patch("httpx.AsyncClient", return_value=mock_client):
+        await client.complete([LLMMessage(role="user", content="hi")])
+
+    assert len(captured_usage["usage"].tool_calls_json) <= _TOOL_CALLS_MAX_LEN

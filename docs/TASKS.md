@@ -238,7 +238,7 @@ Dependencies: B-01
 
 | Task | Description | Status |
 |---|---|---|
-| T-185 | Unit tests: `ClaudeClient.complete()` and `OllamaClient.complete()` populate the 3 new `LLMUsage` fields; `LlmUsageRepository.create()` stores them (mock DB) | Not Started |
-| T-186 | Existing unit tests pass (`make test-unit`) | Not Started |
+| T-185 | Unit tests: `ClaudeClient.complete()` and `OllamaClient.complete()` populate the 3 new `LLMUsage` fields; `LlmUsageRepository.create()` stores them (mock DB) | Done |
+| T-186 | Existing unit tests pass (`make test-unit`) | Done |
 
 Dependencies: B-02

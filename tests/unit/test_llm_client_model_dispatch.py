@@ -394,3 +394,74 @@ async def test_claude_client_complete_truncates_long_prompt_messages() -> None:
     await client.complete(messages=messages)
 
     assert len(captured_usage["usage"].prompt_messages_json) <= _PROMPT_MESSAGES_MAX_LEN
+
+
+async def test_claude_client_complete_truncates_long_response_text() -> None:
+    """response_text is capped at _RESPONSE_TEXT_MAX_LEN characters."""
+    from packages.agent.llm import LLMMessage, _RESPONSE_TEXT_MAX_LEN
+
+    client = _make_client()
+    messages = [LLMMessage(role="user", content="hi")]
+
+    captured_usage: dict[str, Any] = {}
+
+    async def _fake_writer(
+        session_id: Any, agent_step_id: Any, specialist_role: Any,
+        provider: Any, model: Any, usage: Any,
+    ) -> None:
+        captured_usage["usage"] = usage
+
+    client._usage_writer = _fake_writer
+
+    async def _fake_create(**kwargs: Any) -> MagicMock:
+        response = _make_fake_response()
+        long_block = MagicMock()
+        long_block.type = "text"
+        long_block.text = "r" * 100_000
+        response.content = [long_block]
+        return response
+
+    client._client.messages.create = _fake_create
+
+    await client.complete(messages=messages)
+
+    assert len(captured_usage["usage"].response_text) <= _RESPONSE_TEXT_MAX_LEN
+
+
+async def test_claude_client_complete_truncates_long_tool_calls_json() -> None:
+    """tool_calls_json is capped at _TOOL_CALLS_MAX_LEN characters."""
+    from packages.agent.llm import LLMMessage, _TOOL_CALLS_MAX_LEN
+
+    client = _make_client()
+    messages = [LLMMessage(role="user", content="hi")]
+
+    captured_usage: dict[str, Any] = {}
+
+    async def _fake_writer(
+        session_id: Any, agent_step_id: Any, specialist_role: Any,
+        provider: Any, model: Any, usage: Any,
+    ) -> None:
+        captured_usage["usage"] = usage
+
+    client._usage_writer = _fake_writer
+
+    async def _fake_create(**kwargs: Any) -> MagicMock:
+        response = _make_fake_response()
+        # Build many tool_use blocks so serialized JSON exceeds _TOOL_CALLS_MAX_LEN
+        tool_blocks = []
+        for i in range(50):
+            b = MagicMock()
+            b.type = "tool_use"
+            b.id = f"tc-{i}"
+            b.name = "big_tool"
+            b.input = {"data": "z" * 1_000}
+            tool_blocks.append(b)
+        response.content = tool_blocks
+        response.stop_reason = "tool_use"
+        return response
+
+    client._client.messages.create = _fake_create
+
+    await client.complete(messages=messages)
+
+    assert len(captured_usage["usage"].tool_calls_json) <= _TOOL_CALLS_MAX_LEN
