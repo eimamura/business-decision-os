@@ -260,3 +260,55 @@ Dependencies: B-02
 | T-191 | `make test-unit` 全通過確認 | Done |
 
 Dependencies: none
+
+---
+
+## P31 — Demand Agent: Data Analysis Layer
+
+**Goal:** Extend the Demand Agent from a forecast-only agent to a full data-analysis-capable agent by adding 8 new analysis tools (4 must-have, 4 next-tier), wiring them into the registry and allowlist, and updating the system prompt to guide analysis-first behavior.
+
+### Batch B-01 — Must-have analysis tools (App Builder) — Done
+
+| Task | Description | Status |
+|---|---|---|
+| T-192 | `DemandProfileTool` — `packages/tools/demand_profile_tool.py`: `profile_demand_data(sku_id?, lookback_days)` → data quality metrics (missing_rate, zero_demand_days, stockout_suspected_days, mean, std, cv, data_quality_score) | Done |
+| T-193 | `DemandTrendTool` — `packages/tools/demand_trend_tool.py`: `analyze_demand_trend(sku_id, lookback_days, granularity)` → trend_direction, trend_slope, r_squared, period_over_period_growth, peak/trough_period, periods list | Done |
+| T-194 | `ForecastAccuracyTool` — `packages/tools/forecast_accuracy_tool.py`: `evaluate_forecast_accuracy(sku_id, lookback_days)` → mape, wape, bias, coverage, sample_size, worst_period | Done |
+| T-195 | `DemandAnomalyTool` — `packages/tools/demand_anomaly_tool.py`: `detect_demand_anomalies(sku_id, lookback_days, z_threshold)` → anomaly_count, anomalies list with date/quantity/z_score/anomaly_type | Done |
+
+Dependencies: none
+
+### Batch B-02 — Next-tier analysis tools (App Builder) — Done
+
+| Task | Description | Status |
+|---|---|---|
+| T-196 | `DemandSeasonalityTool` — `packages/tools/demand_seasonality_tool.py`: `analyze_seasonality(sku_id, lookback_days)` → has_weekly_pattern, has_monthly_pattern, peak_periods, trough_periods, seasonality_index | Done |
+| T-197 | `DemandDriversTool` — `packages/tools/demand_drivers_tool.py`: `analyze_demand_drivers(sku_id, lookback_days)` → top_customers with demand_share/trend, customer_concentration, sku_risk_level | Done |
+| T-198 | `DemandSegmentTool` — `packages/tools/demand_segment_tool.py`: `segment_demand(dimension, lookback_days, top_n)` → segments list with total_qty, demand_share, trend_direction, cv | Done |
+| T-199 | `DemandCompareTool` — `packages/tools/demand_compare_tool.py`: `compare_demand_periods(sku_id?, period_a, period_b)` → totals, change_pct, change_units, daily_avg per period | Done |
+
+Dependencies: none (parallel-eligible with B-01)
+
+### Batch B-03 — Registry + allowlist + agent wiring + TOOLS.md (App Builder) — Done
+
+| Task | Description | Status |
+|---|---|---|
+| T-200 | Register all 8 new tools in `create_tool_registry()` in `packages/tools/__init__.py` | Done |
+| T-201 | Extend `_ROLE_TOOL_ALLOWLIST["demand"]` in `packages/tools/base.py` to include all 8 new tool names | Done |
+| T-202 | Rewrite `_SYSTEM_PROMPT` in `packages/agent/domain/demand.py` — 4 sections: Responsibilities, TOOL USE RULES (analysis-first), Available tables, Output format | Done |
+| T-203 | Update `docs/TOOLS.md` — add specs for 8 new tools; update demand role allowlist table | Done |
+
+Dependencies: B-01, B-02
+
+### Batch B-04 — Unit tests (Test/Review) — Done
+
+| Task | Description | Status |
+|---|---|---|
+| T-204 | Unit tests for `DemandProfileTool` — missing_rate calc, cv calc, data_quality_score, sku_id=None path (mock DB) | Done |
+| T-205 | Unit tests for `DemandTrendTool` — slope direction, period aggregation, granularity switch (mock DB) | Done |
+| T-206 | Unit tests for `ForecastAccuracyTool` — mape=None on zero-demand, wape calc, bias sign, worst_period detection (mock DB) | Done |
+| T-207 | Unit tests for `DemandAnomalyTool` — spike/drop/stockout/missing types, z_threshold boundary (mock DB) | Done |
+| T-208 | Unit tests for next-tier tools: seasonality index, driver concentration, segment share sum=1, period compare change_pct (mock DB) | Done |
+| T-209 | `make test-unit` full pass + `make lint` + `make typecheck` | Done |
+
+Dependencies: B-01, B-02, B-03

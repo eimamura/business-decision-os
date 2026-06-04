@@ -97,7 +97,7 @@ Defined in `packages/tools/base.py` as `_ROLE_TOOL_ALLOWLIST`. Each agent role h
 | `anomaly_detector` | `sql_query`, `nl_query`, `data_catalog_search`, `table_schema_reader`, `data_quality_checker` |
 | `simulation_optimizer` | `simulate_inventory`, `optimize_replenishment` |
 | `evaluator` | `evaluate_candidates`, `write_audit_log` |
-| `demand` | `sql_query`, `nl_query`, `forecast` |
+| `demand` | `sql_query`, `nl_query`, `forecast`, `train_forecast`, `profile_demand_data`, `analyze_demand_trend`, `evaluate_forecast_accuracy`, `detect_demand_anomalies`, `analyze_seasonality`, `analyze_demand_drivers`, `segment_demand`, `compare_demand_periods` |
 | `inventory` | `sql_query`, `nl_query` |
 | `replenishment` | `sql_query`, `nl_query` |
 | `procurement` | `sql_query`, `nl_query` |
@@ -535,6 +535,290 @@ This tool never fails — it always returns a pending record.
 - Never write a hand-coded table-schema string (`DB_SCHEMA`, `TABLE_COLUMNS`, etc.). Call `get_schema_context()`.
 - Never reference column names as string literals in tool code or agent system prompts. If the schema changes, only the Alembic migration and `ALLOWED_READ_TABLES` need to change — everything else derives from them automatically.
 - Raw SQL with hardcoded column names belongs in `packages/persistence/` repository functions only. Tool code and agent code must not contain inline SQL.
+
+---
+
+### Demand Analysis Tools
+
+---
+
+#### `profile_demand_data`
+
+Profile demand data quality and statistical distribution for a SKU over a lookback period.
+
+**Class:** `DemandProfileTool` (`packages/tools/demand_profile_tool.py`)
+**Requires approval:** No
+
+**Input**
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `sku_id` | string | No | SKU to profile; omit for a cross-SKU summary |
+| `lookback_days` | integer ≥ 1 | No | Number of days to look back (default: 90) |
+
+**Output**
+
+| Field | Type | Description |
+|---|---|---|
+| `sku_id` | string \| null | Echoed SKU (null for cross-SKU) |
+| `record_count` | integer | Total demand records in the lookback window |
+| `missing_rate` | number | Fraction of records flagged as missing |
+| `zero_demand_days` | integer | Days with quantity = 0 |
+| `stockout_suspected_days` | integer | Days suspected as stockout (equals missing_rate count) |
+| `mean` | number \| null | Mean demand quantity; null if no data |
+| `std` | number \| null | Standard deviation; null if no data |
+| `cv` | number \| null | Coefficient of variation (std / mean); null if mean is zero |
+| `data_quality_score` | number | Score in [0, 1] — 1 = fully clean data |
+| `date_range` | object | `{start: string, end: string}` ISO dates |
+| `error` | string | Present only on database failure |
+
+**Failure handling**
+
+On database error: returns `{error: "no database connection"}`. Never raises.
+
+**Audit payload:** `{sku_id, lookback_days, record_count}`
+
+---
+
+#### `analyze_demand_trend`
+
+Analyze demand trend direction, slope, and period-over-period growth for a SKU.
+
+**Class:** `DemandTrendTool` (`packages/tools/demand_trend_tool.py`)
+**Requires approval:** No
+
+**Input**
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `sku_id` | string | Yes | SKU identifier |
+| `lookback_days` | integer ≥ 7 | No | Number of days to look back (default: 90) |
+| `granularity` | `"weekly"` \| `"monthly"` | No | Aggregation period (default: `"weekly"`) |
+
+**Output**
+
+| Field | Type | Description |
+|---|---|---|
+| `sku_id` | string | Echoed SKU |
+| `granularity` | string | Echoed granularity |
+| `trend_direction` | string | `"up"`, `"down"`, or `"flat"` |
+| `trend_slope` | number | Linear regression slope (units per period) |
+| `r_squared` | number | Goodness-of-fit for the trend line [0, 1] |
+| `period_over_period_growth` | number \| null | Fractional growth from second-to-last to last period |
+| `peak_period` | string \| null | Period label with highest demand |
+| `trough_period` | string \| null | Period label with lowest demand |
+| `periods` | array | `[{period: string, quantity: number}]` aggregated by period |
+| `error` | string | Present only on database failure |
+
+**Failure handling**
+
+On database error: returns `{error: "no database connection"}`. Never raises.
+
+**Audit payload:** `{sku_id, lookback_days, granularity}`
+
+---
+
+#### `evaluate_forecast_accuracy`
+
+Compute MAPE, WAPE, and bias for a SKU by comparing forecast history against actual demand.
+
+**Class:** `ForecastAccuracyTool` (`packages/tools/forecast_accuracy_tool.py`)
+**Requires approval:** No
+
+**Input**
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `sku_id` | string | Yes | SKU identifier |
+| `lookback_days` | integer ≥ 1 | No | Evaluation window in days (default: 90) |
+
+**Output**
+
+| Field | Type | Description |
+|---|---|---|
+| `sku_id` | string | Echoed SKU |
+| `sample_size` | integer | Number of matched forecast–actual pairs |
+| `mape` | number \| null | Mean Absolute Percentage Error; null if no positive-actual rows |
+| `wape` | number | Weighted Absolute Percentage Error |
+| `bias` | number | Average signed error (positive = over-forecast) |
+| `coverage` | number | Fraction of demand days that have a corresponding forecast |
+| `worst_period` | object \| null | `{date, forecast_qty, actual_qty, error_pct}` for the highest-error day |
+| `error` | string | Present only on database failure |
+
+**Failure handling**
+
+On database error: returns `{error: "no database connection"}`. Never raises.
+
+**Audit payload:** `{sku_id, lookback_days, sample_size}`
+
+---
+
+#### `detect_demand_anomalies`
+
+Detect demand spikes, drops, and stockout periods using z-score analysis.
+
+**Class:** `DemandAnomalyTool` (`packages/tools/demand_anomaly_tool.py`)
+**Requires approval:** No
+
+**Input**
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `sku_id` | string | Yes | SKU identifier |
+| `lookback_days` | integer ≥ 7 | No | Number of days to look back (default: 90) |
+| `z_threshold` | number ≥ 0.5 | No | Z-score threshold for spike/drop detection (default: 2.5) |
+
+**Output**
+
+| Field | Type | Description |
+|---|---|---|
+| `sku_id` | string | Echoed SKU |
+| `anomaly_count` | integer | Total number of anomalous days detected |
+| `anomalies` | array | `[{date, quantity, z_score, anomaly_type}]`; `anomaly_type` is `"spike"`, `"drop"`, `"stockout"`, or `"missing"` |
+| `error` | string | Present only on database failure |
+
+**Failure handling**
+
+On database error: returns `{error: "no database connection"}`. Never raises. Returns empty `anomalies` when fewer than 3 records exist.
+
+**Audit payload:** `{sku_id, lookback_days, z_threshold, anomaly_count}`
+
+---
+
+#### `analyze_seasonality`
+
+Detect weekly and monthly demand seasonality patterns for a SKU.
+
+**Class:** `DemandSeasonalityTool` (`packages/tools/demand_seasonality_tool.py`)
+**Requires approval:** No
+
+**Input**
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `sku_id` | string | Yes | SKU identifier |
+| `lookback_days` | integer ≥ 28 | No | Number of days to look back (default: 365) |
+
+**Output**
+
+| Field | Type | Description |
+|---|---|---|
+| `sku_id` | string | Echoed SKU |
+| `lookback_days` | integer | Echoed lookback window |
+| `record_count` | integer | Number of non-missing demand records used |
+| `has_weekly_pattern` | boolean | True if day-of-week CV > 0.15 |
+| `has_monthly_pattern` | boolean | True if month-of-year CV > 0.10 |
+| `peak_periods` | array of string | Days/months with above-average demand (up to 5) |
+| `trough_periods` | array of string | Days/months with below-average demand (up to 5) |
+| `seasonality_index` | number | Max of weekly and monthly CVs; 0 if fewer than 28 records |
+| `error` | string | Present only on database failure |
+
+**Failure handling**
+
+On database error: returns `{error: "no database connection"}`. Never raises. Returns zeroed seasonality fields when fewer than 14 records exist.
+
+**Audit payload:** `{sku_id, lookback_days, record_count}`
+
+---
+
+#### `analyze_demand_drivers`
+
+Identify top customers driving demand for a SKU and assess customer concentration risk.
+
+**Class:** `DemandDriversTool` (`packages/tools/demand_drivers_tool.py`)
+**Requires approval:** No
+
+**Input**
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `sku_id` | string | Yes | SKU identifier |
+| `lookback_days` | integer ≥ 7 | No | Number of days to look back (default: 90) |
+
+**Output**
+
+| Field | Type | Description |
+|---|---|---|
+| `sku_id` | string | Echoed SKU |
+| `lookback_days` | integer | Echoed lookback window |
+| `total_demand` | number | Total demand quantity for the SKU in the window |
+| `top_customers` | array | Up to 5 `{customer_id, segment, total_qty, demand_share, avg_daily_qty}` sorted by demand share |
+| `customer_concentration` | number | HHI-like concentration score in [0, 1]; higher = more concentrated |
+| `sku_risk_level` | string | `"low"`, `"medium"`, or `"high"` based on concentration |
+| `error` | string | Present only on database failure |
+
+**Failure handling**
+
+On database error: returns `{error: "no database connection"}`. Never raises. Returns empty `top_customers` when no affinity data is found.
+
+**Audit payload:** `{sku_id, lookback_days, customer_count}`
+
+---
+
+#### `segment_demand`
+
+Rank SKUs or summarize demand distribution across a dimension (SKU or customer).
+
+**Class:** `DemandSegmentTool` (`packages/tools/demand_segment_tool.py`)
+**Requires approval:** No
+
+**Input**
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `dimension` | `"sku"` \| `"customer"` | No | Segmentation dimension (default: `"sku"`) |
+| `lookback_days` | integer ≥ 1 | No | Number of days to look back (default: 90) |
+| `top_n` | integer 1–50 | No | Maximum segments to return (default: 10) |
+
+**Output**
+
+| Field | Type | Description |
+|---|---|---|
+| `dimension` | string | Echoed dimension |
+| `lookback_days` | integer | Echoed lookback window |
+| `total_demand` | number | Total demand across all segments |
+| `segments` | array | Up to `top_n` entries of `{id, total_qty, demand_share, trend_direction, cv}` sorted by total quantity descending |
+| `error` | string | Present only on database failure |
+
+**Failure handling**
+
+On database error: returns `{error: "no database connection"}`. Never raises.
+
+**Audit payload:** `{dimension, lookback_days, top_n, segment_count}`
+
+---
+
+#### `compare_demand_periods`
+
+Compare total and average demand between two date ranges for a SKU or all SKUs.
+
+**Class:** `DemandCompareTool` (`packages/tools/demand_compare_tool.py`)
+**Requires approval:** No
+
+**Input**
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `sku_id` | string | No | SKU identifier; omit for all SKUs |
+| `period_a` | object | Yes | `{start: "YYYY-MM-DD", end: "YYYY-MM-DD"}` — baseline period |
+| `period_b` | object | Yes | `{start: "YYYY-MM-DD", end: "YYYY-MM-DD"}` — comparison period |
+
+**Output**
+
+| Field | Type | Description |
+|---|---|---|
+| `sku_id` | string \| null | Echoed SKU (null for all SKUs) |
+| `period_a` | object | `{start, end, total_qty, daily_avg, days}` for the baseline period |
+| `period_b` | object | `{start, end, total_qty, daily_avg, days}` for the comparison period |
+| `change_units` | number | Absolute change in total quantity (period_b − period_a) |
+| `change_pct` | number \| null | Percentage change relative to period_a; null if period_a total is 0 |
+| `error` | string | Present only on database or date-parse failure |
+
+**Failure handling**
+
+On invalid date format: returns `{error: "Invalid date format: ..."}`. On database error: returns `{error: "no database connection"}`. Never raises.
+
+**Audit payload:** `{sku_id, period_a_start, period_b_end}`
 
 ---
 

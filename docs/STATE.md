@@ -14,7 +14,7 @@ P0–P23 (T-001–T-146) all Done. See `docs/archive/v3/STATE.md` for per-phase 
 
 ## Active Phase
 
-None (P30 complete)
+None (P31 complete)
 
 ## Active Lease
 
@@ -22,7 +22,10 @@ None
 
 ## Last Completed
 
-P30-B-01 — AgentRuntime execute_tools unit tests (2026-06-04)
+P31-B-04 — Unit tests for all 8 demand analysis tools (2026-06-04)
+- `make test-unit` → 615 passed, 11 skipped (exit 0)
+- `make lint` → All checks passed (exit 0)
+- `make typecheck` → 149 source files, no issues (exit 0)
 - `make test-unit` → 587 passed, 11 skipped (exit 0)
 - `make test-unit` → 584 passed, 11 skipped (exit 0)
 - `make lint` → All checks passed (exit 0)
