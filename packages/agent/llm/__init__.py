@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import os
 import time
 import warnings
@@ -586,11 +587,234 @@ class ClaudeClient:
         return [[0.0] * 1536 for _ in texts]
 
 
+_logger = logging.getLogger(__name__)
+
+
+class OllamaClient:
+    """LLMClient implementation that calls a locally-running Ollama server.
+
+    Uses Ollama's OpenAI-compatible /v1/chat/completions endpoint.
+    Cost is always zero — no per-token billing for local inference.
+    Embedding is a zero-vector stub; no local embedding model is bundled.
+    """
+
+    DEFAULT_BASE_URL = "http://localhost:11434"
+    DEFAULT_MODEL = "qwen2.5-coder:7b"
+
+    def __init__(
+        self,
+        base_url: str = DEFAULT_BASE_URL,
+        model: str = DEFAULT_MODEL,
+        usage_writer: UsageWriter | None = None,
+    ) -> None:
+        if not base_url:
+            raise RuntimeError("OllamaClient: base_url must not be empty — set OLLAMA_BASE_URL")
+        self._base_url = base_url.rstrip("/")
+        self._model = model
+        self._usage_writer: UsageWriter = usage_writer or _noop_usage_writer
+        _logger.info("OllamaClient initialized: base_url=%s model=%s", self._base_url, self._model)
+
+    # ------------------------------------------------------------------
+    # Internal helpers
+    # ------------------------------------------------------------------
+
+    def _to_openai_messages(self, messages: list[LLMMessage]) -> list[dict[str, Any]]:
+        result: list[dict[str, Any]] = []
+        for msg in messages:
+            if msg.role == "tool":
+                result.append({
+                    "role": "tool",
+                    "tool_call_id": msg.tool_call_id or "",
+                    "content": msg.content,
+                })
+            else:
+                result.append({"role": msg.role, "content": msg.content})
+        return result
+
+    def _to_openai_tools(self, tools: list[LLMToolSpec]) -> list[dict[str, Any]]:
+        return [
+            {
+                "type": "function",
+                "function": {
+                    "name": t.name,
+                    "description": t.description,
+                    "parameters": t.input_schema,
+                },
+            }
+            for t in tools
+        ]
+
+    def _map_finish_reason(
+        self, raw: str | None
+    ) -> Literal["stop", "tool_use", "length", "error"]:
+        match raw:
+            case "stop":
+                return "stop"
+            case "tool_calls":
+                return "tool_use"
+            case "length":
+                return "length"
+            case _:
+                return "stop"
+
+    # ------------------------------------------------------------------
+    # LLMClient Protocol methods
+    # ------------------------------------------------------------------
+
+    async def complete(
+        self,
+        messages: list[LLMMessage],
+        tools: list[LLMToolSpec] | None = None,
+        temperature: float = 0.0,
+        max_tokens: int = 4096,
+        prompt_cache: bool = True,
+        agent_step_id: UUID | None = None,
+        specialist_role: str | None = None,
+    ) -> LLMResponse:
+        import httpx
+
+        payload: dict[str, Any] = {
+            "model": self._model,
+            "messages": self._to_openai_messages(messages),
+            "temperature": temperature,
+            "max_tokens": max_tokens,
+            "stream": False,
+        }
+        if tools:
+            payload["tools"] = self._to_openai_tools(tools)
+
+        start = time.monotonic()
+        try:
+            async with httpx.AsyncClient() as client:
+                resp = await client.post(
+                    f"{self._base_url}/v1/chat/completions",
+                    json=payload,
+                    timeout=120.0,
+                )
+                resp.raise_for_status()
+        except httpx.HTTPError as exc:
+            raise RuntimeError(f"OllamaClient HTTP error: {exc}") from exc
+
+        latency_ms = int((time.monotonic() - start) * 1000)
+        data: dict[str, Any] = resp.json()
+
+        choice = data["choices"][0]
+        message = choice["message"]
+
+        text: str = message.get("content") or ""
+        raw_tool_calls: list[dict[str, Any]] = message.get("tool_calls") or []
+        tool_calls: list[dict[str, Any]] = [
+            {
+                "id": tc.get("id", str(uuid4())),
+                "name": tc["function"]["name"],
+                "input": tc["function"].get("arguments", {}),
+            }
+            for tc in raw_tool_calls
+        ]
+
+        finish_reason = self._map_finish_reason(choice.get("finish_reason"))
+
+        raw_usage = data.get("usage", {})
+        llm_usage = LLMUsage(
+            input_tokens=raw_usage.get("prompt_tokens", 0),
+            output_tokens=raw_usage.get("completion_tokens", 0),
+            cache_read_tokens=0,
+            cache_write_tokens=0,
+            total_cost_usd=Decimal("0"),
+        )
+        await self._usage_writer(
+            None, agent_step_id, specialist_role, "ollama", self._model, llm_usage
+        )
+
+        return LLMResponse(
+            text=text,
+            tool_calls=tool_calls,
+            finish_reason=finish_reason,
+            usage=llm_usage,
+            model=self._model,
+            request_id=data.get("id", str(uuid4())),
+            latency_ms=latency_ms,
+        )
+
+    async def stream(
+        self,
+        messages: list[LLMMessage],
+        tools: list[LLMToolSpec] | None = None,
+        temperature: float = 0.0,
+        max_tokens: int = 4096,
+        prompt_cache: bool = True,
+        agent_step_id: UUID | None = None,
+        specialist_role: str | None = None,
+    ) -> AsyncIterator[LLMStreamEvent]:
+        import httpx
+
+        payload: dict[str, Any] = {
+            "model": self._model,
+            "messages": self._to_openai_messages(messages),
+            "temperature": temperature,
+            "max_tokens": max_tokens,
+            "stream": True,
+        }
+        if tools:
+            payload["tools"] = self._to_openai_tools(tools)
+
+        base_url = self._base_url
+
+        async def _gen() -> AsyncIterator[LLMStreamEvent]:
+            try:
+                async with httpx.AsyncClient() as client:
+                    async with client.stream(
+                        "POST",
+                        f"{base_url}/v1/chat/completions",
+                        json=payload,
+                        timeout=120.0,
+                    ) as resp:
+                        resp.raise_for_status()
+                        async for line in resp.aiter_lines():
+                            if not line.startswith("data:"):
+                                continue
+                            raw = line[len("data:"):].strip()
+                            if raw == "[DONE]":
+                                break
+                            import json
+
+                            try:
+                                chunk: dict[str, Any] = json.loads(raw)
+                            except ValueError:
+                                continue
+                            choices = chunk.get("choices", [])
+                            if not choices:
+                                continue
+                            delta = choices[0].get("delta", {})
+                            content: str | None = delta.get("content")
+                            if content:
+                                yield LLMStreamEvent(event="text_delta", data=content)
+            except Exception as exc:  # noqa: BLE001 — stream errors must not crash the generator
+                yield LLMStreamEvent(event="error", error=str(exc))
+
+        return _gen()
+
+    async def embed(
+        self,
+        texts: list[str],
+        model: str = "text-embedding-3-small",
+        agent_step_id: UUID | None = None,
+    ) -> list[list[float]]:
+        # No local embedding model bundled; return zero vectors (same as StubClaudeClient).
+        return [[0.0] * 1536 for _ in texts]
+
+
 def create_llm_client(
     usage_writer: UsageWriter | None = None,
-) -> ClaudeClient | ScenarioStubClaudeClient:
+) -> ClaudeClient | ScenarioStubClaudeClient | OllamaClient:
     if os.environ.get("MOCK_LLM", "").lower() == "true":
         return ScenarioStubClaudeClient()
+    provider = os.environ.get("LLM_PROVIDER", "anthropic").lower()
+    if provider == "ollama":
+        base_url = os.environ.get("OLLAMA_BASE_URL", OllamaClient.DEFAULT_BASE_URL)
+        model = os.environ.get("OLLAMA_MODEL", OllamaClient.DEFAULT_MODEL)
+        return OllamaClient(base_url=base_url, model=model, usage_writer=usage_writer)
+    # Default: anthropic
     api_key = os.environ.get("ANTHROPIC_API_KEY", "")
     if not api_key:
         raise RuntimeError("ANTHROPIC_API_KEY is not set — add it to .env")
@@ -599,7 +823,7 @@ def create_llm_client(
 
 
 class BudgetedClaudeClient:
-    def __init__(self, inner: ClaudeClient | ScenarioStubClaudeClient, guard: BudgetGuard) -> None:
+    def __init__(self, inner: ClaudeClient | ScenarioStubClaudeClient | OllamaClient, guard: BudgetGuard) -> None:
         self._inner = inner
         self._guard = guard
 
