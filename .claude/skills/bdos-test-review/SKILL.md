@@ -68,7 +68,7 @@ Read when relevant:
 
 | Task type | Also read |
 |---|---|
-| Code review across layer boundaries | `docs/ARCHITECTURE_RULES.md` — MUST/MUST NOT rules per layer |
+| Code review across layer boundaries | `docs/DESIGN.md §Architecture Constraints` — MUST/MUST NOT rules per layer |
 
 ## Tool Usage Rules
 

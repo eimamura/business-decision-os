@@ -66,8 +66,8 @@ Read when relevant:
 | Task type | Also read |
 |---|---|
 | Implementing or changing any tool | `docs/TOOLS.md` — tool specs, failure handling, audit payload |
-| Touching layer boundaries (agent ↔ tool ↔ persistence) | `docs/ARCHITECTURE_RULES.md` — MUST/MUST NOT rules per layer |
-| Changing any public interface | `docs/ARCHITECTURE_RULES.md §Cross-cutting Rules` and `docs/adr/` |
+| Touching layer boundaries (agent ↔ tool ↔ persistence) | `docs/DESIGN.md §Architecture Constraints` — MUST/MUST NOT rules per layer |
+| Changing any public interface | `docs/DESIGN.md §Architecture Constraints — Cross-cutting` and `docs/adr/` |
 | Writing or modifying any test | `.claude/rules/testing.md` — test tiers, naming conventions, zero-network rule |
 
 ## Tool Usage Rules

@@ -10,6 +10,78 @@ For tool categories and design principles, see `docs/DESIGN.md` §Tool Design.
 
 ---
 
+## API Behavioral Contracts
+
+Behaviors that must survive every refactoring phase. If a change would break one of these, file an ADR before proceeding.
+
+### HTTP API Routes
+
+| Route | Method | Guaranteed behavior |
+|---|---|---|
+| `/healthz` | GET | 200 `{"status": "ok"}` |
+| `/readyz` | GET | 200 when DB reachable; 503 when not |
+| `POST /api/v1/sessions` | POST | Creates session; returns `session_id` (UUID, stable across restarts) |
+| `GET /api/v1/sessions` | GET | Returns list of sessions for caller |
+| `GET /api/v1/sessions/{session_id}` | GET | Returns session or 404 |
+| `DELETE /api/v1/sessions/{session_id}` | DELETE | 204; cascades to messages |
+| `GET /api/v1/sessions/{session_id}/messages` | GET | Returns ordered message list |
+| `POST /api/v1/sessions/{session_id}/messages` | POST | Enqueues user message; returns job handle |
+| `GET /api/v1/sessions/{session_id}/stream` | GET | SSE stream (see `packages/schemas/sse_events.py`) |
+| `POST /api/v1/sessions/{session_id}/messages/{message_id}/answer` | POST | Submits AskUser answer; resumes orchestrator |
+| `POST /api/v1/decisions` | POST | Triggers async decision job; returns `job_id` |
+| `GET /api/v1/decisions/{job_id}/status` | GET | Returns job status; never blocks |
+| `GET /api/v1/approvals/{approval_id}` | GET | Returns approval or 404 |
+| `POST /api/v1/approvals/{approval_id}/decision` | POST | Applies state transition; 422 on illegal transitions |
+
+### Auth Contracts
+
+| Condition | Behavior |
+|---|---|
+| `APP_ENV=dev` | `user_id` is `None`; all routes accessible without token |
+| `APP_ENV != dev` | Auth middleware enforces identity; unauth → 401 |
+
+- Missing/invalid credentials → **401** (not 403, not 200)
+- Insufficient permissions → **403**
+- These codes MUST NOT be swapped during refactoring.
+
+### Error Contracts
+
+| Situation | Required behavior |
+|---|---|
+| Request validation failure | 422 (FastAPI default; MUST NOT change to 400) |
+| Internal / unexpected error | 500 with error envelope; never silent 200 with error in body |
+| Missing `ANTHROPIC_API_KEY` | `RuntimeError` at call site; never stub or no-op |
+| Missing external service config | `RuntimeError` at call site; never silently degrade |
+| Illegal approval state transition | 422 |
+
+### Persistence Contracts
+
+The following data MUST survive a service restart:
+
+| Entity | Repository | Guarantee |
+|---|---|---|
+| Sessions | `persistence.sessions_repo` | `session_id` stable; messages preserved |
+| Approvals | `persistence.approvals_repo` | Status and all transitions preserved |
+| Audit log | `persistence.audit_log_repo` | Append-only; no rows ever deleted |
+| LLM usage | `persistence.llm_usage_repo` | Cost/token records preserved |
+
+Approval state machine (enforced at domain layer, not just DB):
+
+```
+pending → approved | rejected | needs_revision | expired
+approved / rejected / needs_revision / expired → (terminal — no further transitions)
+```
+
+### SSE Stream Contract
+
+The SSE event schema is the code: `packages/schemas/sse_events.py` is SSoT.
+
+**Guaranteed invariants (independent of event type):**
+- Every stream ends with `done` or `error` — never silently terminates mid-sequence.
+- `done.reply` is always populated with the final user-facing text.
+
+---
+
 ## Tool Access Control
 
 Tool access is enforced at two layers, both of which must pass for a tool to be callable.

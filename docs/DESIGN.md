@@ -150,6 +150,15 @@ Specialized analysis and business judgment are delegated to Domain Agents or Cro
 
 When results from multiple agents conflict, the SessionOrchestrator detects the conflict and, if necessary, requests additional confirmation, re-analysis, or escalation to a human.
 
+### Constraints
+
+- Orchestrator MAY route, plan, aggregate results, detect conflicts, score decisions, and generate responses.
+- Orchestrator MUST receive user-facing work as `SessionUserQuery` and return `SessionResponse`; `SessionGoal` is internal and only used when a clear decision or analytical goal exists.
+- Orchestrator MUST delegate specialized domain analysis to Domain Agents or Analytical Agents.
+- Orchestrator MUST NOT own domain-specific calculations, supply chain thresholds, or business rules.
+- Orchestrator MUST NOT call the database directly; data access goes through Tools.
+- Orchestrator MUST NOT call the LLM provider SDK directly; all LLM calls go through `packages/agent/llm/`.
+
 ---
 
 ## Agent Classification
@@ -190,6 +199,20 @@ Cross-Domain Agents own responsibility for reusable capabilities that support mu
 | Evaluator Agent | Evaluate candidate plans | Score each candidate plan against all KPIs independently | Analysis Tools, Calculation Tools, Knowledge Tools, Memory / Audit Tools | Candidate list, KPI definitions, weights, constraints, risk information | Per-KPI scores, evaluation rationale, audit notes | Working Memory, Decision Memory |
 | Anomaly Detector Agent | Detect anomalies and items requiring attention | Detect missing data, outliers, sudden changes, rule violations, and abnormal patterns across domains; surface root cause candidates | Data Access Tools, Analysis Tools, Knowledge Tools, Memory / Audit Tools | Operational data, KPIs, thresholds, rules, historical trends | Anomaly list, severity, root cause candidates, review rationale | Working Memory, Audit Memory |
 
+### Domain Agent Constraints
+
+- Domain Agents MAY reason over their domain context and invoke Tools to retrieve data or run calculations.
+- Domain Agents MAY hold domain-specific business rules as reasoning input (not as executable code).
+- Domain Agents MUST NOT implement data access directly; all reads go through Tool Layer.
+- Domain Agents MUST NOT route requests between agents or aggregate multi-domain results.
+- Domain Agents MUST NOT call the LLM provider SDK directly.
+
+### Analytical Agent Constraints
+
+- Analytical Agents MAY operate across domain boundaries by invoking Tools.
+- Analytical Agents MUST NOT own domain-specific business rules; they consume domain data, not domain logic.
+- Analytical Agents MUST NOT route or aggregate in a way that duplicates Orchestrator responsibilities.
+
 ---
 
 ## Tool Design
@@ -219,6 +242,15 @@ Tools are classified into the following categories:
 Tool specifications, arguments, return values, permissions, failure handling, access control, and MVP implementation priority are defined in `docs/TOOLS.md`.
 
 In DESIGN.md, only the purpose and responsibility boundaries of tool categories are defined.
+
+### Constraints
+
+- Tools MAY execute data access, calculations, external API calls, simulations, and audit writes.
+- Tools MUST expose a clear input/output schema conforming to the `Tool` base class in `packages/tools/base.py`.
+- Tools MUST raise `RuntimeError` on missing configuration (API keys, DB connection); never silently degrade to a no-op or stub.
+- Tools MUST NOT decide business strategy or routing; they are execution primitives, not decision-makers.
+- Tools MUST NOT route requests between agents.
+- Tools MUST NOT bypass `LLMClient` to call the provider SDK directly.
 
 ---
 
@@ -266,6 +298,13 @@ Retains business rules, KPI definitions, domain knowledge, and historical cases.
 
 Memory is used not only for response quality but also for accountability, reproducibility, and auditability.
 
+### Constraints
+
+- Memory MUST be accessed through typed store classes: `ShortTermMemory`, `WorkingMemory`, `LongTermMemory`, `DecisionMemory`, `UserMemory`, `DomainMemory`.
+- Agents MUST NOT pass raw dicts as "memory" between components; use the Memory Layer API.
+- Agents MUST NOT read or write memory belonging to another agent's domain without going through the Memory Layer API.
+- Memory MUST NOT be used solely as raw conversation history; it holds state, context, and decision records.
+
 ---
 
 ## Guardrail Design
@@ -287,6 +326,21 @@ The Guardrail Layer is responsible for:
 - Separating executable operations from proposal-only operations
 
 When confidence is low or business risk is high, agents prioritize requesting human confirmation.
+
+### Constraints
+
+- All external actions (database writes with business impact, notifications, approval requests) MUST pass through Guardrail before execution.
+- Guardrail logic MUST NOT be scattered as ad-hoc `if permission` or `if approval` checks inside Agent or Tool code.
+- Guardrail MUST expose a stable API: `can_execute()`, `needs_approval()`, `audit_required()`.
+- Agents MUST surface low-confidence or high-risk decisions to Guardrail; never silently degrade or self-approve.
+- Approval rows in terminal states (`approved`, `rejected`, `needs_revision`, `expired`) MUST NOT be mutated by any layer.
+
+#### SQL Read Guardrail
+
+- `SqlQueryTool` and `NlQueryTool` MUST validate SQL through `packages/tools/sql_guardrail.py:validate_read_sql()` before calling any persistence repository function.
+- SQL read guardrail policy MUST stay in the Tool Layer. `packages/persistence/` executes validated queries and MUST NOT become the policy owner for table allowlisting or SQL safety.
+- User- or LLM-provided SQL MUST be a single `SELECT` statement, reference at least one allowlisted table, and avoid non-read operations or dangerous database features.
+- SQL guardrail tests MUST cover direct SQL, generated SQL, quoted identifiers, schema-qualified names, joins, comma joins, CTEs, subqueries, and `UNION` references.
 
 ---
 
@@ -341,6 +395,22 @@ In implementation, multiple capabilities may be consolidated into a smaller numb
 However, the agent definitions as responsibility boundaries must be maintained.
 
 Rather than perpetuating the existing structure for implementation convenience, the priority is to align with the responsibility separation, orchestration, tool design, memory design, and guardrail design defined in this DESIGN.md.
+
+---
+
+## Architecture Constraints — Cross-cutting
+
+These apply everywhere, regardless of layer. When a code review or arch test cites an architecture violation, this section and the layer-specific Constraints subsections above are the authoritative source.
+
+| Rule | Rationale |
+|------|-----------|
+| Only `packages/agent/llm/` may call the LLM provider SDK | Centralizes rate limiting, cost tracking, and failover |
+| Only `packages/tools/` and `packages/persistence/` may hold SQLAlchemy models or execute queries | Prevents hidden data access paths |
+| `data/sample/ground_truth/` MUST NOT be read by any agent or tool | Test-data isolation |
+| Public interfaces (`LLMClient`, `Tool`, `JobRunner`, `MemoryStore`, `Orchestrator`, `Specialist`) MUST NOT change without an ADR | Preserves integration contracts |
+| Orchestrator interface changes are governed by `docs/adr/2026-05-21-user-query-orchestrator-flow.md` | Records the accepted `SessionUserQuery` → `SessionResponse` flow |
+| No smart stubs: stubs MUST conform to schema, not approximate real behavior | Prevents false-passing tests |
+| No fail-silent fallbacks: missing config raises `RuntimeError` at the call site | Prevents silent degradation in production |
 
 ---
 
