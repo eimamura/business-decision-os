@@ -622,7 +622,7 @@ class OllamaClient:
     """
 
     DEFAULT_BASE_URL = "http://localhost:11434"
-    DEFAULT_MODEL = "qwen2.5-coder:7b"
+    DEFAULT_MODEL = "qwen3.6:latest"
 
     def __init__(
         self,

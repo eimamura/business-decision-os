@@ -137,7 +137,7 @@ def test_create_llm_client_returns_ollama_when_provider_env_set(
     client = create_llm_client()
 
     assert isinstance(client, OllamaClient)
-    assert client._model == "qwen2.5-coder:7b"
+    assert client._model == OllamaClient.DEFAULT_MODEL
 
 
 def test_create_llm_client_ollama_respects_env_vars(
