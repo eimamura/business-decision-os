@@ -3,7 +3,6 @@ import { z } from "zod";
 // AUTO-GENERATED — do not edit by hand.
 // Single Source of Truth: packages/schemas/sse_events.py
 // Regenerate:  make codegen
-
 export const TokenCostSchema = z.object({
   input_tokens: z.number().int(),
   output_tokens: z.number().int(),
@@ -137,14 +136,14 @@ export const TextDeltaEventSchema = z.object({
 
 export const DoneEventSchema = z.object({
   type: z.literal("done"),
-  session_id: z.string(),
+  session_id: z.string().uuid(),
   reply: z.string().nullable().optional(),
   timestamp: z.string(),
 });
 
 export const AwaitingInputEventSchema = z.object({
   type: z.literal("awaiting_input"),
-  session_id: z.string(),
+  session_id: z.string().uuid(),
   ask_user_id: z.string(),
   timestamp: z.string(),
 });

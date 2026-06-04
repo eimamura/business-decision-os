@@ -58,7 +58,7 @@ typecheck:
 	uv run mypy packages/ apps/api/
 
 codegen:
-	uv run python scripts/generate_sse_schemas.py
+	uv run python scripts/generate_schemas.py
 	@echo "Verifying no TS compile errors after codegen..."
 	cd apps/web && npx tsc --noEmit
 	@echo "codegen OK"
