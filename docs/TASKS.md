@@ -39,6 +39,7 @@ Full task history for P0–P23 is archived at `docs/archive/v3/TASKS.md`.
 | P25 — Tool Scenario E2E Validation & Session Cleanup | T-153–T-159 | 2026-06-04 |
 | P26 — SSE/Broadcaster Bug Fixes | T-160–T-166 | 2026-06-04 |
 | P27 — Model Name in Execution Trace Nodes | T-167–T-171 | 2026-06-04 |
+| P28 — Real-time Execution Trace & Persistence Recovery | T-172–T-178 | 2026-06-04 |
 
 ---
 
@@ -172,3 +173,72 @@ Dependencies: B-01
 | T-171 | Vitest: `ExecutionPanel` renders model badge when `meta.model_name` is set | Done |
 
 Dependencies: B-01, B-02
+
+---
+
+## P28 — Real-time Execution Trace & Persistence Recovery
+
+**Goal:** Fix a race condition that causes early graph_node SSE events to be silently dropped before the SSE subscriber is registered, resulting in an incomplete execution trace in ExecutionPanel. Also fix missing `response_ready` emission in non-direct-chat execution paths, and verify that execution trace is restored from DB on page refresh or navigation.
+
+### Batch B-01 — Backend: Broadcaster replay buffer + response_ready fix (App Builder) — Done
+
+| Task | Description | Status |
+|---|---|---|
+| T-172 | Add `_buffer: list[dict]` to `Broadcaster` in `apps/api/state.py`; on `subscribe()`, replay buffered events into the new subscriber's queue; clear buffer on terminal event (`done`, `error`, `awaiting_input`) delivered via `put()` | Done |
+| T-173 | Emit `response_ready` at the end of `_node_run_sequential`, `_node_run_planned`, and `_node_run_dag` in `session_orchestrator.py` — mirrors what `run_direct_chat` already does | Done |
+
+Dependencies: none
+
+### Batch B-02 — Frontend: Restore execution trace on navigation/refresh (App Builder) — Done
+
+| Task | Description | Status |
+|---|---|---|
+| T-174 | In `loadMessages()` (`ChatStateContext.tsx`): decouple event hydration from the `isSendingRef.current` guard — call `fetchSessionEvents()` unconditionally (even when `isSending` is true) so that navigating back to an active session restores the partial trace from DB | Done |
+| T-175 | In `sendAskUserAnswer()` (`ChatStateContext.tsx`): do NOT clear `graphRun` when resuming from an ask_user interrupt — the existing trace from the first half of execution should remain visible; only clear it when `sendMessage()` starts a fresh conversation turn | Done |
+
+Dependencies: none (parallel-eligible with B-01)
+
+### Batch B-03 — Tests (Test/Review) — Done
+
+| Task | Description | Status |
+|---|---|---|
+| T-176 | Unit test: `Broadcaster` replay buffer delivers buffered events to a late subscriber; buffer is cleared after terminal event | Done |
+| T-177 | Unit test: `_node_run_sequential` emits `response_ready` SSE event via `orchestrator._push` | Done |
+| T-178 | Existing unit tests pass (`make test-unit`) | Done |
+
+Dependencies: B-01, B-02
+
+---
+
+## P29 — LLM Call Prompt/Response Persistence
+
+**Goal:** Store prompt messages, response text, and tool calls in `llm_usage` for post-hoc inspection; covers both `ClaudeClient` and `OllamaClient`.
+
+### Batch B-01 — DB migration: add prompt/response columns (Infra) — Done
+
+| Task | Description | Status |
+|---|---|---|
+| T-179 | Alembic migration `0015_llm_usage_prompt_response.py` — add `prompt_messages_json TEXT`, `response_text TEXT`, `tool_calls_json TEXT` (all nullable) to `llm_usage` | Done |
+
+Dependencies: none
+
+### Batch B-02 — Persistence + LLM clients (App Builder) — Not Started
+
+| Task | Description | Status |
+|---|---|---|
+| T-180 | `LLMUsage` Pydantic model: add optional fields `prompt_messages_json: str \| None = None`, `response_text: str \| None = None`, `tool_calls_json: str \| None = None` | Not Started |
+| T-181 | `LlmUsageRepository.create()` — accept and store the 3 new optional fields in the INSERT | Not Started |
+| T-182 | `ClaudeClient.complete()` — serialize `messages` → `prompt_messages_json`, `response.text` → `response_text`, `response.tool_calls` → `tool_calls_json`; populate `LLMUsage` fields before calling `usage_writer` | Not Started |
+| T-183 | `OllamaClient.complete()` — same as T-182 (ensures Ollama parity) | Not Started |
+| T-184 | `_real_usage_writer` in `apps/api/state.py` — pass `usage.prompt_messages_json`, `usage.response_text`, `usage.tool_calls_json` to `repo.create()` | Not Started |
+
+Dependencies: B-01
+
+### Batch B-03 — Tests (Test/Review) — Not Started
+
+| Task | Description | Status |
+|---|---|---|
+| T-185 | Unit tests: `ClaudeClient.complete()` and `OllamaClient.complete()` populate the 3 new `LLMUsage` fields; `LlmUsageRepository.create()` stores them (mock DB) | Not Started |
+| T-186 | Existing unit tests pass (`make test-unit`) | Not Started |
+
+Dependencies: B-02
