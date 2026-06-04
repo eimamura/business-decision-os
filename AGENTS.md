@@ -12,7 +12,7 @@ This repository uses the word "agent" in two distinct contexts. Do not confuse t
 
 | Term | What it means | Where defined |
 |---|---|---|
-| **Coding agent** (or **subagent**) | A Claude Code harness agent that **builds** this system. Runs during development only. Never ships in production. | This file (`AGENTS.md`) and `agents/*/SPEC.md` |
+| **Coding agent** (or **subagent**) | A Claude Code harness agent that **builds** this system. Runs during development only. Never ships in production. | This file (`AGENTS.md`) and `.claude/skills/bdos-*/SKILL.md` |
 | **Product agent** | An AI agent that **is** the Business Decision OS system. Runs in production; processes user requests and calls tools. | `docs/DESIGN.md` §Agent Classification |
 
 When this file says "agent" it means a coding agent.
@@ -24,14 +24,14 @@ See `docs/DESIGN.md` §Terminology for the full disambiguation.
 
 ## Coding Agent Architecture
 
-This project uses a SPEC-centered Claude Code architecture. Your full execution contract is in your role's `agents/*/SPEC.md`.
+This project uses a skill-centered Claude Code architecture. Your full execution contract is in your role's `.claude/skills/bdos-*/SKILL.md`.
 
-| Subagent | SPEC | Model | Role |
+| Subagent | SKILL | Model | Role |
 |---|---|---|---|
-| `bdos-orchestrator` | `agents/orchestrator/SPEC.md` | sonnet | Plan, decompose, route |
-| `bdos-app-builder` | `agents/app-builder/SPEC.md` | sonnet | Implement app code |
-| `bdos-infra` | `agents/infra/SPEC.md` | sonnet | Infrastructure, CI/CD |
-| `bdos-test-review` | `agents/test-review/SPEC.md` | sonnet | Tests, code review |
+| `bdos-orchestrator` | `.claude/skills/bdos-orchestrator/SKILL.md` | sonnet | Plan, decompose, route |
+| `bdos-app-builder` | `.claude/skills/bdos-app-builder/SKILL.md` | sonnet | Implement app code |
+| `bdos-infra` | `.claude/skills/bdos-infra/SKILL.md` | sonnet | Infrastructure, CI/CD |
+| `bdos-test-review` | `.claude/skills/bdos-test-review/SKILL.md` | sonnet | Tests, code review |
 
 **Invocation:**
 - Skill (human): `/bdos-orchestrator` — runs in the current Claude context; use for planning sessions and ADR reviews.
@@ -91,7 +91,7 @@ Scopes — pick the one that matches the files changed:
 
 | Scope | Changed paths |
 |---|---|
-| `agent` | `agents/*/SPEC.md`, agent config |
+| `agent` | `.claude/skills/bdos-*/SKILL.md`, agent config |
 | `api` | `apps/api/` |
 | `web` | `apps/web/` |
 | `schemas` | `packages/schemas/` |
@@ -112,8 +112,8 @@ Agent commit boundary: `git add` + `git commit` only. Never `git push` or `gh pr
 
 ## References
 
-- Working rules (stubs, cost discipline, approvals, multi-agent constraints): `agents/*/SPEC.md`
-- ADR triggers, authorship rules, TASKS.md write authority: `agents/orchestrator/SPEC.md`
+- Working rules (stubs, cost discipline, approvals, multi-agent constraints): `.claude/skills/bdos-*/SKILL.md`
+- ADR triggers, authorship rules, TASKS.md write authority: `.claude/skills/bdos-orchestrator/SKILL.md`
 - Test tiers, cassettes, CI: `.claude/rules/testing.md` (SSoT); operational How-to: `docs/TESTING.md`
 
 ## When in Doubt
@@ -132,7 +132,7 @@ Coding agent chat messages and narrative responses should match the user's langu
 | Source code, identifiers, comments | English |
 | Commit messages, PR titles and bodies | English |
 | `docs/` (all files including ADRs, DESIGN.md, TASKS.md, etc.) | English |
-| `SPEC.md`, `AGENTS.md`, `CLAUDE.md` | English |
+| `SKILL.md`, `AGENTS.md`, `CLAUDE.md` | English |
 | All user-visible UI strings | English |
 | Chat messages and agent narrative responses | Match the user's language; Japanese when the user writes in Japanese, otherwise English |
 | Log messages, error messages, metric labels | English |
