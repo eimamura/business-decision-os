@@ -18,6 +18,9 @@ class LlmUsageRepository:
         total_cost_usd: float = 0.0,
         request_id: str | None = None,
         latency_ms: int | None = None,
+        prompt_messages_json: str | None = None,
+        response_text: str | None = None,
+        tool_calls_json: str | None = None,
     ) -> str:
         row_id = str(uuid.uuid4())
         pool = await get_pool()
@@ -27,8 +30,9 @@ class LlmUsageRepository:
                 INSERT INTO llm_usage
                     (id, agent_step_id, model, input_tokens, output_tokens,
                      cache_read_tokens, cache_write_tokens, total_cost_usd,
-                     request_id, latency_ms)
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+                     request_id, latency_ms,
+                     prompt_messages_json, response_text, tool_calls_json)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
                 """,
                 uuid.UUID(row_id),
                 uuid.UUID(agent_step_id),
@@ -40,6 +44,9 @@ class LlmUsageRepository:
                 total_cost_usd,
                 request_id,
                 latency_ms,
+                prompt_messages_json,
+                response_text,
+                tool_calls_json,
             )
         return row_id
 

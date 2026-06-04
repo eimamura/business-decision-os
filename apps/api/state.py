@@ -163,6 +163,9 @@ async def _real_usage_writer(
                 cache_read_tokens=usage.cache_read_tokens,
                 cache_write_tokens=usage.cache_write_tokens,
                 total_cost_usd=float(usage.total_cost_usd),
+                prompt_messages_json=usage.prompt_messages_json,
+                response_text=usage.response_text,
+                tool_calls_json=usage.tool_calls_json,
             )
         except RuntimeError as exc:
             logger.warning("LLM usage write skipped: %s", exc)

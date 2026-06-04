@@ -211,3 +211,186 @@ def test_compute_cost_zero_tokens_returns_zero() -> None:
 
     assert client._compute_cost(usage, "claude-sonnet-4-6") == Decimal("0")
     assert client._compute_cost(usage, "claude-haiku-4-5-20251001") == Decimal("0")
+
+
+# ---------------------------------------------------------------------------
+# T-180: LLMUsage optional fields
+# ---------------------------------------------------------------------------
+
+
+def test_llm_usage_optional_fields_default_to_none() -> None:
+    """LLMUsage new optional fields default to None when not supplied."""
+    from packages.agent.llm import LLMUsage
+
+    usage = LLMUsage(input_tokens=1, output_tokens=1, total_cost_usd=Decimal("0"))
+
+    assert usage.prompt_messages_json is None
+    assert usage.response_text is None
+    assert usage.tool_calls_json is None
+
+
+def test_llm_usage_optional_fields_accept_values() -> None:
+    """LLMUsage optional fields can be set to string values."""
+    from packages.agent.llm import LLMUsage
+
+    usage = LLMUsage(
+        input_tokens=1,
+        output_tokens=1,
+        total_cost_usd=Decimal("0"),
+        prompt_messages_json='[{"role": "user", "content": "hi"}]',
+        response_text="hello",
+        tool_calls_json="[]",
+    )
+
+    assert usage.prompt_messages_json == '[{"role": "user", "content": "hi"}]'
+    assert usage.response_text == "hello"
+    assert usage.tool_calls_json == "[]"
+
+
+# ---------------------------------------------------------------------------
+# T-182: ClaudeClient.complete() populates LLMUsage fields
+# ---------------------------------------------------------------------------
+
+
+async def test_claude_client_complete_populates_prompt_messages_json() -> None:
+    """ClaudeClient.complete() serializes input messages into LLMUsage.prompt_messages_json."""
+    client = _make_client()
+    messages = _make_messages()
+
+    captured_usage: dict[str, Any] = {}
+
+    async def _fake_writer(
+        session_id: Any, agent_step_id: Any, specialist_role: Any,
+        provider: Any, model: Any, usage: Any,
+    ) -> None:
+        captured_usage["usage"] = usage
+
+    client._usage_writer = _fake_writer
+
+    async def _fake_create(**kwargs: Any) -> MagicMock:
+        return _make_fake_response()
+
+    client._client.messages.create = _fake_create
+
+    await client.complete(messages=messages)
+
+    usage = captured_usage["usage"]
+    import json
+    parsed = json.loads(usage.prompt_messages_json)
+    assert isinstance(parsed, list)
+    assert parsed[0]["role"] == "user"
+    assert parsed[0]["content"] == "hello"
+
+
+async def test_claude_client_complete_populates_response_text() -> None:
+    """ClaudeClient.complete() stores the text response in LLMUsage.response_text."""
+    client = _make_client()
+    messages = _make_messages()
+
+    captured_usage: dict[str, Any] = {}
+
+    async def _fake_writer(
+        session_id: Any, agent_step_id: Any, specialist_role: Any,
+        provider: Any, model: Any, usage: Any,
+    ) -> None:
+        captured_usage["usage"] = usage
+
+    client._usage_writer = _fake_writer
+
+    async def _fake_create(**kwargs: Any) -> MagicMock:
+        return _make_fake_response()
+
+    client._client.messages.create = _fake_create
+
+    await client.complete(messages=messages)
+
+    assert captured_usage["usage"].response_text == "ok"
+
+
+async def test_claude_client_complete_populates_tool_calls_json_empty() -> None:
+    """ClaudeClient.complete() stores an empty JSON array when there are no tool calls."""
+    client = _make_client()
+    messages = _make_messages()
+
+    captured_usage: dict[str, Any] = {}
+
+    async def _fake_writer(
+        session_id: Any, agent_step_id: Any, specialist_role: Any,
+        provider: Any, model: Any, usage: Any,
+    ) -> None:
+        captured_usage["usage"] = usage
+
+    client._usage_writer = _fake_writer
+
+    async def _fake_create(**kwargs: Any) -> MagicMock:
+        return _make_fake_response()
+
+    client._client.messages.create = _fake_create
+
+    await client.complete(messages=messages)
+
+    import json
+    assert json.loads(captured_usage["usage"].tool_calls_json) == []
+
+
+async def test_claude_client_complete_error_path_sets_fields_to_none() -> None:
+    """ClaudeClient.complete() sets all 3 new fields to None in the APIError error path."""
+    import anthropic
+
+    client = _make_client()
+    messages = _make_messages()
+
+    captured_usage: dict[str, Any] = {}
+
+    async def _fake_writer(
+        session_id: Any, agent_step_id: Any, specialist_role: Any,
+        provider: Any, model: Any, usage: Any,
+    ) -> None:
+        captured_usage["usage"] = usage
+
+    client._usage_writer = _fake_writer
+
+    async def _fake_create(**kwargs: Any) -> MagicMock:
+        raise anthropic.APIStatusError(
+            "bad request",
+            response=MagicMock(status_code=400),
+            body={},
+        )
+
+    client._client.messages.create = _fake_create
+
+    with pytest.raises(anthropic.APIError):
+        await client.complete(messages=messages)
+
+    usage = captured_usage["usage"]
+    assert usage.prompt_messages_json is None
+    assert usage.response_text is None
+    assert usage.tool_calls_json is None
+
+
+async def test_claude_client_complete_truncates_long_prompt_messages() -> None:
+    """prompt_messages_json is capped at 65536 characters."""
+    from packages.agent.llm import LLMMessage, _PROMPT_MESSAGES_MAX_LEN
+
+    client = _make_client()
+    long_content = "x" * 100_000
+    messages = [LLMMessage(role="user", content=long_content)]
+
+    captured_usage: dict[str, Any] = {}
+
+    async def _fake_writer(
+        session_id: Any, agent_step_id: Any, specialist_role: Any,
+        provider: Any, model: Any, usage: Any,
+    ) -> None:
+        captured_usage["usage"] = usage
+
+    client._usage_writer = _fake_writer
+
+    async def _fake_create(**kwargs: Any) -> MagicMock:
+        return _make_fake_response()
+
+    client._client.messages.create = _fake_create
+
+    await client.complete(messages=messages)
+
+    assert len(captured_usage["usage"].prompt_messages_json) <= _PROMPT_MESSAGES_MAX_LEN

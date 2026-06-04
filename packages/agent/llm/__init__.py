@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import logging
 import os
 import time
@@ -9,6 +10,10 @@ from typing import Any, AsyncIterator, Awaitable, Callable, Coroutine, Literal, 
 from uuid import UUID, uuid4
 
 from pydantic import BaseModel
+
+_PROMPT_MESSAGES_MAX_LEN: int = 65536
+_RESPONSE_TEXT_MAX_LEN: int = 65536
+_TOOL_CALLS_MAX_LEN: int = 16384
 
 _ORCHESTRATOR_ROLES: frozenset[str] = frozenset({"orchestrator"})
 
@@ -84,6 +89,9 @@ class LLMUsage(BaseModel):
     cache_read_tokens: int = 0
     cache_write_tokens: int = 0
     total_cost_usd: Decimal
+    prompt_messages_json: str | None = None
+    response_text: str | None = None
+    tool_calls_json: str | None = None
 
 
 class LLMResponse(BaseModel):
@@ -489,6 +497,9 @@ class ClaudeClient:
                 input_tokens=0,
                 output_tokens=0,
                 total_cost_usd=Decimal("0"),
+                prompt_messages_json=None,
+                response_text=None,
+                tool_calls_json=None,
             )
             await self._usage_writer(
                 None, agent_step_id, specialist_role, "anthropic", model, usage_zero
@@ -500,17 +511,6 @@ class ClaudeClient:
         raw_usage = response.usage
         cache_read = getattr(raw_usage, "cache_read_input_tokens", 0) or 0
         cache_write = getattr(raw_usage, "cache_creation_input_tokens", 0) or 0
-
-        llm_usage = LLMUsage(
-            input_tokens=raw_usage.input_tokens,
-            output_tokens=raw_usage.output_tokens,
-            cache_read_tokens=cache_read,
-            cache_write_tokens=cache_write,
-            total_cost_usd=self._compute_cost(raw_usage, model_name=model),
-        )
-        await self._usage_writer(
-            None, agent_step_id, specialist_role, "anthropic", model, llm_usage
-        )
 
         text_parts = []
         tool_calls = []
@@ -533,8 +533,29 @@ class ClaudeClient:
             str(response.stop_reason), "stop"
         )  # type: ignore[assignment]
 
+        response_text_str = " ".join(text_parts)
+        prompt_messages_json = json.dumps(
+            [m.model_dump() for m in messages], ensure_ascii=False
+        )[:_PROMPT_MESSAGES_MAX_LEN]
+        response_text_truncated = response_text_str[:_RESPONSE_TEXT_MAX_LEN]
+        tool_calls_json = json.dumps(tool_calls, ensure_ascii=False)[:_TOOL_CALLS_MAX_LEN]
+
+        llm_usage = LLMUsage(
+            input_tokens=raw_usage.input_tokens,
+            output_tokens=raw_usage.output_tokens,
+            cache_read_tokens=cache_read,
+            cache_write_tokens=cache_write,
+            total_cost_usd=self._compute_cost(raw_usage, model_name=model),
+            prompt_messages_json=prompt_messages_json,
+            response_text=response_text_truncated,
+            tool_calls_json=tool_calls_json,
+        )
+        await self._usage_writer(
+            None, agent_step_id, specialist_role, "anthropic", model, llm_usage
+        )
+
         return LLMResponse(
-            text=" ".join(text_parts),
+            text=response_text_str,
             tool_calls=tool_calls,
             finish_reason=finish_reason,
             usage=llm_usage,
@@ -717,12 +738,22 @@ class OllamaClient:
         finish_reason = self._map_finish_reason(choice.get("finish_reason"))
 
         raw_usage = data.get("usage", {})
+
+        prompt_messages_json = json.dumps(
+            [m.model_dump() for m in messages], ensure_ascii=False
+        )[:_PROMPT_MESSAGES_MAX_LEN]
+        response_text_truncated = text[:_RESPONSE_TEXT_MAX_LEN]
+        tool_calls_json = json.dumps(tool_calls, ensure_ascii=False)[:_TOOL_CALLS_MAX_LEN]
+
         llm_usage = LLMUsage(
             input_tokens=raw_usage.get("prompt_tokens", 0),
             output_tokens=raw_usage.get("completion_tokens", 0),
             cache_read_tokens=0,
             cache_write_tokens=0,
             total_cost_usd=Decimal("0"),
+            prompt_messages_json=prompt_messages_json,
+            response_text=response_text_truncated,
+            tool_calls_json=tool_calls_json,
         )
         await self._usage_writer(
             None, agent_step_id, specialist_role, "ollama", self._model, llm_usage

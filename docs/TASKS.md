@@ -222,15 +222,15 @@ Dependencies: B-01, B-02
 
 Dependencies: none
 
-### Batch B-02 — Persistence + LLM clients (App Builder) — Not Started
+### Batch B-02 — Persistence + LLM clients (App Builder) — Done
 
 | Task | Description | Status |
 |---|---|---|
-| T-180 | `LLMUsage` Pydantic model: add optional fields `prompt_messages_json: str \| None = None`, `response_text: str \| None = None`, `tool_calls_json: str \| None = None` | Not Started |
-| T-181 | `LlmUsageRepository.create()` — accept and store the 3 new optional fields in the INSERT | Not Started |
-| T-182 | `ClaudeClient.complete()` — serialize `messages` → `prompt_messages_json`, `response.text` → `response_text`, `response.tool_calls` → `tool_calls_json`; populate `LLMUsage` fields before calling `usage_writer` | Not Started |
-| T-183 | `OllamaClient.complete()` — same as T-182 (ensures Ollama parity) | Not Started |
-| T-184 | `_real_usage_writer` in `apps/api/state.py` — pass `usage.prompt_messages_json`, `usage.response_text`, `usage.tool_calls_json` to `repo.create()` | Not Started |
+| T-180 | `LLMUsage` Pydantic model: add optional fields `prompt_messages_json: str \| None = None`, `response_text: str \| None = None`, `tool_calls_json: str \| None = None` | Done |
+| T-181 | `LlmUsageRepository.create()` — accept and store the 3 new optional fields in the INSERT | Done |
+| T-182 | `ClaudeClient.complete()` — serialize `messages` → `prompt_messages_json`, `response.text` → `response_text`, `response.tool_calls` → `tool_calls_json`; populate `LLMUsage` fields before calling `usage_writer` | Done |
+| T-183 | `OllamaClient.complete()` — same as T-182 (ensures Ollama parity) | Done |
+| T-184 | `_real_usage_writer` in `apps/api/state.py` — pass `usage.prompt_messages_json`, `usage.response_text`, `usage.tool_calls_json` to `repo.create()` | Done |
 
 Dependencies: B-01
 

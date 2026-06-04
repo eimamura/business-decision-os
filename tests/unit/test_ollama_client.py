@@ -153,3 +153,108 @@ def test_create_llm_client_ollama_respects_env_vars(
 
     assert client._base_url == "http://myhost:11434"
     assert client._model == "mistral:7b"
+
+
+# ---------------------------------------------------------------------------
+# T-183: OllamaClient.complete() populates LLMUsage fields
+# ---------------------------------------------------------------------------
+
+
+async def test_ollama_client_complete_populates_prompt_messages_json() -> None:
+    """OllamaClient.complete() serializes input messages into LLMUsage.prompt_messages_json."""
+    import json
+    from packages.agent.llm import OllamaClient
+
+    json_body = {
+        "id": "resp-1",
+        "choices": [
+            {
+                "message": {"content": "ollama says hi", "tool_calls": None},
+                "finish_reason": "stop",
+            }
+        ],
+        "usage": {"prompt_tokens": 8, "completion_tokens": 3},
+    }
+    mock_response = _make_response(200, json_body)
+    mock_client = _make_mock_client(mock_response)
+
+    captured_usage: dict = {}
+
+    async def _fake_writer(
+        session_id, agent_step_id, specialist_role, provider, model, usage
+    ) -> None:
+        captured_usage["usage"] = usage
+
+    client = OllamaClient(usage_writer=_fake_writer)
+    with patch("httpx.AsyncClient", return_value=mock_client):
+        await client.complete(_minimal_messages())
+
+    usage = captured_usage["usage"]
+    parsed = json.loads(usage.prompt_messages_json)
+    assert isinstance(parsed, list)
+    assert parsed[0]["role"] == "user"
+
+
+async def test_ollama_client_complete_populates_response_text() -> None:
+    """OllamaClient.complete() stores the text response in LLMUsage.response_text."""
+    from packages.agent.llm import OllamaClient
+
+    json_body = {
+        "id": "resp-2",
+        "choices": [
+            {
+                "message": {"content": "the answer", "tool_calls": None},
+                "finish_reason": "stop",
+            }
+        ],
+        "usage": {},
+    }
+    mock_response = _make_response(200, json_body)
+    mock_client = _make_mock_client(mock_response)
+
+    captured_usage: dict = {}
+
+    async def _fake_writer(
+        session_id, agent_step_id, specialist_role, provider, model, usage
+    ) -> None:
+        captured_usage["usage"] = usage
+
+    client = OllamaClient(usage_writer=_fake_writer)
+    with patch("httpx.AsyncClient", return_value=mock_client):
+        await client.complete(_minimal_messages())
+
+    assert captured_usage["usage"].response_text == "the answer"
+
+
+async def test_ollama_client_complete_truncates_long_prompt_messages() -> None:
+    """OllamaClient.complete() caps prompt_messages_json at 65536 chars."""
+    from packages.agent.llm import LLMMessage, OllamaClient, _PROMPT_MESSAGES_MAX_LEN
+
+    long_content = "y" * 100_000
+    messages = [LLMMessage(role="user", content=long_content)]
+
+    json_body = {
+        "id": "resp-3",
+        "choices": [
+            {
+                "message": {"content": "ok", "tool_calls": None},
+                "finish_reason": "stop",
+            }
+        ],
+        "usage": {},
+    }
+    mock_response = _make_response(200, json_body)
+    mock_client = _make_mock_client(mock_response)
+
+    captured_usage: dict = {}
+
+    async def _fake_writer(
+        session_id, agent_step_id, specialist_role, provider, model, usage
+    ) -> None:
+        captured_usage["usage"] = usage
+
+    client = OllamaClient(usage_writer=_fake_writer)
+    with patch("httpx.AsyncClient", return_value=mock_client):
+        await client.complete(messages)
+
+    assert len(captured_usage["usage"].prompt_messages_json) <= _PROMPT_MESSAGES_MAX_LEN
