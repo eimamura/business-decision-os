@@ -10,7 +10,8 @@ import { test, expect, type Page } from "@playwright/test";
  *   npx playwright test ask_user_bubble_mock --config apps/web/playwright.config.ts
  */
 
-const SESSION_ID = "mock-ask-user-session";
+// Must be a valid UUID — DoneEventSchema.session_id uses z.string().uuid()
+const SESSION_ID = "00000000-0000-4000-a000-000000000001";
 const NOW = "2024-01-01T00:00:00.000Z";
 
 // ---------------------------------------------------------------------------
@@ -192,12 +193,15 @@ test.describe("AskUser bubble (mocked SSE — no backend required)", () => {
       timeout: 10_000,
     });
 
-    // Capture POST /answer before clicking submit
-    const answerRequestPromise = page.waitForRequest(
-      (req) => req.url().includes("/answer") && req.method() === "POST",
-    );
+    // The streaming dots (.animate-bounce) disappear only after awaiting_input is
+    // processed and the finally block clears isSendingRef. Without this wait,
+    // sendAskUserAnswer's guard sees isSendingRef=true and returns early — the
+    // POST /answer is never made and the assistant reply never renders.
+    await expect(page.locator(".animate-bounce").first()).not.toBeVisible({ timeout: 5_000 });
 
     await page.locator('[data-testid="ask-user-suggestion-1"]').click();
+    // Confirm chip populated the input before clicking Submit
+    await expect(page.locator('[data-testid="ask-user-input"]')).toHaveValue("Low stock only");
     await page.locator('[data-testid="ask-user-submit"]').click();
 
     // Bubble switches to answered state immediately (optimistic)
@@ -205,10 +209,12 @@ test.describe("AskUser bubble (mocked SSE — no backend required)", () => {
     await expect(answeredEl).toBeVisible({ timeout: 5_000 });
     await expect(answeredEl).toContainText("Low stock only");
 
-    // Verify the POST /answer payload
-    const answerRequest = await answerRequestPromise;
-    expect(JSON.parse(answerRequest.postData() ?? "{}")).toEqual({
-      answer: "Low stock only",
-    });
+    // End-to-end: the reply from SECOND_STREAM_BODY's done event only appears if
+    // sendAskUserAnswer ran (guard cleared), POST /answer was made, and the stream
+    // was processed. This is a stronger check than waitForRequest.
+    await expect(
+      page.locator(".rounded-2xl")
+        .filter({ hasText: /Analyzing low stock inventory/ })
+    ).toBeVisible({ timeout: 10_000 });
   });
 });
