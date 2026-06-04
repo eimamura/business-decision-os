@@ -23,6 +23,7 @@ SpecialistRole = Literal[
     "logistics",
     "supply_planning",
     "finance_impact",
+    "sop",
 ]
 
 

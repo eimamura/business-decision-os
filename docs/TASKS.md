@@ -40,6 +40,11 @@ Full task history for P0–P23 is archived at `docs/archive/v3/TASKS.md`.
 | P26 — SSE/Broadcaster Bug Fixes | T-160–T-166 | 2026-06-04 |
 | P27 — Model Name in Execution Trace Nodes | T-167–T-171 | 2026-06-04 |
 | P28 — Real-time Execution Trace & Persistence Recovery | T-172–T-178 | 2026-06-04 |
+| P29–P31 — Goal-Based Agent, Forecasting & Demand Analysis | T-179–T-209 | 2026-06-04 |
+| P32 — Supply Planning Agent | T-210–T-223 | 2026-06-04 |
+| P33 — Finance Impact Agent | T-224–T-234 | 2026-06-04 |
+| P34 — Inventory Agent Enhancement | T-235–T-243 | 2026-06-04 |
+| P35 — S&OP Agent & Orchestration | T-244–T-251 | 2026-06-04 |
 
 ---
 
@@ -434,25 +439,25 @@ Dependencies: B-01, B-02
 
 **Goal:** Add `SopAgent` as the S&OP synthesis agent and a new "sop" intent that routes the SessionOrchestrator through a sequential demand→inventory→supply_planning→finance_impact→sop plan, enabling full S&OP cycle in one session.
 
-### Batch B-01 — SopAgent class + "sop" intent (App Builder) — Not Started
+### Batch B-01 — SopAgent class + "sop" intent (App Builder) — Done
 
 | Task | Description | Status |
 |---|---|---|
-| T-244 | `SopAgent` — `packages/agent/domain/sop.py`: role="sop", system prompt that synthesizes multi-agent outputs into a final S&OP recommendation covering demand/inventory/supply/finance dimensions; outputs structured decision with reason + next_actions | Not Started |
-| T-245 | Add `"sop"` to `SpecialistRole` Literal in `packages/agent/base.py`; add to `DOMAIN_AGENT_ROLES`; add `SopAgent` to `packages/agent/domain/__init__.py` `create_domain_agents()` | Not Started |
-| T-246 | Add `"sop"` allowlist in `packages/tools/base.py`: `["sql_query", "nl_query"]`; update `packages/agent/orchestrator/roles.py` `DOMAIN_AGENT_ROLES` | Not Started |
-| T-247 | Add `"sop"` intent to `INTENT_REGISTRY` in `packages/agent/orchestrator/intent_registry.py` — plan_prompt instructs sequential demand→inventory→supply_planning→finance_impact→sop flow; allowed_agent_roles includes all 5 | Not Started |
+| T-244 | `SopAgent` — `packages/agent/domain/sop.py`: role="sop", system prompt that synthesizes multi-agent outputs into a final S&OP recommendation covering demand/inventory/supply/finance dimensions; outputs structured decision with reason + next_actions | Done |
+| T-245 | Add `"sop"` to `SpecialistRole` Literal in `packages/agent/base.py`; add to `DOMAIN_AGENT_ROLES`; add `SopAgent` to `packages/agent/domain/__init__.py` `create_domain_agents()` | Done |
+| T-246 | Add `"sop"` allowlist in `packages/tools/base.py`: `["sql_query", "nl_query"]`; update `packages/agent/orchestrator/roles.py` `DOMAIN_AGENT_ROLES` | Done |
+| T-247 | Add `"sop"` intent to `INTENT_REGISTRY` in `packages/agent/orchestrator/intent_registry.py` — plan_prompt instructs sequential demand→inventory→supply_planning→finance_impact→sop flow; allowed_agent_roles includes all 5 | Done |
 
 Dependencies: P32 Done, P33 Done, P34 Done
 
-### Batch B-02 — Tests (Test/Review) — Not Started
+### Batch B-02 — Tests (Test/Review) — Done
 
 | Task | Description | Status |
 |---|---|---|
-| T-248 | Unit test: `SopAgent` instantiates with role="sop"; `_SYSTEM_PROMPT` references structured recommendation output | Not Started |
-| T-249 | Unit test: `INTENT_REGISTRY["sop"]` exists; `allowed_agent_roles` contains all 5 S&OP agents; `max_tool_calls` ≥ 25 | Not Started |
-| T-250 | Unit test: `SpecialistRole` Literal includes "supply_planning", "finance_impact", "sop"; `DOMAIN_AGENT_ROLES` contains all three | Not Started |
-| T-251 | `make test-unit` + `make lint` + `make typecheck` | Not Started |
+| T-248 | Unit test: `SopAgent` instantiates with role="sop"; `_SYSTEM_PROMPT` references structured recommendation output | Done |
+| T-249 | Unit test: `INTENT_REGISTRY["sop"]` exists; `allowed_agent_roles` contains all 5 S&OP agents; `max_tool_calls` ≥ 25 | Done |
+| T-250 | Unit test: `SpecialistRole` Literal includes "supply_planning", "finance_impact", "sop"; `DOMAIN_AGENT_ROLES` contains all three | Done |
+| T-251 | `make test-unit` + `make lint` + `make typecheck` | Done |
 
 Dependencies: B-01
 

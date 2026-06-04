@@ -9,6 +9,7 @@ from packages.agent.domain.logistics import LogisticsAgent
 from packages.agent.domain.procurement import ProcurementAgent
 from packages.agent.domain.production import ProductionAgent
 from packages.agent.domain.replenishment import ReplenishmentAgent
+from packages.agent.domain.sop import SopAgent
 from packages.agent.domain.supplier import SupplierAgent
 from packages.agent.domain.supply_planning import SupplyPlanningAgent
 
@@ -20,6 +21,7 @@ __all__ = [
     "ProcurementAgent",
     "ProductionAgent",
     "ReplenishmentAgent",
+    "SopAgent",
     "SupplierAgent",
     "SupplyPlanningAgent",
     "create_domain_agents",
@@ -40,5 +42,6 @@ def create_domain_agents(
         SupplierAgent(llm_client, tool_registry, sse_queue),
         ProductionAgent(llm_client, tool_registry, sse_queue),
         LogisticsAgent(llm_client, tool_registry, sse_queue),
+        SopAgent(llm_client, tool_registry, sse_queue),
         SupplyPlanningAgent(llm_client, tool_registry, sse_queue),
     ]

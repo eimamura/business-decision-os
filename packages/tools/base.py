@@ -47,6 +47,7 @@ _ROLE_TOOL_ALLOWLIST: dict[str, list[str]] = {
     "supplier": ["sql_query", "nl_query"],
     "production": ["sql_query", "nl_query"],
     "logistics": ["sql_query", "nl_query"],
+    "sop": ["sql_query", "nl_query"],
 }
 
 

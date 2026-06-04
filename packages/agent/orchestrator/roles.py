@@ -17,6 +17,7 @@ DOMAIN_AGENT_ROLES = {
     "logistics",
     "supply_planning",
     "finance_impact",
+    "sop",
 }
 
 CROSS_DOMAIN_AGENT_CLASSES: dict[str, type] = {
