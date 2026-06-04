@@ -1,4 +1,4 @@
-import { test, expect } from "@playwright/test";
+import { testWithCleanup as test, expect } from "./fixtures";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
@@ -14,6 +14,7 @@ const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 test.describe("AskUser inline answer input", () => {
   test("ask_user_required SSE event renders inline question with chips and answer input", async ({
     page,
+    createdSessionIds,
   }) => {
     // Create a session via API
     const createRes = await page.request.post(`${API_BASE}/api/v1/sessions`, {
@@ -23,6 +24,7 @@ test.describe("AskUser inline answer input", () => {
     expect(createRes.ok()).toBeTruthy();
     const session = (await createRes.json()) as { session_id: string };
     const sessionId = session.session_id;
+    createdSessionIds.push(sessionId);
 
     // Navigate to the chat page
     await page.goto(`/chat/${sessionId}`);
@@ -66,12 +68,14 @@ test.describe("AskUser inline answer input", () => {
 
   test("clicking a suggestion chip pre-populates the answer input", async ({
     page,
+    createdSessionIds,
   }) => {
     const createRes = await page.request.post(`${API_BASE}/api/v1/sessions`, {
       data: { goal: "Chip pre-populate test" },
       headers: { "X-Dev-User": "dev-user" },
     });
     const session = (await createRes.json()) as { session_id: string };
+    createdSessionIds.push(session.session_id);
     await page.goto(`/chat/${session.session_id}`);
     await expect(page.locator("textarea")).toBeVisible();
 

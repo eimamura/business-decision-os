@@ -39,12 +39,6 @@ Full task history for P0–P23 is archived at `docs/archive/v3/TASKS.md`.
 
 ---
 
-## Active Phase
-
-None.
-
----
-
 ## P24 — Ollama Local LLM Provider
 
 **Goal:** Add `OllamaClient` behind `LLM_PROVIDER=ollama` so developers can use qwen2.5-coder:7b locally without Anthropic API costs. `LLMClient` protocol signature is unchanged.
@@ -71,6 +65,40 @@ Dependencies: B-01
 
 ---
 
-## Next Phase
+## Active Phase
 
-To be defined. Use bdos-orchestrator to plan the next phase.
+P25 — Tool Scenario E2E Validation & Playwright Session Cleanup
+
+---
+
+## P25 — Tool Scenario E2E Validation & Playwright Session Cleanup
+
+**Goal:** Close test session pollution from Playwright tests that never clean up DB rows, and verify that all 20 tool scenario prompts produce a visible, non-empty chat bubble in the UI through mocked-SSE E2E tests and integration tests.
+
+### Batch B-01 — Playwright Session Auto-Cleanup (Test/Review) — Done
+
+| Task | Description | Status |
+|---|---|---|
+| T-153 | Create `tests/e2e/playwright/fixtures.ts` — `testWithCleanup` fixture that tracks session IDs and calls `DELETE /api/v1/sessions/{id}` in afterEach | Done |
+| T-154 | Migrate all session-creating Playwright specs (`chat_flow.spec.ts`, `ask_user_flow.spec.ts`, `job_approval.spec.ts`) to use `testWithCleanup` | Done |
+
+Dependencies: none
+
+### Batch B-02 — Tool Scenario Modal & Chat Bubble Playwright Tests (Test/Review) — Not Started
+
+| Task | Description | Status |
+|---|---|---|
+| T-155 | `tool_scenario_modal.spec.ts` — verify modal opens, 5 category tabs visible, clicking a scenario card fills textarea with the prompt and closes modal | Not Started |
+| T-156 | `tool_scenario_bubbles_mock.spec.ts` — mocked SSE (no backend) test verifying each category produces a non-empty assistant bubble (no error bubble, no empty bubble) | Not Started |
+| T-157 | `hitl_scenario_bubbles_mock.spec.ts` — Ask User full cycle (question bubble → answer → result bubble) + Job Dispatch (approval card → approve → status change) using mocked SSE | Not Started |
+
+Dependencies: B-01
+
+### Batch B-03 — Integration Test Coverage Gaps (Test/Review) — Not Started
+
+| Task | Description | Status |
+|---|---|---|
+| T-158 | `tests/integration/test_scenario_coverage.py` — integration tests for catalog / schema / quality / multi-SKU forecast / scenario-comparison intents using mock LLM | Not Started |
+| T-159 | Integration tests for all 6 Ask User HITL modal variants (vague→ask, fully-specified→no ask, warehouse given→ask, SKU-no-period→ask, etc.) | Not Started |
+
+Dependencies: none (parallel-eligible with B-02)

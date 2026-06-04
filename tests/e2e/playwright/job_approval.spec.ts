@@ -20,7 +20,8 @@
  * Playwright can locate them unambiguously.
  */
 
-import { test, expect } from "@playwright/test";
+import { testWithCleanup as test, expect } from "./fixtures";
+import type { Page } from "@playwright/test";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
@@ -50,10 +51,12 @@ test.beforeEach(() => {
 
 /**
  * Create a session via the API and navigate to its chat page.
+ * Pushes the created session_id into `createdSessionIds` for cleanup.
  * Returns the session_id.
  */
 async function createSessionAndNavigate(
-  page: Parameters<Parameters<typeof test>[1]>[0],
+  page: Page,
+  createdSessionIds: string[],
 ): Promise<string> {
   const res = await page.request.post(`${API_BASE}/api/v1/sessions`, {
     data: { goal: "Playwright job approval spec" },
@@ -61,6 +64,7 @@ async function createSessionAndNavigate(
   });
   const session = (await res.json()) as { session_id: string };
   expect(session.session_id).toMatch(/^[0-9a-f]{8}-/);
+  createdSessionIds.push(session.session_id);
   await page.goto(`/chat/${session.session_id}`);
   return session.session_id;
 }
@@ -68,10 +72,7 @@ async function createSessionAndNavigate(
 /**
  * Type a message in the chat textarea and click Send.
  */
-async function sendMessage(
-  page: Parameters<Parameters<typeof test>[1]>[0],
-  message: string,
-): Promise<void> {
+async function sendMessage(page: Page, message: string): Promise<void> {
   await page.locator("textarea").fill(message);
   await page.getByRole("button", { name: /send/i }).click();
 }
@@ -81,9 +82,9 @@ async function sendMessage(
 // ---------------------------------------------------------------------------
 
 test.describe("Job Approval Card", () => {
-  test("approve flow renders card and transitions to approved state", async ({ page }) => {
+  test("approve flow renders card and transitions to approved state", async ({ page, createdSessionIds }) => {
     // 1. Create a session and navigate to the chat page
-    await createSessionAndNavigate(page);
+    await createSessionAndNavigate(page, createdSessionIds);
 
     // 2. Send a message that will cause the agent to call job_dispatch
     await sendMessage(page, TRIGGER_MESSAGE);
@@ -112,9 +113,9 @@ test.describe("Job Approval Card", () => {
     });
   });
 
-  test("reject flow transitions card to rejected state", async ({ page }) => {
+  test("reject flow transitions card to rejected state", async ({ page, createdSessionIds }) => {
     // 1. Create a separate session to avoid cross-test state
-    await createSessionAndNavigate(page);
+    await createSessionAndNavigate(page, createdSessionIds);
 
     // 2. Trigger the job_dispatch HITL tool
     await sendMessage(page, TRIGGER_MESSAGE);

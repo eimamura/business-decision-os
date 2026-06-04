@@ -1,4 +1,4 @@
-import { test, expect } from "@playwright/test";
+import { testWithCleanup as test, expect } from "./fixtures";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
@@ -19,7 +19,7 @@ test.describe("Chat flow", () => {
     expect(url).not.toContain("undefined");
   });
 
-  test("chat page renders message input and send button", async ({ page }) => {
+  test("chat page renders message input and send button", async ({ page, createdSessionIds }) => {
     // create session via API so we have a valid session_id
     const res = await page.request.post(`${API_BASE}/api/v1/sessions`, {
       data: { goal: "Playwright smoke test" },
@@ -27,30 +27,33 @@ test.describe("Chat flow", () => {
     });
     const session = await res.json() as { session_id: string };
     expect(session.session_id).toMatch(/^[0-9a-f]{8}-/);
+    createdSessionIds.push(session.session_id);
 
     await page.goto(`/chat/${session.session_id}`);
     await expect(page.locator("textarea")).toBeVisible();
     await expect(page.getByRole("button", { name: /send/i })).toBeVisible();
   });
 
-  test("send button is disabled when input is empty", async ({ page }) => {
+  test("send button is disabled when input is empty", async ({ page, createdSessionIds }) => {
     const res = await page.request.post(`${API_BASE}/api/v1/sessions`, {
       data: { goal: "Playwright smoke test" },
       headers: { "X-Dev-User": "dev-user" },
     });
     const session = await res.json() as { session_id: string };
+    createdSessionIds.push(session.session_id);
 
     await page.goto(`/chat/${session.session_id}`);
     const sendButton = page.getByRole("button", { name: /send/i });
     await expect(sendButton).toBeDisabled();
   });
 
-  test("typing a message enables the send button", async ({ page }) => {
+  test("typing a message enables the send button", async ({ page, createdSessionIds }) => {
     const res = await page.request.post(`${API_BASE}/api/v1/sessions`, {
       data: { goal: "Playwright smoke test" },
       headers: { "X-Dev-User": "dev-user" },
     });
     const session = await res.json() as { session_id: string };
+    createdSessionIds.push(session.session_id);
 
     await page.goto(`/chat/${session.session_id}`);
     await page.locator("textarea").fill("What is the current inventory status?");
@@ -58,12 +61,13 @@ test.describe("Chat flow", () => {
     await expect(sendButton).toBeEnabled();
   });
 
-  test("session sidebar shows no undefined links", async ({ page }) => {
+  test("session sidebar shows no undefined links", async ({ page, createdSessionIds }) => {
     const res = await page.request.post(`${API_BASE}/api/v1/sessions`, {
       data: { goal: "Sidebar check" },
       headers: { "X-Dev-User": "dev-user" },
     });
     const session = await res.json() as { session_id: string };
+    createdSessionIds.push(session.session_id);
 
     await page.goto(`/chat/${session.session_id}`);
     const links = await page.locator("a[href*='/chat/']").all();
