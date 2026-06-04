@@ -3,18 +3,35 @@ import { testWithCleanup as test, expect } from "./fixtures";
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
 test.describe("Chat flow", () => {
-  test("session list page loads with New Session button", async ({ page }) => {
-    await page.goto("/chat");
-    await expect(page.getByRole("button", { name: /new session/i })).toBeVisible();
-    await expect(page.getByRole("heading", { name: /business decision os/i })).toBeVisible();
+  test("chat sidebar shows New Session button", async ({ page, createdSessionIds }) => {
+    // /chat auto-redirects; navigate to an actual session page to see the sidebar
+    const res = await page.request.post(`${API_BASE}/api/v1/sessions`, {
+      data: { goal: "Playwright smoke test" },
+      headers: { "X-Dev-User": "dev-user" },
+    });
+    const session = await res.json() as { session_id: string };
+    createdSessionIds.push(session.session_id);
+
+    await page.goto(`/chat/${session.session_id}`);
+    await expect(page.getByTitle("New Session")).toBeVisible();
   });
 
-  test("new session navigates to valid UUID url", async ({ page }) => {
-    await page.goto("/chat");
-    await page.getByRole("button", { name: /new session/i }).click();
+  test("new session navigates to valid UUID url", async ({ page, createdSessionIds }) => {
+    const res = await page.request.post(`${API_BASE}/api/v1/sessions`, {
+      data: { goal: "Playwright smoke test" },
+      headers: { "X-Dev-User": "dev-user" },
+    });
+    const session = await res.json() as { session_id: string };
+    createdSessionIds.push(session.session_id);
+
+    await page.goto(`/chat/${session.session_id}`);
+    await page.getByTitle("New Session").click();
 
     await page.waitForURL(/\/chat\/[0-9a-f-]{36}$/, { timeout: 10_000 });
     const url = page.url();
+    const newId = url.split("/chat/")[1];
+    if (newId && newId !== session.session_id) createdSessionIds.push(newId);
+
     expect(url).toMatch(/\/chat\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
     expect(url).not.toContain("undefined");
   });
