@@ -109,7 +109,7 @@ Makefile
 ## CI/CD Rules
 
 - PRs: run `lint-test` + `terraform-plan` + `codegen-check` (no deploy)
-  - `codegen-check`: runs `make codegen` and fails if `packages/schemas-ts/` has a diff; ensures App Builder did not forget to regenerate
+  - `codegen-check`: runs `make codegen` and fails if `apps/web/schemas/` has a diff; ensures App Builder did not forget to regenerate
 - Merge to `main`: full chain — lint-test → codegen-check → image-build → acr-push → tf apply shared → tf apply aca
 - Never force-push to `main`
 

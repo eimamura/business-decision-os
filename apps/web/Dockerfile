@@ -1,9 +1,8 @@
 FROM node:20-alpine AS builder
 WORKDIR /app
-COPY package.json package-lock.json* ./
+COPY apps/web/package.json apps/web/package-lock.json* apps/web/
+RUN cd apps/web && npm ci
 COPY apps/web/ apps/web/
-COPY packages/schemas-ts/ packages/schemas-ts/
-RUN npm ci
 RUN cd apps/web && npm run build
 
 FROM node:20-alpine AS runner

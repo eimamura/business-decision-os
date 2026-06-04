@@ -1,10 +1,8 @@
 FROM node:20-alpine
 WORKDIR /app
-COPY package.json package-lock.json* ./
-COPY packages/schemas-ts/package.json packages/schemas-ts/
-COPY apps/web/package.json apps/web/
-RUN npm ci
+COPY apps/web/package.json apps/web/package-lock.json* apps/web/
+RUN cd apps/web && npm ci
 EXPOSE 3000
 ENV NODE_ENV=development
 ENV WATCHPACK_POLLING=true
-CMD ["sh", "-c", "cd /app/apps/web && exec /app/node_modules/.bin/next dev -p 3000"]
+CMD ["sh", "-c", "cd /app/apps/web && exec npx next dev -p 3000"]

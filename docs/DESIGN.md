@@ -408,7 +408,6 @@ packages/
   optimization/     ← Optimization compute engine (used by optimizer_tool.py)
   prediction/       ← Prediction compute engine (used by forecast_tool.py)
   schemas/          ← Pydantic schemas shared across Python packages
-  schemas-ts/       ← TypeScript schemas shared with apps/web
   lakehouse/        ← Bronze / Silver / Gold data lake layers
 apps/
   api/              ← FastAPI application (entry point)

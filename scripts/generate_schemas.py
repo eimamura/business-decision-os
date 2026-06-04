@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate packages/schemas-ts/src/*.ts from packages/schemas/*.py.
+"""Generate apps/web/schemas/*.ts from packages/schemas/*.py.
 
 packages/schemas/ is the Single Source of Truth for all shared schemas.
 This script derives TypeScript / Zod equivalents via Pydantic's model_json_schema()
@@ -210,10 +210,11 @@ def generate_file(
 # Entry point
 # ---------------------------------------------------------------------------
 
-_OUT = ROOT / "packages/schemas-ts/src"
+_OUT = ROOT / "apps/web/schemas"
 
 
 def main() -> None:
+    _OUT.mkdir(parents=True, exist_ok=True)
     generate_file(_rec, _OUT / "recommendation.ts", "recommendation", "recommendation")
     generate_file(_eval, _OUT / "evaluations.ts", "evaluations", "evaluations")
     generate_file(_jobs, _OUT / "jobs.ts", "jobs", "jobs")
@@ -224,16 +225,6 @@ def main() -> None:
         "sse-events",
         discriminated_union=("type", _sse.SseEvent),
     )
-
-    index = _OUT / "index.ts"
-    index.write_text(
-        "// AUTO-GENERATED — do not edit by hand. Regenerate: make codegen\n"
-        'export * from "./sse-events";\n'
-        'export * from "./recommendation";\n'
-        'export * from "./evaluations";\n'
-        'export * from "./jobs";\n'
-    )
-    print(f"Generated {index.relative_to(ROOT)}")
 
 
 if __name__ == "__main__":

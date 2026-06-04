@@ -59,5 +59,5 @@ export interface SessionUsage {
   costUsd: number;
 }
 
-export { SseEventSchema } from "@bdos/schemas-ts";
-export type { SseEvent } from "@bdos/schemas-ts";
+export { SseEventSchema } from "@/schemas/sse-events";
+export type { SseEvent } from "@/schemas/sse-events";
