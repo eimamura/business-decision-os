@@ -130,11 +130,11 @@ Dependencies: B-01
 
 Dependencies: none
 
-### Batch B-04 — Tests (Test/Review) — Not Started
+### Batch B-04 — Tests (Test/Review) — Done
 
 | Task | Description | Status |
 |---|---|---|
-| T-165 | broadcaster cleanup・run_id stale drop・SSE error break に対するユニットテスト | Not Started |
-| T-166 | 既存ユニットテスト全通過確認（`make test-unit`） | Not Started |
+| T-165 | broadcaster cleanup・run_id stale drop・SSE error break に対するユニットテスト | Done |
+| T-166 | 既存ユニットテスト全通過確認（`make test-unit`） | Done |
 
 Dependencies: B-01, B-02, B-03

@@ -22,7 +22,10 @@ None
 
 ## Last Completed
 
-P26-B-02+B-03 — Abort race fix (session_run_ids) + sendAskUserAnswer invalidateQueries (2026-06-04)
+P26-B-04 — Unit tests for broadcaster cleanup, run_id stale drop, SSE error break (2026-06-04)
+- `make test-unit` → 544 passed, 11 skipped (exit 0)
+- `make lint` → All checks passed
+- `make typecheck` → 140 source files, no issues
 - `make test-unit` → 535 passed, 11 skipped (exit 0)
 - `make lint` → All checks passed
 - `make typecheck` → 140 source files, no issues
