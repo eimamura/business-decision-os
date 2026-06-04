@@ -6,7 +6,6 @@ from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
-import pytest
 
 from packages.agent.llm import LLMMessage, LLMResponse, LLMUsage
 from packages.agent.orchestrator.models import (
@@ -129,7 +128,6 @@ def _make_runtime(
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.asyncio
 async def test_agent_runtime_hitl_tool_suspends_with_interrupt() -> None:
     """When the LLM requests a hitl tool, AgentRuntime graph must suspend via
     interrupt() — the __interrupt__ key appears in the state output and
@@ -214,7 +212,6 @@ async def test_agent_runtime_hitl_tool_suspends_with_interrupt() -> None:
     assert interrupt_values[0].value.get("tool_name") == "request_approval"
 
 
-@pytest.mark.asyncio
 async def test_agent_runtime_hitl_handle_never_called() -> None:
     """tool.handle() must never be called when safety_level == 'hitl'."""
     called: list[bool] = []
@@ -292,7 +289,6 @@ async def test_agent_runtime_hitl_handle_never_called() -> None:
     assert "__interrupt__" in result
 
 
-@pytest.mark.asyncio
 async def test_agent_runtime_read_only_tool_does_not_interrupt() -> None:
     """read_only tools must proceed normally without interrupting."""
     tool_input: dict[str, Any] = {}
@@ -311,7 +307,6 @@ async def test_agent_runtime_read_only_tool_does_not_interrupt() -> None:
     assert result.status == "completed"
 
 
-@pytest.mark.asyncio
 async def test_agent_runtime_hitl_approval_id_from_repo() -> None:
     """ApprovalsRepository.create must be called during prepare_hitl and
     the approval_id stored in graph state must match the repo return value."""
@@ -381,7 +376,6 @@ async def test_agent_runtime_hitl_approval_id_from_repo() -> None:
     assert interrupt_value.get("approval_id") == expected_id
 
 
-@pytest.mark.asyncio
 async def test_agent_runtime_hitl_fallback_uuid_on_repo_error() -> None:
     """If ApprovalsRepository.create fails, graph must still suspend with a
     non-empty UUID fallback as the approval_id."""
@@ -461,7 +455,6 @@ async def test_agent_runtime_hitl_fallback_uuid_on_repo_error() -> None:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.asyncio
 async def test_session_orchestrator_has_no_hitl_pause_catch_block() -> None:
     """SessionOrchestrator.run() must not reference HITLPause anywhere.
     Verify by confirming that raising HITLPause-like errors from inside
@@ -476,7 +469,6 @@ async def test_session_orchestrator_has_no_hitl_pause_catch_block() -> None:
     )
 
 
-@pytest.mark.asyncio
 async def test_session_orchestrator_awaiting_approval_status_via_sse() -> None:
     """When a HITL tool is triggered, the graph emits 'awaiting_approval' and
     'session_paused' SSE events without the orchestrator needing to catch HITLPause."""

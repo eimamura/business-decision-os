@@ -5,7 +5,6 @@ from decimal import Decimal
 from typing import Any
 from uuid import UUID, uuid4
 
-import pytest
 
 from packages.agent.llm import LLMMessage, LLMResponse, LLMStreamEvent, LLMToolSpec, LLMUsage
 from packages.agent.orchestrator.ask_user import build_ask_user_event, is_analytical_intent
@@ -159,7 +158,6 @@ def _make_orchestrator(llm_client: Any) -> Any:
     )
 
 
-@pytest.mark.asyncio
 async def test_ask_user_node_passes_through_when_no_input_needed() -> None:
     """When the LLM returns needs_input=false, the node passes through to select_mode."""
     from unittest.mock import AsyncMock, MagicMock, patch

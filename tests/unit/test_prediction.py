@@ -19,7 +19,6 @@ def _make_tool_ctx() -> ToolContext:
     )
 
 
-@pytest.mark.asyncio
 async def test_linear_regression_predictor_no_db_returns_fallback():
     predictor = LinearRegressionPredictor(db_session=None)
     result = await predictor.predict("SKU001", 7)
@@ -31,7 +30,6 @@ async def test_linear_regression_predictor_no_db_returns_fallback():
     assert result.source == "in_process"
 
 
-@pytest.mark.asyncio
 async def test_linear_regression_predictor_fallback_all_zeros():
     predictor = LinearRegressionPredictor(db_session=None)
     result = await predictor.predict("SKU_UNKNOWN", 14)
@@ -62,7 +60,6 @@ def test_forecast_tool_raises_without_predictor():
         ForecastTool(predictor=None)
 
 
-@pytest.mark.asyncio
 async def test_forecast_tool_with_predictor_returns_output():
     predictor = LinearRegressionPredictor(db_session=None)
     tool = ForecastTool(predictor=predictor)

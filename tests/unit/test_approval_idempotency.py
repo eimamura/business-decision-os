@@ -4,7 +4,6 @@ from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import UUID, uuid4
 
-import pytest
 
 from packages.persistence.approvals_repo import ApprovalsRepository
 
@@ -13,7 +12,6 @@ from packages.persistence.approvals_repo import ApprovalsRepository
 # test_get_pending_approval_returns_none_for_unknown_session
 # ---------------------------------------------------------------------------
 
-@pytest.mark.asyncio
 async def test_get_pending_approval_returns_none_for_unknown_session() -> None:
     """When the DB returns no row for the session, the method returns None."""
     session_id = uuid4()
@@ -43,7 +41,6 @@ async def test_get_pending_approval_returns_none_for_unknown_session() -> None:
 # test_second_approval_request_reuses_existing
 # ---------------------------------------------------------------------------
 
-@pytest.mark.asyncio
 async def test_second_approval_request_reuses_existing() -> None:
     """When get_pending_approval_for_session returns an existing record,
     create() must NOT be called a second time."""

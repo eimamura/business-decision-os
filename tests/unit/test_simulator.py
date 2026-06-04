@@ -23,7 +23,6 @@ def _no_db_ctx() -> SimulationContext:
     return SimulationContext(db_session=None)
 
 
-@pytest.mark.asyncio
 async def test_simulator_runs_horizon_days():
     sim = InventorySimulator()
     result = await sim.run(
@@ -34,7 +33,6 @@ async def test_simulator_runs_horizon_days():
     assert len(result.daily_on_hand) == 30
 
 
-@pytest.mark.asyncio
 async def test_simulator_ending_on_hand_deterministic():
     # order_qty=100, horizon_days=10 → daily_demand=10.0 (exact division)
     # day-by-day on_hand: 90, 80, 70, 60, 50, 40, 30, 20, 10, 0 → ending=0.0
@@ -47,7 +45,6 @@ async def test_simulator_ending_on_hand_deterministic():
     assert result.stockout_days == 1
 
 
-@pytest.mark.asyncio
 async def test_simulator_stockout_days_when_demand_exceeds_supply():
     # order_qty=10, horizon_days=5, daily_demand=2.0
     # on_hand sequence: 8, 6, 4, 2, 0 → last day hits 0 → stockout_days=1
@@ -59,7 +56,6 @@ async def test_simulator_stockout_days_when_demand_exceeds_supply():
     assert result.stockout_days > 0
 
 
-@pytest.mark.asyncio
 async def test_simulator_no_stockout_when_ample_supply():
     # order_qty=10000 with horizon_days=11: daily_demand≈909.09
     # on_hand stays well above 0 for every day except possibly the last.
@@ -76,7 +72,6 @@ async def test_simulator_no_stockout_when_ample_supply():
     assert all(v > 0.0 for v in non_last_days)
 
 
-@pytest.mark.asyncio
 async def test_inprocess_runner_result_simulation():
     runner = InProcessJobRunner()
     spec = JobSpec(

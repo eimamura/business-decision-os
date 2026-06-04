@@ -13,7 +13,6 @@ from packages.agent.llm import (
 )
 
 
-@pytest.mark.asyncio
 async def test_intent_detection_returns_session_intent_json() -> None:
     client = ScenarioStubClaudeClient()
     msgs = [
@@ -26,7 +25,6 @@ async def test_intent_detection_returns_session_intent_json() -> None:
     assert "confidence" in data
 
 
-@pytest.mark.asyncio
 async def test_route_detection_returns_agent_route_json() -> None:
     client = ScenarioStubClaudeClient()
     msgs = [
@@ -41,7 +39,6 @@ async def test_route_detection_returns_agent_route_json() -> None:
     assert len(data["agents"]) == 1
 
 
-@pytest.mark.asyncio
 async def test_verify_detection_returns_verification_json() -> None:
     client = ScenarioStubClaudeClient()
     msgs = [
@@ -53,7 +50,6 @@ async def test_verify_detection_returns_verification_json() -> None:
     assert data["status"] == "pass"
 
 
-@pytest.mark.asyncio
 async def test_default_returns_plain_text() -> None:
     client = ScenarioStubClaudeClient()
     msgs = [
@@ -65,7 +61,6 @@ async def test_default_returns_plain_text() -> None:
     assert resp.finish_reason == "stop"
 
 
-@pytest.mark.asyncio
 async def test_stream_yields_text_delta() -> None:
     client = ScenarioStubClaudeClient()
     msgs = [LLMMessage(role="user", content="hello")]

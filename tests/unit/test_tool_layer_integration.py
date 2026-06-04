@@ -150,7 +150,6 @@ async def _events(queue: asyncio.Queue[dict]) -> list[dict]:
     return events
 
 
-@pytest.mark.asyncio
 async def test_direct_chat_does_not_create_decision(stub_orchestrator):
     orchestrator, queue = stub_orchestrator
     response = await orchestrator.run(uuid4(), SessionUserQuery(text="Good morning!"))
@@ -167,7 +166,6 @@ async def test_direct_chat_does_not_create_decision(stub_orchestrator):
     assert "response_ready" in emitted_types
 
 
-@pytest.mark.asyncio
 async def test_single_agent_runs_only_selected_agent(stub_orchestrator):
     orchestrator, queue = stub_orchestrator
     response = await orchestrator.run(uuid4(), SessionUserQuery(text="single inventory check"))
@@ -181,7 +179,6 @@ async def test_single_agent_runs_only_selected_agent(stub_orchestrator):
     assert "response_ready" in event_types
 
 
-@pytest.mark.asyncio
 async def test_sequential_agents_pass_previous_results(stub_orchestrator):
     orchestrator, _ = stub_orchestrator
     response = await orchestrator.run(uuid4(), SessionUserQuery(text="optimize replenishment"))
@@ -192,7 +189,6 @@ async def test_sequential_agents_pass_previous_results(stub_orchestrator):
     assert response.tradeoff is not None
 
 
-@pytest.mark.asyncio
 async def test_planned_execution_uses_serial_plan(stub_orchestrator):
     orchestrator, queue = stub_orchestrator
     response = await orchestrator.run(uuid4(), SessionUserQuery(text="planned replenishment"))
@@ -206,7 +202,6 @@ async def test_planned_execution_uses_serial_plan(stub_orchestrator):
     assert "response_ready" in event_types
 
 
-@pytest.mark.asyncio
 async def test_dag_execution_respects_dependencies(stub_orchestrator):
     orchestrator, _ = stub_orchestrator
     response = await orchestrator.run(uuid4(), SessionUserQuery(text="dag replenishment"))
@@ -215,7 +210,6 @@ async def test_dag_execution_respects_dependencies(stub_orchestrator):
     assert list(response.agent_results) == ["data", "sim"]
 
 
-@pytest.mark.asyncio
 async def test_router_bad_json_fails_explicitly(stub_orchestrator):
     orchestrator, queue = stub_orchestrator
 

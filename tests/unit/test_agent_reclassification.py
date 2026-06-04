@@ -72,7 +72,6 @@ def test_budget_guard_hard_limit_message():
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.asyncio
 async def test_budgeted_client_accumulates_on_complete():
     inner = StubClaudeClient()
     guard = BudgetGuard(soft_limit_usd=Decimal("100"), hard_limit_usd=Decimal("200"))
@@ -82,7 +81,6 @@ async def test_budgeted_client_accumulates_on_complete():
     assert guard.accumulated_cost == Decimal("0")
 
 
-@pytest.mark.asyncio
 async def test_budgeted_client_raises_on_hard_limit():
     _inner = StubClaudeClient()
 
@@ -115,49 +113,42 @@ async def test_budgeted_client_raises_on_hard_limit():
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.asyncio
 async def test_notifications_repo_get_raises():
     repo = NotificationsRepository()
     with pytest.raises(NotImplementedError):
         await repo.get(uuid4())
 
 
-@pytest.mark.asyncio
 async def test_notifications_repo_create_raises():
     repo = NotificationsRepository()
     with pytest.raises(NotImplementedError):
         await repo.create({})
 
 
-@pytest.mark.asyncio
 async def test_notifications_repo_list_raises():
     repo = NotificationsRepository()
     with pytest.raises(NotImplementedError):
         await repo.list()
 
 
-@pytest.mark.asyncio
 async def test_notifications_repo_mark_read_raises():
     repo = NotificationsRepository()
     with pytest.raises(NotImplementedError):
         await repo.mark_read(uuid4())
 
 
-@pytest.mark.asyncio
 async def test_policies_repo_get_current_raises():
     repo = PoliciesRepository()
     with pytest.raises(NotImplementedError):
         await repo.get_current()
 
 
-@pytest.mark.asyncio
 async def test_policies_repo_create_raises():
     repo = PoliciesRepository()
     with pytest.raises(NotImplementedError):
         await repo.create({})
 
 
-@pytest.mark.asyncio
 async def test_policies_repo_update_raises():
     repo = PoliciesRepository()
     with pytest.raises(NotImplementedError):
@@ -247,7 +238,6 @@ def test_put_policies_returns_200(api_client: TestClient) -> None:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.asyncio
 async def test_t073_session_orchestrator_compiles_with_memory_saver() -> None:
     """SessionOrchestrator._build_graph() must compile successfully with MemorySaver."""
     from langgraph.checkpoint.memory import MemorySaver

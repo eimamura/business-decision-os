@@ -34,7 +34,6 @@ def _no_job_ctx() -> OptimizationContext:
     return OptimizationContext(db_session=None)
 
 
-@pytest.mark.asyncio
 async def test_returns_exactly_3_candidates():
     optimizer = ReplenishmentOptimizer()
     result = await optimizer.run(_default_input(), _no_job_ctx())
@@ -42,7 +41,6 @@ async def test_returns_exactly_3_candidates():
     assert len(result.candidates) == 3
 
 
-@pytest.mark.asyncio
 async def test_candidates_sorted_by_cost_ascending():
     optimizer = ReplenishmentOptimizer()
     result = await optimizer.run(_default_input(), _no_job_ctx())
@@ -50,7 +48,6 @@ async def test_candidates_sorted_by_cost_ascending():
     assert costs == sorted(costs)
 
 
-@pytest.mark.asyncio
 async def test_feasible_candidates_preferred():
     optimizer = ReplenishmentOptimizer()
     result = await optimizer.run(_default_input(max_stockout_days=90), _no_job_ctx())
@@ -60,7 +57,6 @@ async def test_feasible_candidates_preferred():
         )
 
 
-@pytest.mark.asyncio
 async def test_moq_constraint_in_satisfied():
     optimizer = ReplenishmentOptimizer()
     result = await optimizer.run(_default_input(), _no_job_ctx())
@@ -69,7 +65,6 @@ async def test_moq_constraint_in_satisfied():
             assert "MOQ" in candidate.constraints_satisfied
 
 
-@pytest.mark.asyncio
 async def test_order_qty_is_moq_multiple():
     moq = 150.0
     optimizer = ReplenishmentOptimizer()
@@ -79,7 +74,6 @@ async def test_order_qty_is_moq_multiple():
         assert remainder == pytest.approx(0.0, abs=1e-9)
 
 
-@pytest.mark.asyncio
 async def test_total_cost_positive_for_nonzero_qty():
     optimizer = ReplenishmentOptimizer()
     result = await optimizer.run(_default_input(), _no_job_ctx())
@@ -88,7 +82,6 @@ async def test_total_cost_positive_for_nonzero_qty():
             assert candidate.total_supply_chain_cost > 0
 
 
-@pytest.mark.asyncio
 async def test_simulation_dict_present():
     optimizer = ReplenishmentOptimizer()
     result = await optimizer.run(_default_input(), _no_job_ctx())
@@ -97,7 +90,6 @@ async def test_simulation_dict_present():
         assert "estimated_stockout_days" in candidate.simulation
 
 
-@pytest.mark.asyncio
 async def test_inprocess_runner_optimization():
     runner = InProcessJobRunner()
     spec = JobSpec(

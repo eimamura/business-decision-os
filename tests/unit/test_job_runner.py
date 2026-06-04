@@ -18,7 +18,6 @@ def _make_ctx() -> ToolContext:
     )
 
 
-@pytest.mark.asyncio
 async def test_submit_returns_queued_handle():
     runner = InProcessJobRunner()
     spec = JobSpec(
@@ -31,7 +30,6 @@ async def test_submit_returns_queued_handle():
     assert handle.job_id is not None
 
 
-@pytest.mark.asyncio
 async def test_status_returns_handle():
     runner = InProcessJobRunner()
     spec = JobSpec(
@@ -44,7 +42,6 @@ async def test_status_returns_handle():
     assert retrieved.job_id == handle.job_id
 
 
-@pytest.mark.asyncio
 async def test_result_raises_key_error_for_unknown_job():
     runner = InProcessJobRunner()
     with pytest.raises(KeyError):
@@ -56,7 +53,6 @@ def test_job_spec_train_forecast_kind_is_valid():
     assert spec.kind == "train_forecast"
 
 
-@pytest.mark.asyncio
 async def test_inprocess_run_train_forecast_no_db_returns_failed_result(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

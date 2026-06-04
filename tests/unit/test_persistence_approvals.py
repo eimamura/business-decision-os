@@ -60,7 +60,6 @@ def test_compute_hash_changes_with_payload():
 # Repository stubs — all methods raise NotImplementedError
 # ---------------------------------------------------------------------------
 
-@pytest.mark.asyncio
 async def test_sessions_repo_raises(monkeypatch: pytest.MonkeyPatch) -> None:
     import packages.persistence.db as _db
     monkeypatch.delenv("DATABASE_URL", raising=False)
@@ -70,14 +69,12 @@ async def test_sessions_repo_raises(monkeypatch: pytest.MonkeyPatch) -> None:
         await repo.get(str(__import__("uuid").uuid4()))
 
 
-@pytest.mark.asyncio
 async def test_audit_log_repo_raises():
     repo = AuditLogRepository()
     with pytest.raises(NotImplementedError):
         await repo.get(__import__("uuid").uuid4())
 
 
-@pytest.mark.asyncio
 async def test_audit_log_hash_chain_write_raises():
     repo = AuditLogRepository()
     with pytest.raises(NotImplementedError):
@@ -91,7 +88,6 @@ async def test_audit_log_hash_chain_write_raises():
         )
 
 
-@pytest.mark.asyncio
 async def test_approvals_repo_raises(monkeypatch: pytest.MonkeyPatch) -> None:
     import packages.persistence.db as _db
     monkeypatch.delenv("DATABASE_URL", raising=False)
@@ -101,14 +97,12 @@ async def test_approvals_repo_raises(monkeypatch: pytest.MonkeyPatch) -> None:
         await repo.get(__import__("uuid").uuid4())
 
 
-@pytest.mark.asyncio
 async def test_recommendations_repo_raises():
     repo = RecommendationsRepository()
     with pytest.raises(NotImplementedError):
         await repo.get(__import__("uuid").uuid4())
 
 
-@pytest.mark.asyncio
 async def test_llm_usage_repo_raises(monkeypatch: pytest.MonkeyPatch) -> None:
     import packages.persistence.db as _db
     monkeypatch.delenv("DATABASE_URL", raising=False)
@@ -118,7 +112,6 @@ async def test_llm_usage_repo_raises(monkeypatch: pytest.MonkeyPatch) -> None:
         await repo.get_session_totals(str(__import__("uuid").uuid4()))
 
 
-@pytest.mark.asyncio
 async def test_tool_calls_repo_raises():
     repo = ToolCallsRepository()
     with pytest.raises(NotImplementedError):

@@ -9,7 +9,6 @@ from datetime import datetime, timezone
 from unittest.mock import AsyncMock, patch
 from uuid import UUID, uuid4
 
-import pytest
 from httpx import ASGITransport, AsyncClient
 
 from apps.api.main import app
@@ -54,7 +53,6 @@ def _make_file(job_id: UUID, file_id: UUID | None = None) -> dict:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.asyncio
 async def test_list_jobs_returns_items_and_no_cursor_when_under_limit() -> None:
     job = _make_job()
     file = _make_file(job["id"])
@@ -82,7 +80,6 @@ async def test_list_jobs_returns_items_and_no_cursor_when_under_limit() -> None:
     assert data["next_cursor"] is None
 
 
-@pytest.mark.asyncio
 async def test_list_jobs_returns_cursor_when_page_is_full() -> None:
     """When the page is exactly *limit* items long, next_cursor equals the last item id."""
     limit = 2
@@ -110,7 +107,6 @@ async def test_list_jobs_returns_cursor_when_page_is_full() -> None:
     assert data["next_cursor"] == str(jobs[-1]["id"])
 
 
-@pytest.mark.asyncio
 async def test_list_jobs_second_page_cursor_is_last_item_of_first_page() -> None:
     """Verify that the cursor returned on page 1 equals the id of the last item."""
     limit = 3
@@ -142,7 +138,6 @@ async def test_list_jobs_second_page_cursor_is_last_item_of_first_page() -> None
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.asyncio
 async def test_get_job_returns_job_with_files() -> None:
     job = _make_job()
     file = _make_file(job["id"])
@@ -171,7 +166,6 @@ async def test_get_job_returns_job_with_files() -> None:
     assert data["generated_files"][0]["file_name"] == "report.csv"
 
 
-@pytest.mark.asyncio
 async def test_get_job_404_on_unknown_id() -> None:
     missing_id = uuid4()
 
@@ -194,7 +188,6 @@ async def test_get_job_404_on_unknown_id() -> None:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.asyncio
 async def test_list_files_all_files_linked_to_valid_job_ids() -> None:
     job_ids = [uuid4(), uuid4()]
     files = [
@@ -219,7 +212,6 @@ async def test_list_files_all_files_linked_to_valid_job_ids() -> None:
     assert returned_job_ids == {str(jid) for jid in job_ids}
 
 
-@pytest.mark.asyncio
 async def test_list_files_returns_no_cursor_when_under_limit() -> None:
     job_id = uuid4()
     files = [_make_file(job_id)]
@@ -239,7 +231,6 @@ async def test_list_files_returns_no_cursor_when_under_limit() -> None:
     assert data["next_cursor"] is None
 
 
-@pytest.mark.asyncio
 async def test_list_files_returns_cursor_when_page_is_full() -> None:
     limit = 2
     job_id = uuid4()

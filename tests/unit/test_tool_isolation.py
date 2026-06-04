@@ -156,7 +156,6 @@ class SQLStubClaudeClient(StubClaudeClient):
 
 # ===== T-1001: StubClaudeClient =====
 
-@pytest.mark.asyncio
 async def test_stub_client_complete_returns_schema_conformant():
     client = StubClaudeClient()
     messages = [LLMMessage(role="user", content="hello")]
@@ -168,7 +167,6 @@ async def test_stub_client_complete_returns_schema_conformant():
     assert response.usage.total_cost_usd == Decimal("0")
 
 
-@pytest.mark.asyncio
 async def test_stub_client_embed_returns_correct_shape():
     client = StubClaudeClient()
     embeddings = await client.embed(["text1", "text2"])
@@ -178,7 +176,6 @@ async def test_stub_client_embed_returns_correct_shape():
 
 # ===== T-1002: UsageWriter callback =====
 
-@pytest.mark.asyncio
 async def test_usage_writer_called_on_complete():
     calls: list[tuple] = []
 
@@ -326,7 +323,6 @@ def test_sql_guardrail_rejects_unsafe_sql(sql: str):
         validate_read_sql(sql)
 
 
-@pytest.mark.asyncio
 async def test_sql_tool_no_db_returns_empty(monkeypatch: pytest.MonkeyPatch) -> None:
     import packages.persistence.db as _db
     monkeypatch.delenv("DATABASE_URL", raising=False)
@@ -338,14 +334,12 @@ async def test_sql_tool_no_db_returns_empty(monkeypatch: pytest.MonkeyPatch) -> 
     assert "error" not in result.output
 
 
-@pytest.mark.asyncio
 async def test_sql_tool_blocks_write_statements():
     tool = SqlQueryTool()
     result = await tool.handle({"query": "DELETE FROM sku_master WHERE 1=1"}, _ctx())
     assert "error" in result.output
 
 
-@pytest.mark.asyncio
 async def test_sql_tool_blocks_non_allowlist_table():
     tool = SqlQueryTool()
     result = await tool.handle({"query": "SELECT * FROM users"}, _ctx())
@@ -362,7 +356,6 @@ async def test_sql_tool_blocks_non_allowlist_table():
         "WITH u AS (SELECT * FROM users) SELECT * FROM sku_master",
     ],
 )
-@pytest.mark.asyncio
 async def test_sql_tool_guardrail_blocks_without_execution(
     sql: str,
     monkeypatch: pytest.MonkeyPatch,
@@ -379,7 +372,6 @@ async def test_sql_tool_guardrail_blocks_without_execution(
     assert result.output["row_count"] == 0
 
 
-@pytest.mark.asyncio
 async def test_nl_query_tool_guardrail_blocks_without_execution(
     monkeypatch: pytest.MonkeyPatch,
 ):
@@ -397,7 +389,6 @@ async def test_nl_query_tool_guardrail_blocks_without_execution(
 
 # ===== T-1011: ApprovalTool =====
 
-@pytest.mark.asyncio
 async def test_approval_tool_returns_pending():
     tool = ApprovalTool()
     result = await tool.handle({"action_summary": "test action"}, _ctx())
@@ -409,7 +400,6 @@ async def test_approval_tool_returns_pending():
 
 # ===== T-1012: AuditLogTool =====
 
-@pytest.mark.asyncio
 async def test_audit_tool_returns_hash():
     tool = AuditLogTool()
     result = await tool.handle({"event_type": "test", "payload": {"key": "value"}}, _ctx())
@@ -425,7 +415,6 @@ def test_forecast_tool_raises_without_predictor():
         ForecastTool(predictor=None)
 
 
-@pytest.mark.asyncio
 async def test_forecast_tool_with_predictor_returns_schema():
     from packages.prediction import LinearRegressionPredictor
     tool = ForecastTool(predictor=LinearRegressionPredictor(db_session=None))
@@ -437,7 +426,6 @@ async def test_forecast_tool_with_predictor_returns_schema():
 
 # ===== T-1014: SimulationTool =====
 
-@pytest.mark.asyncio
 async def test_simulation_tool_returns_schema():
     tool = SimulationTool()
     result = await tool.handle({"sku_id": "SKU001", "order_qty": 200.0, "horizon_days": 90}, _ctx())
@@ -449,7 +437,6 @@ async def test_simulation_tool_returns_schema():
 
 # ===== T-1015: OptimizerTool =====
 
-@pytest.mark.asyncio
 async def test_optimizer_tool_returns_3_candidates():
     tool = OptimizerTool()
     result = await tool.handle({"sku_id": "SKU001", "moq": 100.0, "horizon_days": 90}, _ctx())
@@ -459,7 +446,6 @@ async def test_optimizer_tool_returns_3_candidates():
     assert costs == sorted(costs)
 
 
-@pytest.mark.asyncio
 async def test_optimizer_tool_moq_constraint():
     tool = OptimizerTool()
     result = await tool.handle({"sku_id": "SKU001", "moq": 50.0, "horizon_days": 90}, _ctx())
@@ -469,7 +455,6 @@ async def test_optimizer_tool_moq_constraint():
 
 # ===== T-1016: EvaluatorTool =====
 
-@pytest.mark.asyncio
 async def test_evaluator_tool_8_kpis():
     tool = EvaluatorTool()
     candidates = [
@@ -484,7 +469,6 @@ async def test_evaluator_tool_8_kpis():
         assert ev["risk_level"] in ("low", "medium", "high")
 
 
-@pytest.mark.asyncio
 async def test_evaluator_no_collapsed_total():
     tool = EvaluatorTool()
     candidates = [{"id": "c1", "order_qty": 100.0}]
@@ -561,7 +545,6 @@ def test_sanitize_for_llm_returns_string():
     assert parsed["key"] == "value"
 
 
-@pytest.mark.asyncio
 async def test_sql_tool_output_is_sanitized(monkeypatch: pytest.MonkeyPatch):
     fake_rows = [{"id": i, "val": float(i)} for i in range(200)]
 
@@ -614,7 +597,6 @@ def test_list_for_role_orchestrator_returns_empty():
 
 # ===== T-1003/T-1040: Orchestrator + MemoryStore =====
 
-@pytest.mark.asyncio
 async def test_orchestrator_run_returns_session_response():
     client = PlanningStubClaudeClient()
     registry = create_tool_registry()
@@ -641,7 +623,6 @@ async def test_orchestrator_run_returns_session_response():
     )
 
 
-@pytest.mark.asyncio
 async def test_orchestrator_emits_sse_events():
     client = PlanningStubClaudeClient()
     registry = create_tool_registry()
@@ -669,7 +650,6 @@ async def test_orchestrator_emits_sse_events():
     assert "response_ready" in event_types
 
 
-@pytest.mark.asyncio
 async def test_orchestrator_session_goal_weight_override():
     client = PlanningStubClaudeClient()
     registry = create_tool_registry()
@@ -705,7 +685,6 @@ def test_prompt_based_execution_roles_instantiate():
         assert role in specialists
 
 
-@pytest.mark.asyncio
 async def test_specialist_run_returns_result():
     client = StubClaudeClient()
     registry = create_tool_registry()

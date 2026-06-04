@@ -79,7 +79,6 @@ def _make_session_response() -> SessionResponse:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.asyncio
 async def test_resume_uses_graph_astream_with_none_input() -> None:
     """resume() must call graph.astream_events(None, ...) — not ainvoke(initial_state, ...)."""
     orchestrator = _make_orchestrator()
@@ -116,7 +115,6 @@ async def test_resume_uses_graph_astream_with_none_input() -> None:
     assert result is expected
 
 
-@pytest.mark.asyncio
 async def test_resume_returns_result_from_graph_state() -> None:
     """resume() must extract SessionResponse from the 'result' key of the root chain output."""
     orchestrator = _make_orchestrator()
@@ -153,7 +151,6 @@ async def test_resume_returns_result_from_graph_state() -> None:
     assert result is expected
 
 
-@pytest.mark.asyncio
 async def test_resume_raises_on_no_result() -> None:
     """resume() must raise RuntimeError when no result is produced by the graph."""
     orchestrator = _make_orchestrator()
@@ -180,7 +177,6 @@ async def test_resume_raises_on_no_result() -> None:
             await orchestrator.resume(session_id, approval_id)
 
 
-@pytest.mark.asyncio
 async def test_resume_schedules_failed_status_on_graph_exception() -> None:
     """When graph.astream_events raises, resume() must schedule a 'failed' status update."""
     orchestrator = _make_orchestrator()
@@ -213,7 +209,6 @@ async def test_resume_schedules_failed_status_on_graph_exception() -> None:
     assert "failed" in statuses, f"Expected 'failed' status update on exception, got: {statuses}"
 
 
-@pytest.mark.asyncio
 async def test_resume_does_not_call_jobs_repository() -> None:
     """resume() must NOT look up jobs or call JobsRepository — the graph drives the response."""
     orchestrator = _make_orchestrator()
@@ -242,7 +237,6 @@ async def test_resume_does_not_call_jobs_repository() -> None:
     mock_jobs_cls.assert_not_called()
 
 
-@pytest.mark.asyncio
 async def test_resume_signature_unchanged() -> None:
     """resume() must accept session_id: UUID and approval_id: UUID and return SessionResponse."""
     import inspect
@@ -258,7 +252,6 @@ async def test_resume_signature_unchanged() -> None:
     assert "SessionResponse" in str(hints)
 
 
-@pytest.mark.asyncio
 async def test_resume_get_graph_uses_memory_saver_without_database_url() -> None:
     """_get_graph() must fall back to MemorySaver when DATABASE_URL is not set."""
     orchestrator = _make_orchestrator()

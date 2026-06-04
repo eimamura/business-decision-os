@@ -10,7 +10,6 @@ import json
 import io
 import logging
 
-import pytest
 import structlog
 import structlog.testing
 

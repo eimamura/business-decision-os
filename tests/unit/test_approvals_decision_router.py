@@ -7,7 +7,6 @@ from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
-import pytest
 
 
 # ---------------------------------------------------------------------------
@@ -58,7 +57,6 @@ def test_approvals_router_does_not_import_execute_job() -> None:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.asyncio
 async def test_approved_decision_triggers_orchestrator_resume() -> None:
     """POST /approvals/{id}/decision with 'approved' must fire orchestrator.resume()."""
     from httpx import ASGITransport, AsyncClient
@@ -114,7 +112,6 @@ async def test_approved_decision_triggers_orchestrator_resume() -> None:
     )
 
 
-@pytest.mark.asyncio
 async def test_rejected_decision_does_not_call_orchestrator_resume() -> None:
     """POST /approvals/{id}/decision with 'rejected' must NOT call orchestrator.resume()."""
     from httpx import ASGITransport, AsyncClient

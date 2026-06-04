@@ -111,7 +111,6 @@ def _make_orchestrator(llm_client: Any) -> SessionOrchestrator:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.asyncio
 async def test_run_success_calls_running_then_completed() -> None:
     """On a successful run, update_status must be called with 'running' then 'completed'."""
     orchestrator = _make_orchestrator(DirectChatLLMClient())
@@ -138,7 +137,6 @@ async def test_run_success_calls_running_then_completed() -> None:
     )
 
 
-@pytest.mark.asyncio
 async def test_run_failure_calls_running_then_failed() -> None:
     """When run() raises, update_status must be called with 'running' then 'failed'."""
     orchestrator = _make_orchestrator(FailingLLMClient())
@@ -165,7 +163,6 @@ async def test_run_failure_calls_running_then_failed() -> None:
     )
 
 
-@pytest.mark.asyncio
 async def test_run_status_update_uses_correct_session_id() -> None:
     """The session_id passed to update_status must match the one given to run()."""
     orchestrator = _make_orchestrator(DirectChatLLMClient())
@@ -189,7 +186,6 @@ async def test_run_status_update_uses_correct_session_id() -> None:
         )
 
 
-@pytest.mark.asyncio
 async def test_db_error_does_not_propagate() -> None:
     """If update_status raises (e.g. DB not configured), run() must still succeed."""
     orchestrator = _make_orchestrator(DirectChatLLMClient())

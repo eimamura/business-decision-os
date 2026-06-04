@@ -4,7 +4,6 @@ from typing import Any
 from unittest.mock import AsyncMock, patch
 from uuid import uuid4
 
-import pytest
 
 from packages.tools.base import ToolContext, ToolResult
 

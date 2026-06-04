@@ -87,7 +87,6 @@ def _make_orchestrator(llm_client: Any) -> Any:
     )
 
 
-@pytest.mark.asyncio
 async def test_prepare_ask_user_clamps_suggestions_to_three() -> None:
     """_node_prepare_ask_user must clamp suggestions to at most 3 items."""
     from unittest.mock import AsyncMock, MagicMock, patch
@@ -155,7 +154,6 @@ async def test_prepare_ask_user_clamps_suggestions_to_three() -> None:
     assert len(captured_event.get("suggestions", [])) <= 3
 
 
-@pytest.mark.asyncio
 async def test_ask_user_graph_pauses_at_wait_for_answer() -> None:
     """Graph pauses at wait_for_answer when LLM returns needs_input=true."""
     from unittest.mock import AsyncMock, MagicMock, patch
@@ -186,7 +184,6 @@ async def test_ask_user_graph_pauses_at_wait_for_answer() -> None:
     assert state.values.get("ask_user_question") == "What date range should I analyze?"
 
 
-@pytest.mark.asyncio
 async def test_ask_user_resume_reaches_select_mode() -> None:
     """Resuming via answer_ask_user() completes and returns a SessionResponse."""
     from unittest.mock import AsyncMock, MagicMock, patch
@@ -217,7 +214,6 @@ async def test_ask_user_resume_reaches_select_mode() -> None:
     assert response.route.rationale != "ask_user"
 
 
-@pytest.mark.asyncio
 async def test_ask_user_non_analytical_passes_through() -> None:
     """Chat intent skips ask_user; graph completes normally with no GraphInterrupt."""
     from unittest.mock import AsyncMock, MagicMock, patch

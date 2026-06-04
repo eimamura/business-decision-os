@@ -25,7 +25,6 @@ def _make_memory() -> Memory:
     )
 
 
-@pytest.mark.asyncio
 async def test_stub_write_and_get() -> None:
     store = StubMemoryStore()
     mem = _make_memory()
@@ -36,7 +35,6 @@ async def test_stub_write_and_get() -> None:
     assert fetched.content == "test content"
 
 
-@pytest.mark.asyncio
 async def test_stub_search_returns_empty() -> None:
     store = StubMemoryStore()
     mem = _make_memory()
@@ -45,7 +43,6 @@ async def test_stub_search_returns_empty() -> None:
     assert results == []
 
 
-@pytest.mark.asyncio
 async def test_stub_get_missing_returns_none() -> None:
     store = StubMemoryStore()
     result = await store.get(uuid4())

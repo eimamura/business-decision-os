@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from unittest.mock import AsyncMock, MagicMock
 
-import pytest
 
 from packages.prediction import Predictor, TrainedModelPredictor
 
@@ -32,7 +31,6 @@ def test_trained_model_predictor_satisfies_protocol():
     assert isinstance(predictor, Predictor)
 
 
-@pytest.mark.asyncio
 async def test_trained_model_predictor_returns_stored_units():
     stored_units = [float(i) for i in range(90)]
     session = _make_db_session_with_row(stored_units, "linear_regression_v1_trained")
@@ -46,7 +44,6 @@ async def test_trained_model_predictor_returns_stored_units():
     assert result.model_version == "linear_regression_v1_trained"
 
 
-@pytest.mark.asyncio
 async def test_trained_model_predictor_fallback_when_no_row():
     session = _make_db_session_no_row()
 
