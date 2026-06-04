@@ -382,13 +382,13 @@ Dependencies: none (parallel-eligible with P32 B-01)
 
 Dependencies: B-01
 
-### Batch B-03 — Unit tests (Test/Review) — Not Started
+### Batch B-03 — Unit tests (Test/Review) — Done
 
 | Task | Description | Status |
 |---|---|---|
-| T-232 | Unit tests for `CalculateHoldingCostImpactTool` and `CalculateStockoutCostImpactTool` — positive costs, zero excess/shortage, missing cost_master row (mock DB) | Not Started |
-| T-233 | Unit tests for `CalculateExpediteCostTool` and `CompareCostScenariosTool` — expedite premium calc, scenario ordering, recommended_scenario field (mock DB) | Not Started |
-| T-234 | `make test-unit` + `make lint` + `make typecheck` | Not Started |
+| T-232 | Unit tests for `CalculateHoldingCostImpactTool` and `CalculateStockoutCostImpactTool` — positive costs, zero excess/shortage, missing cost_master row (mock DB) | Done |
+| T-233 | Unit tests for `CalculateExpediteCostTool` and `CompareCostScenariosTool` — expedite premium calc, scenario ordering, recommended_scenario field (mock DB) | Done |
+| T-234 | `make test-unit` + `make lint` + `make typecheck` | Done |
 
 Dependencies: B-01, B-02
 
