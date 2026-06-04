@@ -164,6 +164,17 @@ export default function ExecutionPanel({ sessionId }: Props): React.ReactElement
                           : ""}
                       </span>
                     )}
+                  {(node.kind === "orchestrator" || node.kind === "agent") &&
+                    typeof node.meta?.model_name === "string" && (
+                      <span className="block mt-0.5">
+                        <span
+                          className="inline-block px-1 py-0 text-[10px] font-mono text-indigo-300/50 bg-indigo-500/10 border border-indigo-500/20 rounded"
+                          data-testid="model-name-badge"
+                        >
+                          {node.meta.model_name as string}
+                        </span>
+                      </span>
+                    )}
                   {node.durationMs != null && node.status !== "running" && (
                     <span className="block text-[10px] text-white/25 mt-0.5">
                       Completed ·{" "}
