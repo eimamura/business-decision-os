@@ -37,6 +37,7 @@ Full task history for P0–P23 is archived at `docs/archive/v3/TASKS.md`.
 | P23 — Test Suite Rationalization | T-141–T-146 | 2026-06-03 |
 | P24 — Ollama Local LLM Provider | T-147–T-152 | 2026-06-04 |
 | P25 — Tool Scenario E2E Validation & Session Cleanup | T-153–T-159 | 2026-06-04 |
+| P26 — SSE/Broadcaster Bug Fixes | T-160–T-166 | 2026-06-04 |
 
 ---
 
