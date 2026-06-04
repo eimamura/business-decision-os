@@ -65,6 +65,14 @@ _ORCHESTRATOR_NODES = frozenset({
 })
 
 
+def _get_orchestrator_model_name(llm_client: Any) -> str | None:
+    """Return the orchestrator-role model name, falling back to the default model."""
+    return (
+        getattr(llm_client, "_orchestrator_model", None)
+        or getattr(llm_client, "_model", None)
+    )
+
+
 def _extract_orch_meta(node_name: str, output: Any) -> dict[str, Any]:
     meta: dict[str, Any] = {}
     if not isinstance(output, dict):
@@ -505,13 +513,15 @@ class SessionOrchestrator:
                     "type": "graph_node", "event": "start",
                     "kind": "orchestrator", "name": name,
                     "run_id": run_id, "timestamp": _iso_now(),
-                    "status": "ok", "meta": {},
+                    "status": "ok",
+                    "meta": {"model_name": _get_orchestrator_model_name(self._llm_client)},
                 })
             elif ev_type == "on_chain_end":
                 duration_ms = int(
                     (time.monotonic() - node_start_times.pop(run_id, time.monotonic())) * 1000
                 )
                 meta = _extract_orch_meta(name, ev.get("data", {}).get("output", {}))
+                meta["model_name"] = _get_orchestrator_model_name(self._llm_client)
                 await self._push({
                     "type": "graph_node", "event": "end",
                     "kind": "orchestrator", "name": name,

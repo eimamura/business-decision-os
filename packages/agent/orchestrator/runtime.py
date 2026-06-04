@@ -62,13 +62,14 @@ async def _run_agent(
     task_id = uuid4()
     agent_run_id = str(task_id)
     started_at = datetime.now(timezone.utc)
+    model_name: str | None = getattr(orchestrator._llm_client, "_model", None)
     await orchestrator._push({
         "type": "graph_node", "event": "start",
         "kind": "agent", "name": agent_role,
         "run_id": agent_run_id,
         "timestamp": started_at.isoformat(),
         "input_summary": instruction[:200],
-        "status": "ok", "meta": {},
+        "status": "ok", "meta": {"model_name": model_name},
     })
 
     async def _persist_create() -> None:
@@ -118,7 +119,7 @@ async def _run_agent(
         "timestamp": ended_at.isoformat(),
         "duration_ms": int((time.monotonic() - t0) * 1000),
         "status": "error" if result.status == "failed" else "ok",
-        "meta": {}, "token_cost": token_cost,
+        "meta": {"model_name": model_name}, "token_cost": token_cost,
         **({"error": result.error} if result.status == "failed" else {}),
     })
 
