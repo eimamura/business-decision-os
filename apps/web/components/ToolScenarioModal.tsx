@@ -177,6 +177,93 @@ const CATEGORIES: Category[] = [
       },
     ],
   },
+  {
+    id: "supply",
+    label: "Supply Planning",
+    icon: "◧",
+    scenarios: [
+      {
+        id: "supply-gap",
+        title: "Supply Gap Analysis",
+        description: "Calculate the gap between demand forecast and available supply over 30 days",
+        prompt: "SKU-A の供給ギャップを30日間で分析して、不足リスクと補充推奨を教えて",
+      },
+      {
+        id: "lead-time",
+        title: "Lead Time Review",
+        description: "Analyse supplier lead times and flag high-variance or long-tail suppliers",
+        prompt: "サプライヤーのリードタイム分析を実行して、平均・最大・最小リードタイムと遅延リスクを報告して",
+      },
+      {
+        id: "open-orders",
+        title: "Open Supply Orders",
+        description: "List all pending and in-transit orders with expected arrival dates",
+        prompt: "現在オープン状態のすべての供給注文を取得して、到着予定日と数量を一覧で見せて",
+      },
+      {
+        id: "supply-risk",
+        title: "Supply Risk Assessment",
+        description: "Score supply risk combining gap, lead-time variance, and supplier concentration",
+        prompt: "SKU-A の供給リスクを総合評価して、ギャップリスク・リードタイムリスク・集中リスクのスコアを報告して",
+      },
+    ],
+  },
+  {
+    id: "finance",
+    label: "Finance & Cost",
+    icon: "⬟",
+    scenarios: [
+      {
+        id: "holding-cost",
+        title: "Holding Cost Analysis",
+        description: "Calculate monthly and annualised holding cost for excess inventory",
+        prompt: "SKU-A の過剰在庫 500 units の保管コストを計算して、月次・年次の金額を教えて",
+      },
+      {
+        id: "stockout-cost",
+        title: "Stockout Cost Impact",
+        description: "Quantify the opportunity cost of a stockout event for a given SKU",
+        prompt: "SKU-A で 200 units の欠品が発生した場合の機会損失コストを計算して",
+      },
+      {
+        id: "expedite-cost",
+        title: "Expedite Cost vs Stockout",
+        description: "Compare expedite premium against stockout cost to find the break-even",
+        prompt: "SKU-A を緊急調達する場合のコストを計算して、欠品放置と比較してどちらが安いか教えて",
+      },
+      {
+        id: "cost-scenarios",
+        title: "3-Way Cost Scenario Comparison",
+        description: "Compare do-nothing, full-expedite, and partial-fulfill total costs",
+        prompt: "SKU-A の不足 300 units に対して、do_nothing・全量緊急調達・部分対応の3シナリオのコストを比較して最適な選択肢を推奨して",
+      },
+    ],
+  },
+  {
+    id: "sop",
+    label: "S&OP",
+    icon: "◬",
+    scenarios: [
+      {
+        id: "sop-full",
+        title: "Full S&OP Cycle",
+        description: "Sequential demand → inventory → supply → finance → SopAgent synthesis",
+        prompt: "SKU-A の S&OP 分析を実行して：需要予測 → 在庫状況 → 供給フィージビリティ → 財務影響の順で分析し、最終的な対応方針と次のアクションを推奨して",
+      },
+      {
+        id: "sop-shortage",
+        title: "Shortage Decision",
+        description: "Compare full-response, partial-response, and do-nothing across cost, risk, and service level",
+        prompt: "SKU-A で来月 400 units の不足が予想される。全量対応・部分対応・何もしないの選択肢をコスト・リスク・サービスレベルの観点から比較して、最適な意思決定をして",
+      },
+      {
+        id: "sop-health",
+        title: "Inventory Health Check",
+        description: "Cross-domain health scan: stockout risk, excess, ATP, and supply gap across SKUs",
+        prompt: "主要SKUの在庫健全性をチェックして：欠品リスク・過剰在庫・ATP・供給ギャップを横断的に分析して課題のあるSKUを優先度順にリストアップして",
+      },
+    ],
+  },
 ];
 
 interface ToolScenarioModalProps {

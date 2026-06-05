@@ -45,6 +45,7 @@ Full task history for P0–P23 is archived at `docs/archive/v3/TASKS.md`.
 | P33 — Finance Impact Agent | T-224–T-234 | 2026-06-04 |
 | P34 — Inventory Agent Enhancement | T-235–T-243 | 2026-06-04 |
 | P35 — S&OP Agent & Orchestration | T-244–T-251 | 2026-06-04 |
+| P36 — Tool Scenario Prompts for S&OP Agents | T-252–T-257 | 2026-06-04 |
 
 ---
 
@@ -461,3 +462,28 @@ Dependencies: P32 Done, P33 Done, P34 Done
 
 Dependencies: B-01
 
+---
+
+## P36 — Tool Scenario Prompts for S&OP Agents
+
+**Goal:** Add Supply Planning, Finance & Cost, and S&OP scenario categories to the Tool Scenarios modal and 3 quick chips to ToolScenarioBar, exposing the new P32–P35 agents to the demo UI.
+
+### Batch B-01 — ToolScenarioModal + ToolScenarioBar (App Builder) — Done
+
+| Task | Description | Status |
+|---|---|---|
+| T-252 | Add `"supply"` category (4 scenarios) to `CATEGORIES` in `apps/web/components/ToolScenarioModal.tsx`: supply gap analysis, lead time review, open orders check, supply risk assessment | Done |
+| T-253 | Add `"finance"` category (4 scenarios) to `ToolScenarioModal.tsx`: holding cost analysis, stockout cost impact, expedite cost comparison, cost scenario comparison | Done |
+| T-254 | Add `"sop"` category (3 scenarios) to `ToolScenarioModal.tsx`: full S&OP cycle, shortage decision, inventory health check | Done |
+| T-255 | Add 3 quick chips (Supply Gap, Cost Scenarios, S&OP) to `apps/web/components/ToolScenarioBar.tsx` | Done |
+
+Dependencies: none
+
+### Batch B-02 — Playwright test update (Test/Review) — Done
+
+| Task | Description | Status |
+|---|---|---|
+| T-256 | Update `tests/e2e/playwright/tool_scenario_modal.spec.ts` — rename "all 5 category tabs" test, add assertions for Supply Planning, Finance & Cost, S&OP tabs | Done |
+| T-257 | `make build` + `npx vitest run` (all checks pass) | Done |
+
+Dependencies: B-01

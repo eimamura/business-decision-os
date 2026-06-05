@@ -132,7 +132,7 @@ test.describe("ToolScenarioModal (mocked routes — no backend required)", () =>
     await expect(page.getByText("Tool Scenarios")).toBeVisible();
   });
 
-  test("all 5 category tabs are visible in the open modal", async ({ page }) => {
+  test("all category tabs are visible in the open modal", async ({ page }) => {
     await setupMockRoutes(page);
     await navigateToChat(page);
     await openModal(page);
@@ -143,6 +143,9 @@ test.describe("ToolScenarioModal (mocked routes — no backend required)", () =>
     await expect(dialog.getByText("Simulation & Optimization")).toBeVisible();
     await expect(dialog.getByText("Ask User (HITL)")).toBeVisible();
     await expect(dialog.getByText("Job Dispatch (HITL)")).toBeVisible();
+    await expect(dialog.getByText("Supply Planning")).toBeVisible();
+    await expect(dialog.getByText("Finance & Cost")).toBeVisible();
+    await expect(dialog.getByText("S&OP")).toBeVisible();
   });
 
   test("clicking Forecasting tab shows its scenario cards", async ({ page }) => {

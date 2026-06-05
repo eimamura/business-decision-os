@@ -34,6 +34,21 @@ const SCENARIOS: Scenario[] = [
     label: "Data Catalog",
     prompt: "利用可能なデータテーブル一覧をカタログから検索して",
   },
+  {
+    id: "supply-gap",
+    label: "Supply Gap",
+    prompt: "SKU-A の供給ギャップを30日間で分析して、不足リスクと補充推奨を教えて",
+  },
+  {
+    id: "cost-scenarios",
+    label: "Cost Scenarios",
+    prompt: "SKU-A の不足 300 units に対して、do_nothing・全量緊急調達・部分対応の3シナリオのコストを比較して最適な選択肢を推奨して",
+  },
+  {
+    id: "sop",
+    label: "S&OP",
+    prompt: "SKU-A の S&OP 分析を実行して：需要予測 → 在庫状況 → 供給フィージビリティ → 財務影響の順で分析し、最終的な対応方針と次のアクションを推奨して",
+  },
 ];
 
 interface ToolScenarioBarProps {
