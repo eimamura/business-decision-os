@@ -1,130 +1,52 @@
 /**
- * T-155: ToolScenarioModal Playwright tests using mocked API routes.
+ * T-264: ToolScenarioModal Playwright tests — real API backend.
  *
- * No backend, LLM, or Docker required — only the Next.js dev server.
+ * Tests 1–3 and 5 are pure UI tests that exercise modal state without
+ * sending a message to the LLM. Test 4 clicks a scenario card, which
+ * calls sendMessage() directly and waits for an Ollama response.
  *
  * Run with:
- *   cd apps/web && npm run dev   (separate terminal)
- *   npx playwright test tool_scenario_modal --config apps/web/playwright.config.ts
+ *   make dev-up   (starts web + api + Ollama)
+ *   make test-playwright
  */
 
 import { testWithCleanup as test, expect } from "./fixtures";
-import type { Page } from "@playwright/test";
 
-const SESSION_ID = "mock-tool-modal-session";
-const NOW = "2024-01-01T00:00:00.000Z";
-
-// ---------------------------------------------------------------------------
-// Route mock setup
-// ---------------------------------------------------------------------------
-
-async function setupMockRoutes(page: Page): Promise<void> {
-  // Catch-all for any unhandled /api/v1/* route (lowest priority)
-  await page.route("**/api/v1/**", async (route) => {
-    await route.fulfill({ status: 200, contentType: "application/json", body: "[]" });
-  });
-
-  // Sessions list (sidebar)
-  await page.route("**/api/v1/sessions", async (route) => {
-    if (route.request().method() !== "GET") {
-      await route.continue();
-      return;
-    }
-    await route.fulfill({
-      status: 200,
-      contentType: "application/json",
-      body: JSON.stringify([
-        { session_id: SESSION_ID, status: "active", title: "Test", created_at: NOW },
-      ]),
-    });
-  });
-
-  // Session detail
-  await page.route(`**/api/v1/sessions/${SESSION_ID}`, async (route) => {
-    await route.fulfill({
-      status: 200,
-      contentType: "application/json",
-      body: JSON.stringify({
-        session_id: SESSION_ID,
-        status: "active",
-        title: "Test",
-        created_at: NOW,
-      }),
-    });
-  });
-
-  // Messages history
-  await page.route(`**/api/v1/sessions/${SESSION_ID}/messages`, async (route) => {
-    if (route.request().method() === "GET") {
-      await route.fulfill({ status: 200, contentType: "application/json", body: "[]" });
-    } else {
-      await route.fulfill({
-        status: 202,
-        contentType: "application/json",
-        body: JSON.stringify({ message_id: "msg-1", session_id: SESSION_ID, status: "processing" }),
-      });
-    }
-  });
-
-  // Session events
-  await page.route(`**/api/v1/sessions/${SESSION_ID}/events`, async (route) => {
-    await route.fulfill({ status: 200, contentType: "application/json", body: "[]" });
-  });
-
-  // SSE stream (returns a minimal done event)
-  await page.route(`**/api/v1/sessions/${SESSION_ID}/stream`, async (route) => {
-    const body = [
-      { type: "done", session_id: SESSION_ID, reply: "Analysis complete.", timestamp: NOW },
-    ]
-      .map((e) => `data: ${JSON.stringify(e)}\n\n`)
-      .join("");
-    await route.fulfill({
-      status: 200,
-      headers: {
-        "Content-Type": "text/event-stream",
-        "Cache-Control": "no-cache",
-        "X-Accel-Buffering": "no",
-      },
-      body,
-    });
-  });
-
-  // Usage
-  await page.route(`**/api/v1/sessions/${SESSION_ID}/usage`, async (route) => {
-    await route.fulfill({
-      status: 200,
-      contentType: "application/json",
-      body: JSON.stringify({ input_tokens: 0, output_tokens: 0, total_cost_usd: 0 }),
-    });
-  });
-}
+const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+const OLLAMA_TIMEOUT = 90_000;
 
 // ---------------------------------------------------------------------------
-// Helper: navigate to the chat page
+// Helpers
 // ---------------------------------------------------------------------------
 
-async function navigateToChat(page: Page): Promise<void> {
-  await page.goto(`/chat/${SESSION_ID}`);
-  await expect(page.locator("textarea")).toBeVisible();
-}
-
-// ---------------------------------------------------------------------------
-// Helper: open the modal
-// ---------------------------------------------------------------------------
-
-async function openModal(page: Page): Promise<void> {
-  await page.getByTitle("Browse all tool scenarios").click();
-  await expect(page.getByRole("dialog")).toBeVisible({ timeout: 5_000 });
+async function createSession(
+  request: Parameters<typeof test>[1]["request"],
+  goal: string,
+): Promise<string> {
+  const res = await request.post(`${API_BASE}/api/v1/sessions`, {
+    data: { goal },
+    headers: { "X-Dev-User": "dev-user" },
+  });
+  expect(res.ok()).toBeTruthy();
+  const body = (await res.json()) as { session_id: string };
+  return body.session_id;
 }
 
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
 
-test.describe("ToolScenarioModal (mocked routes — no backend required)", () => {
-  test("modal opens when grid button is clicked", async ({ page }) => {
-    await setupMockRoutes(page);
-    await navigateToChat(page);
+test.describe("ToolScenarioModal (real API backend)", () => {
+  test("modal opens when grid button is clicked", async ({
+    page,
+    request,
+    createdSessionIds,
+  }) => {
+    const sessionId = await createSession(request, "Modal open test");
+    createdSessionIds.push(sessionId);
+
+    await page.goto(`/chat/${sessionId}`);
+    await expect(page.locator("textarea")).toBeVisible();
 
     await page.getByTitle("Browse all tool scenarios").click();
 
@@ -132,10 +54,18 @@ test.describe("ToolScenarioModal (mocked routes — no backend required)", () =>
     await expect(page.getByText("Tool Scenarios")).toBeVisible();
   });
 
-  test("all category tabs are visible in the open modal", async ({ page }) => {
-    await setupMockRoutes(page);
-    await navigateToChat(page);
-    await openModal(page);
+  test("all category tabs are visible in the open modal", async ({
+    page,
+    request,
+    createdSessionIds,
+  }) => {
+    const sessionId = await createSession(request, "Modal tabs test");
+    createdSessionIds.push(sessionId);
+
+    await page.goto(`/chat/${sessionId}`);
+    await expect(page.locator("textarea")).toBeVisible();
+    await page.getByTitle("Browse all tool scenarios").click();
+    await expect(page.getByRole("dialog")).toBeVisible({ timeout: 5_000 });
 
     const dialog = page.getByRole("dialog");
     await expect(dialog.getByText("Data Query")).toBeVisible();
@@ -148,27 +78,43 @@ test.describe("ToolScenarioModal (mocked routes — no backend required)", () =>
     await expect(dialog.getByText("S&OP")).toBeVisible();
   });
 
-  test("clicking Forecasting tab shows its scenario cards", async ({ page }) => {
-    await setupMockRoutes(page);
-    await navigateToChat(page);
-    await openModal(page);
+  test("clicking Forecasting tab shows its scenario cards", async ({
+    page,
+    request,
+    createdSessionIds,
+  }) => {
+    const sessionId = await createSession(request, "Modal Forecasting tab test");
+    createdSessionIds.push(sessionId);
+
+    await page.goto(`/chat/${sessionId}`);
+    await expect(page.locator("textarea")).toBeVisible();
+    await page.getByTitle("Browse all tool scenarios").click();
+    await expect(page.getByRole("dialog")).toBeVisible({ timeout: 5_000 });
 
     const dialog = page.getByRole("dialog");
-    // Use role=button to avoid matching text inside scenario cards
     await dialog.getByRole("button", { name: "Forecasting" }).click();
 
     // Use .first() — "Demand Forecast" also appears in "Train Forecast Model"'s description text
     await expect(dialog.getByText("Demand Forecast").first()).toBeVisible({ timeout: 5_000 });
   });
 
-  test("clicking a scenario card closes the modal and sends the prompt as a message", async ({ page }) => {
-    await setupMockRoutes(page);
-    await navigateToChat(page);
-    await openModal(page);
+  test("clicking a scenario card closes the modal and sends the prompt as a message", async ({
+    page,
+    request,
+    createdSessionIds,
+  }) => {
+    test.setTimeout(OLLAMA_TIMEOUT + 10_000);
+    const sessionId = await createSession(request, "Modal card click test");
+    createdSessionIds.push(sessionId);
+
+    await page.goto(`/chat/${sessionId}`);
+    await expect(page.locator("textarea")).toBeVisible();
+    await page.getByTitle("Browse all tool scenarios").click();
+    await expect(page.getByRole("dialog")).toBeVisible({ timeout: 5_000 });
 
     // "SQL Direct Query" is under the default "Data Query" tab — visible immediately.
     // Clicking a scenario card calls handleScenarioApply() which sends the message
-    // immediately (does NOT fill the textarea — it calls sendMessage() directly).
+    // directly (does NOT fill the textarea — it calls sendMessage() directly).
     const dialog = page.getByRole("dialog");
     await dialog.getByText("SQL Direct Query").click();
 
@@ -176,16 +122,30 @@ test.describe("ToolScenarioModal (mocked routes — no backend required)", () =>
     await expect(page.getByRole("dialog")).not.toBeVisible({ timeout: 3_000 });
 
     // A user message bubble should appear with the SQL prompt text
-    await expect(page.locator(".rounded-2xl").filter({ hasText: /在庫テーブル/ })).toBeVisible({
-      timeout: 8_000,
+    await expect(
+      page.locator(".rounded-2xl.bg-indigo-600").filter({ hasText: /在庫テーブル/ }),
+    ).toBeVisible({ timeout: 8_000 });
+
+    // An assistant bubble must appear with a response from Ollama
+    await expect(page.locator("text=Completed").first()).toBeVisible({
+      timeout: OLLAMA_TIMEOUT,
     });
+    const assistantBubble = page.locator(".rounded-2xl.bg-\\[\\#1a1a2a\\]").first();
+    await expect(assistantBubble).toBeVisible({ timeout: 5_000 });
+    await expect(assistantBubble).not.toBeEmpty();
+    expect(await assistantBubble.getAttribute("class")).not.toContain("text-red-400");
   });
 
   test("clicking a quick chip in ToolScenarioBar fills textarea without opening the modal", async ({
     page,
+    request,
+    createdSessionIds,
   }) => {
-    await setupMockRoutes(page);
-    await navigateToChat(page);
+    const sessionId = await createSession(request, "Chip fill test");
+    createdSessionIds.push(sessionId);
+
+    await page.goto(`/chat/${sessionId}`);
+    await expect(page.locator("textarea")).toBeVisible();
 
     // Click the "SQL Query" chip directly in the bar
     await page.getByText("SQL Query").click();

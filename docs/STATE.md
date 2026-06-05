@@ -27,7 +27,7 @@ P37 — Playwright E2E: Remove Mocks, Consolidate
 
 ## Active Lease
 
-P37-B-02, P37-B-03, P37-B-04 (parallel)
+P37-B-05
 
 ## Last Completed
 

@@ -503,29 +503,29 @@ Dependencies: B-01
 
 Dependencies: none
 
-### Batch B-02 — Rewrite HITL tests with real Ollama (Test/Review) — Not Started
+### Batch B-02 — Rewrite HITL tests with real Ollama (Test/Review) — Done
 
 | Task | Description | Status |
 |---|---|---|
-| T-260 | Rewrite `ask_user_flow.spec.ts` — remove MOCK_LLM/MOCK_ASK_USER requirement; use real Ollama; cover: question bubble appears, chip pre-populates input, submit disabled before selection, answer submission → answered state + assistant reply, fully-specified prompt skips AskUser | Not Started |
-| T-261 | Rewrite `job_approval.spec.ts` — remove RUN_E2E guard (always run); add "awaiting_approval event shows card with action buttons" test (merged from deleted hitl spec); approve + reject flows via real backend | Not Started |
+| T-260 | Rewrite `ask_user_flow.spec.ts` — remove MOCK_LLM/MOCK_ASK_USER requirement; use real Ollama; cover: question bubble appears, chip pre-populates input, submit disabled before selection, answer submission → answered state + assistant reply, fully-specified prompt skips AskUser | Done |
+| T-261 | Rewrite `job_approval.spec.ts` — remove RUN_E2E guard (always run); add "awaiting_approval event shows card with action buttons" test (merged from deleted hitl spec); approve + reject flows via real backend | Done |
 
 Dependencies: B-01
 
-### Batch B-03 — Rewrite trace persistence tests with real Ollama (Test/Review) — Not Started
+### Batch B-03 — Rewrite trace persistence tests with real Ollama (Test/Review) — Done
 
 | Task | Description | Status |
 |---|---|---|
-| T-262 | Rewrite `realtime_trace_persistence.spec.ts` — remove all `page.route()` mocks; run real Ollama agent; verify: spinner CSS on running nodes, trace nodes appear on completion, execution trace persists after page reload; consolidate with `live_trace_verify.spec.ts` if coverage overlaps | Not Started |
+| T-262 | Rewrite `realtime_trace_persistence.spec.ts` — remove all `page.route()` mocks; run real Ollama agent; verify: spinner CSS on running nodes, trace nodes appear on completion, execution trace persists after page reload; consolidate with `live_trace_verify.spec.ts` if coverage overlaps | Done |
 
 Dependencies: B-01
 
-### Batch B-04 — Rewrite tool scenario tests with real Ollama (Test/Review) — Not Started
+### Batch B-04 — Rewrite tool scenario tests with real Ollama (Test/Review) — Done
 
 | Task | Description | Status |
 |---|---|---|
-| T-263 | Rename + rewrite `tool_scenario_bubbles_mock.spec.ts` → `tool_scenario_bubbles.spec.ts` — no `page.route()`; for each scenario prompt (Data Query, Forecasting, Simulation, Optimization, Data Catalog): create real session, send prompt, verify assistant bubble appears ≤60s | Not Started |
-| T-264 | Rewrite `tool_scenario_modal.spec.ts` — remove all `page.route()` mocks; use real session creation; verify modal open/tab-switch/chip UI; verify scenario card click sends real POST /messages and assistant bubble appears | Not Started |
+| T-263 | Rename + rewrite `tool_scenario_bubbles_mock.spec.ts` → `tool_scenario_bubbles.spec.ts` — no `page.route()`; for each scenario prompt (Data Query, Forecasting, Simulation, Optimization, Data Catalog): create real session, send prompt, verify assistant bubble appears ≤60s | Done |
+| T-264 | Rewrite `tool_scenario_modal.spec.ts` — remove all `page.route()` mocks; use real session creation; verify modal open/tab-switch/chip UI; verify scenario card click sends real POST /messages and assistant bubble appears | Done |
 
 Dependencies: B-01
 
