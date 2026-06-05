@@ -23,11 +23,11 @@ See `docs/archive/v3/STATE.md` for P0–P23 per-phase details.
 
 ## Active Phase
 
-None.
+P37 — Playwright E2E: Remove Mocks, Consolidate
 
 ## Active Lease
 
-None.
+P37-B-02, P37-B-03, P37-B-04 (parallel)
 
 ## Last Completed
 
