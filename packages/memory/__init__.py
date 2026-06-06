@@ -10,6 +10,8 @@ from uuid import UUID, uuid4
 import openai
 from pydantic import BaseModel, Field
 
+from packages.memory.working import WorkingMemoryStore
+
 # ---------------------------------------------------------------------------
 # Legacy record models — used by PgVectorMemoryStore and existing API code
 # ---------------------------------------------------------------------------
@@ -275,6 +277,8 @@ __all__ = [
     "DecisionMemory",
     "UserMemory",
     "DomainMemory",
+    # Physical async implementations (P41-B-02+)
+    "WorkingMemoryStore",
     # Concrete implementations
     "PgVectorMemoryStore",
     "StubMemoryStore",

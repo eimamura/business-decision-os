@@ -31,11 +31,11 @@ P41 — Memory Layer
 
 ## Active Lease
 
-P41-B-02
+P41-B-03
 
 ## Last Completed
 
-P41-B-01 — Memory Layer typed store base classes + stubs: 743 passed, lint+typecheck clean (2026-06-06)
+P41-B-02 — WorkingMemoryStore backed by agent_steps: 757 passed, lint+typecheck clean (2026-06-06)
 
 ## Blockers
 

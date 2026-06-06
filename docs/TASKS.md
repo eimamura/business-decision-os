@@ -768,14 +768,14 @@ Dependencies: P39 Done
 
 Dependencies: none
 
-### Batch B-02 — WorkingMemory physical implementation (App Builder) — Not Started
+### Batch B-02 — WorkingMemory physical implementation (App Builder) — Done
 
 WorkingMemory maps to existing DB tables: `agent_session`, `task_run`, `tool_result`, `intermediate_artifact`, `approval_state` (DESIGN.md §Context Engineering Layer §Working Context Store).
 
 | Task | Description | Status |
 |---|---|---|
-| T-292 | `packages/memory/working.py` — `WorkingMemoryStore(WorkingMemory)` backed by existing repository classes in `packages/persistence/`; `write()` creates `task_run` + `tool_result` rows; `search()` returns recent task_run records for the session | Not Started |
-| T-293 | Alembic migration if any schema changes needed to support `intermediate_artifact` table (check whether it already exists; create only if absent) | Not Started |
+| T-292 | `packages/memory/working.py` — `WorkingMemoryStore(WorkingMemory)` backed by existing repository classes in `packages/persistence/`; `write()` creates `task_run` + `tool_result` rows; `search()` returns recent task_run records for the session | Done |
+| T-293 | Alembic migration if any schema changes needed to support `intermediate_artifact` table (check whether it already exists; create only if absent) | Done |
 
 Dependencies: B-01
 

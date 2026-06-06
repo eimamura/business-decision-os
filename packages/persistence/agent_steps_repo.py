@@ -74,3 +74,46 @@ class AgentStepsRepository:
                 ended_at,
                 json.dumps(output_json) if output_json is not None else None,
             )
+
+    async def list_recent_by_session(
+        self,
+        session_id: str,
+        limit: int = 5,
+    ) -> list[dict[str, Any]]:
+        """Return the *limit* most recent agent_steps rows for a session.
+
+        Each returned dict contains: step_id, session_id, step_type, content, created_at.
+        ``content`` is extracted from ``input_json->>'content'`` when present.
+        """
+        pool = await get_pool()
+        async with pool.acquire() as conn:
+            rows = await conn.fetch(
+                """
+                SELECT id, session_id, step_type, input_json, started_at
+                FROM agent_steps
+                WHERE session_id = $1
+                ORDER BY started_at DESC
+                LIMIT $2
+                """,
+                uuid.UUID(session_id),
+                limit,
+            )
+        results: list[dict[str, Any]] = []
+        for row in rows:
+            raw_input = row["input_json"]
+            if isinstance(raw_input, str):
+                input_data: dict[str, Any] = json.loads(raw_input)
+            elif raw_input is None:
+                input_data = {}
+            else:
+                input_data = dict(raw_input)
+            results.append(
+                {
+                    "step_id": str(row["id"]),
+                    "session_id": str(row["session_id"]),
+                    "step_type": row["step_type"],
+                    "content": input_data.get("content", ""),
+                    "created_at": row["started_at"].isoformat() if row["started_at"] else None,
+                }
+            )
+        return results
