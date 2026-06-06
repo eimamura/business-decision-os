@@ -51,6 +51,7 @@ Full task history for P0–P23 is archived at `docs/archive/v3/TASKS.md`.
 | P44 — Playwright Tests: Revert to Mock SSE | T-311–T-317 | 2026-06-06 |
 | P39 — Supply Chain Control Agent (MVP Core) | T-273–T-280 | 2026-06-06 |
 | P45 — Control-Agent-Only Routing | T-318–T-324 | 2026-06-06 |
+| P40 — Skill Registry | T-281–T-289 | 2026-06-06 |
 
 > **Design Realignment Note (2026-06-05):** P29–P36 built Specialist Domain Agents (DemandAgent,
 > InventoryAgent, SupplyPlanningAgent, FinanceImpactAgent, SopAgent) as independent runtime units.
@@ -738,13 +739,13 @@ Dependencies: B-01
 
 Dependencies: B-01, B-02, P39 Done
 
-### Batch B-04 — Tests (Test/Review) — Not Started
+### Batch B-04 — Tests (Test/Review) — Done
 
 | Task | Description | Status |
 |---|---|---|
-| T-287 | Unit test: `SkillLoader.load("supply_chain")` returns content from at least one Skill file; `SkillLoader.load("unknown_intent")` returns empty list without error | Not Started |
-| T-288 | Unit test: ControlAgent context builder includes Skill procedure text in the user message when SkillLoader returns content | Not Started |
-| T-289 | `make test-unit` + `make lint` + `make typecheck` | Not Started |
+| T-287 | Unit test: `SkillLoader.load("supply_chain")` returns content from at least one Skill file; `SkillLoader.load("unknown_intent")` returns empty list without error | Done |
+| T-288 | Unit test: ControlAgent context builder includes Skill procedure text in the user message when SkillLoader returns content | Done |
+| T-289 | `make test-unit` + `make lint` + `make typecheck` | Done |
 
 Dependencies: B-01, B-02, B-03
 

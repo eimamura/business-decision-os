@@ -27,15 +27,15 @@ See `docs/archive/v3/STATE.md` for P0–P23 per-phase details.
 
 ## Active Phase
 
-P40 — Skill Registry
+P41 — Memory Layer
 
 ## Active Lease
 
-P40-B-04
+None
 
 ## Last Completed
 
-P40-B-03 — SkillLoader integrated into ControlAgent.run(): 674 passed, lint+typecheck clean (2026-06-06)
+P40-B-04 — SkillLoader + ControlAgent unit tests: 682 passed, lint+typecheck clean (2026-06-06)
 
 ## Blockers
 
