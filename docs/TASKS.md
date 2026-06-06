@@ -730,11 +730,11 @@ Three Skill files covering the MVP validation questions (DESIGN.md §Agent Desig
 
 Dependencies: B-01
 
-### Batch B-03 — SkillLoader integration into ControlAgent (App Builder) — Not Started
+### Batch B-03 — SkillLoader integration into ControlAgent (App Builder) — Done
 
 | Task | Description | Status |
 |---|---|---|
-| T-286 | In `packages/agent/control/control_agent.py` (or its context builder): before each LLM call, invoke `SkillLoader.load(intent)` and prepend the returned Skill procedure(s) as a structured context block in the user message | Not Started |
+| T-286 | In `packages/agent/control/control_agent.py` (or its context builder): before each LLM call, invoke `SkillLoader.load(intent)` and prepend the returned Skill procedure(s) as a structured context block in the user message | Done |
 
 Dependencies: B-01, B-02, P39 Done
 

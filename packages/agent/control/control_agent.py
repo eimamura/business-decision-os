@@ -1,8 +1,13 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from packages.agent.base import AgentBasedSpecialist
+from packages.knowledge import SkillLoader
+
+if TYPE_CHECKING:
+    from packages.agent.orchestrator import SpecialistResult, SpecialistTask
+    from packages.tools.base import ToolContext
 
 _SYSTEM_PROMPT = (
     "You are a cross-domain operational judgment center for supply chain decisions.\n\n"
@@ -18,6 +23,9 @@ _SYSTEM_PROMPT = (
     "and finance impact quantification (holding costs, stockout costs, expedite costs).\n\n"
     "Always ground recommendations in tool results. Do not fabricate quantities or risk scores."
 )
+
+_SKILL_HEADER = "\n\n---\n## Analysis Procedures\n\n"
+_SKILL_SEPARATOR = "\n\n---\n\n"
 
 
 class ControlAgent(AgentBasedSpecialist):
@@ -37,3 +45,20 @@ class ControlAgent(AgentBasedSpecialist):
             sse_queue=sse_queue,
             system_prompt=self._SYSTEM_PROMPT,
         )
+
+    async def run(
+        self,
+        task: "SpecialistTask",
+        ctx: "ToolContext",
+        agent_run_id: str = "",
+    ) -> "SpecialistResult":
+        intent_category: str = (
+            (task.context_payload.get("intent") or {}).get("category") or ""
+        )
+        skills = SkillLoader().load(intent_category)
+        if skills:
+            skill_block = _SKILL_HEADER + _SKILL_SEPARATOR.join(skills)
+            task = task.model_copy(
+                update={"instruction": skill_block + "\n\n" + task.instruction}
+            )
+        return await super().run(task, ctx, agent_run_id=agent_run_id)
