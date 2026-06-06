@@ -27,7 +27,7 @@ P38 — Architecture Realignment: Deactivate Specialist Agent Routing
 
 ## Active Lease
 
-P38-B-01
+P38-B-02
 
 ## Last Completed
 

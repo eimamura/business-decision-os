@@ -569,7 +569,7 @@ Skill file conversion, but no longer imported or registered anywhere.
 
 Dependencies: none
 
-### Batch B-02 — Update Tool Scenario UI (App Builder) — Not Started
+### Batch B-02 — Update Tool Scenario UI (App Builder) — Done
 
 The Supply, Finance, and S&OP categories in the Tool Scenario Modal (added in P36) sent prompts that
 assumed specialist routing. With those routes deactivated, these prompts will fall through to the
@@ -578,8 +578,8 @@ have a valid route.
 
 | Task | Description | Status |
 |---|---|---|
-| T-268 | Remove "supply", "finance", "sop" categories from `ToolScenarioModal.tsx` CATEGORIES; retain "query", "forecast", "simulation", "optimization", "catalog" | Not Started |
-| T-269 | Remove the 3 quick chips (Supply Gap, Cost Scenarios, S&OP) from `ToolScenarioBar.tsx`; update `tool_scenario_modal.spec.ts` to assert 5-category structure | Not Started |
+| T-268 | Remove "supply", "finance", "sop" categories from `ToolScenarioModal.tsx` CATEGORIES; retain "query", "forecast", "simulation", "optimization", "catalog" | Done |
+| T-269 | Remove the 3 quick chips (Supply Gap, Cost Scenarios, S&OP) from `ToolScenarioBar.tsx`; update `tool_scenario_modal.spec.ts` to assert 5-category structure | Done |
 
 Dependencies: B-01
 
