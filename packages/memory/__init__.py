@@ -2,12 +2,17 @@ from __future__ import annotations
 
 import json
 import os
+from abc import ABC, abstractmethod
 from datetime import datetime, timezone
-from typing import Any, Literal, Protocol
+from typing import Any, Literal
 from uuid import UUID, uuid4
 
 import openai
 from pydantic import BaseModel, Field
+
+# ---------------------------------------------------------------------------
+# Legacy record models — used by PgVectorMemoryStore and existing API code
+# ---------------------------------------------------------------------------
 
 
 class Memory(BaseModel):
@@ -28,10 +33,68 @@ class MemoryQuery(BaseModel):
     min_similarity: float = 0.0
 
 
-class MemoryStore(Protocol):
-    async def write(self, memory: Memory) -> UUID: ...
-    async def search(self, query: MemoryQuery) -> list[tuple[Memory, float]]: ...
-    async def get(self, id: UUID) -> Memory | None: ...
+# ---------------------------------------------------------------------------
+# Legacy conversation-turn record model
+# (formerly named ShortTermMemory before P41 typed-store redesign)
+# ---------------------------------------------------------------------------
+
+
+class ConversationTurn(BaseModel):
+    """A single conversation message stored as a short-term memory record."""
+
+    id: UUID = Field(default_factory=uuid4)
+    session_id: UUID | None = None
+    role: Literal["user", "assistant", "system"]
+    content: str
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+
+# ---------------------------------------------------------------------------
+# Typed Memory Store — abstract base classes (P41, public interface)
+#
+# Signatures are LOCKED. Any change requires an ADR.
+#   write(record: dict) -> None
+#   search(query: str, k: int = 5) -> list[dict]
+# ---------------------------------------------------------------------------
+
+
+class MemoryStore(ABC):
+    """Base protocol for all typed memory stores."""
+
+    @abstractmethod
+    def write(self, record: dict[str, Any]) -> None: ...
+
+    @abstractmethod
+    def search(self, query: str, k: int = 5) -> list[dict[str, Any]]: ...
+
+
+class ShortTermMemory(MemoryStore):
+    """Recent conversation turns and in-flight context."""
+
+
+class WorkingMemory(MemoryStore):
+    """Session task runs, tool results, intermediate artifacts."""
+
+
+class LongTermMemory(MemoryStore):
+    """Aggregated historical patterns and domain knowledge."""
+
+
+class DecisionMemory(MemoryStore):
+    """Past decisions and failure records with record_type field."""
+
+
+class UserMemory(MemoryStore):
+    """User preferences and interaction history."""
+
+
+class DomainMemory(MemoryStore):
+    """Business rules and domain knowledge (e.g. KPI thresholds)."""
+
+
+# ---------------------------------------------------------------------------
+# PgVector-backed store (legacy async interface — used by existing API code)
+# ---------------------------------------------------------------------------
 
 
 async def _get_embedding(text: str) -> list[float]:
@@ -177,6 +240,11 @@ class PgVectorMemoryStore:
         )
 
 
+# ---------------------------------------------------------------------------
+# Legacy in-memory stub (async interface — used by existing API + test code)
+# ---------------------------------------------------------------------------
+
+
 class StubMemoryStore:
     def __init__(self) -> None:
         self._store: dict[UUID, Memory] = {}
@@ -194,70 +262,22 @@ class StubMemoryStore:
         return self._store.get(id)
 
 
-class ShortTermMemory(BaseModel):
-    """Temporary information needed only during the current interaction."""
-
-    id: UUID = Field(default_factory=uuid4)
-    session_id: UUID | None = None
-    role: Literal["user", "assistant", "system"]
-    content: str
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
-
-
-class WorkingMemory(BaseModel):
-    """Intermediate state, in-progress calculations, and shared state between agents."""
-
-    id: UUID = Field(default_factory=uuid4)
-    session_id: UUID | None = None
-    key: str
-    value: str
-    agent: str | None = None
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
-
-
-class LongTermMemory(BaseModel):
-    """Knowledge and context to be reused in future decisions."""
-
-    id: UUID = Field(default_factory=uuid4)
-    scope: str = "global"
-    summary: str
-    source: str
-    embedding: list[float] | None = None
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
-
-
-class DecisionMemory(BaseModel):
-    """Decision rationale, alternatives, rejection reasons, preconditions, and past decisions."""
-
-    id: UUID = Field(default_factory=uuid4)
-    session_id: UUID | None = None
-    goal: str
-    chosen_action: str
-    rationale: str
-    alternatives: list[str] = Field(default_factory=list)
-    rejection_reasons: list[str] = Field(default_factory=list)
-    preconditions: list[str] = Field(default_factory=list)
-    risk_level: Literal["low", "medium", "high"] = "medium"
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
-
-
-class UserMemory(BaseModel):
-    """User goals, preferences, decision tendencies, and usage context."""
-
-    id: UUID = Field(default_factory=uuid4)
-    user_id: str
-    preference_key: str
-    preference_value: str
-    context: str | None = None
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
-
-
-class DomainMemory(BaseModel):
-    """Business rules, KPI definitions, domain knowledge, and historical cases."""
-
-    id: UUID = Field(default_factory=uuid4)
-    domain: str
-    rule_key: str
-    rule_value: str
-    description: str | None = None
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+__all__ = [
+    # Legacy record models
+    "Memory",
+    "MemoryQuery",
+    "ConversationTurn",
+    # Typed store base classes (P41 public interface)
+    "MemoryStore",
+    "ShortTermMemory",
+    "WorkingMemory",
+    "LongTermMemory",
+    "DecisionMemory",
+    "UserMemory",
+    "DomainMemory",
+    # Concrete implementations
+    "PgVectorMemoryStore",
+    "StubMemoryStore",
+    # Internal helpers (exported for test patching)
+    "_get_embedding",
+]

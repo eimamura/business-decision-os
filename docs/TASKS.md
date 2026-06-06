@@ -759,12 +759,12 @@ physical grouping can evolve independently.
 
 Dependencies: P39 Done
 
-### Batch B-01 — Typed store base classes (App Builder) — Not Started
+### Batch B-01 — Typed store base classes (App Builder) — Done
 
 | Task | Description | Status |
 |---|---|---|
-| T-290 | `packages/memory/__init__.py` — define abstract base classes for all six typed stores: `ShortTermMemory`, `WorkingMemory`, `LongTermMemory`, `DecisionMemory`, `UserMemory`, `DomainMemory`; each exposes `write(record)` and `search(query, k) -> list` | Not Started |
-| T-291 | `packages/memory/stub.py` — `StubMemoryStore` in-memory implementations of all six typed stores; used in unit tests to replace real DB | Not Started |
+| T-290 | `packages/memory/__init__.py` — define abstract base classes for all six typed stores: `ShortTermMemory`, `WorkingMemory`, `LongTermMemory`, `DecisionMemory`, `UserMemory`, `DomainMemory`; each exposes `write(record)` and `search(query, k) -> list` | Done |
+| T-291 | `packages/memory/stub.py` — `StubMemoryStore` in-memory implementations of all six typed stores; used in unit tests to replace real DB | Done |
 
 Dependencies: none
 

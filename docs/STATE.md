@@ -31,11 +31,11 @@ P41 — Memory Layer
 
 ## Active Lease
 
-None
+P41-B-02
 
 ## Last Completed
 
-P40-B-04 — SkillLoader + ControlAgent unit tests: 682 passed, lint+typecheck clean (2026-06-06)
+P41-B-01 — Memory Layer typed store base classes + stubs: 743 passed, lint+typecheck clean (2026-06-06)
 
 ## Blockers
 

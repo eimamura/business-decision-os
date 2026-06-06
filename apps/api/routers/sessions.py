@@ -25,7 +25,7 @@ from apps.api.state import (
 from packages.agent.history import compress_history
 from packages.agent.orchestrator import SessionResponse, SessionUserQuery
 from packages.agent.rate_limiter import RateLimitExceeded, check_rate_limit
-from packages.memory import ShortTermMemory
+from packages.memory import ConversationTurn
 from packages.persistence.llm_usage_repo import LlmUsageRepository
 from packages.persistence.session_events_repo import SessionEventRepository
 from packages.persistence.sessions_repo import DecisionSessionRepository
@@ -311,7 +311,7 @@ async def post_message(
     conversation_context: str | None = None
     try:
         msgs = await repo.get_messages(session_id, limit=60)
-        short_term = [ShortTermMemory(role=m["role"], content=m["content"]) for m in msgs]
+        short_term = [ConversationTurn(role=m["role"], content=m["content"]) for m in msgs]
         _msgs_to_use, summary = await compress_history(short_term)
         if summary is not None:
             conversation_context = summary
