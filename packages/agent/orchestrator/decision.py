@@ -238,8 +238,7 @@ async def _synthesize_response(
     agent_results: dict[str, SpecialistResult],
 ) -> SessionResponse:
     decision_mode = (
-        route.mode in ("planned_execution", "dag_execution")
-        or "simulation_optimizer" in route.agents
+        "simulation_optimizer" in route.agents
         or any("simulation_optimizer" in key for key in agent_results)
     )
     if decision_mode:

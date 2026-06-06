@@ -27,15 +27,15 @@ See `docs/archive/v3/STATE.md` for P0–P23 per-phase details.
 
 ## Active Phase
 
-P40 — Skill Registry (packages/knowledge/skills/)
+P45 — Control-Agent-Only Routing
 
 ## Active Lease
 
-None
+P45-B-02
 
 ## Last Completed
 
-P39-B-03 — Tests + phase sign-off: all quality gates pass (2026-06-06)
+P45-B-01 — Remove legacy agent roles: DOMAIN_AGENT_ROLES={"control"}, CROSS_DOMAIN_AGENT_CLASSES={} (2026-06-06)
 
 ## Blockers
 

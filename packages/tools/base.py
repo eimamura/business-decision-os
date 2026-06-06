@@ -5,8 +5,6 @@ from uuid import UUID
 
 from pydantic import BaseModel
 
-from packages.agent.base import SpecialistRole
-
 _ROLE_TOOL_ALLOWLIST: dict[str, list[str]] = {
     "orchestrator": ["job_dispatch"],
     "data_engineer": [
@@ -68,7 +66,7 @@ _ROLE_TOOL_ALLOWLIST: dict[str, list[str]] = {
 class ToolContext(BaseModel):
     session_id: UUID
     agent_step_id: UUID
-    specialist_role: SpecialistRole
+    specialist_role: str  # broad str; SpecialistRole Literal trimmed to ["orchestrator", "control"]
     actor: str
     correlation_id: UUID
     user_role: str = "analyst"
@@ -99,7 +97,7 @@ class ToolRegistry:
     def get(self, name: str) -> Tool | None:
         return self._tools.get(name)
 
-    def list_for_role(self, role: SpecialistRole) -> list[Tool]:
+    def list_for_role(self, role: str) -> list[Tool]:
         allowed = _ROLE_TOOL_ALLOWLIST.get(role)
         if allowed is None:
             return list(self._tools.values())

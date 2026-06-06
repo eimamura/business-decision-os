@@ -78,8 +78,8 @@ class PlanningStubClaudeClient(StubClaudeClient):
         if "router inside SessionOrchestrator" in system:
             return LLMResponse(
                 text=(
-                    '{"mode":"sequential_agents","agents":["data_engineer","simulation_optimizer"],'
-                    '"requires_planning":false,"requires_dag":false,"rationale":"serial"}'
+                    '{"mode":"single_agent","agents":["control"],'
+                    '"requires_planning":false,"requires_dag":false,"rationale":"control-only"}'
                 ),
                 tool_calls=[],
                 finish_reason="stop",
@@ -105,28 +105,12 @@ class PlanningStubClaudeClient(StubClaudeClient):
                 request_id=str(uuid4()),
                 latency_ms=0,
             )
-        # Specialist agent: simulation_optimizer (content_blocks after T-008)
-        if "simulation and optimization specialist" in system:
-            if any(getattr(m, "role", "") == "tool" for m in messages):
-                return LLMResponse(
-                    text="Candidates generated.",
-                    tool_calls=[],
-                    finish_reason="stop",
-                    usage=LLMUsage(
-                        input_tokens=0, output_tokens=0, total_cost_usd=Decimal("0")
-                    ),
-                    model="stub",
-                    request_id=str(uuid4()),
-                    latency_ms=0,
-                )
+        # ControlAgent (P45: single control agent architecture)
+        if "cross-domain operational judgment center" in system:
             return LLMResponse(
-                text="",
-                tool_calls=[{
-                    "id": "call_opt_1",
-                    "name": "optimize_replenishment",
-                    "input": {"sku_id": "SKU001", "moq": 100.0, "horizon_days": 90},
-                }],
-                finish_reason="tool_use",
+                text="Supply chain analysis complete. No critical issues detected.",
+                tool_calls=[],
+                finish_reason="stop",
                 usage=LLMUsage(
                     input_tokens=0, output_tokens=0, total_cost_usd=Decimal("0")
                 ),
@@ -614,13 +598,10 @@ async def test_orchestrator_run_returns_session_response():
     query = SessionUserQuery(text="optimize replenishment for SKU001")
     response = await orchestrator.run(session_id, query)
 
-    assert response.primary is not None
-    assert len(response.alternatives) >= 1
-    assert response.risk_level in ("low", "medium", "high")
-    assert response.tradeoff is not None
-    assert response.tradeoff.weight_source in (
-        "default", "session_goal", "critical_sku", "user_policy"
-    )
+    # P45: single ControlAgent — synthesis path (no decision candidates)
+    assert response.mode == "single_agent"
+    assert isinstance(response.reply, str)
+    assert len(response.reply) > 0
 
 
 async def test_orchestrator_emits_sse_events():
@@ -667,8 +648,9 @@ async def test_orchestrator_session_goal_weight_override():
         weight_override_json={"service_level": 0.9, "total_supply_chain_cost": 0.1},
     )
     response = await orchestrator.run(session_id, query)
-    assert response.tradeoff is not None
-    assert response.tradeoff.weight_source == "session_goal"
+    # P45: single ControlAgent — synthesis path; weight_override still accepted
+    assert response.mode == "single_agent"
+    assert isinstance(response.reply, str)
 
 
 # ===== T-1004: Prompt-based execution roles =====

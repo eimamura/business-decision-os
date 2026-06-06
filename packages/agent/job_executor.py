@@ -104,12 +104,12 @@ async def execute_job(
     from packages.tools.base import ToolContext
 
     _role_by_type: dict[str, SpecialistRole] = {
-        "simulate": "simulation_optimizer",
-        "optimize": "simulation_optimizer",
-        "forecast": "data_engineer",
-        "train_forecast": "data_engineer",
+        "simulate": "simulation_optimizer",  # type: ignore[dict-item]
+        "optimize": "simulation_optimizer",  # type: ignore[dict-item]
+        "forecast": "data_engineer",  # type: ignore[dict-item]
+        "train_forecast": "data_engineer",  # type: ignore[dict-item]
     }
-    _specialist_role: SpecialistRole = _role_by_type.get(job_type, "simulation_optimizer")
+    _specialist_role: SpecialistRole = _role_by_type.get(job_type, "simulation_optimizer")  # type: ignore[arg-type]
     ctx = ToolContext(
         session_id=job["session_id"] if job.get("session_id") else uuid4(),
         agent_step_id=uuid4(),

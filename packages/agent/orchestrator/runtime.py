@@ -90,7 +90,7 @@ async def _run_agent(
     ctx = ToolContext(
         session_id=session_id,
         agent_step_id=task_id,
-        specialist_role=agent_role,  # type: ignore[arg-type]
+        specialist_role=agent_role,
         actor="orchestrator",
         correlation_id=uuid4(),
     )

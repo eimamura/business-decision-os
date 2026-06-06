@@ -59,58 +59,36 @@ class QueryFlowStubClaudeClient(StubClaudeClient):
                 )
             if "single" in payload:
                 return _response(
-                    '{"mode":"single_agent","agents":["replenishment"],"requires_planning":false,'
-                    '"requires_dag":false,"rationale":"Replenishment only"}'
+                    '{"mode":"single_agent","agents":["control"],"requires_planning":false,'
+                    '"requires_dag":false,"rationale":"Control only"}'
                 )
             if "planned" in payload:
                 return _response(
-                    '{"mode":"planned_execution","agents":["data_engineer","simulation_optimizer"],'
+                    '{"mode":"planned_execution","agents":["control"],'
                     '"requires_planning":true,"requires_dag":false,"rationale":"Needs serial plan"}'
                 )
             if "dag" in payload:
                 return _response(
-                    '{"mode":"dag_execution","agents":["data_engineer","simulation_optimizer"],'
+                    '{"mode":"dag_execution","agents":["control"],'
                     '"requires_planning":true,"requires_dag":true,"rationale":"Needs dependencies"}'
                 )
             return _response(
-                '{"mode":"sequential_agents","agents":["data_engineer","simulation_optimizer"],'
+                '{"mode":"sequential_agents","agents":["control"],'
                 '"requires_planning":false,"requires_dag":false,"rationale":"Default serial route"}'
             )
         if "Create a serial execution plan" in system:
             return _response(
                 '{"steps":['
-                '{"id":"data","agent_role":"data_engineer","instruction":"Gather facts","tools":["sql_query"]},'
-                '{"id":"sim","agent_role":"simulation_optimizer","instruction":"Create candidates",'
-                '"tools":["optimize_replenishment"]}]}'
+                '{"id":"ctrl","agent_role":"control","instruction":"Analyze supply chain","tools":["sql_query"]}]}'
             )
         if "Create dependency nodes" in system:
             return _response(
-                '[{"id":"data","agent_role":"data_engineer","deps":[],"instruction":"Gather facts",'
-                '"tools":["sql_query"]},'
-                '{"id":"sim","agent_role":"simulation_optimizer","deps":["data"],'
-                '"instruction":"Create candidates","tools":["optimize_replenishment"]}]'
+                '[{"id":"ctrl","agent_role":"control","deps":[],"instruction":"Analyze supply chain",'
+                '"tools":["sql_query"]}]'
             )
-        # Specialist agents use content_blocks (T-008); detect by block 0 text
-        if "simulation and optimization specialist" in system:
-            # Second call: tool result already present — return final text
-            if any(getattr(m, "role", "") == "tool" for m in messages):
-                return _response("Optimization complete.")
-            # First call: invoke optimize_replenishment tool
-            return LLMResponse(
-                text="",
-                tool_calls=[{
-                    "id": "call_opt_1",
-                    "name": "optimize_replenishment",
-                    "input": {"sku_id": "SKU001", "moq": 100.0, "horizon_days": 90},
-                }],
-                finish_reason="tool_use",
-                usage=LLMUsage(
-                    input_tokens=0, output_tokens=0, total_cost_usd=Decimal("0")
-                ),
-                model="stub",
-                request_id=str(uuid4()),
-                latency_ms=0,
-            )
+        # ControlAgent system prompt
+        if "cross-domain operational judgment center" in system:
+            return _response("Supply chain analysis complete.")
         if "helpful supply chain decision assistant" in system:
             return _response("Good morning! How can I help?")
         if "Synthesize the agent results" in system:
@@ -171,7 +149,7 @@ async def test_single_agent_runs_only_selected_agent(stub_orchestrator):
     response = await orchestrator.run(uuid4(), SessionUserQuery(text="single inventory check"))
 
     assert response.mode == "single_agent"
-    assert list(response.agent_results) == ["replenishment"]
+    assert list(response.agent_results) == ["control"]
     event_types = [event["type"] for event in await _events(queue)]
     # P20: agent_started replaced by graph_node (kind="agent") events
     agent_nodes = [e for e in event_types if e == "graph_node"]
@@ -184,9 +162,8 @@ async def test_sequential_agents_pass_previous_results(stub_orchestrator):
     response = await orchestrator.run(uuid4(), SessionUserQuery(text="optimize replenishment"))
 
     assert response.mode == "sequential_agents"
-    assert list(response.agent_results) == ["data_engineer", "simulation_optimizer"]
-    assert response.primary is not None
-    assert response.tradeoff is not None
+    assert list(response.agent_results) == ["control"]
+    assert isinstance(response.reply, str)
 
 
 async def test_planned_execution_uses_serial_plan(stub_orchestrator):
@@ -194,7 +171,7 @@ async def test_planned_execution_uses_serial_plan(stub_orchestrator):
     response = await orchestrator.run(uuid4(), SessionUserQuery(text="planned replenishment"))
 
     assert response.mode == "planned_execution"
-    assert list(response.agent_results) == ["data", "sim"]
+    assert list(response.agent_results) == ["ctrl"]
     events = await _events(queue)
     # P20: plan_created event removed; plan structure visible via graph_node agent events
     event_types = [e["type"] for e in events]
@@ -207,7 +184,7 @@ async def test_dag_execution_respects_dependencies(stub_orchestrator):
     response = await orchestrator.run(uuid4(), SessionUserQuery(text="dag replenishment"))
 
     assert response.mode == "dag_execution"
-    assert list(response.agent_results) == ["data", "sim"]
+    assert list(response.agent_results) == ["ctrl"]
 
 
 async def test_router_bad_json_fails_explicitly(stub_orchestrator):

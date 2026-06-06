@@ -867,3 +867,41 @@ Dependencies: P42 Done, B-01
 | T-310 | `make test-unit` + `make test-integration` + `make test-playwright` — all pass; ControlAgent answers all 3 MVP questions end-to-end | Not Started |
 
 Dependencies: B-01, B-02
+
+---
+
+## P45 — Control-Agent-Only Routing
+
+**Goal:** Remove all agent roles from `VALID_AGENT_ROLES` except `"control"`, route all non-chat
+INTENT_REGISTRY entries to ControlAgent, and simplify prompts — aligning the MVP implementation
+with DESIGN.md's "SessionOrchestrator → ControlAgent only" rule.
+
+Dependencies: P39 Done
+
+### Batch B-01 — Remove legacy agent roles (App Builder) — Done
+
+| Task | Description | Status |
+|---|---|---|
+| T-318 | `packages/agent/orchestrator/roles.py` — set `DOMAIN_AGENT_ROLES = {"control"}` only; set `CROSS_DOMAIN_AGENT_CLASSES = {}` (empty); `VALID_AGENT_ROLES` becomes `{"control"}` | Done |
+| T-319 | `packages/agent/domain/__init__.py` — `create_domain_agents()` returns only `[ControlAgent(llm_client, tool_registry, sse_queue)]`; remove imports of all legacy domain agents | Done |
+| T-320 | `packages/agent/base.py` — remove all values from `SpecialistRole` Literal except `"orchestrator"` and `"control"` | Done |
+
+Dependencies: none
+
+### Batch B-02 — Simplify INTENT_REGISTRY + prompts (App Builder) — Not Started
+
+| Task | Description | Status |
+|---|---|---|
+| T-321 | `packages/agent/orchestrator/intent_registry.py` — set `allowed_agent_roles=["control"]` for all non-chat intents (lookup, domain_analysis, cross_domain_analysis, decision_support, supply_chain); chat stays `[]` | Not Started |
+| T-322 | `packages/agent/orchestrator/prompts.py` — simplify `ROUTER_SYSTEM`, `PLAN_SYSTEM`, `DAG_SYSTEM` allowed agents to `"control"` only | Not Started |
+
+Dependencies: B-01
+
+### Batch B-03 — Tests + quality gate (Test/Review) — Not Started
+
+| Task | Description | Status |
+|---|---|---|
+| T-323 | Update unit tests that reference removed roles (test_intent_registry.py, test_control_agent.py, etc.) | Not Started |
+| T-324 | `make test-unit` + `make lint` + `make typecheck` | Not Started |
+
+Dependencies: B-01, B-02

@@ -184,11 +184,11 @@ async def test_node_run_sequential_emits_response_ready() -> None:
                 )
             if "router inside SessionOrchestrator" in system:
                 return _llm_resp(
-                    '{"mode":"single_agent","agents":["replenishment"],'
+                    '{"mode":"single_agent","agents":["control"],'
                     '"requires_planning":false,"requires_dag":false,"rationale":"single"}'
                 )
-            # synthesize / specialist calls
-            return _llm_resp('{"reply":"Replenishment is healthy.","sources":[]}')
+            # ControlAgent and synthesis
+            return _llm_resp("Supply chain analysis complete.")
 
         async def stream(
             self,
