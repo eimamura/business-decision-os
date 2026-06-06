@@ -150,6 +150,34 @@ const CATEGORIES: Category[] = [
     ],
   },
   {
+    id: "supply-chain",
+    label: "Supply Chain",
+    icon: "◉",
+    scenarios: [
+      {
+        id: "sc-exceptions",
+        title: "Today's Exceptions",
+        description:
+          "Identify and prioritize operational exceptions requiring immediate attention",
+        prompt: "What are today's exceptions?",
+      },
+      {
+        id: "sc-stockout-risk",
+        title: "Stockout Risk This Week",
+        description:
+          "Assess stockout risk across inventory and supply signals",
+        prompt: "Which products are at stockout risk this week?",
+      },
+      {
+        id: "sc-order-delay",
+        title: "Order Delay Root Cause",
+        description:
+          "Diagnose root cause of a specific order delay through logistics data",
+        prompt: "Why is order #ORD-1042 delayed?",
+      },
+    ],
+  },
+  {
     id: "jobs",
     label: "Job Dispatch (HITL)",
     icon: "◎",
