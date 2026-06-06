@@ -53,7 +53,11 @@ export async function mockCompletedStream(
   assistantText?: string,
 ): Promise<void> {
   const text = assistantText ?? "Mock response: test passed";
-  const now = new Date().toISOString();
+  const base = Date.now();
+  const startTs = new Date(base).toISOString();
+  // response_ready timestamp must be > sessionStartedAt so that
+  // diffMs > 0 and the ExecutionPanel "· Xs total" footer renders.
+  const endTs = new Date(base + 500).toISOString();
 
   // --- SSE stream ---
   const streamPattern = `**/api/v1/sessions/${sessionId}/stream`;
@@ -67,7 +71,7 @@ export async function mockCompletedStream(
         run_id: "mock-run-1",
         status: "ok",
         meta: { model_name: "mock" },
-        timestamp: new Date().toISOString(),
+        timestamp: startTs,
       },
       {
         type: "graph_node",
@@ -77,19 +81,24 @@ export async function mockCompletedStream(
         run_id: "mock-run-1",
         status: "ok",
         meta: { model_name: "mock", category: "lookup", confidence: 0.9 },
-        timestamp: new Date().toISOString(),
+        timestamp: startTs,
         duration_ms: 50,
       },
       {
         type: "text_delta",
+        session_id: sessionId,
         delta: text,
+        timestamp: startTs,
       },
       {
         type: "response_ready",
-        session_id: sessionId,
+        mode: "direct",
+        timestamp: endTs,
       },
       {
         type: "done",
+        session_id: sessionId,
+        timestamp: endTs,
       },
     ];
 
@@ -110,14 +119,14 @@ export async function mockCompletedStream(
         session_id: sessionId,
         role: "user",
         content: "mock user message",
-        created_at: now,
+        created_at: startTs,
       },
       {
         message_id: "mock-msg-asst-1",
         session_id: sessionId,
         role: "assistant",
         content: text,
-        created_at: now,
+        created_at: endTs,
       },
     ];
 
@@ -175,6 +184,7 @@ export async function mockAskUserStream(
     "SKU-002, last 14 days",
   ];
 
+  const now = new Date().toISOString();
   const streamPattern = `**/api/v1/sessions/${sessionId}/stream`;
   await page.route(streamPattern, async (route) => {
     const events = [
@@ -186,7 +196,7 @@ export async function mockAskUserStream(
         run_id: "mock-run-1",
         status: "ok",
         meta: { model_name: "mock" },
-        timestamp: new Date().toISOString(),
+        timestamp: now,
       },
       {
         type: "graph_node",
@@ -196,7 +206,7 @@ export async function mockAskUserStream(
         run_id: "mock-run-1",
         status: "ok",
         meta: { model_name: "mock", category: "domain_analysis", confidence: 0.9 },
-        timestamp: new Date().toISOString(),
+        timestamp: now,
         duration_ms: 50,
       },
       {
@@ -205,12 +215,13 @@ export async function mockAskUserStream(
         ask_user_id: askUserId,
         question,
         suggestions,
+        timestamp: now,
       },
       {
         type: "awaiting_input",
         session_id: sessionId,
         ask_user_id: askUserId,
-        timestamp: new Date().toISOString(),
+        timestamp: now,
       },
     ];
 

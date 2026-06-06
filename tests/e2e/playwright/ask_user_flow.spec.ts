@@ -235,6 +235,7 @@ test.describe("AskUser inline answer input (mock SSE)", () => {
               ask_user_id: askUserId,
               question,
               suggestions,
+              timestamp: now,
             },
             {
               type: "awaiting_input",
@@ -248,14 +249,19 @@ test.describe("AskUser inline answer input (mock SSE)", () => {
           events = [
             {
               type: "text_delta",
+              session_id: sessionId,
               delta: assistantText,
+              timestamp: now,
             },
             {
               type: "response_ready",
-              session_id: sessionId,
+              mode: "direct",
+              timestamp: now,
             },
             {
               type: "done",
+              session_id: sessionId,
+              timestamp: now,
             },
           ];
         }

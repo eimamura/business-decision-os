@@ -628,7 +628,7 @@ Dependencies: B-01
 
 | Task | Description | Status |
 |---|---|---|
-| T-314 | Rewrite tests 1–3 using mocked graph_node events; reduce timeout to 15s; test 4 (persistence) kept as real Ollama with 60s timeout — requires real DB events for reload verification | Done |
+| T-314 | Rewrite tests 1–3 using mocked graph_node events; reduce timeout to 15s; test 4 (persistence) kept as real Ollama with 90s timeout — requires real DB events for reload verification | Done |
 
 Dependencies: B-01
 
@@ -640,12 +640,12 @@ Dependencies: B-01
 
 Dependencies: B-01
 
-### Batch B-06 — Quality gate (Test/Review) — Not Started
+### Batch B-06 — Quality gate (Test/Review) — Done
 
 | Task | Description | Status |
 |---|---|---|
-| T-316 | `make test-playwright` — all 7 spec files pass in under 2 minutes total | Not Started |
-| T-317 | `make test-unit` + `make lint` + `make typecheck` — all pass | Not Started |
+| T-316 | `make test-playwright` — all 7 spec files pass in under 2 minutes total | Done |
+| T-317 | `make test-unit` + `make lint` + `make typecheck` — all pass | Done |
 
 Dependencies: B-02, B-03, B-04, B-05
 

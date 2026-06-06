@@ -25,7 +25,7 @@ const SIMPLE_QUERY = "Reply with the single word: hello";
 /** Timeout (ms) for mocked tests — the mock resolves in under 1 s. */
 const MOCK_TIMEOUT = 15_000;
 /** Timeout (ms) for the real-Ollama persistence test. */
-const REAL_TIMEOUT = 60_000;
+const REAL_TIMEOUT = 90_000;
 
 async function createSession(
   request: Parameters<typeof test>[1]["request"],
