@@ -50,6 +50,7 @@ Full task history for P0–P23 is archived at `docs/archive/v3/TASKS.md`.
 | P38 — Architecture Realignment | T-266–T-271 | 2026-06-06 |
 | P44 — Playwright Tests: Revert to Mock SSE | T-311–T-317 | 2026-06-06 |
 | P39 — Supply Chain Control Agent (MVP Core) | T-273–T-280 | 2026-06-06 |
+| P45 — Control-Agent-Only Routing | T-318–T-324 | 2026-06-06 |
 
 > **Design Realignment Note (2026-06-05):** P29–P36 built Specialist Domain Agents (DemandAgent,
 > InventoryAgent, SupplyPlanningAgent, FinanceImpactAgent, SopAgent) as independent runtime units.
@@ -897,11 +898,11 @@ Dependencies: none
 
 Dependencies: B-01
 
-### Batch B-03 — Tests + quality gate (Test/Review) — Not Started
+### Batch B-03 — Tests + quality gate (Test/Review) — Done
 
 | Task | Description | Status |
 |---|---|---|
-| T-323 | Update unit tests that reference removed roles (test_intent_registry.py, test_control_agent.py, etc.) | Not Started |
-| T-324 | `make test-unit` + `make lint` + `make typecheck` | Not Started |
+| T-323 | Update unit tests that reference removed roles (test_intent_registry.py, test_control_agent.py, etc.) | Done |
+| T-324 | `make test-unit` + `make lint` + `make typecheck` | Done |
 
 Dependencies: B-01, B-02

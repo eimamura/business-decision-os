@@ -27,15 +27,15 @@ See `docs/archive/v3/STATE.md` for P0–P23 per-phase details.
 
 ## Active Phase
 
-P45 — Control-Agent-Only Routing
+P40 — Skill Registry
 
 ## Active Lease
 
-P45-B-03
+None
 
 ## Last Completed
 
-P45-B-02 — Simplify INTENT_REGISTRY + prompts: all intents → control (2026-06-06)
+P45-B-03 — Tests + quality gate: 674 passed, lint clean, typecheck clean (2026-06-06)
 
 ## Blockers
 
