@@ -790,13 +790,13 @@ DecisionMemory maps to `decision_log` (with `record_type` column distinguishing 
 
 Dependencies: B-01
 
-### Batch B-04 — Tests (Test/Review) — Not Started
+### Batch B-04 — Tests (Test/Review) — Done
 
 | Task | Description | Status |
 |---|---|---|
-| T-296 | Unit tests: `StubMemoryStore` write + search round-trip for all six typed stores | Not Started |
-| T-297 | Integration tests: `WorkingMemoryStore` and `DecisionMemoryStore` write + search against real DB | Not Started |
-| T-298 | `make test-unit` + `make test-integration` + `make lint` + `make typecheck` | Not Started |
+| T-296 | Unit tests: `StubMemoryStore` write + search round-trip for all six typed stores | Done |
+| T-297 | Integration tests: `WorkingMemoryStore` and `DecisionMemoryStore` write + search against real DB | Done |
+| T-298 | `make test-unit` + `make test-integration` + `make lint` + `make typecheck` | Done |
 
 Dependencies: B-01, B-02, B-03
 
