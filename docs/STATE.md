@@ -31,11 +31,11 @@ P40 — Skill Registry
 
 ## Active Lease
 
-P40-B-02
+P40-B-03
 
 ## Last Completed
 
-P40-B-01 — Skill file format + SkillLoader: 674 passed, lint clean, typecheck clean (2026-06-06)
+P40-B-02 — MVP Skill files (stockout_risk, exception_detection, shipment_delay): 674 passed (2026-06-06)
 
 ## Blockers
 

@@ -718,15 +718,15 @@ Dependencies: P39 Done
 
 Dependencies: none
 
-### Batch B-02 — MVP Skill files (App Builder) — Not Started
+### Batch B-02 — MVP Skill files (App Builder) — Done
 
 Three Skill files covering the MVP validation questions (DESIGN.md §Agent Design §MVP Validation Questions):
 
 | Task | Description | Status |
 |---|---|---|
-| T-283 | `packages/knowledge/skills/stockout_risk_analysis.md` — procedure: check on_hand vs. demand forecast vs. incoming supply; compute days-of-supply; identify SKUs with days_of_supply < reorder threshold; surface root cause (low stock vs. inbound delay vs. demand surge) | Not Started |
-| T-284 | `packages/knowledge/skills/exception_detection.md` — procedure: scan inventory, orders, shipments, and production for anomalies exceeding thresholds; rank by business impact; return prioritized exception list with root cause candidates | Not Started |
-| T-285 | `packages/knowledge/skills/shipment_delay_root_cause.md` — procedure: cross-reference open orders vs. inventory availability vs. shipping status vs. inbound schedule; distinguish: inventory-blocked vs. carrier-delayed vs. slot-constrained vs. inbound-delayed; return root cause candidates with evidence | Not Started |
+| T-283 | `packages/knowledge/skills/stockout_risk_analysis.md` — procedure: check on_hand vs. demand forecast vs. incoming supply; compute days-of-supply; identify SKUs with days_of_supply < reorder threshold; surface root cause (low stock vs. inbound delay vs. demand surge) | Done |
+| T-284 | `packages/knowledge/skills/exception_detection.md` — procedure: scan inventory, orders, shipments, and production for anomalies exceeding thresholds; rank by business impact; return prioritized exception list with root cause candidates | Done |
+| T-285 | `packages/knowledge/skills/shipment_delay_root_cause.md` — procedure: cross-reference open orders vs. inventory availability vs. shipping status vs. inbound schedule; distinguish: inventory-blocked vs. carrier-delayed vs. slot-constrained vs. inbound-delayed; return root cause candidates with evidence | Done |
 
 Dependencies: B-01
 
