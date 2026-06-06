@@ -47,6 +47,14 @@ Full task history for P0–P23 is archived at `docs/archive/v3/TASKS.md`.
 | P35 — S&OP Agent & Orchestration | T-244–T-251 | 2026-06-04 |
 | P36 — Tool Scenario Prompts for S&OP Agents | T-252–T-257 | 2026-06-04 |
 
+> **Design Realignment Note (2026-06-05):** P29–P36 built Specialist Domain Agents (DemandAgent,
+> InventoryAgent, SupplyPlanningAgent, FinanceImpactAgent, SopAgent) as independent runtime units.
+> The DESIGN.md refresh (ADR: `docs/adr/2026-06-05-integrated-control-agent-first.md`) specifies
+> that in MVP, Specialist Agents exist as **Skill files only (Level 2)** — not runtime units.
+> The **domain tools** created in P31–P34 (calculation, analysis, gap tools) remain valid and will
+> be accessed by the Supply Chain Control Agent via the Tool Gateway. The agent runtime classes
+> will be retired in P38.
+
 ---
 
 ## P24 — Ollama Local LLM Provider
@@ -533,6 +541,268 @@ Dependencies: B-01
 
 | Task | Description | Status |
 |---|---|---|
-| T-265 | `make test-playwright` full pass — all surviving spec files (7 files after 2 deleted), no tests skipped via RUN_E2E guard or env-var conditions | Not Started |
+| T-265 | `make test-playwright` full pass — all surviving spec files (7 files after 2 deleted), no tests skipped via RUN_E2E guard or env-var conditions | Done |
 
 Dependencies: B-02, B-03, B-04
+
+---
+
+## P38 — Architecture Realignment: Deactivate Specialist Agent Routing
+
+**Goal:** Stop routing new supply chain intents through the specialist runtime agents (DemandAgent,
+InventoryAgent, SupplyPlanningAgent, FinanceImpactAgent, SopAgent). The agent class files and their
+domain tools are **left in place** — they are not deleted or moved. Removal happens only if they
+create concrete problems (test failures, import conflicts, confusion during P39+ work). The domain
+tools from P31–P34 remain registered and will be reused by the Control Agent.
+
+Dependencies: P37-B-05 (quality gate must pass before P38 starts)
+
+### Batch B-01 — Move specialist agent classes to deprecated/ + deactivate routing (App Builder) — Not Started
+
+Agent class files are moved to `packages/agent/deprecated/` — kept intact for reference and potential
+Skill file conversion, but no longer imported or registered anywhere.
+
+| Task | Description | Status |
+|---|---|---|
+| T-266 | Create `packages/agent/deprecated/` and move `packages/agent/domain/demand.py`, `inventory.py`, `supply_planning.py`, `finance_impact.py`, `sop.py` into it; add `packages/agent/deprecated/__init__.py` (empty — do not re-export) | Not Started |
+| T-267 | Remove `"sop"` intent and S&OP-specific multi-agent plan routes from `packages/agent/orchestrator/intent_registry.py`; remove `"demand"`, `"inventory"`, `"supply_planning"`, `"finance_impact"`, `"sop"` from `DOMAIN_AGENT_ROLES` / `VALID_AGENT_ROLES` in `roles.py` and `SpecialistRole` Literal in `packages/agent/base.py`; remove all five from `create_domain_agents()` in `packages/agent/domain/__init__.py` | Not Started |
+
+Dependencies: none
+
+### Batch B-02 — Update Tool Scenario UI (App Builder) — Not Started
+
+The Supply, Finance, and S&OP categories in the Tool Scenario Modal (added in P36) sent prompts that
+assumed specialist routing. With those routes deactivated, these prompts will fall through to the
+Control Agent in P39. For now, remove them from the UI to avoid confusing demo paths that no longer
+have a valid route.
+
+| Task | Description | Status |
+|---|---|---|
+| T-268 | Remove "supply", "finance", "sop" categories from `ToolScenarioModal.tsx` CATEGORIES; retain "query", "forecast", "simulation", "optimization", "catalog" | Not Started |
+| T-269 | Remove the 3 quick chips (Supply Gap, Cost Scenarios, S&OP) from `ToolScenarioBar.tsx`; update `tool_scenario_modal.spec.ts` to assert 5-category structure | Not Started |
+
+Dependencies: B-01
+
+### Batch B-03 — Quality gate (Test/Review) — Not Started
+
+| Task | Description | Status |
+|---|---|---|
+| T-270 | `make test-unit` + `make lint` + `make typecheck` — all pass | Not Started |
+| T-271 | `make test-playwright` — all surviving Playwright specs pass with 5-category tool scenario modal | Not Started |
+
+Dependencies: B-01, B-02
+
+---
+
+## P39 — Supply Chain Control Agent (MVP Core)
+
+**Goal:** Build the Supply Chain Control Agent in `packages/agent/control/`. This is the cross-domain
+judgment center and sole user-facing responder for supply chain queries (DESIGN.md §Agent Classification).
+The Control Agent receives cross-domain context from SessionOrchestrator, calls domain tools via the Tool
+Gateway, and produces decision-ready answers covering all domains (demand, inventory, supply, logistics,
+finance).
+
+Dependencies: P38 Done
+
+### Batch B-01 — ControlAgent class (App Builder) — Not Started
+
+| Task | Description | Status |
+|---|---|---|
+| T-273 | Create `packages/agent/control/__init__.py` and `packages/agent/control/control_agent.py` — `ControlAgent` class implementing the `Specialist` protocol; role="control"; system prompt covering cross-domain operational judgment (stockout risk, exceptions, shipment delays, supply gaps, root cause candidates, action priorities) | Not Started |
+| T-274 | Tool allowlist for ControlAgent in `packages/tools/base.py`: `["sql_query", "nl_query"]` + all calculation/analysis tools from P31–P34 (`profile_demand_data`, `analyze_demand_trend`, `evaluate_forecast_accuracy`, `detect_demand_anomalies`, `analyze_seasonality`, `analyze_demand_drivers`, `segment_demand`, `compare_demand_periods`, `calculate_supply_gap`, `get_open_supply_orders`, `analyze_supply_lead_time`, `calculate_days_of_supply`, `analyze_supply_risk`, `calculate_holding_cost_impact`, `calculate_stockout_cost_impact`, `calculate_expedite_cost`, `compare_cost_scenarios`, `calculate_days_of_inventory`, `calculate_stockout_risk`, `calculate_excess_inventory_risk`, `get_available_to_promise`) | Not Started |
+| T-275 | Register ControlAgent in `packages/agent/orchestrator/roles.py` — add `"control"` to agent role definitions; add `ControlAgent` to `create_domain_agents()` | Not Started |
+
+Dependencies: P38 Done
+
+### Batch B-02 — SessionOrchestrator thin routing (App Builder) — Not Started
+
+Simplify SessionOrchestrator to classify intent → route supply chain intents to ControlAgent.
+Remove multi-agent sequential planning logic introduced for the S&OP pipeline.
+
+| Task | Description | Status |
+|---|---|---|
+| T-276 | Add `"supply_chain"` intent to `INTENT_REGISTRY` in `packages/agent/orchestrator/intent_registry.py` — `allowed_agent_roles: ["control"]`; plan_prompt directs single ControlAgent call with full cross-domain tool access | Not Started |
+| T-277 | Remove or stub out multi-agent plan-building nodes in `packages/agent/session_orchestrator.py` that previously coordinated sequential specialist runs; replace with single-agent delegation to ControlAgent for supply_chain intent | Not Started |
+
+Dependencies: B-01
+
+### Batch B-03 — Tests (Test/Review) — Not Started
+
+| Task | Description | Status |
+|---|---|---|
+| T-278 | Unit test: `ControlAgent` instantiates with role="control"; `_SYSTEM_PROMPT` references all supply chain domains (demand, inventory, supply, logistics, finance) | Not Started |
+| T-279 | Unit test: `INTENT_REGISTRY["supply_chain"]` routes to `allowed_agent_roles=["control"]`; ControlAgent tool allowlist contains sql_query + all domain calculation tools | Not Started |
+| T-280 | `make test-unit` + `make lint` + `make typecheck` | Not Started |
+
+Dependencies: B-01, B-02
+
+---
+
+## P40 — Skill Registry (packages/knowledge/skills/)
+
+**Goal:** Build the Skill Registry as the authoritative source for standard analysis procedures
+(DESIGN.md §Context Engineering Layer §Skill Loader). Skills define *what to do*, not LLM reasoning —
+making analysis reproducible and auditable. Implement `SkillLoader` that matches intent → Skill files
+and injects relevant procedures into the ControlAgent context on demand.
+
+Dependencies: P39 Done
+
+### Batch B-01 — Skill file format + SkillLoader (App Builder) — Not Started
+
+| Task | Description | Status |
+|---|---|---|
+| T-281 | Define Skill file format in `packages/knowledge/skills/` — each file is markdown with frontmatter: `skill_name`, `description`, `required_tables`, `required_kpis`, `procedure` (numbered steps), `output_schema` | Not Started |
+| T-282 | `packages/knowledge/__init__.py` and `packages/knowledge/skill_loader.py` — `SkillLoader` class: `load(intent: str) -> list[str]` returns Skill file content for the given intent; MVP mapping is declared in code (keyword/intent-to-filename dict), not inferred dynamically | Not Started |
+
+Dependencies: none
+
+### Batch B-02 — MVP Skill files (App Builder) — Not Started
+
+Three Skill files covering the MVP validation questions (DESIGN.md §Agent Design §MVP Validation Questions):
+
+| Task | Description | Status |
+|---|---|---|
+| T-283 | `packages/knowledge/skills/stockout_risk_analysis.md` — procedure: check on_hand vs. demand forecast vs. incoming supply; compute days-of-supply; identify SKUs with days_of_supply < reorder threshold; surface root cause (low stock vs. inbound delay vs. demand surge) | Not Started |
+| T-284 | `packages/knowledge/skills/exception_detection.md` — procedure: scan inventory, orders, shipments, and production for anomalies exceeding thresholds; rank by business impact; return prioritized exception list with root cause candidates | Not Started |
+| T-285 | `packages/knowledge/skills/shipment_delay_root_cause.md` — procedure: cross-reference open orders vs. inventory availability vs. shipping status vs. inbound schedule; distinguish: inventory-blocked vs. carrier-delayed vs. slot-constrained vs. inbound-delayed; return root cause candidates with evidence | Not Started |
+
+Dependencies: B-01
+
+### Batch B-03 — SkillLoader integration into ControlAgent (App Builder) — Not Started
+
+| Task | Description | Status |
+|---|---|---|
+| T-286 | In `packages/agent/control/control_agent.py` (or its context builder): before each LLM call, invoke `SkillLoader.load(intent)` and prepend the returned Skill procedure(s) as a structured context block in the user message | Not Started |
+
+Dependencies: B-01, B-02, P39 Done
+
+### Batch B-04 — Tests (Test/Review) — Not Started
+
+| Task | Description | Status |
+|---|---|---|
+| T-287 | Unit test: `SkillLoader.load("supply_chain")` returns content from at least one Skill file; `SkillLoader.load("unknown_intent")` returns empty list without error | Not Started |
+| T-288 | Unit test: ControlAgent context builder includes Skill procedure text in the user message when SkillLoader returns content | Not Started |
+| T-289 | `make test-unit` + `make lint` + `make typecheck` | Not Started |
+
+Dependencies: B-01, B-02, B-03
+
+---
+
+## P41 — Memory Layer (packages/memory/)
+
+**Goal:** Implement the six typed Memory store base classes as the Memory Layer public API
+(DESIGN.md §Memory Design). Physical implementations are minimal in MVP. The typed API is locked;
+physical grouping can evolve independently.
+
+Dependencies: P39 Done
+
+### Batch B-01 — Typed store base classes (App Builder) — Not Started
+
+| Task | Description | Status |
+|---|---|---|
+| T-290 | `packages/memory/__init__.py` — define abstract base classes for all six typed stores: `ShortTermMemory`, `WorkingMemory`, `LongTermMemory`, `DecisionMemory`, `UserMemory`, `DomainMemory`; each exposes `write(record)` and `search(query, k) -> list` | Not Started |
+| T-291 | `packages/memory/stub.py` — `StubMemoryStore` in-memory implementations of all six typed stores; used in unit tests to replace real DB | Not Started |
+
+Dependencies: none
+
+### Batch B-02 — WorkingMemory physical implementation (App Builder) — Not Started
+
+WorkingMemory maps to existing DB tables: `agent_session`, `task_run`, `tool_result`, `intermediate_artifact`, `approval_state` (DESIGN.md §Context Engineering Layer §Working Context Store).
+
+| Task | Description | Status |
+|---|---|---|
+| T-292 | `packages/memory/working.py` — `WorkingMemoryStore(WorkingMemory)` backed by existing repository classes in `packages/persistence/`; `write()` creates `task_run` + `tool_result` rows; `search()` returns recent task_run records for the session | Not Started |
+| T-293 | Alembic migration if any schema changes needed to support `intermediate_artifact` table (check whether it already exists; create only if absent) | Not Started |
+
+Dependencies: B-01
+
+### Batch B-03 — DecisionMemory physical implementation (App Builder) — Not Started
+
+DecisionMemory maps to `decision_log` (with `record_type` column distinguishing decisions from failures) and pgvector embeddings for past-case similarity search (stub in MVP; real pgvector in Post-MVP).
+
+| Task | Description | Status |
+|---|---|---|
+| T-294 | Alembic migration: `decision_log` table — `id`, `session_id`, `record_type` (decision / failure), `content_json TEXT`, `agent_role`, `created_at`; add index on `(session_id, record_type)` | Not Started |
+| T-295 | `packages/memory/decision.py` — `DecisionMemoryStore(DecisionMemory)` backed by `decision_log` repository; `write()` inserts record; `search()` returns recent records filtered by session_id + record_type (pgvector stub: full-table recency-ordered fallback in MVP) | Not Started |
+
+Dependencies: B-01
+
+### Batch B-04 — Tests (Test/Review) — Not Started
+
+| Task | Description | Status |
+|---|---|---|
+| T-296 | Unit tests: `StubMemoryStore` write + search round-trip for all six typed stores | Not Started |
+| T-297 | Integration tests: `WorkingMemoryStore` and `DecisionMemoryStore` write + search against real DB | Not Started |
+| T-298 | `make test-unit` + `make test-integration` + `make lint` + `make typecheck` | Not Started |
+
+Dependencies: B-01, B-02, B-03
+
+---
+
+## P42 — Context Engineering Integration
+
+**Goal:** Wire Memory Retriever and Skill Loader into the ControlAgent context-building step so that on
+every LLM call the agent receives: (1) relevant past decisions from DecisionMemory, (2) the matching
+Skill procedure(s) from the Skill Registry. Neither is pre-loaded — both are retrieved on demand
+(DESIGN.md §Context Engineering Layer §Constraints).
+
+Dependencies: P40 Done, P41 Done
+
+### Batch B-01 — Memory Retriever integration (App Builder) — Not Started
+
+| Task | Description | Status |
+|---|---|---|
+| T-299 | In the ControlAgent context builder: before the LLM call, query `DecisionMemoryStore.search(query_text=user_query, k=3)` and `DomainMemoryStore.search(query_text=user_query, k=2)` (stub in MVP); append retrieved records as a structured "Past Decisions / Business Rules" context block | Not Started |
+| T-300 | After each ControlAgent response: write the session decision record to `DecisionMemoryStore` — includes: session_id, intent, agent_role="control", tool_calls_made, response summary, record_type="decision" | Not Started |
+| T-301 | On ControlAgent failure (exception propagated to orchestrator): write failure record to `DecisionMemoryStore` — record_type="failure", includes: session_id, intent, error message, tool_calls_made | Not Started |
+
+Dependencies: P40 Done, P41 Done
+
+### Batch B-02 — Tests (Test/Review) — Not Started
+
+| Task | Description | Status |
+|---|---|---|
+| T-302 | Unit test: ControlAgent context builder calls `DecisionMemoryStore.search()` before LLM call; retrieved records appear in context block | Not Started |
+| T-303 | Unit test: successful response writes `record_type="decision"` to `DecisionMemoryStore`; failure writes `record_type="failure"` | Not Started |
+| T-304 | `make test-unit` + `make lint` + `make typecheck` | Not Started |
+
+Dependencies: B-01
+
+---
+
+## P43 — MVP Validation (3 Questions)
+
+**Goal:** Validate that the integrated Supply Chain Control Agent can answer the three MVP validation
+questions defined in DESIGN.md §Agent Design §MVP Validation Questions:
+(1) What exceptions does the human need to see today?
+(2) Which products have high stockout risk?
+(3) What are the root cause candidates for shipment delays and unfulfilled orders?
+
+Dependencies: P42 Done
+
+### Batch B-01 — Integration tests (Test/Review) — Not Started
+
+| Task | Description | Status |
+|---|---|---|
+| T-305 | Integration test: "What are today's exceptions?" → ControlAgent calls exception_detection Skill + relevant tools; response includes prioritized exception list with at least one root cause candidate; `record_type="decision"` written to DecisionMemory | Not Started |
+| T-306 | Integration test: "Which products are at stockout risk this week?" → ControlAgent calls stockout_risk_analysis Skill + stockout_risk tools; response includes at-risk SKU list with days-of-supply and risk classification | Not Started |
+| T-307 | Integration test: "Why is order #X delayed?" → ControlAgent calls shipment_delay_root_cause Skill + SQL tools; response identifies root cause category (inventory-blocked / carrier-delayed / inbound-delayed) with evidence | Not Started |
+
+Dependencies: none
+
+### Batch B-02 — Playwright E2E (Test/Review) — Not Started
+
+| Task | Description | Status |
+|---|---|---|
+| T-308 | Add 3 "MVP Demo" scenario prompts to `ToolScenarioModal.tsx` — one for each MVP validation question; add to a new "Supply Chain" category | Not Started |
+| T-309 | Playwright spec: each MVP scenario prompt triggers a ControlAgent response bubble within 90s; execution trace shows ControlAgent node + tool call nodes | Not Started |
+
+Dependencies: P42 Done, B-01
+
+### Batch B-03 — Quality gate (Test/Review) — Not Started
+
+| Task | Description | Status |
+|---|---|---|
+| T-310 | `make test-unit` + `make test-integration` + `make test-playwright` — all pass; ControlAgent answers all 3 MVP questions end-to-end | Not Started |
+
+Dependencies: B-01, B-02

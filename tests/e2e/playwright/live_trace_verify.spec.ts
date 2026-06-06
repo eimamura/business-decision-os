@@ -14,7 +14,8 @@ import { testWithCleanup as test, expect } from "./fixtures";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 const SIMPLE_QUERY = "Reply with the single word: hello";
-const DONE_TIMEOUT = 60_000;
+// gpt-oss:20b is slower than qwen2.5-coder:7b; allow up to 150s.
+const DONE_TIMEOUT = 150_000;
 
 async function createSession(request: Parameters<typeof test>[1]["request"]): Promise<string> {
   const res = await request.post(`${API_BASE}/api/v1/sessions`, {
@@ -37,7 +38,11 @@ async function sendAndWaitForCompleted(
   await expect(page.locator("textarea")).toBeVisible();
   await page.locator("textarea").fill(query);
   await page.getByRole("button", { name: /send/i }).click();
-  // "Completed" appears in the ExecutionPanel footer when sessionEndedAt is set.
+  // "Completed" appears both in per-node "Completed · Xs" labels and in the
+  // ExecutionPanel footer "Completed {timestamp} · {n}s total" when sessionEndedAt is set.
+  // Matching on the first occurrence is sufficient for live_trace tests because these
+  // use a simple prompt that does not trigger the ask_user path; the session completes
+  // before the node-level "Completed" text is rendered.
   await expect(page.locator("text=Completed").first()).toBeVisible({ timeout: DONE_TIMEOUT });
 }
 
@@ -49,7 +54,7 @@ test.describe("Live execution trace (real Ollama backend)", () => {
     request,
     createdSessionIds,
   }) => {
-    test.setTimeout(90_000);
+    test.setTimeout(180_000);
     const sessionId = await createSession(request);
     createdSessionIds.push(sessionId);
 
@@ -66,7 +71,7 @@ test.describe("Live execution trace (real Ollama backend)", () => {
     request,
     createdSessionIds,
   }) => {
-    test.setTimeout(90_000);
+    test.setTimeout(180_000);
     const sessionId = await createSession(request);
     createdSessionIds.push(sessionId);
 
@@ -87,7 +92,7 @@ test.describe("Live execution trace (real Ollama backend)", () => {
     request,
     createdSessionIds,
   }) => {
-    test.setTimeout(90_000);
+    test.setTimeout(180_000);
     const sessionId = await createSession(request);
     createdSessionIds.push(sessionId);
 
@@ -120,7 +125,7 @@ test.describe("Live execution trace (real Ollama backend)", () => {
     request,
     createdSessionIds,
   }) => {
-    test.setTimeout(120_000);
+    test.setTimeout(240_000);
     const sessionId = await createSession(request);
     createdSessionIds.push(sessionId);
 

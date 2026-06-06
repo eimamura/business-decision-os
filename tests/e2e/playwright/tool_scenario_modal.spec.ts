@@ -13,7 +13,8 @@
 import { testWithCleanup as test, expect } from "./fixtures";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
-const OLLAMA_TIMEOUT = 90_000;
+// gpt-oss:20b is slower than qwen2.5-coder:7b; allow up to 180s.
+const OLLAMA_TIMEOUT = 180_000;
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -103,7 +104,7 @@ test.describe("ToolScenarioModal (real API backend)", () => {
     request,
     createdSessionIds,
   }) => {
-    test.setTimeout(OLLAMA_TIMEOUT + 10_000);
+    test.setTimeout(OLLAMA_TIMEOUT + 30_000);
     const sessionId = await createSession(request, "Modal card click test");
     createdSessionIds.push(sessionId);
 
@@ -126,8 +127,10 @@ test.describe("ToolScenarioModal (real API backend)", () => {
       page.locator(".rounded-2xl.bg-indigo-600").filter({ hasText: /在庫テーブル/ }),
     ).toBeVisible({ timeout: 8_000 });
 
-    // An assistant bubble must appear with a response from Ollama
-    await expect(page.locator("text=Completed").first()).toBeVisible({
+    // An assistant bubble must appear with a response from Ollama.
+    // Match /total/ to resolve on the footer "Completed {ts} · {n}s total", not
+    // on per-node "Completed · Xs" labels that appear before the session is done.
+    await expect(page.locator("text=/total/").first()).toBeVisible({
       timeout: OLLAMA_TIMEOUT,
     });
     const assistantBubble = page.locator(".rounded-2xl.bg-\\[\\#1a1a2a\\]").first();

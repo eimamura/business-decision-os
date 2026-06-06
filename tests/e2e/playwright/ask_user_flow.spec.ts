@@ -21,11 +21,12 @@ const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 /**
  * Maximum time (ms) to wait for the ask_user question bubble to appear.
  * Real Ollama (qwen2.5-coder:7b) completes intent + ask_user LLM calls in ~10-30s.
+ * gpt-oss:20b is slower; allow up to 90s.
  */
-const ASK_USER_TIMEOUT = 30_000;
+const ASK_USER_TIMEOUT = 90_000;
 
 /** Maximum time (ms) to wait for the assistant reply after submitting an answer. */
-const REPLY_TIMEOUT = 30_000;
+const REPLY_TIMEOUT = 90_000;
 
 // ---------------------------------------------------------------------------
 // Helper: create a session via API and navigate to its chat page.
@@ -58,7 +59,7 @@ test.describe("AskUser inline answer input (real Ollama)", () => {
     page,
     createdSessionIds,
   }) => {
-    test.setTimeout(90_000);
+    test.setTimeout(180_000);
 
     await createSessionAndNavigate(
       page,
@@ -91,7 +92,7 @@ test.describe("AskUser inline answer input (real Ollama)", () => {
     page,
     createdSessionIds,
   }) => {
-    test.setTimeout(90_000);
+    test.setTimeout(180_000);
 
     await createSessionAndNavigate(
       page,
@@ -99,8 +100,9 @@ test.describe("AskUser inline answer input (real Ollama)", () => {
       "Ask-user E2E test — chip pre-populate",
     );
 
-    // "Run a demand forecast" has no product, horizon, or location — triggers ask_user.
-    await page.locator("textarea").fill("Run a demand forecast");
+    // "Analyze inventory" is maximally underspecified — SKU, period, and
+    // location are all absent — reliably triggers ask_user with gpt-oss:20b.
+    await page.locator("textarea").fill("Analyze inventory");
     await page.getByRole("button", { name: /send/i }).click();
 
     const firstChip = page.locator('[data-testid="ask-user-suggestion-0"]');
@@ -118,7 +120,7 @@ test.describe("AskUser inline answer input (real Ollama)", () => {
     page,
     createdSessionIds,
   }) => {
-    test.setTimeout(90_000);
+    test.setTimeout(180_000);
 
     await createSessionAndNavigate(
       page,
@@ -147,7 +149,7 @@ test.describe("AskUser inline answer input (real Ollama)", () => {
     page,
     createdSessionIds,
   }) => {
-    test.setTimeout(120_000);
+    test.setTimeout(240_000);
 
     await createSessionAndNavigate(
       page,
@@ -185,7 +187,7 @@ test.describe("AskUser inline answer input (real Ollama)", () => {
     page,
     createdSessionIds,
   }) => {
-    test.setTimeout(90_000);
+    test.setTimeout(180_000);
 
     await createSessionAndNavigate(
       page,
