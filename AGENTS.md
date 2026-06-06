@@ -69,7 +69,7 @@ The following are explicitly forbidden across all agents:
 - Adding new top-level modules outside the layout in `docs/DESIGN.md` §Monorepo Layout.
 - Changing public interface signatures (`LLMClient`, `Tool`, `JobRunner`, `MemoryStore`, `Orchestrator`, `Specialist`) without an ADR.
 - Reading or referencing `data/sample/ground_truth/`.
-- Hardcoded secrets in source code or committed `.env` files.
+- Security violations (secrets, SQL injection, CORS widening, etc.) — see `.claude/rules/security.md` for the full list.
 - Hardcoding table column names or table schemas as string literals in tool code, agent system prompts, or raw SQL outside `packages/persistence/`. Use `get_schema_context()` from `packages/tools/schema_context.py` for LLM prompts; use the repository layer for DB queries.
 - Writing a hand-maintained `DB_SCHEMA` string or any schema description that duplicates what `information_schema` already provides. Schema context must flow from the DB, not from human memory.
 - Sending raw inventory rows to LLM context.

@@ -25,10 +25,7 @@ cd apps/web && npm test
 
 ### Playwright note
 
-`make test-playwright` sets `NODE_PATH`, `WEB_URL`, and `NEXT_PUBLIC_API_URL` automatically
-to match the ports configured in the Makefile (`WEB_PORT=3002`, `API_PORT=8002`).
-Never run `npx playwright test` by hand — the env vars will be wrong and the module
-resolution for `@playwright/test` will fail because the test files live outside `apps/web/`.
+See `.claude/rules/testing.md §How to Run Tests` for why `npx playwright test` must never be used directly (env vars, module resolution).
 
 ---
 

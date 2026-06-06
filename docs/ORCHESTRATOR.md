@@ -138,6 +138,20 @@ If the pattern reaches Count 2, `/harden-system <FP-NNN>` must be invoked before
 
 ---
 
+## ADR Triggers
+
+Author an ADR under `docs/adr/YYYY-MM-DD-<slug>.md` whenever:
+
+- A public interface signature changes (`LLMClient`, `Tool`, `JobRunner`, `MemoryStore`, `Orchestrator`, `Specialist`).
+- A technology choice is added or replaced (LLM provider, framework, DB, etc.).
+- Risk thresholds, KPI weight defaults, or schema CHECK constraints change.
+- `llm_pricing` seed values are updated.
+- The SQL Tool allowlist is modified.
+
+Each ADR must include: background, candidates considered, decision, rationale, tradeoffs, reversibility / re-evaluation triggers.
+
+---
+
 ## Agent Conflict Protocol
 
 When two agents disagree or a handoff is rejected:
