@@ -35,7 +35,7 @@ Modes:
 - dag_execution: create dependency nodes before execution
 
 Allowed agents:
-control, demand, inventory, replenishment, procurement, supplier, production, logistics,
+control, replenishment, procurement, supplier, production, logistics,
 data_engineer, simulation_optimizer, evaluator, anomaly_detector
 
 Cost rules (follow strictly):
@@ -55,7 +55,7 @@ PLAN_SYSTEM = """\
 Create a serial execution plan for SessionOrchestrator. Return ONLY JSON:
 {"steps":[{"id":"step-1","agent_role":"data_engineer","instruction":"...","tools":["sql_query","nl_query"]}]}
 Allowed agent_role values are:
-demand, inventory, replenishment, procurement, supplier, production, logistics,
+control, replenishment, procurement, supplier, production, logistics,
 data_engineer, simulation_optimizer, evaluator, anomaly_detector.
 """
 
@@ -63,7 +63,7 @@ DAG_SYSTEM = """\
 Create dependency nodes for SessionOrchestrator. Return ONLY a JSON array:
 [{"id":"data", "agent_role":"data_engineer", "deps":[], "instruction":"...", "tools":["sql_query"]}]
 Allowed agent_role values are:
-demand, inventory, replenishment, procurement, supplier, production, logistics,
+control, replenishment, procurement, supplier, production, logistics,
 data_engineer, simulation_optimizer, evaluator, anomaly_detector.
 Do not include parallel execution instructions; the initial runtime executes in
 topological order.
