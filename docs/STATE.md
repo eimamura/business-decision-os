@@ -31,11 +31,11 @@ P42 — Context Engineering Integration
 
 ## Active Lease
 
-None
+P42-B-02
 
 ## Last Completed
 
-P41-B-04 — Memory Layer tests: 757 passed, lint+typecheck clean (2026-06-06)
+P42-B-01 — Memory Retriever in ControlAgent (pre-call search, post-call write, on-failure write): 757 passed (2026-06-06)
 
 ## Blockers
 

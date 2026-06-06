@@ -812,13 +812,13 @@ Skill procedure(s) from the Skill Registry. Neither is pre-loaded — both are r
 
 Dependencies: P40 Done, P41 Done
 
-### Batch B-01 — Memory Retriever integration (App Builder) — Not Started
+### Batch B-01 — Memory Retriever integration (App Builder) — Done
 
 | Task | Description | Status |
 |---|---|---|
-| T-299 | In the ControlAgent context builder: before the LLM call, query `DecisionMemoryStore.search(query_text=user_query, k=3)` and `DomainMemoryStore.search(query_text=user_query, k=2)` (stub in MVP); append retrieved records as a structured "Past Decisions / Business Rules" context block | Not Started |
-| T-300 | After each ControlAgent response: write the session decision record to `DecisionMemoryStore` — includes: session_id, intent, agent_role="control", tool_calls_made, response summary, record_type="decision" | Not Started |
-| T-301 | On ControlAgent failure (exception propagated to orchestrator): write failure record to `DecisionMemoryStore` — record_type="failure", includes: session_id, intent, error message, tool_calls_made | Not Started |
+| T-299 | In the ControlAgent context builder: before the LLM call, query `DecisionMemoryStore.search(query_text=user_query, k=3)` and `DomainMemoryStore.search(query_text=user_query, k=2)` (stub in MVP); append retrieved records as a structured "Past Decisions / Business Rules" context block | Done |
+| T-300 | After each ControlAgent response: write the session decision record to `DecisionMemoryStore` — includes: session_id, intent, agent_role="control", tool_calls_made, response summary, record_type="decision" | Done |
+| T-301 | On ControlAgent failure (exception propagated to orchestrator): write failure record to `DecisionMemoryStore` — record_type="failure", includes: session_id, intent, error message, tool_calls_made | Done |
 
 Dependencies: P40 Done, P41 Done
 
