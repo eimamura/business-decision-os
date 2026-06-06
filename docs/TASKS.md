@@ -709,12 +709,12 @@ and injects relevant procedures into the ControlAgent context on demand.
 
 Dependencies: P39 Done
 
-### Batch B-01 — Skill file format + SkillLoader (App Builder) — Not Started
+### Batch B-01 — Skill file format + SkillLoader (App Builder) — Done
 
 | Task | Description | Status |
 |---|---|---|
-| T-281 | Define Skill file format in `packages/knowledge/skills/` — each file is markdown with frontmatter: `skill_name`, `description`, `required_tables`, `required_kpis`, `procedure` (numbered steps), `output_schema` | Not Started |
-| T-282 | `packages/knowledge/__init__.py` and `packages/knowledge/skill_loader.py` — `SkillLoader` class: `load(intent: str) -> list[str]` returns Skill file content for the given intent; MVP mapping is declared in code (keyword/intent-to-filename dict), not inferred dynamically | Not Started |
+| T-281 | Define Skill file format in `packages/knowledge/skills/` — each file is markdown with frontmatter: `skill_name`, `description`, `required_tables`, `required_kpis`, `procedure` (numbered steps), `output_schema` | Done |
+| T-282 | `packages/knowledge/__init__.py` and `packages/knowledge/skill_loader.py` — `SkillLoader` class: `load(intent: str) -> list[str]` returns Skill file content for the given intent; MVP mapping is declared in code (keyword/intent-to-filename dict), not inferred dynamically | Done |
 
 Dependencies: none
 

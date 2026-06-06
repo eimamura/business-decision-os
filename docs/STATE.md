@@ -31,11 +31,11 @@ P40 — Skill Registry
 
 ## Active Lease
 
-None
+P40-B-02
 
 ## Last Completed
 
-P45-B-03 — Tests + quality gate: 674 passed, lint clean, typecheck clean (2026-06-06)
+P40-B-01 — Skill file format + SkillLoader: 674 passed, lint clean, typecheck clean (2026-06-06)
 
 ## Blockers
 
