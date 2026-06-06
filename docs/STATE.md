@@ -27,15 +27,15 @@ See `docs/archive/v3/STATE.md` for P0–P23 per-phase details.
 
 ## Active Phase
 
-P41 — Memory Layer
+P42 — Context Engineering Integration
 
 ## Active Lease
 
-P41-B-04
+None
 
 ## Last Completed
 
-P41-B-03 — DecisionMemoryStore + decision_log migration: 757 passed, lint+typecheck clean (2026-06-06)
+P41-B-04 — Memory Layer tests: 757 passed, lint+typecheck clean (2026-06-06)
 
 ## Blockers
 

@@ -52,6 +52,7 @@ Full task history for P0–P23 is archived at `docs/archive/v3/TASKS.md`.
 | P39 — Supply Chain Control Agent (MVP Core) | T-273–T-280 | 2026-06-06 |
 | P45 — Control-Agent-Only Routing | T-318–T-324 | 2026-06-06 |
 | P40 — Skill Registry | T-281–T-289 | 2026-06-06 |
+| P41 — Memory Layer | T-290–T-298 | 2026-06-06 |
 
 > **Design Realignment Note (2026-06-05):** P29–P36 built Specialist Domain Agents (DemandAgent,
 > InventoryAgent, SupplyPlanningAgent, FinanceImpactAgent, SopAgent) as independent runtime units.
