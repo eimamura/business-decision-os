@@ -53,6 +53,7 @@ Full task history for P0–P23 is archived at `docs/archive/v3/TASKS.md`.
 | P45 — Control-Agent-Only Routing | T-318–T-324 | 2026-06-06 |
 | P40 — Skill Registry | T-281–T-289 | 2026-06-06 |
 | P41 — Memory Layer | T-290–T-298 | 2026-06-06 |
+| P42 — Context Engineering Integration | T-299–T-304 | 2026-06-06 |
 
 > **Design Realignment Note (2026-06-05):** P29–P36 built Specialist Domain Agents (DemandAgent,
 > InventoryAgent, SupplyPlanningAgent, FinanceImpactAgent, SopAgent) as independent runtime units.
@@ -822,13 +823,13 @@ Dependencies: P40 Done, P41 Done
 
 Dependencies: P40 Done, P41 Done
 
-### Batch B-02 — Tests (Test/Review) — Not Started
+### Batch B-02 — Tests (Test/Review) — Done
 
 | Task | Description | Status |
 |---|---|---|
-| T-302 | Unit test: ControlAgent context builder calls `DecisionMemoryStore.search()` before LLM call; retrieved records appear in context block | Not Started |
-| T-303 | Unit test: successful response writes `record_type="decision"` to `DecisionMemoryStore`; failure writes `record_type="failure"` | Not Started |
-| T-304 | `make test-unit` + `make lint` + `make typecheck` | Not Started |
+| T-302 | Unit test: ControlAgent context builder calls `DecisionMemoryStore.search()` before LLM call; retrieved records appear in context block | Done |
+| T-303 | Unit test: successful response writes `record_type="decision"` to `DecisionMemoryStore`; failure writes `record_type="failure"` | Done |
+| T-304 | `make test-unit` + `make lint` + `make typecheck` | Done |
 
 Dependencies: B-01
 

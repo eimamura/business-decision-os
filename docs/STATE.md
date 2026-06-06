@@ -27,15 +27,15 @@ See `docs/archive/v3/STATE.md` for P0–P23 per-phase details.
 
 ## Active Phase
 
-P42 — Context Engineering Integration
+P43 — MVP Validation (3 Questions)
 
 ## Active Lease
 
-P42-B-02
+None
 
 ## Last Completed
 
-P42-B-01 — Memory Retriever in ControlAgent (pre-call search, post-call write, on-failure write): 757 passed (2026-06-06)
+P42-B-02 — ControlAgent memory integration tests: 763 passed, lint+typecheck clean (2026-06-06)
 
 ## Blockers
 
