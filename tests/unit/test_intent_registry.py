@@ -38,7 +38,8 @@ def test_chat_skips_tool_loop() -> None:
 
 def test_all_intent_categories_registered() -> None:
     expected = {
-        "chat", "lookup", "domain_analysis", "cross_domain_analysis", "decision_support"
+        "chat", "lookup", "domain_analysis", "cross_domain_analysis",
+        "supply_chain", "decision_support",
     }
     assert set(INTENT_REGISTRY.keys()) == expected
 

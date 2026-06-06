@@ -674,15 +674,15 @@ Dependencies: P38 Done
 
 Dependencies: P38 Done
 
-### Batch B-02 — SessionOrchestrator thin routing (App Builder) — Not Started
+### Batch B-02 — SessionOrchestrator thin routing (App Builder) — Done
 
 Simplify SessionOrchestrator to classify intent → route supply chain intents to ControlAgent.
 Remove multi-agent sequential planning logic introduced for the S&OP pipeline.
 
 | Task | Description | Status |
 |---|---|---|
-| T-276 | Add `"supply_chain"` intent to `INTENT_REGISTRY` in `packages/agent/orchestrator/intent_registry.py` — `allowed_agent_roles: ["control"]`; plan_prompt directs single ControlAgent call with full cross-domain tool access | Not Started |
-| T-277 | Remove or stub out multi-agent plan-building nodes in `packages/agent/session_orchestrator.py` that previously coordinated sequential specialist runs; replace with single-agent delegation to ControlAgent for supply_chain intent | Not Started |
+| T-276 | Add `"supply_chain"` intent to `INTENT_REGISTRY` in `packages/agent/orchestrator/intent_registry.py` — `allowed_agent_roles: ["control"]`; plan_prompt directs single ControlAgent call with full cross-domain tool access | Done |
+| T-277 | Remove or stub out multi-agent plan-building nodes in `packages/agent/session_orchestrator.py` that previously coordinated sequential specialist runs; replace with single-agent delegation to ControlAgent for supply_chain intent | Done |
 
 Dependencies: B-01
 

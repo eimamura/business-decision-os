@@ -10,6 +10,8 @@ Categories:
 - lookup: factual supply-chain question or data lookup
 - domain_analysis: one domain needs analysis
 - cross_domain_analysis: several domains or anomaly/root-cause analysis
+- supply_chain: cross-domain supply chain query — stockout risk, exceptions,
+  shipment delays, supply gaps, inventory positioning, or action priorities
 - decision_support: explicit recommendation, optimization, scenario comparison,
   or approval-oriented decision
 
@@ -33,7 +35,7 @@ Modes:
 - dag_execution: create dependency nodes before execution
 
 Allowed agents:
-demand, inventory, replenishment, procurement, supplier, production, logistics,
+control, demand, inventory, replenishment, procurement, supplier, production, logistics,
 data_engineer, simulation_optimizer, evaluator, anomaly_detector
 
 Cost rules (follow strictly):

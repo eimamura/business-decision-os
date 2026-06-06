@@ -35,7 +35,7 @@ None
 
 ## Last Completed
 
-P39-B-01 — ControlAgent class: control_agent.py + tool allowlist + role registration (2026-06-06)
+P39-B-02 — SessionOrchestrator: supply_chain intent + ControlAgent short-circuit routing (2026-06-06)
 
 ## Blockers
 

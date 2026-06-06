@@ -65,6 +65,18 @@ INTENT_REGISTRY: dict[str, IntentConfig] = {
         ],
         max_tool_calls=15,
     ),
+    "supply_chain": IntentConfig(
+        description=(
+            "Cross-domain supply chain query — stockout risk, exceptions, "
+            "shipment delays, supply gaps, inventory positioning, or action priorities"
+        ),
+        plan_prompt=(
+            "Use the ControlAgent with its full cross-domain tool access to analyze "
+            "the supply chain situation and produce a decision-ready answer."
+        ),
+        allowed_agent_roles=["control"],
+        max_tool_calls=15,
+    ),
     "decision_support": IntentConfig(
         description=(
             "Explicit recommendation, optimization, scenario comparison, "

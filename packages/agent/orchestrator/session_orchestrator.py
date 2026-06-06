@@ -295,6 +295,17 @@ class SessionOrchestrator:
                 weight_override_json=query.weight_override_json,
             )
 
+        # Supply chain intent routes deterministically to ControlAgent — no LLM call needed.
+        if intent.category == "supply_chain":
+            route = AgentRoute(
+                mode="single_agent",
+                agents=["control"],
+                requires_planning=False,
+                requires_dag=False,
+                rationale="Supply chain intent: routed to ControlAgent",
+            )
+            return {"route": route}
+
         route = await self.select_execution_mode(query, intent, session_id)
         return {"route": route}
 
