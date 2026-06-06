@@ -8,7 +8,7 @@ Full history archived at `docs/archive/v3/STATE.md`.
 
 ## Completed Phases
 
-P0–P38, P44 all Done (T-001–T-271, T-311–T-317).
+P0–P38, P39–P45 all Done (T-001–T-271, T-273–T-324).
 
 P32–P36 S&OP MVP (2026-06-04):
 - P32 — SupplyPlanningAgent + 5 supply tools (T-210–T-223)
@@ -27,15 +27,15 @@ See `docs/archive/v3/STATE.md` for P0–P23 per-phase details.
 
 ## Active Phase
 
-P43 — MVP Validation (3 Questions)
+None — all planned phases complete.
 
 ## Active Lease
 
-P43-B-03
+None.
 
 ## Last Completed
 
-P43-B-02 — Supply Chain MVP Playwright spec + ToolScenarioModal scenarios (2026-06-06)
+P43-B-03 — Quality gate: 769 unit + 32 Playwright passed, lint+typecheck clean (2026-06-06)
 
 ## Blockers
 

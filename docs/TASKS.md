@@ -54,6 +54,7 @@ Full task history for P0–P23 is archived at `docs/archive/v3/TASKS.md`.
 | P40 — Skill Registry | T-281–T-289 | 2026-06-06 |
 | P41 — Memory Layer | T-290–T-298 | 2026-06-06 |
 | P42 — Context Engineering Integration | T-299–T-304 | 2026-06-06 |
+| P43 — MVP Validation (3 Questions) | T-305–T-310 | 2026-06-06 |
 
 > **Design Realignment Note (2026-06-05):** P29–P36 built Specialist Domain Agents (DemandAgent,
 > InventoryAgent, SupplyPlanningAgent, FinanceImpactAgent, SopAgent) as independent runtime units.
@@ -864,11 +865,11 @@ Dependencies: none
 
 Dependencies: P42 Done, B-01
 
-### Batch B-03 — Quality gate (Test/Review) — Not Started
+### Batch B-03 — Quality gate (Test/Review) — Done
 
 | Task | Description | Status |
 |---|---|---|
-| T-310 | `make test-unit` + `make test-integration` + `make test-playwright` — all pass; ControlAgent answers all 3 MVP questions end-to-end | Not Started |
+| T-310 | `make test-unit` + `make test-integration` + `make test-playwright` — all pass; ControlAgent answers all 3 MVP questions end-to-end | Done |
 
 Dependencies: B-01, B-02
 
