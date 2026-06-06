@@ -31,11 +31,11 @@ P43 — MVP Validation (3 Questions)
 
 ## Active Lease
 
-None
+P43-B-02
 
 ## Last Completed
 
-P42-B-02 — ControlAgent memory integration tests: 763 passed, lint+typecheck clean (2026-06-06)
+P43-B-01 — MVP pipeline skill injection tests: 769 passed, lint+typecheck clean (2026-06-06)
 
 ## Blockers
 

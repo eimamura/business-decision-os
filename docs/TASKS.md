@@ -845,13 +845,13 @@ questions defined in DESIGN.md §Agent Design §MVP Validation Questions:
 
 Dependencies: P42 Done
 
-### Batch B-01 — Integration tests (Test/Review) — Not Started
+### Batch B-01 — Integration tests (Test/Review) — Done
 
 | Task | Description | Status |
 |---|---|---|
-| T-305 | Integration test: "What are today's exceptions?" → ControlAgent calls exception_detection Skill + relevant tools; response includes prioritized exception list with at least one root cause candidate; `record_type="decision"` written to DecisionMemory | Not Started |
-| T-306 | Integration test: "Which products are at stockout risk this week?" → ControlAgent calls stockout_risk_analysis Skill + stockout_risk tools; response includes at-risk SKU list with days-of-supply and risk classification | Not Started |
-| T-307 | Integration test: "Why is order #X delayed?" → ControlAgent calls shipment_delay_root_cause Skill + SQL tools; response identifies root cause category (inventory-blocked / carrier-delayed / inbound-delayed) with evidence | Not Started |
+| T-305 | Integration test: "What are today's exceptions?" → ControlAgent calls exception_detection Skill + relevant tools; response includes prioritized exception list with at least one root cause candidate; `record_type="decision"` written to DecisionMemory | Done |
+| T-306 | Integration test: "Which products are at stockout risk this week?" → ControlAgent calls stockout_risk_analysis Skill + stockout_risk tools; response includes at-risk SKU list with days-of-supply and risk classification | Done |
+| T-307 | Integration test: "Why is order #X delayed?" → ControlAgent calls shipment_delay_root_cause Skill + SQL tools; response identifies root cause category (inventory-blocked / carrier-delayed / inbound-delayed) with evidence | Done |
 
 Dependencies: none
 
