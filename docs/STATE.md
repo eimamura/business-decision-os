@@ -31,11 +31,11 @@ P43 — MVP Validation (3 Questions)
 
 ## Active Lease
 
-P43-B-02
+P43-B-03
 
 ## Last Completed
 
-P43-B-01 — MVP pipeline skill injection tests: 769 passed, lint+typecheck clean (2026-06-06)
+P43-B-02 — Supply Chain MVP Playwright spec + ToolScenarioModal scenarios (2026-06-06)
 
 ## Blockers
 

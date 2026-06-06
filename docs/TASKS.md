@@ -855,12 +855,12 @@ Dependencies: P42 Done
 
 Dependencies: none
 
-### Batch B-02 — Playwright E2E (Test/Review) — Not Started
+### Batch B-02 — Playwright E2E (Test/Review) — Done
 
 | Task | Description | Status |
 |---|---|---|
 | T-308 | Add 3 "MVP Demo" scenario prompts to `ToolScenarioModal.tsx` — one for each MVP validation question; add to a new "Supply Chain" category | Done |
-| T-309 | Playwright spec: each MVP scenario prompt triggers a ControlAgent response bubble within 90s; execution trace shows ControlAgent node + tool call nodes | Not Started |
+| T-309 | Playwright spec: each MVP scenario prompt triggers a ControlAgent response bubble within 90s; execution trace shows ControlAgent node + tool call nodes | Done |
 
 Dependencies: P42 Done, B-01
 
