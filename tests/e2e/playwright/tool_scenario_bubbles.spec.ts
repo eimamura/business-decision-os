@@ -1,19 +1,27 @@
 /**
- * T-263: Tool scenario assistant bubble tests — real Ollama backend.
+ * T-312: Tool scenario assistant bubble tests — mock SSE interceptors.
  *
  * Verifies that sending each tool scenario prompt results in a non-empty,
- * non-error assistant bubble. Requires a running API server and Ollama.
+ * non-error assistant bubble.  The SSE stream and GET /messages endpoint are
+ * intercepted by page.route() so tests complete in under 15 s instead of up
+ * to 180 s with real Ollama.
+ *
+ * Real sessions are created via the API (we need a genuine session_id for the
+ * route patterns to match).  The POST /messages call fires to the real API and
+ * may spawn an orphaned Ollama request in the background; that is harmless
+ * because we never wait for it.
  *
  * Run with:
- *   make dev-up   (starts web + api + Ollama)
+ *   make dev-up   (starts web + api)
  *   make test-playwright
  */
 
 import { testWithCleanup as test, expect } from "./fixtures";
+import { mockCompletedStream } from "./sse-mock";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
-// gpt-oss:20b is slower than qwen2.5-coder:7b; allow up to 180s.
-const OLLAMA_TIMEOUT = 180_000;
+/** Maximum time (ms) to wait for the mocked "Completed · total" footer. */
+const MOCK_TIMEOUT = 15_000;
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -34,23 +42,23 @@ async function createSession(
 
 /**
  * Navigate to the chat page, fill the textarea with the given prompt,
- * click Send, and wait until the "Completed" footer appears in the
+ * click Send, and wait until the "Completed · total" footer appears in the
  * ExecutionPanel (set when the response_ready SSE event fires).
+ *
+ * With the mock SSE interceptor in place this resolves in under 1 s.
  */
 async function sendPromptAndWaitForCompleted(
   page: import("@playwright/test").Page,
-  sessionId: string,
   prompt: string,
 ): Promise<void> {
-  await page.goto(`/chat/${sessionId}`);
   await expect(page.locator("textarea")).toBeVisible();
   await page.locator("textarea").fill(prompt);
   await page.getByRole("button", { name: /send/i }).click();
-  // The ExecutionPanel footer shows "Completed {timestamp} · {duration}s total" when
-  // sessionEndedAt is set.  Match /total/ so we only resolve on the footer, not on
-  // per-node "Completed · Xs" duration labels that appear before the session is done.
+  // The ExecutionPanel footer shows "Completed {timestamp} · {duration}s total"
+  // when sessionEndedAt is set.  Match /total/ so we only resolve on the
+  // footer, not on per-node "Completed · Xs" duration labels.
   await expect(page.locator("text=/total/").first()).toBeVisible({
-    timeout: OLLAMA_TIMEOUT,
+    timeout: MOCK_TIMEOUT,
   });
 }
 
@@ -58,19 +66,21 @@ async function sendPromptAndWaitForCompleted(
 // Tests
 // ---------------------------------------------------------------------------
 
-test.describe("Tool scenario assistant bubbles (real Ollama backend)", () => {
+test.describe("Tool scenario assistant bubbles (mock SSE)", () => {
   test("Data Query scenario produces assistant bubble", async ({
     page,
     request,
     createdSessionIds,
   }) => {
-    test.setTimeout(OLLAMA_TIMEOUT + 30_000);
+    test.setTimeout(30_000);
     const sessionId = await createSession(request, "Data Query scenario test");
     createdSessionIds.push(sessionId);
+    // Register the mock BEFORE goto so the route is active when the page loads.
+    await mockCompletedStream(page, sessionId);
 
+    await page.goto(`/chat/${sessionId}`);
     await sendPromptAndWaitForCompleted(
       page,
-      sessionId,
       "在庫テーブルから全SKUの現在庫数をSQLで直接取得して",
     );
 
@@ -85,17 +95,14 @@ test.describe("Tool scenario assistant bubbles (real Ollama backend)", () => {
     request,
     createdSessionIds,
   }) => {
-    test.setTimeout(OLLAMA_TIMEOUT + 30_000);
+    test.setTimeout(30_000);
     const sessionId = await createSession(request, "Forecasting scenario test");
     createdSessionIds.push(sessionId);
+    await mockCompletedStream(page, sessionId);
 
-    // Uses analyze_demand_trend (read_only, demand agent) for SKU-001.
-    // The forecast tool is write-safety-level and filtered for the default analyst
-    // user role; read_only tools are always available regardless of user role.
-    // Date range is specified explicitly to avoid triggering the ask_user path.
+    await page.goto(`/chat/${sessionId}`);
     await sendPromptAndWaitForCompleted(
       page,
-      sessionId,
       "Use the analyze_demand_trend tool to analyze the demand trend for SKU-001 for the last 30 days and show the results.",
     );
 
@@ -110,16 +117,14 @@ test.describe("Tool scenario assistant bubbles (real Ollama backend)", () => {
     request,
     createdSessionIds,
   }) => {
-    test.setTimeout(OLLAMA_TIMEOUT + 30_000);
+    test.setTimeout(30_000);
     const sessionId = await createSession(request, "Simulation scenario test");
     createdSessionIds.push(sessionId);
+    await mockCompletedStream(page, sessionId);
 
-    // Uses calculate_supply_gap (supply_planning agent) for SKU-001 at DC West.
-    // Avoids simulation_optimizer to prevent the "No candidates" synthesis error
-    // that occurs when simulate_inventory results lack the required "candidates" key.
+    await page.goto(`/chat/${sessionId}`);
     await sendPromptAndWaitForCompleted(
       page,
-      sessionId,
       "Use the calculate_supply_gap tool to check the supply gap for SKU-001 at DC West and show the result.",
     );
 
@@ -134,16 +139,14 @@ test.describe("Tool scenario assistant bubbles (real Ollama backend)", () => {
     request,
     createdSessionIds,
   }) => {
-    test.setTimeout(OLLAMA_TIMEOUT + 30_000);
+    test.setTimeout(30_000);
     const sessionId = await createSession(request, "Optimization scenario test");
     createdSessionIds.push(sessionId);
+    await mockCompletedStream(page, sessionId);
 
-    // Uses calculate_days_of_inventory (read_only, inventory agent) for SKU-001.
-    // optimize_replenishment is write-safety-level and filtered for analyst role;
-    // inventory DOI is read_only and always available.
+    await page.goto(`/chat/${sessionId}`);
     await sendPromptAndWaitForCompleted(
       page,
-      sessionId,
       "Use the calculate_days_of_inventory tool to calculate inventory days on hand for SKU-001 and show the result.",
     );
 
@@ -158,13 +161,14 @@ test.describe("Tool scenario assistant bubbles (real Ollama backend)", () => {
     request,
     createdSessionIds,
   }) => {
-    test.setTimeout(OLLAMA_TIMEOUT + 30_000);
+    test.setTimeout(30_000);
     const sessionId = await createSession(request, "Data Catalog scenario test");
     createdSessionIds.push(sessionId);
+    await mockCompletedStream(page, sessionId);
 
+    await page.goto(`/chat/${sessionId}`);
     await sendPromptAndWaitForCompleted(
       page,
-      sessionId,
       "利用可能なデータテーブル一覧をカタログから検索して",
     );
 

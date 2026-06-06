@@ -1,41 +1,56 @@
 /**
- * Ask-user inline answer input flow — real API + real Ollama backend.
+ * T-313: Ask-user inline answer input flow — mock SSE interceptors.
  *
- * The AskUser flow is triggered when:
- *   1. The intent classifier returns an analytical intent
- *      (domain_analysis, cross_domain_analysis, or decision_support), AND
- *   2. The information-gathering LLM call returns needs_input=true.
+ * The AskUser flow is triggered when the SSE stream emits an ask_user_required
+ * event.  Previously these tests waited up to 240 s for real Ollama to produce
+ * that event; now page.route() intercepts the stream and delivers a synthetic
+ * ask_user_required sequence in under 1 s.
  *
- * Maximally underspecified prompts ("Analyze inventory", "Run a demand forecast")
- * reliably trigger the ask_user path with qwen2.5-coder:7b because the model
- * follows the ASK_USER_SYSTEM prompt instruction: "Only ask when a CRITICAL
- * parameter is absent (e.g., date range, specific SKU, warehouse location)."
+ * Tests 1–4 use mockAskUserStream.  Test 4 (answer + reply) also mocks the
+ * second SSE subscription (after the user submits an answer) with a stateful
+ * callCount closure — first call returns ask_user, second call returns
+ * completed.  Test 5 uses mockCompletedStream only (fully-specified prompt,
+ * no ask_user).
  *
- * Requires: make dev-up  (web on WEB_PORT, api on API_PORT, Ollama on 11434)
+ * Real sessions are created via the API so we have a genuine session_id for
+ * the route patterns.
+ *
+ * Run with:
+ *   make dev-up   (starts web + api)
+ *   make test-playwright
  */
 
 import { testWithCleanup as test, expect } from "./fixtures";
+import { mockAskUserStream, mockCompletedStream } from "./sse-mock";
+import type { Page } from "@playwright/test";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
-/**
- * Maximum time (ms) to wait for the ask_user question bubble to appear.
- * Real Ollama (qwen2.5-coder:7b) completes intent + ask_user LLM calls in ~10-30s.
- * gpt-oss:20b is slower; allow up to 90s.
- */
-const ASK_USER_TIMEOUT = 90_000;
-
+/** Maximum time (ms) to wait for the ask_user question bubble to appear. */
+const ASK_USER_TIMEOUT = 10_000;
 /** Maximum time (ms) to wait for the assistant reply after submitting an answer. */
-const REPLY_TIMEOUT = 90_000;
+const REPLY_TIMEOUT = 10_000;
 
 // ---------------------------------------------------------------------------
-// Helper: create a session via API and navigate to its chat page.
+// SSE response headers (shared with sse-mock.ts)
 // ---------------------------------------------------------------------------
 
-async function createSessionAndNavigate(
-  page: import("@playwright/test").Page,
+const SSE_HEADERS: Record<string, string> = {
+  "Content-Type": "text/event-stream",
+  "Cache-Control": "no-cache",
+  "X-Accel-Buffering": "no",
+};
+
+// ---------------------------------------------------------------------------
+// Helper: create a session via API, set up the mock, then navigate.
+// Callers pass the mock-setup callback so the route is registered BEFORE goto.
+// ---------------------------------------------------------------------------
+
+async function createSessionMockAndNavigate(
+  page: Page,
   createdSessionIds: string[],
   goal: string,
+  setupMock: (sessionId: string) => Promise<void>,
 ): Promise<string> {
   const res = await page.request.post(`${API_BASE}/api/v1/sessions`, {
     data: { goal },
@@ -45,6 +60,11 @@ async function createSessionAndNavigate(
   const session = (await res.json()) as { session_id: string };
   expect(session.session_id).toMatch(/^[0-9a-f]{8}-/);
   createdSessionIds.push(session.session_id);
+
+  // Register the mock route BEFORE navigation so the route is active when
+  // the page establishes its SSE connection.
+  await setupMock(session.session_id);
+
   await page.goto(`/chat/${session.session_id}`);
   await expect(page.locator("textarea")).toBeVisible();
   return session.session_id;
@@ -54,22 +74,20 @@ async function createSessionAndNavigate(
 // Test suite
 // ---------------------------------------------------------------------------
 
-test.describe("AskUser inline answer input (real Ollama)", () => {
+test.describe("AskUser inline answer input (mock SSE)", () => {
   test("ask_user_required SSE event renders inline question with chips and answer input", async ({
     page,
     createdSessionIds,
   }) => {
-    test.setTimeout(180_000);
+    test.setTimeout(30_000);
 
-    await createSessionAndNavigate(
+    await createSessionMockAndNavigate(
       page,
       createdSessionIds,
       "Ask-user E2E test — question bubble",
+      (sessionId) => mockAskUserStream(page, sessionId),
     );
 
-    // "Analyze inventory" is maximally underspecified — SKU, period, and
-    // location are all absent.  qwen2.5-coder:7b follows the ASK_USER_SYSTEM
-    // rules and emits needs_input=true for this class of vague analytical prompt.
     await page.locator("textarea").fill("Analyze inventory");
     await page.getByRole("button", { name: /send/i }).click();
 
@@ -92,16 +110,15 @@ test.describe("AskUser inline answer input (real Ollama)", () => {
     page,
     createdSessionIds,
   }) => {
-    test.setTimeout(180_000);
+    test.setTimeout(30_000);
 
-    await createSessionAndNavigate(
+    await createSessionMockAndNavigate(
       page,
       createdSessionIds,
       "Ask-user E2E test — chip pre-populate",
+      (sessionId) => mockAskUserStream(page, sessionId),
     );
 
-    // "Analyze inventory" is maximally underspecified — SKU, period, and
-    // location are all absent — reliably triggers ask_user with gpt-oss:20b.
     await page.locator("textarea").fill("Analyze inventory");
     await page.getByRole("button", { name: /send/i }).click();
 
@@ -120,12 +137,13 @@ test.describe("AskUser inline answer input (real Ollama)", () => {
     page,
     createdSessionIds,
   }) => {
-    test.setTimeout(180_000);
+    test.setTimeout(30_000);
 
-    await createSessionAndNavigate(
+    await createSessionMockAndNavigate(
       page,
       createdSessionIds,
       "Ask-user E2E test — submit disabled state",
+      (sessionId) => mockAskUserStream(page, sessionId),
     );
 
     await page.locator("textarea").fill("Analyze inventory");
@@ -149,13 +167,140 @@ test.describe("AskUser inline answer input (real Ollama)", () => {
     page,
     createdSessionIds,
   }) => {
-    test.setTimeout(240_000);
+    test.setTimeout(30_000);
 
-    await createSessionAndNavigate(
-      page,
-      createdSessionIds,
-      "Ask-user E2E test — answer submission",
+    // This test needs a stateful mock: first SSE subscription → ask_user;
+    // second subscription (after answer submitted) → completed.
+    // We register the route manually instead of using the helpers so we can
+    // use a callCount closure to change behaviour between calls.
+    const res = await page.request.post(`${API_BASE}/api/v1/sessions`, {
+      data: { goal: "Ask-user E2E test — answer submission" },
+      headers: { "X-Dev-User": "dev-user" },
+    });
+    expect(res.ok()).toBeTruthy();
+    const session = (await res.json()) as { session_id: string };
+    expect(session.session_id).toMatch(/^[0-9a-f]{8}-/);
+    createdSessionIds.push(session.session_id);
+    const sessionId = session.session_id;
+
+    const askUserId = "mock-ask-answer-1";
+    const question = "Which SKU and time period should I analyze?";
+    const suggestions = [
+      "SKU-001, last 30 days",
+      "All SKUs, last 7 days",
+      "SKU-002, last 14 days",
+    ];
+    const assistantText = "Mock response: test passed";
+    const now = new Date().toISOString();
+
+    let callCount = 0;
+
+    await page.route(
+      `**/api/v1/sessions/${sessionId}/stream`,
+      async (route) => {
+        callCount += 1;
+
+        let events: unknown[];
+        if (callCount === 1) {
+          // First call: return ask_user_required + awaiting_input.
+          events = [
+            {
+              type: "graph_node",
+              event: "start",
+              kind: "orchestrator",
+              name: "classify_intent",
+              run_id: "mock-run-1",
+              status: "ok",
+              meta: { model_name: "mock" },
+              timestamp: now,
+            },
+            {
+              type: "graph_node",
+              event: "end",
+              kind: "orchestrator",
+              name: "classify_intent",
+              run_id: "mock-run-1",
+              status: "ok",
+              meta: {
+                model_name: "mock",
+                category: "domain_analysis",
+                confidence: 0.9,
+              },
+              timestamp: now,
+              duration_ms: 50,
+            },
+            {
+              type: "ask_user_required",
+              session_id: sessionId,
+              ask_user_id: askUserId,
+              question,
+              suggestions,
+            },
+            {
+              type: "awaiting_input",
+              session_id: sessionId,
+              ask_user_id: askUserId,
+              timestamp: now,
+            },
+          ];
+        } else {
+          // Second call (after answer submitted): return completed response.
+          events = [
+            {
+              type: "text_delta",
+              delta: assistantText,
+            },
+            {
+              type: "response_ready",
+              session_id: sessionId,
+            },
+            {
+              type: "done",
+            },
+          ];
+        }
+
+        const body = events
+          .map((e) => `data: ${JSON.stringify(e)}\n\n`)
+          .join("");
+        await route.fulfill({
+          status: 200,
+          headers: SSE_HEADERS,
+          body,
+        });
+      },
     );
+
+    // Also mock GET /messages so the assistant bubble has content to display.
+    await page.route(
+      `**/api/v1/sessions/${sessionId}/messages`,
+      async (route) => {
+        const messages = [
+          {
+            message_id: "mock-msg-user-1",
+            session_id: sessionId,
+            role: "user",
+            content: "Analyze inventory",
+            created_at: now,
+          },
+          {
+            message_id: "mock-msg-asst-1",
+            session_id: sessionId,
+            role: "assistant",
+            content: assistantText,
+            created_at: now,
+          },
+        ];
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify(messages),
+        });
+      },
+    );
+
+    await page.goto(`/chat/${sessionId}`);
+    await expect(page.locator("textarea")).toBeVisible();
 
     await page.locator("textarea").fill("Analyze inventory");
     await page.getByRole("button", { name: /send/i }).click();
@@ -178,7 +323,6 @@ test.describe("AskUser inline answer input (real Ollama)", () => {
 
     // After the answer is submitted, the orchestrator resumes and the agent
     // produces a final reply.  An assistant message bubble must eventually appear.
-    // The bubble uses the className from MessageBubble.tsx: rounded-2xl bg-[#1a1a2a]
     const assistantBubbles = page.locator(".rounded-2xl.bg-\\[\\#1a1a2a\\]");
     await expect(assistantBubbles.first()).toBeVisible({ timeout: REPLY_TIMEOUT });
   });
@@ -187,17 +331,18 @@ test.describe("AskUser inline answer input (real Ollama)", () => {
     page,
     createdSessionIds,
   }) => {
-    test.setTimeout(180_000);
+    test.setTimeout(30_000);
 
-    await createSessionAndNavigate(
+    await createSessionMockAndNavigate(
       page,
       createdSessionIds,
       "Ask-user E2E test — fully specified, no question",
+      (sessionId) => mockCompletedStream(page, sessionId),
     );
 
     // All critical parameters are present: SKU, location, time range, and a
-    // comparison baseline.  The information-gathering LLM should return
-    // needs_input=false and the agent should proceed directly to execution.
+    // comparison baseline.  With the mock stream the completed response fires
+    // immediately — no ask_user event is emitted.
     const fullySpecifiedPrompt =
       "Analyze inventory for SKU-001 at DC West for the past 30 days and compare with the previous month";
 

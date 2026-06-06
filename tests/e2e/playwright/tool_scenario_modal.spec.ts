@@ -2,19 +2,22 @@
  * T-264: ToolScenarioModal Playwright tests — real API backend.
  *
  * Tests 1–3 and 5 are pure UI tests that exercise modal state without
- * sending a message to the LLM. Test 4 clicks a scenario card, which
- * calls sendMessage() directly and waits for an Ollama response.
+ * sending a message to the LLM.  Test 4 clicks a scenario card (which calls
+ * sendMessage() directly) and verifies the assistant bubble appears; the SSE
+ * stream is intercepted by page.route() so this test completes in under 30 s
+ * instead of waiting up to 180 s for Ollama.
  *
  * Run with:
- *   make dev-up   (starts web + api + Ollama)
+ *   make dev-up   (starts web + api)
  *   make test-playwright
  */
 
 import { testWithCleanup as test, expect } from "./fixtures";
+import { mockCompletedStream } from "./sse-mock";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
-// gpt-oss:20b is slower than qwen2.5-coder:7b; allow up to 180s.
-const OLLAMA_TIMEOUT = 180_000;
+/** Maximum time (ms) to wait for the mocked "Completed · total" footer. */
+const MOCK_TIMEOUT = 15_000;
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -105,9 +108,14 @@ test.describe("ToolScenarioModal (real API backend)", () => {
     request,
     createdSessionIds,
   }) => {
-    test.setTimeout(OLLAMA_TIMEOUT + 30_000);
+    test.setTimeout(30_000);
     const sessionId = await createSession(request, "Modal card click test");
     createdSessionIds.push(sessionId);
+
+    // Register the mock BEFORE goto so the route is active when the page loads.
+    // The scenario card calls sendMessage() directly (not via textarea), so the
+    // SSE stream subscription fires immediately after the card is clicked.
+    await mockCompletedStream(page, sessionId);
 
     await page.goto(`/chat/${sessionId}`);
     await expect(page.locator("textarea")).toBeVisible();
@@ -120,19 +128,17 @@ test.describe("ToolScenarioModal (real API backend)", () => {
     const dialog = page.getByRole("dialog");
     await dialog.getByText("SQL Direct Query").click();
 
-    // Modal must be gone after clicking
+    // Modal must be gone after clicking.
     await expect(page.getByRole("dialog")).not.toBeVisible({ timeout: 3_000 });
 
-    // A user message bubble should appear with the SQL prompt text
+    // A user message bubble should appear with the SQL prompt text.
     await expect(
       page.locator(".rounded-2xl.bg-indigo-600").filter({ hasText: /在庫テーブル/ }),
     ).toBeVisible({ timeout: 8_000 });
 
-    // An assistant bubble must appear with a response from Ollama.
-    // Match /total/ to resolve on the footer "Completed {ts} · {n}s total", not
-    // on per-node "Completed · Xs" labels that appear before the session is done.
+    // The ExecutionPanel "Completed · total" footer must appear (mock resolves fast).
     await expect(page.locator("text=/total/").first()).toBeVisible({
-      timeout: OLLAMA_TIMEOUT,
+      timeout: MOCK_TIMEOUT,
     });
     const assistantBubble = page.locator(".rounded-2xl.bg-\\[\\#1a1a2a\\]").first();
     await expect(assistantBubble).toBeVisible({ timeout: 5_000 });

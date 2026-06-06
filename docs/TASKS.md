@@ -608,35 +608,35 @@ Dependencies: P38-B-02 Done (P38-B-03 blocked on this phase completing first)
 
 Dependencies: none
 
-### Batch B-02 — Rewrite tool_scenario_bubbles.spec.ts (Test/Review) — Not Started
+### Batch B-02 — Rewrite tool_scenario_bubbles.spec.ts (Test/Review) — Done
 
 | Task | Description | Status |
 |---|---|---|
-| T-312 | Rewrite all 5 tests using `mockCompletedStream()`; remove `OLLAMA_TIMEOUT`; reduce per-test timeout to 30s; keep all assertions (bubble visible, not empty, no text-red-400) | Not Started |
+| T-312 | Rewrite all 5 tests using `mockCompletedStream()`; remove `OLLAMA_TIMEOUT`; reduce per-test timeout to 30s; keep all assertions (bubble visible, not empty, no text-red-400) | Done |
 
 Dependencies: B-01
 
-### Batch B-03 — Rewrite ask_user_flow.spec.ts (Test/Review) — Not Started
+### Batch B-03 — Rewrite ask_user_flow.spec.ts (Test/Review) — Done
 
 | Task | Description | Status |
 |---|---|---|
-| T-313 | Rewrite 5 tests: tests 1–4 use `mockAskUserStream()` (inject ask_user_required event); test 5 (fully-specified, no ask) uses `mockCompletedStream()`; reduce ASK_USER_TIMEOUT and REPLY_TIMEOUT to 15s; keep all UI assertions | Not Started |
+| T-313 | Rewrite 5 tests: tests 1–4 use `mockAskUserStream()` (inject ask_user_required event); test 5 (fully-specified, no ask) uses `mockCompletedStream()`; reduce ASK_USER_TIMEOUT and REPLY_TIMEOUT to 10s; keep all UI assertions | Done |
 
 Dependencies: B-01
 
-### Batch B-04 — Rewrite live_trace_verify.spec.ts (Test/Review) — Not Started
+### Batch B-04 — Rewrite live_trace_verify.spec.ts (Test/Review) — Done
 
 | Task | Description | Status |
 |---|---|---|
-| T-314 | Rewrite 4 tests using mocked graph_node events from `mockCompletedStream()`; reduce DONE_TIMEOUT to 15s; persistence test mocks SSE on initial load and after reload (also mock GET messages) | Not Started |
+| T-314 | Rewrite tests 1–3 using mocked graph_node events; reduce timeout to 15s; test 4 (persistence) kept as real Ollama with 60s timeout — requires real DB events for reload verification | Done |
 
 Dependencies: B-01
 
-### Batch B-05 — Mock slow test in tool_scenario_modal.spec.ts (Test/Review) — Not Started
+### Batch B-05 — Mock slow test in tool_scenario_modal.spec.ts (Test/Review) — Done
 
 | Task | Description | Status |
 |---|---|---|
-| T-315 | Replace the 1 real-Ollama test ("clicking a scenario card closes the modal and sends the prompt as a message") with `mockCompletedStream()` approach; keep the 4 fast UI-only tests unchanged | Not Started |
+| T-315 | Replace the 1 real-Ollama test ("clicking a scenario card closes the modal and sends the prompt as a message") with `mockCompletedStream()` approach; keep the 4 fast UI-only tests unchanged | Done |
 
 Dependencies: B-01
 
