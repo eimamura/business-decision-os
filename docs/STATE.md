@@ -31,11 +31,11 @@ P45 — Control-Agent-Only Routing
 
 ## Active Lease
 
-P45-B-02
+P45-B-03
 
 ## Last Completed
 
-P45-B-01 — Remove legacy agent roles: DOMAIN_AGENT_ROLES={"control"}, CROSS_DOMAIN_AGENT_CLASSES={} (2026-06-06)
+P45-B-02 — Simplify INTENT_REGISTRY + prompts: all intents → control (2026-06-06)
 
 ## Blockers
 

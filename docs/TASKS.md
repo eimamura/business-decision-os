@@ -888,12 +888,12 @@ Dependencies: P39 Done
 
 Dependencies: none
 
-### Batch B-02 — Simplify INTENT_REGISTRY + prompts (App Builder) — Not Started
+### Batch B-02 — Simplify INTENT_REGISTRY + prompts (App Builder) — Done
 
 | Task | Description | Status |
 |---|---|---|
-| T-321 | `packages/agent/orchestrator/intent_registry.py` — set `allowed_agent_roles=["control"]` for all non-chat intents (lookup, domain_analysis, cross_domain_analysis, decision_support, supply_chain); chat stays `[]` | Not Started |
-| T-322 | `packages/agent/orchestrator/prompts.py` — simplify `ROUTER_SYSTEM`, `PLAN_SYSTEM`, `DAG_SYSTEM` allowed agents to `"control"` only | Not Started |
+| T-321 | `packages/agent/orchestrator/intent_registry.py` — set `allowed_agent_roles=["control"]` for all non-chat intents (lookup, domain_analysis, cross_domain_analysis, decision_support, supply_chain); chat stays `[]` | Done |
+| T-322 | `packages/agent/orchestrator/prompts.py` — simplify `ROUTER_SYSTEM`, `PLAN_SYSTEM`, `DAG_SYSTEM` allowed agents to `"control"` only | Done |
 
 Dependencies: B-01
 

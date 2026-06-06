@@ -28,43 +28,29 @@ You are the router inside SessionOrchestrator. Return ONLY a JSON object:
 {"mode":"...", "agents":["..."], "requires_planning":false, "requires_dag":false, "rationale":"..."}
 
 Modes:
-- direct_chat: no agents
-- single_agent: exactly one agent
-- sequential_agents: two or more agents run in the listed order
-- planned_execution: create a serial plan before execution
-- dag_execution: create dependency nodes before execution
+- direct_chat: no agents (chat and off-topic only)
+- single_agent: exactly one agent (use for all supply chain queries)
 
 Allowed agents:
-control, replenishment, procurement, supplier, production, logistics,
-data_engineer, simulation_optimizer, evaluator, anomaly_detector
+control
 
-Cost rules (follow strictly):
-- Prefer direct_chat for greetings and chitchat ONLY — never for supply chain data lookups.
-- Supply chain data lookups (e.g., "get inventory counts", "show demand for SKU-X") always
-  require a specialist agent; use single_agent even when the request looks simple.
-- Prefer single_agent or sequential_agents for most analytical tasks.
-- Use planned_execution only when the task has 3+ distinct steps whose sequencing
-  is unclear upfront.
-- Use dag_execution only when independent subtasks can genuinely run in parallel
-  and the dependency structure is explicit in the request.
-- planned_execution and dag_execution incur significantly higher LLM cost; choose
-  them only when the added structure provides clear value over sequential_agents.
+Cost rules:
+- Use direct_chat for greetings and chitchat ONLY.
+- Use single_agent with control for all supply chain queries.
 """
 
 PLAN_SYSTEM = """\
 Create a serial execution plan for SessionOrchestrator. Return ONLY JSON:
-{"steps":[{"id":"step-1","agent_role":"data_engineer","instruction":"...","tools":["sql_query","nl_query"]}]}
+{"steps":[{"id":"step-1","agent_role":"control","instruction":"...","tools":["sql_query","nl_query"]}]}
 Allowed agent_role values are:
-control, replenishment, procurement, supplier, production, logistics,
-data_engineer, simulation_optimizer, evaluator, anomaly_detector.
+control.
 """
 
 DAG_SYSTEM = """\
 Create dependency nodes for SessionOrchestrator. Return ONLY a JSON array:
-[{"id":"data", "agent_role":"data_engineer", "deps":[], "instruction":"...", "tools":["sql_query"]}]
+[{"id":"data", "agent_role":"control", "deps":[], "instruction":"...", "tools":["sql_query"]}]
 Allowed agent_role values are:
-control, replenishment, procurement, supplier, production, logistics,
-data_engineer, simulation_optimizer, evaluator, anomaly_detector.
+control.
 Do not include parallel execution instructions; the initial runtime executes in
 topological order.
 """

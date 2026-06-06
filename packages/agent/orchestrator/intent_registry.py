@@ -23,14 +23,7 @@ INTENT_REGISTRY: dict[str, IntentConfig] = {
     "lookup": IntentConfig(
         description="Factual supply-chain question or data lookup",
         plan_prompt="Answer the user's factual question using available data tools.",
-        allowed_agent_roles=[
-            "data_engineer",
-            "replenishment",
-            "procurement",
-            "supplier",
-            "production",
-            "logistics",
-        ],
+        allowed_agent_roles=["control"],
         max_tool_calls=5,
     ),
     "domain_analysis": IntentConfig(
@@ -39,13 +32,7 @@ INTENT_REGISTRY: dict[str, IntentConfig] = {
             "Analyze the requested domain using appropriate analytical tools. "
             "Provide data-backed insights."
         ),
-        allowed_agent_roles=[
-            "replenishment",
-            "procurement",
-            "supplier",
-            "production",
-            "logistics",
-        ],
+        allowed_agent_roles=["control"],
         max_tool_calls=10,
     ),
     "cross_domain_analysis": IntentConfig(
@@ -54,15 +41,7 @@ INTENT_REGISTRY: dict[str, IntentConfig] = {
             "Coordinate analysis across multiple domains. "
             "Identify anomalies, root causes, and cross-domain effects."
         ),
-        allowed_agent_roles=[
-            "data_engineer",
-            "replenishment",
-            "procurement",
-            "supplier",
-            "production",
-            "logistics",
-            "anomaly_detector",
-        ],
+        allowed_agent_roles=["control"],
         max_tool_calls=15,
     ),
     "supply_chain": IntentConfig(
@@ -86,12 +65,7 @@ INTENT_REGISTRY: dict[str, IntentConfig] = {
             "Generate ranked decision candidates with KPI scores, "
             "risk assessment, and tradeoff explanation."
         ),
-        allowed_agent_roles=[
-            "replenishment",
-            "simulation_optimizer",
-            "evaluator",
-            "data_engineer",
-        ],
+        allowed_agent_roles=["control"],
         max_tool_calls=20,
     ),
 }
