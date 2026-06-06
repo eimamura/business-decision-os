@@ -10,6 +10,7 @@ from uuid import UUID, uuid4
 import openai
 from pydantic import BaseModel, Field
 
+from packages.memory.decision import DecisionMemoryStore
 from packages.memory.working import WorkingMemoryStore
 
 # ---------------------------------------------------------------------------
@@ -279,6 +280,7 @@ __all__ = [
     "DomainMemory",
     # Physical async implementations (P41-B-02+)
     "WorkingMemoryStore",
+    "DecisionMemoryStore",
     # Concrete implementations
     "PgVectorMemoryStore",
     "StubMemoryStore",

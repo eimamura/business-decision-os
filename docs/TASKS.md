@@ -779,14 +779,14 @@ WorkingMemory maps to existing DB tables: `agent_session`, `task_run`, `tool_res
 
 Dependencies: B-01
 
-### Batch B-03 — DecisionMemory physical implementation (App Builder) — Not Started
+### Batch B-03 — DecisionMemory physical implementation (App Builder) — Done
 
 DecisionMemory maps to `decision_log` (with `record_type` column distinguishing decisions from failures) and pgvector embeddings for past-case similarity search (stub in MVP; real pgvector in Post-MVP).
 
 | Task | Description | Status |
 |---|---|---|
-| T-294 | Alembic migration: `decision_log` table — `id`, `session_id`, `record_type` (decision / failure), `content_json TEXT`, `agent_role`, `created_at`; add index on `(session_id, record_type)` | Not Started |
-| T-295 | `packages/memory/decision.py` — `DecisionMemoryStore(DecisionMemory)` backed by `decision_log` repository; `write()` inserts record; `search()` returns recent records filtered by session_id + record_type (pgvector stub: full-table recency-ordered fallback in MVP) | Not Started |
+| T-294 | Alembic migration: `decision_log` table — `id`, `session_id`, `record_type` (decision / failure), `content_json TEXT`, `agent_role`, `created_at`; add index on `(session_id, record_type)` | Done |
+| T-295 | `packages/memory/decision.py` — `DecisionMemoryStore(DecisionMemory)` backed by `decision_log` repository; `write()` inserts record; `search()` returns recent records filtered by session_id + record_type (pgvector stub: full-table recency-ordered fallback in MVP) | Done |
 
 Dependencies: B-01
 
