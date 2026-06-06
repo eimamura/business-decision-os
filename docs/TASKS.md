@@ -594,6 +594,63 @@ Dependencies: B-01, B-02
 
 ---
 
+## P44 — Playwright Tests: Revert to Mock SSE
+
+**Goal:** Replace real Ollama calls in Playwright specs with `page.route()` mock SSE interceptors to make `make test-playwright` complete in under 2 minutes (down from 40+ minutes).
+
+Dependencies: P38-B-02 Done (P38-B-03 blocked on this phase completing first)
+
+### Batch B-01 — Shared mock SSE helper (Test/Review) — Done
+
+| Task | Description | Status |
+|---|---|---|
+| T-311 | Create `tests/e2e/playwright/sse-mock.ts` — `mockCompletedStream(page, sessionId, text)` (routes SSE stream: graph_node start/end + text_delta + response_ready + done; routes GET messages: returns [user, assistant] pair) and `mockAskUserStream(page, sessionId, opts)` (routes SSE: graph_node + ask_user_required + awaiting_input) | Done |
+
+Dependencies: none
+
+### Batch B-02 — Rewrite tool_scenario_bubbles.spec.ts (Test/Review) — Not Started
+
+| Task | Description | Status |
+|---|---|---|
+| T-312 | Rewrite all 5 tests using `mockCompletedStream()`; remove `OLLAMA_TIMEOUT`; reduce per-test timeout to 30s; keep all assertions (bubble visible, not empty, no text-red-400) | Not Started |
+
+Dependencies: B-01
+
+### Batch B-03 — Rewrite ask_user_flow.spec.ts (Test/Review) — Not Started
+
+| Task | Description | Status |
+|---|---|---|
+| T-313 | Rewrite 5 tests: tests 1–4 use `mockAskUserStream()` (inject ask_user_required event); test 5 (fully-specified, no ask) uses `mockCompletedStream()`; reduce ASK_USER_TIMEOUT and REPLY_TIMEOUT to 15s; keep all UI assertions | Not Started |
+
+Dependencies: B-01
+
+### Batch B-04 — Rewrite live_trace_verify.spec.ts (Test/Review) — Not Started
+
+| Task | Description | Status |
+|---|---|---|
+| T-314 | Rewrite 4 tests using mocked graph_node events from `mockCompletedStream()`; reduce DONE_TIMEOUT to 15s; persistence test mocks SSE on initial load and after reload (also mock GET messages) | Not Started |
+
+Dependencies: B-01
+
+### Batch B-05 — Mock slow test in tool_scenario_modal.spec.ts (Test/Review) — Not Started
+
+| Task | Description | Status |
+|---|---|---|
+| T-315 | Replace the 1 real-Ollama test ("clicking a scenario card closes the modal and sends the prompt as a message") with `mockCompletedStream()` approach; keep the 4 fast UI-only tests unchanged | Not Started |
+
+Dependencies: B-01
+
+### Batch B-06 — Quality gate (Test/Review) — Not Started
+
+| Task | Description | Status |
+|---|---|---|
+| T-316 | `make test-playwright` — all 7 spec files pass in under 2 minutes total | Not Started |
+| T-317 | `make test-unit` + `make lint` + `make typecheck` — all pass | Not Started |
+
+Dependencies: B-02, B-03, B-04, B-05
+
+---
+
 ## P39 — Supply Chain Control Agent (MVP Core)
 
 **Goal:** Build the Supply Chain Control Agent in `packages/agent/control/`. This is the cross-domain

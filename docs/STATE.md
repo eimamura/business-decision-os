@@ -23,18 +23,16 @@ See `docs/archive/v3/STATE.md` for P0–P23 per-phase details.
 
 ## Active Phase
 
-P38 — Architecture Realignment: Deactivate Specialist Agent Routing
+P44 — Playwright Tests: Revert to Mock SSE
+(P38-B-03 is paused: requires make test-playwright to pass; P44 makes the suite fast enough to unblock it)
 
 ## Active Lease
 
-P38-B-02
+P44-B-01
 
 ## Last Completed
 
-P37-B-05 — Quality gate: make test-playwright (2026-06-06)
-- `make test-playwright` → 29 tests passed (exit 0), 6 spec files
-- 3 test code fixes applied (timing, selector, prompt adjustments)
-- 2 flaky due to gpt-oss:20b cold-start — pass on retry, not blocking
+P38-B-02 — Update Tool Scenario UI: remove supply/finance/sop categories (2026-06-06)
 
 ## Blockers
 
