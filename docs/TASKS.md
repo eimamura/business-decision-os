@@ -49,6 +49,7 @@ Full task history for P0–P23 is archived at `docs/archive/v3/TASKS.md`.
 | P37 — Playwright E2E: Remove Mocks, Consolidate | T-258–T-265 | 2026-06-05 |
 | P38 — Architecture Realignment | T-266–T-271 | 2026-06-06 |
 | P44 — Playwright Tests: Revert to Mock SSE | T-311–T-317 | 2026-06-06 |
+| P39 — Supply Chain Control Agent (MVP Core) | T-273–T-280 | 2026-06-06 |
 
 > **Design Realignment Note (2026-06-05):** P29–P36 built Specialist Domain Agents (DemandAgent,
 > InventoryAgent, SupplyPlanningAgent, FinanceImpactAgent, SopAgent) as independent runtime units.
@@ -686,13 +687,13 @@ Remove multi-agent sequential planning logic introduced for the S&OP pipeline.
 
 Dependencies: B-01
 
-### Batch B-03 — Tests (Test/Review) — Not Started
+### Batch B-03 — Tests (Test/Review) — Done
 
 | Task | Description | Status |
 |---|---|---|
-| T-278 | Unit test: `ControlAgent` instantiates with role="control"; `_SYSTEM_PROMPT` references all supply chain domains (demand, inventory, supply, logistics, finance) | Not Started |
-| T-279 | Unit test: `INTENT_REGISTRY["supply_chain"]` routes to `allowed_agent_roles=["control"]`; ControlAgent tool allowlist contains sql_query + all domain calculation tools | Not Started |
-| T-280 | `make test-unit` + `make lint` + `make typecheck` | Not Started |
+| T-278 | Unit test: `ControlAgent` instantiates with role="control"; `_SYSTEM_PROMPT` references all supply chain domains (demand, inventory, supply, logistics, finance) | Done |
+| T-279 | Unit test: `INTENT_REGISTRY["supply_chain"]` routes to `allowed_agent_roles=["control"]`; ControlAgent tool allowlist contains sql_query + all domain calculation tools | Done |
+| T-280 | `make test-unit` + `make lint` + `make typecheck` | Done |
 
 Dependencies: B-01, B-02
 
