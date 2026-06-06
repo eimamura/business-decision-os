@@ -537,7 +537,7 @@ Dependencies: B-01
 
 Dependencies: B-01
 
-### Batch B-05 — Quality gate (Test/Review) — Not Started
+### Batch B-05 — Quality gate (Test/Review) — Done
 
 | Task | Description | Status |
 |---|---|---|

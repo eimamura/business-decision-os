@@ -23,17 +23,18 @@ See `docs/archive/v3/STATE.md` for P0–P23 per-phase details.
 
 ## Active Phase
 
-P37 — Playwright E2E: Remove Mocks, Consolidate
+P38 — Architecture Realignment: Deactivate Specialist Agent Routing
 
 ## Active Lease
 
-P37-B-05
+None
 
 ## Last Completed
 
-P36-B-02 — Playwright test update (2026-06-04)
-- `make build` → Build OK (exit 0)
-- `npx vitest run` → 56 tests passed (exit 0)
+P37-B-05 — Quality gate: make test-playwright (2026-06-06)
+- `make test-playwright` → 29 tests passed (exit 0), 6 spec files
+- 3 test code fixes applied (timing, selector, prompt adjustments)
+- 2 flaky due to gpt-oss:20b cold-start — pass on retry, not blocking
 
 ## Blockers
 
