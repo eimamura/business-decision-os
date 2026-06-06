@@ -38,7 +38,7 @@ def test_chat_skips_tool_loop() -> None:
 
 def test_all_intent_categories_registered() -> None:
     expected = {
-        "chat", "lookup", "domain_analysis", "cross_domain_analysis", "decision_support", "sop"
+        "chat", "lookup", "domain_analysis", "cross_domain_analysis", "decision_support"
     }
     assert set(INTENT_REGISTRY.keys()) == expected
 
@@ -51,7 +51,7 @@ def test_intent_config_is_frozen() -> None:
 
 def test_non_chat_intents_do_not_skip_tool_loop() -> None:
     for category in (
-        "lookup", "domain_analysis", "cross_domain_analysis", "decision_support", "sop"
+        "lookup", "domain_analysis", "cross_domain_analysis", "decision_support"
     ):
         config = get_intent_config(category)
         assert config.skip_tool_loop is False, (

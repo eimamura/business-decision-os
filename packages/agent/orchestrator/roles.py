@@ -8,16 +8,11 @@ from packages.agent.cross_domain import (
 )
 
 DOMAIN_AGENT_ROLES = {
-    "demand",
-    "inventory",
     "replenishment",
     "procurement",
     "supplier",
     "production",
     "logistics",
-    "supply_planning",
-    "finance_impact",
-    "sop",
 }
 
 CROSS_DOMAIN_AGENT_CLASSES: dict[str, type] = {

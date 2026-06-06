@@ -557,15 +557,15 @@ tools from P31–P34 remain registered and will be reused by the Control Agent.
 
 Dependencies: P37-B-05 (quality gate must pass before P38 starts)
 
-### Batch B-01 — Move specialist agent classes to deprecated/ + deactivate routing (App Builder) — Not Started
+### Batch B-01 — Move specialist agent classes to deprecated/ + deactivate routing (App Builder) — Done
 
 Agent class files are moved to `packages/agent/deprecated/` — kept intact for reference and potential
 Skill file conversion, but no longer imported or registered anywhere.
 
 | Task | Description | Status |
 |---|---|---|
-| T-266 | Create `packages/agent/deprecated/` and move `packages/agent/domain/demand.py`, `inventory.py`, `supply_planning.py`, `finance_impact.py`, `sop.py` into it; add `packages/agent/deprecated/__init__.py` (empty — do not re-export) | Not Started |
-| T-267 | Remove `"sop"` intent and S&OP-specific multi-agent plan routes from `packages/agent/orchestrator/intent_registry.py`; remove `"demand"`, `"inventory"`, `"supply_planning"`, `"finance_impact"`, `"sop"` from `DOMAIN_AGENT_ROLES` / `VALID_AGENT_ROLES` in `roles.py` and `SpecialistRole` Literal in `packages/agent/base.py`; remove all five from `create_domain_agents()` in `packages/agent/domain/__init__.py` | Not Started |
+| T-266 | Create `packages/agent/deprecated/` and move `packages/agent/domain/demand.py`, `inventory.py`, `supply_planning.py`, `finance_impact.py`, `sop.py` into it; add `packages/agent/deprecated/__init__.py` (empty — do not re-export) | Done |
+| T-267 | Remove `"sop"` intent and S&OP-specific multi-agent plan routes from `packages/agent/orchestrator/intent_registry.py`; remove `"demand"`, `"inventory"`, `"supply_planning"`, `"finance_impact"`, `"sop"` from `DOMAIN_AGENT_ROLES` / `VALID_AGENT_ROLES` in `roles.py` and `SpecialistRole` Literal in `packages/agent/base.py`; remove all five from `create_domain_agents()` in `packages/agent/domain/__init__.py` | Done |
 
 Dependencies: none
 

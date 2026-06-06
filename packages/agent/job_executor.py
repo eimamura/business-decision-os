@@ -106,8 +106,8 @@ async def execute_job(
     _role_by_type: dict[str, SpecialistRole] = {
         "simulate": "simulation_optimizer",
         "optimize": "simulation_optimizer",
-        "forecast": "demand",
-        "train_forecast": "demand",
+        "forecast": "data_engineer",
+        "train_forecast": "data_engineer",
     }
     _specialist_role: SpecialistRole = _role_by_type.get(job_type, "simulation_optimizer")
     ctx = ToolContext(

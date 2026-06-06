@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from packages.agent.domain.sop import SopAgent, _SYSTEM_PROMPT
+from packages.agent.deprecated.sop import SopAgent, _SYSTEM_PROMPT
 from packages.agent.llm import StubClaudeClient
 from packages.tools.base import ToolRegistry
 

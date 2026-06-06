@@ -17,7 +17,7 @@ def make_ctx() -> ToolContext:
     return ToolContext(
         session_id=uuid4(),
         agent_step_id=uuid4(),
-        specialist_role="inventory",
+        specialist_role="data_engineer",
         actor="test",
         correlation_id=uuid4(),
     )

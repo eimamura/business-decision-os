@@ -59,8 +59,8 @@ class QueryFlowStubClaudeClient(StubClaudeClient):
                 )
             if "single" in payload:
                 return _response(
-                    '{"mode":"single_agent","agents":["inventory"],"requires_planning":false,'
-                    '"requires_dag":false,"rationale":"Inventory only"}'
+                    '{"mode":"single_agent","agents":["replenishment"],"requires_planning":false,'
+                    '"requires_dag":false,"rationale":"Replenishment only"}'
                 )
             if "planned" in payload:
                 return _response(
@@ -171,7 +171,7 @@ async def test_single_agent_runs_only_selected_agent(stub_orchestrator):
     response = await orchestrator.run(uuid4(), SessionUserQuery(text="single inventory check"))
 
     assert response.mode == "single_agent"
-    assert list(response.agent_results) == ["inventory"]
+    assert list(response.agent_results) == ["replenishment"]
     event_types = [event["type"] for event in await _events(queue)]
     # P20: agent_started replaced by graph_node (kind="agent") events
     agent_nodes = [e for e in event_types if e == "graph_node"]

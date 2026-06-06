@@ -179,16 +179,16 @@ async def test_node_run_sequential_emits_response_ready() -> None:
             system = messages[0].content if messages else ""
             if "intent classifier" in system:
                 return _llm_resp(
-                    '{"category":"inventory_analysis","confidence":0.9,'
-                    '"rationale":"inventory","goal_text":"check inventory"}'
+                    '{"category":"domain_analysis","confidence":0.9,'
+                    '"rationale":"replenishment","goal_text":"check replenishment"}'
                 )
             if "router inside SessionOrchestrator" in system:
                 return _llm_resp(
-                    '{"mode":"single_agent","agents":["inventory"],'
+                    '{"mode":"single_agent","agents":["replenishment"],'
                     '"requires_planning":false,"requires_dag":false,"rationale":"single"}'
                 )
             # synthesize / specialist calls
-            return _llm_resp('{"reply":"Inventory is healthy.","sources":[]}')
+            return _llm_resp('{"reply":"Replenishment is healthy.","sources":[]}')
 
         async def stream(
             self,
@@ -218,15 +218,15 @@ async def test_node_run_sequential_emits_response_ready() -> None:
 
     mock_session_response = SessionResponse(
         mode="single_agent",
-        reply="Inventory is healthy.",
+        reply="Replenishment is healthy.",
         intent=SessionIntent(
-            category="inventory_analysis",
+            category="domain_analysis",
             confidence=0.9,
-            rationale="inventory",
+            rationale="replenishment",
         ),
         route=AgentRoute(
             mode="single_agent",
-            agents=["inventory"],
+            agents=["replenishment"],
             requires_planning=False,
             requires_dag=False,
             rationale="single",
