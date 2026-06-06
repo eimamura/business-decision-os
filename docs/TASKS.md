@@ -46,6 +46,9 @@ Full task history for P0–P23 is archived at `docs/archive/v3/TASKS.md`.
 | P34 — Inventory Agent Enhancement | T-235–T-243 | 2026-06-04 |
 | P35 — S&OP Agent & Orchestration | T-244–T-251 | 2026-06-04 |
 | P36 — Tool Scenario Prompts for S&OP Agents | T-252–T-257 | 2026-06-04 |
+| P37 — Playwright E2E: Remove Mocks, Consolidate | T-258–T-265 | 2026-06-05 |
+| P38 — Architecture Realignment | T-266–T-271 | 2026-06-06 |
+| P44 — Playwright Tests: Revert to Mock SSE | T-311–T-317 | 2026-06-06 |
 
 > **Design Realignment Note (2026-06-05):** P29–P36 built Specialist Domain Agents (DemandAgent,
 > InventoryAgent, SupplyPlanningAgent, FinanceImpactAgent, SopAgent) as independent runtime units.
@@ -583,12 +586,12 @@ have a valid route.
 
 Dependencies: B-01
 
-### Batch B-03 — Quality gate (Test/Review) — Not Started
+### Batch B-03 — Quality gate (Test/Review) — Done
 
 | Task | Description | Status |
 |---|---|---|
-| T-270 | `make test-unit` + `make lint` + `make typecheck` — all pass | Not Started |
-| T-271 | `make test-playwright` — all surviving Playwright specs pass with 5-category tool scenario modal | Not Started |
+| T-270 | `make test-unit` + `make lint` + `make typecheck` — all pass | Done |
+| T-271 | `make test-playwright` — all surviving Playwright specs pass with 5-category tool scenario modal | Done |
 
 Dependencies: B-01, B-02
 

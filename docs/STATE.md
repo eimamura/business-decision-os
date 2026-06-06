@@ -8,10 +8,7 @@ Full history archived at `docs/archive/v3/STATE.md`.
 
 ## Completed Phases
 
-P0–P36 (T-001–T-257) all Done.
-P37 — Playwright E2E: Remove Mocks, Consolidate — Done (2026-06-05; reversed by P44)
-P38 — Architecture Realignment — B-01, B-02 Done; B-03 in progress (quality gate)
-P44 — Playwright Tests: Revert to Mock SSE — Done (2026-06-06)
+P0–P38, P44 all Done (T-001–T-271, T-311–T-317).
 
 P32–P36 S&OP MVP (2026-06-04):
 - P32 — SupplyPlanningAgent + 5 supply tools (T-210–T-223)
@@ -20,21 +17,25 @@ P32–P36 S&OP MVP (2026-06-04):
 - P35 — SopAgent + "sop" intent (T-244–T-251)
 - P36 — Tool Scenario prompts for S&OP agents (T-252–T-257)
 
+P37 — Playwright E2E: Remove Mocks, Consolidate (2026-06-05; SSE-mock approach reversed by P44)
+P38 — Architecture Realignment: deactivate specialist routing, clean up Tool Scenario UI (2026-06-06)
+P44 — Playwright Tests: Revert to Mock SSE; 29 tests in 1.4 min (2026-06-06)
+
 See `docs/archive/v3/STATE.md` for P0–P23 per-phase details.
 
 ---
 
 ## Active Phase
 
-P38 — Architecture Realignment (B-03: quality gate)
+P39 — Supply Chain Control Agent (MVP Core)
 
 ## Active Lease
 
-P38-B-03
+None
 
 ## Last Completed
 
-P44-B-06 — Quality gate: all 29 Playwright tests pass in 1.4 min (2026-06-06)
+P38-B-03 — Quality gate: test-unit + lint + typecheck + test-playwright all pass (2026-06-06)
 
 ## Blockers
 
