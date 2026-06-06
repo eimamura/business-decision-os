@@ -19,6 +19,7 @@ SpecialistRole = Literal[
     "replenishment",
     "supplier",
     "logistics",
+    "control",
 ]
 
 

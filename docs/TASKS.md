@@ -664,13 +664,13 @@ finance).
 
 Dependencies: P38 Done
 
-### Batch B-01 — ControlAgent class (App Builder) — Not Started
+### Batch B-01 — ControlAgent class (App Builder) — Done
 
 | Task | Description | Status |
 |---|---|---|
-| T-273 | Create `packages/agent/control/__init__.py` and `packages/agent/control/control_agent.py` — `ControlAgent` class implementing the `Specialist` protocol; role="control"; system prompt covering cross-domain operational judgment (stockout risk, exceptions, shipment delays, supply gaps, root cause candidates, action priorities) | Not Started |
-| T-274 | Tool allowlist for ControlAgent in `packages/tools/base.py`: `["sql_query", "nl_query"]` + all calculation/analysis tools from P31–P34 (`profile_demand_data`, `analyze_demand_trend`, `evaluate_forecast_accuracy`, `detect_demand_anomalies`, `analyze_seasonality`, `analyze_demand_drivers`, `segment_demand`, `compare_demand_periods`, `calculate_supply_gap`, `get_open_supply_orders`, `analyze_supply_lead_time`, `calculate_days_of_supply`, `analyze_supply_risk`, `calculate_holding_cost_impact`, `calculate_stockout_cost_impact`, `calculate_expedite_cost`, `compare_cost_scenarios`, `calculate_days_of_inventory`, `calculate_stockout_risk`, `calculate_excess_inventory_risk`, `get_available_to_promise`) | Not Started |
-| T-275 | Register ControlAgent in `packages/agent/orchestrator/roles.py` — add `"control"` to agent role definitions; add `ControlAgent` to `create_domain_agents()` | Not Started |
+| T-273 | Create `packages/agent/control/__init__.py` and `packages/agent/control/control_agent.py` — `ControlAgent` class implementing the `Specialist` protocol; role="control"; system prompt covering cross-domain operational judgment (stockout risk, exceptions, shipment delays, supply gaps, root cause candidates, action priorities) | Done |
+| T-274 | Tool allowlist for ControlAgent in `packages/tools/base.py`: `["sql_query", "nl_query"]` + all calculation/analysis tools from P31–P34 (`profile_demand_data`, `analyze_demand_trend`, `evaluate_forecast_accuracy`, `detect_demand_anomalies`, `analyze_seasonality`, `analyze_demand_drivers`, `segment_demand`, `compare_demand_periods`, `calculate_supply_gap`, `get_open_supply_orders`, `analyze_supply_lead_time`, `calculate_days_of_supply`, `analyze_supply_risk`, `calculate_holding_cost_impact`, `calculate_stockout_cost_impact`, `calculate_expedite_cost`, `compare_cost_scenarios`, `calculate_days_of_inventory`, `calculate_stockout_risk`, `calculate_excess_inventory_risk`, `get_available_to_promise`) | Done |
+| T-275 | Register ControlAgent in `packages/agent/orchestrator/roles.py` — add `"control"` to agent role definitions; add `ControlAgent` to `create_domain_agents()` | Done |
 
 Dependencies: P38 Done
 

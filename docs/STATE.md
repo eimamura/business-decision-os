@@ -35,7 +35,7 @@ None
 
 ## Last Completed
 
-P38-B-03 — Quality gate: test-unit + lint + typecheck + test-playwright all pass (2026-06-06)
+P39-B-01 — ControlAgent class: control_agent.py + tool allowlist + role registration (2026-06-06)
 
 ## Blockers
 

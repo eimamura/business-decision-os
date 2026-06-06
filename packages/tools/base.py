@@ -48,6 +48,20 @@ _ROLE_TOOL_ALLOWLIST: dict[str, list[str]] = {
     "production": ["sql_query", "nl_query"],
     "logistics": ["sql_query", "nl_query"],
     "sop": ["sql_query", "nl_query"],
+    "control": [
+        "sql_query", "nl_query",
+        "profile_demand_data", "analyze_demand_trend",
+        "evaluate_forecast_accuracy", "detect_demand_anomalies",
+        "analyze_seasonality", "analyze_demand_drivers",
+        "segment_demand", "compare_demand_periods",
+        "calculate_supply_gap", "get_open_supply_orders",
+        "analyze_supply_lead_time", "calculate_days_of_supply",
+        "analyze_supply_risk",
+        "calculate_holding_cost_impact", "calculate_stockout_cost_impact",
+        "calculate_expedite_cost", "compare_cost_scenarios",
+        "calculate_days_of_inventory", "calculate_stockout_risk",
+        "calculate_excess_inventory_risk", "get_available_to_promise",
+    ],
 }
 
 
