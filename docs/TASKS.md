@@ -961,12 +961,12 @@ Dependencies: P41 Done (Memory Layer base classes)
 
 Dependencies: none
 
-### Batch B-02 — LongTermMemoryStore implementation (App Builder) — Not Started
+### Batch B-02 — LongTermMemoryStore implementation (App Builder) — Done
 
 | Task | Description | Status |
 |---|---|---|
-| T-332 | `packages/memory/long_term.py` — `LongTermMemoryStore` standalone async class (same pattern as `DecisionMemoryStore`); `write(record)` requires keys `memory_type`, `content`; optional `scope` (default `''`), `metadata` (default `{}`); parameterized INSERT; `search(query, k=5)` — parses `"type:<type>"` or `"scope:<scope>"` prefix to add WHERE filter; returns `list[dict]` with keys `id, memory_type, scope, content, metadata_json, created_at`; ORDER BY `created_at DESC LIMIT k` | Not Started |
-| T-333 | `packages/memory/__init__.py` — add `from packages.memory.long_term import LongTermMemoryStore` at top-level imports; add `"LongTermMemoryStore"` to `__all__` | Not Started |
+| T-332 | `packages/memory/long_term.py` — `LongTermMemoryStore` standalone async class (same pattern as `DecisionMemoryStore`); `write(record)` requires keys `memory_type`, `content`; optional `scope` (default `''`), `metadata` (default `{}`); parameterized INSERT; `search(query, k=5)` — parses `"type:<type>"` or `"scope:<scope>"` prefix to add WHERE filter; returns `list[dict]` with keys `id, memory_type, scope, content, metadata_json, created_at`; ORDER BY `created_at DESC LIMIT k` | Done |
+| T-333 | `packages/memory/__init__.py` — add `from packages.memory.long_term import LongTermMemoryStore` at top-level imports; add `"LongTermMemoryStore"` to `__all__` | Done |
 
 Dependencies: B-01
 

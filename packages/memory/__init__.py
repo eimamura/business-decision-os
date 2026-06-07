@@ -11,6 +11,7 @@ import openai
 from pydantic import BaseModel, Field
 
 from packages.memory.decision import DecisionMemoryStore
+from packages.memory.long_term import LongTermMemoryStore
 from packages.memory.working import WorkingMemoryStore
 
 # ---------------------------------------------------------------------------
@@ -281,6 +282,7 @@ __all__ = [
     # Physical async implementations (P41-B-02+)
     "WorkingMemoryStore",
     "DecisionMemoryStore",
+    "LongTermMemoryStore",
     # Concrete implementations
     "PgVectorMemoryStore",
     "StubMemoryStore",
