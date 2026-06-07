@@ -21,6 +21,7 @@ P37 — Playwright E2E: Remove Mocks, Consolidate (2026-06-05; SSE-mock approach
 P38 — Architecture Realignment: deactivate specialist routing, clean up Tool Scenario UI (2026-06-06)
 P44 — Playwright Tests: Revert to Mock SSE; 29 tests in 1.4 min (2026-06-06)
 P52 — LangChain ChatModel 移行 Phase 1: ModelRegistry + Structured Output (2026-06-07)
+P53 — LangChain ChatModel 移行 Phase 2: Planner + ControlAgent (2026-06-07)
 
 See `docs/archive/v3/STATE.md` for P0–P23 per-phase details.
 
@@ -28,7 +29,7 @@ See `docs/archive/v3/STATE.md` for P0–P23 per-phase details.
 
 ## Active Phase
 
-P53 — LangChain ChatModel Migration Phase 2: Planner + ControlAgent
+None
 
 ## Active Lease
 
