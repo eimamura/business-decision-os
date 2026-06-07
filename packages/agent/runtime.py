@@ -152,6 +152,7 @@ class AgentRuntime:
         sse_queue: Any = None,  # Any: asyncio.Queue not generically typeable at runtime
         system_prompt: str | None = None,
         output_builder: OutputBuilder | None = None,
+        model_registry: Any = None,  # Any: ModelRegistry | None — lazy import avoids circular dep
     ) -> None:
         self.name = name
         self.role = role
@@ -160,6 +161,10 @@ class AgentRuntime:
         self._sse_queue = sse_queue
         self._system_prompt = system_prompt or f"You are a {role} specialist."
         self._output_builder: OutputBuilder = output_builder or _default_output_builder(name)
+        self._model_registry = model_registry
+        self._lc_model: Any = (  # Any: BaseChatModel — avoid langchain_core circular import
+            model_registry.get("control") if model_registry is not None else None
+        )
 
     # ------------------------------------------------------------------
     # Node: call_model
@@ -186,13 +191,106 @@ class AgentRuntime:
                     attempt=attempt,
                     model=getattr(self._llm_client, "_model", "?"),
                 )
-                response = await self._llm_client.complete(
-                    messages=effective_messages,
-                    tools=llm_tools if llm_tools else None,
-                    temperature=0.0,
-                    agent_step_id=task.task_id,
-                    specialist_role=self.role,
-                )
+
+                if self._lc_model is not None:
+                    import types
+
+                    from langchain_core.messages import (
+                        AIMessage,
+                        HumanMessage,
+                        SystemMessage,
+                        ToolMessage,
+                    )
+
+                    # Convert LLMMessage list to LangChain message list
+                    lc_msgs: list[Any] = []
+                    if self._system_prompt:
+                        lc_msgs.append(SystemMessage(self._system_prompt))
+                    for m in effective_messages:
+                        if m.role == "system":
+                            lc_msgs.append(
+                                SystemMessage(
+                                    m.content if isinstance(m.content, str) else ""
+                                )
+                            )
+                        elif m.role == "user":
+                            lc_msgs.append(
+                                HumanMessage(
+                                    m.content if isinstance(m.content, str) else ""
+                                )
+                            )
+                        elif m.role == "assistant":
+                            lc_msgs.append(
+                                AIMessage(
+                                    content=(
+                                        m.content if isinstance(m.content, str) else ""
+                                    )
+                                )
+                            )
+                        elif m.role == "tool":
+                            # Extract tool_call_id from content_blocks if available
+                            tool_call_id = m.tool_call_id or ""
+                            has_blocks = hasattr(m, "content_blocks") and m.content_blocks
+                            if not tool_call_id and has_blocks:
+                                for block in m.content_blocks:
+                                    if block.get("type") == "tool_result":
+                                        tool_call_id = block.get("tool_use_id", "")
+                                        break
+                            lc_msgs.append(
+                                ToolMessage(
+                                    content=(
+                                        m.content if isinstance(m.content, str) else ""
+                                    ),
+                                    tool_call_id=tool_call_id,
+                                )
+                            )
+
+                    # Convert LLMToolSpec list to OpenAI function-format dicts for bind_tools
+                    tool_dicts = [
+                        {
+                            "type": "function",
+                            "function": {
+                                "name": t.name,
+                                "description": t.description,
+                                "parameters": t.input_schema,
+                            },
+                        }
+                        for t in llm_tools
+                    ] if llm_tools else []
+
+                    bound_model = (
+                        self._lc_model.bind_tools(tool_dicts) if tool_dicts else self._lc_model
+                    )
+                    ai_msg = await bound_model.ainvoke(lc_msgs)
+
+                    # Map AIMessage.tool_calls [{"name", "args", "id"}] → [{"name", "input", "id"}]
+                    mapped_tool_calls = [
+                        {"name": tc["name"], "id": tc["id"], "input": tc.get("args", {})}
+                        for tc in (ai_msg.tool_calls or [])
+                    ]
+
+                    usage_meta: dict[str, Any] = getattr(ai_msg, "usage_metadata", {}) or {}
+
+                    class _Usage:
+                        input_tokens: int = usage_meta.get("input_tokens", 0)
+                        output_tokens: int = usage_meta.get("output_tokens", 0)
+                        total_cost_usd: float = 0.0
+
+                    response = types.SimpleNamespace(
+                        text=str(ai_msg.content),
+                        tool_calls=mapped_tool_calls,
+                        finish_reason="tool_use" if mapped_tool_calls else "stop",
+                        usage=_Usage(),
+                        model=getattr(self._lc_model, "model", "langchain"),
+                    )
+                else:
+                    response = await self._llm_client.complete(
+                        messages=effective_messages,
+                        tools=llm_tools if llm_tools else None,
+                        temperature=0.0,
+                        agent_step_id=task.task_id,
+                        specialist_role=self.role,
+                    )
                 break
             except Exception as exc:
                 last_exc = exc
@@ -592,15 +690,21 @@ class AgentRuntime:
 
         _log.info("running verify_findings", agent_role=self.role)
         try:
-            verifier_response = await self._llm_client.complete(
-                messages=verifier_messages,
-                tools=None,
-                temperature=0.0,
-                max_tokens=256,
-                agent_step_id=ctx.agent_step_id,
-                specialist_role=self.role,
-            )
-            verify_status = _parse_verifier_status(verifier_response.text)
+            if self._lc_model is not None:
+                from langchain_core.messages import HumanMessage
+
+                ai_msg = await self._lc_model.ainvoke([HumanMessage(verifier_content)])
+                verify_status = _parse_verifier_status(str(ai_msg.content))
+            else:
+                verifier_response = await self._llm_client.complete(
+                    messages=verifier_messages,
+                    tools=None,
+                    temperature=0.0,
+                    max_tokens=256,
+                    agent_step_id=ctx.agent_step_id,
+                    specialist_role=self.role,
+                )
+                verify_status = _parse_verifier_status(verifier_response.text)
         except Exception:
             _log.exception(
                 "verify_findings LLM call failed; defaulting to pass",

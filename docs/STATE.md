@@ -32,11 +32,11 @@ P53 — LangChain ChatModel Migration Phase 2: Planner + ControlAgent
 
 ## Active Lease
 
-P53-B-02 — ControlAgent bind_tools migration
+P53-B-03 — Tests
 
 ## Last Completed
 
-P53-B-01 — Planner migration: 798 unit tests passed, lint + typecheck clean (2026-06-07)
+P53-B-02 — ControlAgent bind_tools migration: 798 unit tests passed, lint + typecheck clean (2026-06-07)
 
 ## Blockers
 

@@ -1077,13 +1077,13 @@ Dependencies: P52 Done
 
 Dependencies: none
 
-### Batch B-02 — ControlAgent bind_tools migration (App Builder) — Not Started
+### Batch B-02 — ControlAgent bind_tools migration (App Builder) — Done
 
 | Task | Description | Status |
 |---|---|---|
-| T-368 | `AgentRuntime.__init__` — add `model_registry: ModelRegistry \| None = None` parameter; store `self._lc_model: BaseChatModel \| None = model_registry.get("control") if model_registry else None` | Not Started |
-| T-369 | `_call_model_node()` — when `self._lc_model is not None`, build LangChain message list from `effective_messages`; call `self._lc_model.bind_tools(tool_dicts).ainvoke(lc_messages)`; map `AIMessage.tool_calls` `[{"name", "args", "id"}]` to existing `response.tool_calls` shape `[{"name", "input", "id"}]`; continue loop while `ai_msg.tool_calls` is non-empty; break when empty (analogous to `finish_reason == "stop"`); keep full legacy path when `_lc_model is None` | Not Started |
-| T-370 | `_verify_findings_node()` — when `self._lc_model is not None`, call `self._lc_model.ainvoke([HumanMessage(verifier_content)])` and extract `.content` for `_parse_verifier_status()`; keep legacy fallback | Not Started |
+| T-368 | `AgentRuntime.__init__` — add `model_registry: ModelRegistry \| None = None` parameter; store `self._lc_model: BaseChatModel \| None = model_registry.get("control") if model_registry else None` | Done |
+| T-369 | `_call_model_node()` — when `self._lc_model is not None`, build LangChain message list from `effective_messages`; call `self._lc_model.bind_tools(tool_dicts).ainvoke(lc_messages)`; map `AIMessage.tool_calls` `[{"name", "args", "id"}]` to existing `response.tool_calls` shape `[{"name", "input", "id"}]`; continue loop while `ai_msg.tool_calls` is non-empty; break when empty (analogous to `finish_reason == "stop"`); keep full legacy path when `_lc_model is None` | Done |
+| T-370 | `_verify_findings_node()` — when `self._lc_model is not None`, call `self._lc_model.ainvoke([HumanMessage(verifier_content)])` and extract `.content` for `_parse_verifier_status()`; keep legacy fallback | Done |
 
 Dependencies: B-01
 
