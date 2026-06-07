@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useCallback } from "react";
+import { ClipboardIcon, CheckIcon } from "lucide-react";
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeSanitize from "rehype-sanitize";
@@ -101,10 +102,25 @@ export default function AssistantBubble({
   const handleCopy = useCallback(async (): Promise<void> => {
     await navigator.clipboard.writeText(message.content);
     setCopied(true);
-    setTimeout(() => {
-      setCopied(false);
-    }, 2000);
+    setTimeout(() => setCopied(false), 2000);
   }, [message.content]);
+
+  const copyAction =
+    !message.isStreaming && !!message.content && !message.isError ? (
+      <button
+        type="button"
+        onClick={handleCopy}
+        aria-label={copied ? "copied" : "copy response"}
+        title={copied ? "Copied!" : "Copy"}
+        className="text-white/30 hover:text-white/65 transition-colors"
+      >
+        {copied ? (
+          <CheckIcon className="h-3.5 w-3.5" />
+        ) : (
+          <ClipboardIcon className="h-3.5 w-3.5" />
+        )}
+      </button>
+    ) : undefined;
 
   const avatar = (
     <span className="text-[10px] text-white font-bold tracking-tight">AI</span>
@@ -113,19 +129,9 @@ export default function AssistantBubble({
   if (!message.isError && isAnalysisCard(message.content)) {
     return (
       <div className="flex flex-col items-start">
-        <BubbleShell side="left" avatar={avatar} timestamp={message.created_at}>
+        <BubbleShell side="left" avatar={avatar} timestamp={message.created_at} actions={copyAction}>
           <AnalysisCard message={message} />
         </BubbleShell>
-        {!message.isStreaming && !!message.content && !message.isError && (
-          <button
-            type="button"
-            aria-label={copied ? "copied" : "copy response"}
-            onClick={handleCopy}
-            className="text-xs text-white/40 hover:text-white/70 transition-colors ml-10 mt-0.5"
-          >
-            {copied ? "Copied!" : "Copy"}
-          </button>
-        )}
         {!message.isStreaming && message.messageId && onFeedback && (
           <FeedbackBar
             messageId={message.messageId}
@@ -143,6 +149,7 @@ export default function AssistantBubble({
         side="left"
         avatar={avatar}
         timestamp={message.created_at}
+        actions={copyAction}
       >
         <div
           className={`rounded-2xl px-4 py-2.5 text-sm bg-[#1a1a2a] rounded-tl-sm ${
@@ -171,16 +178,6 @@ export default function AssistantBubble({
           ) : null}
         </div>
       </BubbleShell>
-      {!message.isStreaming && !!message.content && !message.isError && (
-        <button
-          type="button"
-          aria-label={copied ? "copied" : "copy response"}
-          onClick={handleCopy}
-          className="text-xs text-white/40 hover:text-white/70 transition-colors ml-10 mt-0.5"
-        >
-          {copied ? "Copied!" : "Copy"}
-        </button>
-      )}
       {!message.isStreaming && message.messageId && onFeedback && (
         <FeedbackBar
           messageId={message.messageId}

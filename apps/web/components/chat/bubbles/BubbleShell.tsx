@@ -9,6 +9,7 @@ export interface BubbleShellProps {
   avatarBg?: string;
   children: React.ReactNode;
   timestamp?: string;
+  actions?: React.ReactNode;
   maxWidth?: string;
 }
 
@@ -19,6 +20,7 @@ export default function BubbleShell({
   avatarBg = "bg-[#0c0c14]",
   children,
   timestamp,
+  actions,
   maxWidth = "max-w-[78%]",
 }: BubbleShellProps): React.JSX.Element {
   const avatarCircle = (
@@ -37,10 +39,15 @@ export default function BubbleShell({
         {avatarCircle}
         <div className={`${maxWidth} flex flex-col items-start`}>
           {children}
-          {timestamp && (
-            <p className="text-xs mt-1 text-white/45">
-              {new Date(timestamp).toLocaleTimeString()}
-            </p>
+          {(timestamp ?? actions) && (
+            <div className="flex items-center gap-1.5 mt-1">
+              {timestamp && (
+                <span className="text-xs text-white/45">
+                  {new Date(timestamp).toLocaleTimeString()}
+                </span>
+              )}
+              {actions}
+            </div>
           )}
         </div>
       </div>
@@ -51,10 +58,15 @@ export default function BubbleShell({
     <div className="flex justify-end">
       <div className={`${maxWidth} flex flex-col items-end`}>
         {children}
-        {timestamp && (
-          <p className="text-xs mt-1 text-indigo-300">
-            {new Date(timestamp).toLocaleTimeString()}
-          </p>
+        {(timestamp ?? actions) && (
+          <div className="flex items-center gap-1.5 mt-1">
+            {timestamp && (
+              <span className="text-xs text-indigo-300">
+                {new Date(timestamp).toLocaleTimeString()}
+              </span>
+            )}
+            {actions}
+          </div>
         )}
       </div>
       {avatarCircle}
