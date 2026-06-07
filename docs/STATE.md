@@ -37,7 +37,7 @@ None
 
 ## Last Completed
 
-P54-B-02 — Remove legacy fallback paths: 806 passed, lint + typecheck clean (2026-06-07)
+P54-B-03/B-04 — LLMClient/ClaudeClient/OllamaClient deleted, tests updated: 753 passed, lint + typecheck clean (2026-06-07)
 
 ## Blockers
 

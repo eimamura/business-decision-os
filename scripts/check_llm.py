@@ -20,8 +20,10 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import re
 import sys
 from pathlib import Path
+from typing import Any
 
 # Load .env from project root so this works without docker.
 env_path = Path(__file__).parent.parent / ".env"
@@ -35,19 +37,26 @@ if env_path.exists():
 # Add project root to path so packages can be imported.
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from packages.agent.llm import LLMMessage, LLMToolSpec, create_llm_client  # noqa: E402
+from langchain_core.messages import (  # noqa: E402
+    AIMessage,
+    HumanMessage,
+    SystemMessage,
+    ToolMessage,
+)
 
-_TOOL = LLMToolSpec(
-    name="calculate_stockout_risk",
-    description="Calculate stockout risk for a SKU given current inventory and demand.",
-    input_schema={
+from packages.agent.model_registry import create_model_registry  # noqa: E402
+
+_TOOL_DICT: dict[str, Any] = {
+    "name": "calculate_stockout_risk",
+    "description": "Calculate stockout risk for a SKU given current inventory and demand.",
+    "parameters": {
         "type": "object",
         "properties": {
             "sku_id": {"type": "string", "description": "Product SKU identifier"},
         },
         "required": ["sku_id"],
     },
-)
+}
 
 _SYSTEM = (
     "You are a supply chain analyst. "
@@ -59,83 +68,53 @@ def _label(ok: bool) -> str:
     return "✓ PASS" if ok else "✗ FAIL"
 
 
-async def check_basic(client: object) -> bool:
+async def check_basic(model: Any) -> bool:
     """Model responds to a simple question."""
-    resp = await client.complete(  # type: ignore[attr-defined]
-        messages=[
-            LLMMessage(role="system", content=_SYSTEM),
-            LLMMessage(role="user", content="Reply with the single word: READY"),
-        ],
-        tools=None,
-    )
-    return bool(resp.text and resp.text.strip())
+    msg: AIMessage = await model.ainvoke([
+        SystemMessage(_SYSTEM),
+        HumanMessage("Reply with the single word: READY"),
+    ])
+    return bool(str(msg.content).strip())
 
 
-async def check_function_calling(client: object) -> bool:
+async def check_function_calling(model: Any) -> bool:
     """Model calls a tool instead of generating an apology."""
-    resp = await client.complete(  # type: ignore[attr-defined]
-        messages=[
-            LLMMessage(role="system", content=_SYSTEM),
-            LLMMessage(role="user", content="What is the stockout risk for SKU-001?"),
-        ],
-        tools=[_TOOL],
-    )
-    return bool(resp.tool_calls)
+    bound = model.bind_tools([_TOOL_DICT])
+    msg: AIMessage = await bound.ainvoke([
+        SystemMessage(_SYSTEM),
+        HumanMessage("What is the stockout risk for SKU-001?"),
+    ])
+    return bool(msg.tool_calls)
 
 
-async def check_multi_turn(client: object) -> bool:
+async def check_multi_turn(model: Any) -> bool:
     """Model produces a coherent final answer after receiving a tool result."""
+    bound = model.bind_tools([_TOOL_DICT])
+
     # Round 1: model should call the tool
-    resp1 = await client.complete(  # type: ignore[attr-defined]
-        messages=[
-            LLMMessage(role="system", content=_SYSTEM),
-            LLMMessage(role="user", content="What is the stockout risk for SKU-001?"),
-        ],
-        tools=[_TOOL],
-    )
-    if not resp1.tool_calls:
+    msg1: AIMessage = await bound.ainvoke([
+        SystemMessage(_SYSTEM),
+        HumanMessage("What is the stockout risk for SKU-001?"),
+    ])
+    if not msg1.tool_calls:
         return False  # function calling already failed — skip
 
-    call = resp1.tool_calls[0]
+    call = msg1.tool_calls[0]
     tool_result_content = json.dumps(
         {"sku_id": "SKU-001", "risk_level": "high", "days_of_supply": 3}
     )
 
     # Round 2: inject tool result and ask for a final answer
-    resp2 = await client.complete(  # type: ignore[attr-defined]
-        messages=[
-            LLMMessage(role="system", content=_SYSTEM),
-            LLMMessage(role="user", content="What is the stockout risk for SKU-001?"),
-            LLMMessage(
-                role="assistant",
-                content=resp1.text or "",
-                content_blocks=[
-                    *(
-                        [{"type": "text", "text": resp1.text}]
-                        if resp1.text
-                        else []
-                    ),
-                    {
-                        "type": "tool_use",
-                        "id": call["id"],
-                        "name": call["name"],
-                        "input": call.get("input", {}),
-                    },
-                ],
-            ),
-            LLMMessage(
-                role="tool",
-                content=tool_result_content,
-                tool_call_id=call["id"],
-                tool_name=call["name"],
-            ),
-        ],
-        tools=[_TOOL],
-    )
-    return bool(resp2.text and resp2.text.strip() and not resp2.tool_calls)
+    msg2: AIMessage = await bound.ainvoke([
+        SystemMessage(_SYSTEM),
+        HumanMessage("What is the stockout risk for SKU-001?"),
+        msg1,
+        ToolMessage(content=tool_result_content, tool_call_id=call["id"]),
+    ])
+    return bool(str(msg2.content).strip() and not msg2.tool_calls)
 
 
-async def check_json_output(client: object) -> bool:
+async def check_json_output(model: Any) -> bool:
     """Model returns valid JSON when asked for structured output (no tools).
 
     Intent classification and routing both require the model to respond with a
@@ -145,31 +124,21 @@ async def check_json_output(client: object) -> bool:
       via Ollama's OpenAI-compat endpoint — the actual JSON never lands in content
     - Models that output only <think> blocks with no follow-up JSON
     """
-    import re
-
-    resp = await client.complete(  # type: ignore[attr-defined]
-        messages=[
-            LLMMessage(
-                role="system",
-                content=(
-                    "You are a classifier. "
-                    "Always respond with a JSON object only — no prose, no markdown fences. "
-                    'Example: {"label": "positive", "score": 0.9}'
-                ),
+    msg: AIMessage = await model.ainvoke(
+        [
+            SystemMessage(
+                "You are a classifier. "
+                "Always respond with a JSON object only — no prose, no markdown fences. "
+                'Example: {"label": "positive", "score": 0.9}'
             ),
-            LLMMessage(
-                role="user",
-                content=(
-                    'Classify the sentiment of: "I love this product!"\n'
-                    'Respond with {"label": "positive"|"negative"|"neutral", "score": <float 0-1>}'
-                ),
+            HumanMessage(
+                'Classify the sentiment of: "I love this product!"\n'
+                'Respond with {"label": "positive"|"negative"|"neutral", "score": <float 0-1>}'
             ),
         ],
-        tools=None,
-        temperature=0.0,
-        max_tokens=128,
     )
-    if not resp.text:
+    text = str(msg.content).strip()
+    if not text:
         print(
             "\n    [!] Model returned empty text. If using Ollama, this may be a Qwen3 "
             "thinking model (e.g. qwen3.5:2b) that puts output in 'reasoning' rather "
@@ -178,7 +147,6 @@ async def check_json_output(client: object) -> bool:
             end="",
         )
         return False
-    text = resp.text.strip()
     # strip <think>...</think> blocks (non-thinking output should follow)
     text = re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL).strip()
     if not text:
@@ -220,14 +188,15 @@ async def main() -> int:
     print(f"\nLLM backend: {label}\n")
 
     try:
-        client = create_llm_client()
+        registry = create_model_registry()
+        model = registry.get("control")
     except RuntimeError as exc:
-        print(f"  [!] Cannot create LLM client: {exc}")
+        print(f"  [!] Cannot create model registry: {exc}")
         return 1
 
     results: list[tuple[str, bool | str]] = []
 
-    checks: list[tuple[str, object]] = [
+    checks: list[tuple[str, Any]] = [
         ("1. Basic completion      ", check_basic),
         ("2. Function calling      ", check_function_calling),
         ("3. Multi-turn loop       ", check_multi_turn),
@@ -237,7 +206,7 @@ async def main() -> int:
     for name, fn in checks:
         print(f"  {name}... ", end="", flush=True)
         try:
-            ok = await fn(client)  # type: ignore[operator]
+            ok = await fn(model)
             print(_label(ok))
             results.append((name, ok))
         except Exception as exc:

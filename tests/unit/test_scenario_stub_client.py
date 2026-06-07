@@ -1,15 +1,12 @@
-"""Unit tests for ScenarioStubClaudeClient (T-059) and MOCK_LLM env var (T-060)."""
+"""Unit tests for ScenarioStubClaudeClient (T-059)."""
 from __future__ import annotations
 
 import json
-
-import pytest
 
 from packages.agent.llm import (
     LLMMessage,
     LLMToolSpec,
     ScenarioStubClaudeClient,
-    create_llm_client,
 )
 
 
@@ -71,19 +68,3 @@ async def test_stream_yields_text_delta() -> None:
     assert "Mock mode" in events[0]["data"]
 
 
-def test_create_llm_client_mock_llm_true_returns_scenario_stub(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setenv("MOCK_LLM", "true")
-    client = create_llm_client()
-    assert isinstance(client, ScenarioStubClaudeClient)
-
-
-def test_create_llm_client_mock_llm_false_requires_api_key(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.delenv("MOCK_LLM", raising=False)
-    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
-    monkeypatch.delenv("LLM_PROVIDER", raising=False)
-    with pytest.raises(RuntimeError, match="ANTHROPIC_API_KEY"):
-        create_llm_client()

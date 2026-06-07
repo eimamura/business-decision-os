@@ -13,7 +13,7 @@ import apps.api.routers.decisions as decision_router
 import apps.api.routers.sessions as session_router
 from apps.api.main import app
 from apps.api.state import Broadcaster, broadcasters, sessions
-from packages.agent.llm import create_llm_client
+from packages.agent.model_registry import create_model_registry
 from packages.agent.orchestrator import (
     AgentRoute,
     SessionIntent,
@@ -317,6 +317,5 @@ def test_contract_missing_anthropic_key_raises_runtime_error(
 ) -> None:
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
     monkeypatch.delenv("LLM_PROVIDER", raising=False)
-    monkeypatch.delenv("MOCK_LLM", raising=False)
     with pytest.raises(RuntimeError, match="ANTHROPIC_API_KEY"):
-        create_llm_client()
+        create_model_registry()

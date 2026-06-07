@@ -1,111 +1,12 @@
 from __future__ import annotations
 
-import warnings
-from decimal import Decimal
 from uuid import uuid4
 
 import pytest
 from fastapi.testclient import TestClient
 
-from packages.agent.llm import (
-    BudgetedClaudeClient,
-    BudgetGuard,
-    BudgetHardLimitError,
-    BudgetSoftLimitWarning,
-    LLMMessage,
-    LLMResponse,
-    LLMUsage,
-    StubClaudeClient,
-)
 from packages.persistence.notifications_repo import NotificationsRepository
 from packages.persistence.policies_repo import PoliciesRepository
-
-# ---------------------------------------------------------------------------
-# BudgetGuard
-# ---------------------------------------------------------------------------
-
-
-def test_budget_guard_accumulates():
-    guard = BudgetGuard(soft_limit_usd=Decimal("1.0"), hard_limit_usd=Decimal("2.0"))
-    guard.check_and_accumulate(Decimal("0.5"))
-    assert guard.accumulated_cost == Decimal("0.5")
-
-
-def test_budget_guard_no_warning_below_soft():
-    guard = BudgetGuard(soft_limit_usd=Decimal("1.0"), hard_limit_usd=Decimal("2.0"))
-    with warnings.catch_warnings(record=True) as w:
-        warnings.simplefilter("always")
-        guard.check_and_accumulate(Decimal("0.5"))
-    assert len(w) == 0
-
-
-def test_budget_guard_soft_limit_warning():
-    guard = BudgetGuard(soft_limit_usd=Decimal("1.0"), hard_limit_usd=Decimal("2.0"))
-    with warnings.catch_warnings(record=True) as w:
-        warnings.simplefilter("always")
-        guard.check_and_accumulate(Decimal("1.0"))
-    assert len(w) == 1
-    assert issubclass(w[0].category, BudgetSoftLimitWarning)
-
-
-def test_budget_guard_hard_limit_raises():
-    guard = BudgetGuard(soft_limit_usd=Decimal("1.0"), hard_limit_usd=Decimal("2.0"))
-    guard.check_and_accumulate(Decimal("1.5"))
-    with pytest.raises(BudgetHardLimitError):
-        guard.check_and_accumulate(Decimal("0.6"))
-
-
-def test_budget_guard_none_limits_no_error():
-    guard = BudgetGuard(soft_limit_usd=None, hard_limit_usd=None)
-    guard.check_and_accumulate(Decimal("999.99"))
-    assert guard.accumulated_cost == Decimal("999.99")
-
-
-def test_budget_guard_hard_limit_message():
-    guard = BudgetGuard(soft_limit_usd=None, hard_limit_usd=Decimal("1.0"))
-    with pytest.raises(BudgetHardLimitError, match="hard limit"):
-        guard.check_and_accumulate(Decimal("1.5"))
-
-
-# ---------------------------------------------------------------------------
-# BudgetedClaudeClient
-# ---------------------------------------------------------------------------
-
-
-async def test_budgeted_client_accumulates_on_complete():
-    inner = StubClaudeClient()
-    guard = BudgetGuard(soft_limit_usd=Decimal("100"), hard_limit_usd=Decimal("200"))
-    client = BudgetedClaudeClient(inner=inner, guard=guard)
-    messages = [LLMMessage(role="user", content="hello")]
-    await client.complete(messages)
-    assert guard.accumulated_cost == Decimal("0")
-
-
-async def test_budgeted_client_raises_on_hard_limit():
-    _inner = StubClaudeClient()
-
-    class FakeInner(StubClaudeClient):
-        async def complete(self, *args, **kwargs) -> LLMResponse:
-            usage = LLMUsage(
-                input_tokens=1000,
-                output_tokens=1000,
-                total_cost_usd=Decimal("1.5"),
-            )
-            return LLMResponse(
-                text="x",
-                tool_calls=[],
-                finish_reason="stop",
-                usage=usage,
-                model="stub",
-                request_id="r1",
-                latency_ms=0,
-            )
-
-    guard = BudgetGuard(soft_limit_usd=None, hard_limit_usd=Decimal("1.0"))
-    client = BudgetedClaudeClient(inner=FakeInner(), guard=guard)
-    messages = [LLMMessage(role="user", content="hello")]
-    with pytest.raises(BudgetHardLimitError):
-        await client.complete(messages)
 
 
 # ---------------------------------------------------------------------------

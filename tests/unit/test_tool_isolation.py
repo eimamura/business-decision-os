@@ -123,23 +123,6 @@ class PlanningStubClaudeClient(StubClaudeClient):
         return await super().complete(messages, **kwargs)
 
 
-class SQLStubClaudeClient(StubClaudeClient):
-    def __init__(self, sql: str) -> None:
-        super().__init__()
-        self._sql = sql
-
-    async def complete(self, messages, **kwargs) -> LLMResponse:
-        return LLMResponse(
-            text=self._sql,
-            tool_calls=[],
-            finish_reason="stop",
-            usage=LLMUsage(input_tokens=0, output_tokens=0, total_cost_usd=Decimal("0")),
-            model="stub",
-            request_id=str(uuid4()),
-            latency_ms=0,
-        )
-
-
 # ===== T-1001: StubClaudeClient =====
 
 async def test_stub_client_complete_returns_schema_conformant():

@@ -1126,22 +1126,22 @@ Dependencies: none
 
 Dependencies: B-01
 
-### Batch B-03 — Delete LLMClient, ClaudeClient, OllamaClient (App Builder) — Not Started
+### Batch B-03 — Delete LLMClient, ClaudeClient, OllamaClient (App Builder) — Done
 
 | Task | Description | Status |
 |---|---|---|
-| T-381 | `packages/agent/llm/__init__.py` — delete `ClaudeClient` class (~lines 351–634); remove from `__all__` if present | Not Started |
-| T-382 | `packages/agent/llm/__init__.py` — delete `OllamaClient` class and `_normalize_llm_text` module-level helper (~lines 635–913); remove from `__all__` if present | Not Started |
-| T-383 | `packages/agent/llm/__init__.py` — delete `LLMClient(Protocol)` class (~lines 131–172) and `create_llm_client()` factory (~lines 914+); remove from `__all__`; keep `LLMMessage`, `LLMToolSpec`, `LLMResponse`, `LLMUsage`, `LLMStreamEvent`, `StubClaudeClient`, `ScenarioStubClaudeClient` | Not Started |
+| T-381 | `packages/agent/llm/__init__.py` — delete `ClaudeClient` class (~lines 351–634); remove from `__all__` if present | Done |
+| T-382 | `packages/agent/llm/__init__.py` — delete `OllamaClient` class and `_normalize_llm_text` module-level helper (~lines 635–913); remove from `__all__` if present | Done |
+| T-383 | `packages/agent/llm/__init__.py` — delete `LLMClient(Protocol)` class (~lines 131–172) and `create_llm_client()` factory (~lines 914+); remove from `__all__`; keep `LLMMessage`, `LLMToolSpec`, `LLMResponse`, `LLMUsage`, `LLMStreamEvent`, `StubClaudeClient`, `ScenarioStubClaudeClient` | Done |
 
 Dependencies: B-02
 
-### Batch B-04 — Tests (Test/Review) — Not Started
+### Batch B-04 — Tests (Test/Review) — Done
 
 | Task | Description | Status |
 |---|---|---|
-| T-384 | Update `tests/unit/test_tool_isolation.py` line ~366: replace `NlQueryTool(llm_client=SQLStubClaudeClient(...))` with `NlQueryTool(model=mock_model)` where `mock_model` is a `MagicMock(spec=BaseChatModel)` with `ainvoke = AsyncMock(return_value=AIMessage(content="SELECT pg_sleep(10)"))` | Not Started |
-| T-385 | `make test-unit && make lint && make typecheck` — all pass | Not Started |
+| T-384 | Update `tests/unit/test_tool_isolation.py` line ~366: replace `NlQueryTool(llm_client=SQLStubClaudeClient(...))` with `NlQueryTool(model=mock_model)` where `mock_model` is a `MagicMock(spec=BaseChatModel)` with `ainvoke = AsyncMock(return_value=AIMessage(content="SELECT pg_sleep(10)"))` | Done |
+| T-385 | `make test-unit && make lint && make typecheck` — all pass | Done |
 
 Dependencies: B-03
 
