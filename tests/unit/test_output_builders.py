@@ -12,7 +12,13 @@ from packages.agent.cross_domain.simulation_optimizer import (
 from packages.agent.llm import LLMMessage, LLMResponse, LLMUsage
 from packages.agent.orchestrator.models import SpecialistTask
 from packages.agent.runtime import AgentRuntime, _default_output_builder
-from tests.unit.helpers import RecordingLLMClient, make_llm_usage, make_stop_response
+from tests.unit.helpers import (
+    FakeLCModel,
+    RecordingLLMClient,
+    make_llm_usage,
+    make_model_registry,
+    make_stop_response,
+)
 
 # Unit tests for T-006: output builder extraction from AgentRuntime.
 
@@ -102,12 +108,15 @@ def test_default_output_builder_none_response_gives_empty_text() -> None:
 
 async def test_agent_runtime_default_builder_produces_text_and_specialist() -> None:
     """AgentRuntime with no custom output_builder should include 'text' and 'specialist'."""
-    llm = RecordingLLMClient([make_stop_response("Analysis complete."), make_stop_response("pass")])
+    from unittest.mock import MagicMock
+
+    lc_model = FakeLCModel([make_stop_response("Analysis complete."), make_stop_response("pass")])
     runtime = AgentRuntime(
         name="generic_agent",
         role="inventory",
-        llm_client=llm,
+        llm_client=MagicMock(),
         tool_registry=_FakeToolRegistry(),
+        model_registry=make_model_registry(lc_model),
     )
     task = _make_task()
     ctx = _FakeToolContext()
@@ -121,13 +130,16 @@ async def test_agent_runtime_default_builder_produces_text_and_specialist() -> N
 async def test_agent_runtime_default_builder_no_simulation_branching() -> None:
     """AgentRuntime with role='simulation_optimizer' but no custom output_builder
     must NOT produce {'candidates': ...} — it should use the default builder."""
-    llm = RecordingLLMClient([make_stop_response("No candidates here."), make_stop_response("pass")])
+    from unittest.mock import MagicMock
+
+    lc_model = FakeLCModel([make_stop_response("No candidates here."), make_stop_response("pass")])
     runtime = AgentRuntime(
         name="sim_agent",
         role="simulation_optimizer",
-        llm_client=llm,
+        llm_client=MagicMock(),
         tool_registry=_FakeToolRegistry(),
         # No custom output_builder — intentionally omitted to confirm no branching
+        model_registry=make_model_registry(lc_model),
     )
     task = _make_task()
     ctx = _FakeToolContext()
@@ -279,11 +291,14 @@ async def test_simulation_optimizer_agent_returns_candidates() -> None:
     final_response = make_stop_response("Optimization done.")
     verifier_response = make_stop_response("pass")
 
-    llm = RecordingLLMClient([tool_call_response, final_response, verifier_response])
+    from unittest.mock import MagicMock
+
+    lc_model = FakeLCModel([tool_call_response, final_response, verifier_response])
 
     agent = SimulationOptimizerAgent(
-        llm_client=llm,
+        llm_client=MagicMock(),
         tool_registry=_OptimizeToolRegistry(),
+        model_registry=make_model_registry(lc_model),
     )
     task = SpecialistTask(
         task_id=uuid4(),

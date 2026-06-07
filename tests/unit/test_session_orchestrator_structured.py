@@ -69,20 +69,14 @@ async def test_select_execution_mode_uses_structured_output_when_registry_provid
     assert result.mode == "direct_chat"
 
 
-async def test_classify_intent_falls_back_to_llm_client_when_no_registry():
+async def test_classify_intent_raises_when_no_registry():
+    """classify_intent must raise AttributeError when model_registry is None (no fallback)."""
+    import pytest
+
     from packages.agent.orchestrator.models import SessionUserQuery
 
-    response_text = '{"category": "analysis", "confidence": 0.8, "rationale": "x"}'
-    llm_response = MagicMock()
-    llm_response.text = response_text
-    llm_client = MagicMock()
-    llm_client.complete = AsyncMock(return_value=llm_response)
-
     orchestrator = _make_orchestrator(model_registry=None)
-    orchestrator._llm_client = llm_client
 
     query = SessionUserQuery(text="fallback test")
-    result = await orchestrator.classify_intent(query, uuid4())
-
-    llm_client.complete.assert_called_once()
-    assert result.category == "analysis"
+    with pytest.raises(AttributeError):
+        await orchestrator.classify_intent(query, uuid4())

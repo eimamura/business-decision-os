@@ -166,30 +166,14 @@ async def test_verify_findings_uses_lc_model_when_set() -> None:
     assert result["status"] == "completed"
 
 
-async def test_call_model_node_falls_back_to_llm_client_when_no_lc_model() -> None:
-    """_call_model_node calls _llm_client.complete when _lc_model is None."""
+async def test_call_model_node_raises_runtime_error_when_no_lc_model() -> None:
+    """_call_model_node raises RuntimeError when _lc_model is None (legacy fallback removed)."""
+    import pytest
+
+    from langgraph.errors import GraphInterrupt
+
     runtime = _make_runtime()
     runtime._lc_model = None
-
-    import types
-    from decimal import Decimal
-
-    fake_usage = types.SimpleNamespace(
-        input_tokens=0,
-        output_tokens=0,
-        total_cost_usd=Decimal("0"),
-    )
-    fake_response = types.SimpleNamespace(
-        text="",
-        tool_calls=[],
-        finish_reason="stop",
-        usage=fake_usage,
-        model="test",
-    )
-
-    llm_client = MagicMock()
-    llm_client.complete = AsyncMock(return_value=fake_response)
-    runtime._llm_client = llm_client
 
     state = _make_agent_state()
     config: dict[str, Any] = {
@@ -199,6 +183,5 @@ async def test_call_model_node_falls_back_to_llm_client_when_no_lc_model() -> No
         }
     }
 
-    await runtime._call_model_node(state, config)  # type: ignore[arg-type]
-
-    llm_client.complete.assert_called_once()
+    with pytest.raises(RuntimeError, match="AgentRuntime requires model_registry"):
+        await runtime._call_model_node(state, config)  # type: ignore[arg-type]

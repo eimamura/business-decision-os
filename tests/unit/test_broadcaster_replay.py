@@ -233,11 +233,29 @@ async def test_node_run_sequential_emits_response_ready() -> None:
         ),
     )
 
+    from packages.agent.orchestrator.models import AgentRoute, AskUserDecision, SessionIntent
+    from tests.unit.helpers import MultiRoleModelRegistry, StructuredOutputFakeModel
+
+    # domain_analysis intent requires AskUserDecision before routing to single_agent
+    broadcaster_orchestrator_model = StructuredOutputFakeModel([
+        SessionIntent(
+            category="domain_analysis", confidence=0.9,
+            rationale="replenishment", goal_text="check replenishment",
+        ),
+        AskUserDecision(needs_input=False, question=None, suggestions=None),
+        AgentRoute(
+            mode="single_agent", agents=["control"],
+            requires_planning=False, requires_dag=False, rationale="single",
+        ),
+    ])
+    broadcaster_registry = MultiRoleModelRegistry({"orchestrator": broadcaster_orchestrator_model})
+
     orchestrator = SessionOrchestrator(
         llm_client=_SequentialLLMClient(),
         tool_registry=create_tool_registry(),
         memory_store=StubMemoryStore(),
         sse_queue=_CaptureBroadcaster(),
+        model_registry=broadcaster_registry,
     )
 
     with (

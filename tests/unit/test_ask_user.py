@@ -8,6 +8,8 @@ from uuid import UUID, uuid4
 
 from packages.agent.llm import LLMMessage, LLMResponse, LLMStreamEvent, LLMToolSpec, LLMUsage
 from packages.agent.orchestrator.ask_user import build_ask_user_event, is_analytical_intent
+from packages.agent.orchestrator.models import AgentRoute, AskUserDecision, SessionIntent
+from tests.unit.helpers import MultiRoleModelRegistry, StructuredOutputFakeModel
 
 _SESSION_ID = UUID("12345678-1234-5678-1234-567812345678")
 
@@ -151,10 +153,25 @@ def _make_orchestrator(llm_client: Any) -> Any:
     from packages.memory import StubMemoryStore
     from packages.tools import create_tool_registry
 
+    # domain_analysis is an analytical intent — requires AskUserDecision before routing
+    orchestrator_model = StructuredOutputFakeModel([
+        SessionIntent(
+            category="domain_analysis", confidence=0.9,
+            rationale="sufficient context", goal_text="analyze inventory",
+        ),
+        AskUserDecision(needs_input=False, question=None, suggestions=None),
+        AgentRoute(
+            mode="direct_chat", agents=[],
+            requires_planning=False, requires_dag=False, rationale="chat",
+        ),
+    ])
+    registry = MultiRoleModelRegistry({"orchestrator": orchestrator_model})
+
     return SessionOrchestrator(
         llm_client=llm_client,
         tool_registry=create_tool_registry(),
         memory_store=StubMemoryStore(),
+        model_registry=registry,
     )
 
 

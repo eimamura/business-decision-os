@@ -10,6 +10,8 @@ import pytest
 from typing import AsyncIterator
 
 from packages.agent.llm import LLMMessage, LLMResponse, LLMStreamEvent, LLMToolSpec, LLMUsage
+from packages.agent.orchestrator.models import AgentRoute, AskUserDecision, SessionIntent
+from tests.unit.helpers import MultiRoleModelRegistry, StructuredOutputFakeModel
 
 
 def _make_llm_response(text: str) -> LLMResponse:
@@ -75,15 +77,40 @@ class _AskUserYesLLMClient:
         return _gen()
 
 
-def _make_orchestrator(llm_client: Any) -> Any:
+def _make_orchestrator(llm_client: Any, needs_input: bool = True) -> Any:
+    """Build a SessionOrchestrator with a model_registry that returns domain_analysis intent.
+
+    When needs_input=True, AskUserDecision triggers a GraphInterrupt.
+    When needs_input=False, the graph flows through to routing.
+    """
     from packages.agent.orchestrator import SessionOrchestrator
     from packages.memory import StubMemoryStore
     from packages.tools import create_tool_registry
+
+    # domain_analysis is an analytical intent — _node_prepare_ask_user fires
+    ask_decision = AskUserDecision(
+        needs_input=needs_input,
+        question="What date range should I analyze?" if needs_input else None,
+        suggestions=["Last 30 days", "Q1 2025", "Last 12 months"] if needs_input else None,
+    )
+    orchestrator_model = StructuredOutputFakeModel([
+        SessionIntent(
+            category="domain_analysis", confidence=0.9,
+            rationale="needs date range", goal_text="analyze inventory",
+        ),
+        ask_decision,
+        AgentRoute(
+            mode="direct_chat", agents=[],
+            requires_planning=False, requires_dag=False, rationale="resumed",
+        ),
+    ])
+    registry = MultiRoleModelRegistry({"orchestrator": orchestrator_model})
 
     return SessionOrchestrator(
         llm_client=llm_client,
         tool_registry=create_tool_registry(),
         memory_store=StubMemoryStore(),
+        model_registry=registry,
     )
 
 
@@ -93,40 +120,27 @@ async def test_prepare_ask_user_clamps_suggestions_to_three() -> None:
 
     from langgraph.errors import GraphInterrupt
 
-    from packages.agent.orchestrator import SessionUserQuery
+    from packages.agent.orchestrator import SessionOrchestrator, SessionUserQuery
+    from packages.memory import StubMemoryStore
+    from packages.tools import create_tool_registry
 
-    class _FiveSuggestionsLLMClient:
-        """Returns needs_input=true with 5 suggestions — must be clamped to 3."""
-
-        _model = "stub"
-
-        async def complete(
-            self,
-            messages: list[LLMMessage],
-            tools: Any = None,
-            temperature: float = 0.0,
-            max_tokens: int = 4096,
-            prompt_cache: bool = True,
-            agent_step_id: Any = None,
-            specialist_role: Any = None,
-        ) -> LLMResponse:
-            system = messages[0].content if messages else ""
-            if "information-gathering" in system:
-                return _make_llm_response(
-                    '{"needs_input": true, "question": "Which SKU?",'
-                    ' "suggestions": ["A", "B", "C", "D", "E"]}'
-                )
-            if "intent classifier" in system:
-                return _make_llm_response(
-                    '{"category":"domain_analysis","confidence":0.9,'
-                    '"rationale":"needs sku","goal_text":"analyze sku"}'
-                )
-            if "router inside SessionOrchestrator" in system:
-                return _make_llm_response(
-                    '{"mode":"direct_chat","agents":[],'
-                    '"requires_planning":false,"requires_dag":false,"rationale":"resumed"}'
-                )
-            return _make_llm_response("Done.")
+    # AskUserDecision with 5 suggestions — must be clamped to 3 by the node
+    orchestrator_model = StructuredOutputFakeModel([
+        SessionIntent(
+            category="domain_analysis", confidence=0.9,
+            rationale="needs sku", goal_text="analyze sku",
+        ),
+        AskUserDecision(
+            needs_input=True,
+            question="Which SKU?",
+            suggestions=["A", "B", "C", "D", "E"],
+        ),
+        AgentRoute(
+            mode="direct_chat", agents=[],
+            requires_planning=False, requires_dag=False, rationale="resumed",
+        ),
+    ])
+    registry = MultiRoleModelRegistry({"orchestrator": orchestrator_model})
 
     captured_event: dict[str, Any] = {}
 
@@ -135,7 +149,12 @@ async def test_prepare_ask_user_clamps_suggestions_to_three() -> None:
             if event.get("type") == "ask_user_required":
                 captured_event.update(event)
 
-    orchestrator = _make_orchestrator(_FiveSuggestionsLLMClient())
+    orchestrator = SessionOrchestrator(
+        llm_client=_AskUserYesLLMClient(),
+        tool_registry=create_tool_registry(),
+        memory_store=StubMemoryStore(),
+        model_registry=registry,
+    )
     orchestrator._sse_queue = _CapturingSseQueue()  # type: ignore[assignment]
     session_id = uuid4()
     query = SessionUserQuery(text="Analyze SKU data")
@@ -261,7 +280,29 @@ async def test_ask_user_non_analytical_passes_through() -> None:
 
             return _gen()
 
-    orchestrator = _make_orchestrator(_ChatLLMClient())
+    from packages.agent.orchestrator import SessionOrchestrator
+    from packages.memory import StubMemoryStore
+    from packages.tools import create_tool_registry
+
+    # chat intent — ask_user node is skipped
+    chat_orchestrator_model = StructuredOutputFakeModel([
+        SessionIntent(
+            category="chat", confidence=0.95,
+            rationale="greeting", goal_text=None,
+        ),
+        AgentRoute(
+            mode="direct_chat", agents=[],
+            requires_planning=False, requires_dag=False, rationale="chat",
+        ),
+    ])
+    chat_registry = MultiRoleModelRegistry({"orchestrator": chat_orchestrator_model})
+
+    orchestrator = SessionOrchestrator(
+        llm_client=_ChatLLMClient(),
+        tool_registry=create_tool_registry(),
+        memory_store=StubMemoryStore(),
+        model_registry=chat_registry,
+    )
     session_id = uuid4()
     query = SessionUserQuery(text="Hello!")
 

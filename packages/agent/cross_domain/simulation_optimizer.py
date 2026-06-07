@@ -25,6 +25,7 @@ class SimulationOptimizerAgent(AgentBasedSpecialist):
         llm_client: Any,
         tool_registry: Any,
         sse_queue: Any = None,
+        model_registry: Any = None,
     ) -> None:
         super().__init__(
             name="simulation_optimizer",
@@ -34,4 +35,5 @@ class SimulationOptimizerAgent(AgentBasedSpecialist):
             sse_queue=sse_queue,
             system_prompt=_SYSTEM_PROMPT,
             output_builder=_simulation_optimizer_output_builder,
+            model_registry=model_registry,
         )

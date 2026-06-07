@@ -32,15 +32,22 @@ def _default_tools(agent_role: str) -> list[str]:
 
 
 def _make_agent(orchestrator: Any, agent_role: str) -> Any:
+    model_registry = getattr(orchestrator, "_model_registry", None)
     if agent_role in CROSS_DOMAIN_AGENT_CLASSES:
         return CROSS_DOMAIN_AGENT_CLASSES[agent_role](
-            orchestrator._llm_client, orchestrator._tool_registry, orchestrator._sse_queue
+            orchestrator._llm_client,
+            orchestrator._tool_registry,
+            orchestrator._sse_queue,
+            model_registry=model_registry,
         )
     if agent_role in DOMAIN_AGENT_ROLES:
         from packages.agent.domain import create_domain_agents
 
         for agent in create_domain_agents(
-            orchestrator._llm_client, orchestrator._tool_registry, sse_queue=orchestrator._sse_queue
+            orchestrator._llm_client,
+            orchestrator._tool_registry,
+            sse_queue=orchestrator._sse_queue,
+            model_registry=model_registry,
         ):
             if agent.role == agent_role:
                 return agent

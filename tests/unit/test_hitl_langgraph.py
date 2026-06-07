@@ -16,7 +16,12 @@ from uuid import uuid4
 from packages.agent.llm import LLMMessage, LLMResponse, LLMToolSpec
 from packages.agent.orchestrator.models import SpecialistTask
 from packages.agent.runtime import AgentRuntime, AgentState
-from tests.unit.helpers import make_llm_usage, make_stop_response
+from tests.unit.helpers import (
+    FakeLCModel,
+    make_llm_usage,
+    make_model_registry,
+    make_stop_response,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -159,16 +164,19 @@ def _build_system_messages() -> list[LLMMessage]:
 
 async def test_hitl_graph_suspends_at_wait_for_approval() -> None:
     """After the LLM requests a HITL tool, the graph must suspend with __interrupt__."""
+    from unittest.mock import MagicMock
+
     tool_input = {"action_summary": "Reorder 500 units of SKU-A"}
-    llm = _SequenceLLMClient([_tool_use_response("request_approval", tool_input)])
+    lc_model = FakeLCModel([_tool_use_response("request_approval", tool_input)])
     registry = _FakeToolRegistry([_FakeHITLTool()])
     runtime = AgentRuntime(
         name="test_agent",
         role="data_engineer",
-        llm_client=llm,
+        llm_client=MagicMock(),
         tool_registry=registry,
         sse_queue=None,
         system_prompt="You are a test specialist.",
+        model_registry=make_model_registry(lc_model),
     )
     task = _make_task()
     ctx = _FakeToolContext()
@@ -218,16 +226,19 @@ async def test_hitl_graph_suspends_at_wait_for_approval() -> None:
 
 async def test_hitl_approvals_create_called_exactly_once() -> None:
     """ApprovalsRepository.create must be called exactly once — not twice — during HITL."""
+    from unittest.mock import MagicMock
+
     tool_input = {"action_summary": "Critical shipment release"}
-    llm = _SequenceLLMClient([_tool_use_response("request_approval", tool_input)])
+    lc_model = FakeLCModel([_tool_use_response("request_approval", tool_input)])
     registry = _FakeToolRegistry([_FakeHITLTool()])
     runtime = AgentRuntime(
         name="test_agent",
         role="data_engineer",
-        llm_client=llm,
+        llm_client=MagicMock(),
         tool_registry=registry,
         sse_queue=None,
         system_prompt="You are a test specialist.",
+        model_registry=make_model_registry(lc_model),
     )
     task = _make_task()
     ctx = _FakeToolContext()
@@ -307,18 +318,22 @@ async def test_hitl_resume_calls_execute_job() -> None:
         async def handle(self, input: dict[str, Any], ctx: Any) -> Any:
             raise AssertionError("handle() must not be called for a HITL tool")
 
-    llm = _SequenceLLMClient([
+    from unittest.mock import MagicMock
+
+    lc_model = FakeLCModel([
         _tool_use_response("job_dispatch", tool_input),
         make_stop_response("Simulation job dispatched successfully."),
+        make_stop_response("pass"),
     ])
     registry = _FakeToolRegistry([_FakeJobDispatchTool()])
     runtime = AgentRuntime(
         name="test_agent",
         role="data_engineer",
-        llm_client=llm,
+        llm_client=MagicMock(),
         tool_registry=registry,
         sse_queue=None,
         system_prompt="You are a test specialist.",
+        model_registry=make_model_registry(lc_model),
     )
     task = SpecialistTask(
         task_id=uuid.uuid4(),
@@ -456,18 +471,22 @@ async def test_hitl_handle_never_called_on_resume() -> None:
             handle_calls.append(True)
             raise AssertionError("handle() must not be called for a HITL tool")
 
-    llm = _SequenceLLMClient([
+    from unittest.mock import MagicMock
+
+    lc_model = FakeLCModel([
         _tool_use_response("job_dispatch", tool_input),
         make_stop_response("Action completed."),
+        make_stop_response("pass"),
     ])
     registry = _FakeToolRegistry([_SentinelJobDispatchTool()])
     runtime = AgentRuntime(
         name="test_agent",
         role="data_engineer",
-        llm_client=llm,
+        llm_client=MagicMock(),
         tool_registry=registry,
         sse_queue=None,
         system_prompt="You are a test specialist.",
+        model_registry=make_model_registry(lc_model),
     )
     task = SpecialistTask(
         task_id=uuid.uuid4(),

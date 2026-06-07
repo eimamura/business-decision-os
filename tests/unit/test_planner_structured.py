@@ -105,17 +105,12 @@ async def test_create_task_nodes_uses_dag_plan_when_registry_provided() -> None:
     assert all(isinstance(n, TaskNode) for n in result)
 
 
-async def test_create_execution_plan_falls_back_to_llm_client_when_no_registry() -> None:
-    """create_execution_plan falls back to _llm_client.complete when _model_registry is None."""
-    response_text = '{"steps": []}'
-    llm_response = MagicMock()
-    llm_response.text = response_text
-    llm_client = MagicMock()
-    llm_client.complete = AsyncMock(return_value=llm_response)
+async def test_create_execution_plan_raises_when_no_registry() -> None:
+    """create_execution_plan raises AttributeError when _model_registry is None (no fallback)."""
+    import pytest
 
     orchestrator = _MockOrchestrator()
-    orchestrator._model_registry = None
-    orchestrator._llm_client = llm_client
+    orchestrator._model_registry = None  # type: ignore[assignment]
 
     query = _make_query()
     intent = _make_intent()
@@ -126,24 +121,16 @@ async def test_create_execution_plan_falls_back_to_llm_client_when_no_registry()
         "packages.persistence.agent_steps_repo.make_step",
         AsyncMock(return_value="step-1"),
     ):
-        result = await create_execution_plan(orchestrator, session_id, query, intent, route)
-
-    llm_client.complete.assert_called_once()
-    assert isinstance(result, ExecutionPlan)
-    assert result.steps == []
+        with pytest.raises(AttributeError):
+            await create_execution_plan(orchestrator, session_id, query, intent, route)
 
 
-async def test_create_task_nodes_falls_back_to_llm_client_when_no_registry() -> None:
-    """create_task_nodes falls back to _llm_client.complete when _model_registry is None."""
-    response_text = "[]"
-    llm_response = MagicMock()
-    llm_response.text = response_text
-    llm_client = MagicMock()
-    llm_client.complete = AsyncMock(return_value=llm_response)
+async def test_create_task_nodes_raises_when_no_registry() -> None:
+    """create_task_nodes raises AttributeError when _model_registry is None (no fallback)."""
+    import pytest
 
     orchestrator = _MockOrchestrator()
-    orchestrator._model_registry = None
-    orchestrator._llm_client = llm_client
+    orchestrator._model_registry = None  # type: ignore[assignment]
 
     query = _make_query()
     intent = _make_intent()
@@ -154,8 +141,5 @@ async def test_create_task_nodes_falls_back_to_llm_client_when_no_registry() -> 
         "packages.persistence.agent_steps_repo.make_step",
         AsyncMock(return_value="step-1"),
     ):
-        result = await create_task_nodes(orchestrator, session_id, query, intent, route)
-
-    llm_client.complete.assert_called_once()
-    assert isinstance(result, list)
-    assert result == []
+        with pytest.raises(AttributeError):
+            await create_task_nodes(orchestrator, session_id, query, intent, route)

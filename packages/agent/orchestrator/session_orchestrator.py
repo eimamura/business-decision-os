@@ -27,7 +27,6 @@ from packages.agent.orchestrator.models import (
 from packages.agent.orchestrator.parsing import (
     LLMResponseParseError,
     _iso_now,
-    _json_obj,
     json_safe,
 )
 from packages.agent.orchestrator.prompts import ASK_USER_SYSTEM, INTENT_SYSTEM, ROUTER_SYSTEM
@@ -153,74 +152,36 @@ class SessionOrchestrator:
         asyncio.create_task(_persist())
 
     async def classify_intent(self, query: SessionUserQuery, session_id: UUID) -> SessionIntent:
-        from packages.agent.llm import LLMMessage
+        from langchain_core.messages import HumanMessage, SystemMessage
+
         from packages.persistence.agent_steps_repo import make_step
 
-        step_id = await make_step(str(session_id), "intent_classification")
-
-        if self._model_registry is not None:
-            from langchain_core.messages import HumanMessage, SystemMessage
-
-            model = self._model_registry.get("orchestrator")
-            result = await model.with_structured_output(SessionIntent).ainvoke(
-                [SystemMessage(INTENT_SYSTEM), HumanMessage(self._query_text(query))]
-            )
-            return result  # type: ignore[return-value]
-
-        # fallback: legacy LLMClient path
-        response = await self._llm_client.complete(
-            messages=[
-                LLMMessage(role="system", content=INTENT_SYSTEM),
-                LLMMessage(role="user", content=self._query_text(query)),
-            ],
-            tools=None,
-            temperature=0.0,
-            max_tokens=512,
-            prompt_cache=False,
-            specialist_role="orchestrator",
-            agent_step_id=step_id,
+        _ = await make_step(str(session_id), "intent_classification")
+        model = self._model_registry.get("orchestrator")  # type: ignore[union-attr]
+        result = await model.with_structured_output(SessionIntent).ainvoke(
+            [SystemMessage(INTENT_SYSTEM), HumanMessage(self._query_text(query))]
         )
-        return SessionIntent(**_json_obj(response.text))
+        return result  # type: ignore[return-value]
 
     async def select_execution_mode(
         self, query: SessionUserQuery, intent: SessionIntent, session_id: UUID
     ) -> AgentRoute:
-        from packages.agent.llm import LLMMessage
+        from langchain_core.messages import HumanMessage, SystemMessage
+
         from packages.persistence.agent_steps_repo import make_step
 
-        step_id = await make_step(str(session_id), "routing")
+        _ = await make_step(str(session_id), "routing")
         user_content = _json.dumps(
             {
                 "query": self._query_text(query),
                 "intent": intent.model_dump(),
             }
         )
-
-        if self._model_registry is not None:
-            from langchain_core.messages import HumanMessage, SystemMessage
-
-            model = self._model_registry.get("orchestrator")
-            result = await model.with_structured_output(AgentRoute).ainvoke(
-                [SystemMessage(ROUTER_SYSTEM), HumanMessage(user_content)]
-            )
-            route = cast(AgentRoute, result)
-            self._validate_route(route)
-            return route
-
-        # fallback: legacy LLMClient path
-        response = await self._llm_client.complete(
-            messages=[
-                LLMMessage(role="system", content=ROUTER_SYSTEM),
-                LLMMessage(role="user", content=user_content),
-            ],
-            tools=None,
-            temperature=0.0,
-            max_tokens=512,
-            prompt_cache=False,
-            specialist_role="orchestrator",
-            agent_step_id=step_id,
+        model = self._model_registry.get("orchestrator")  # type: ignore[union-attr]
+        result = await model.with_structured_output(AgentRoute).ainvoke(
+            [SystemMessage(ROUTER_SYSTEM), HumanMessage(user_content)]
         )
-        route = AgentRoute(**_json_obj(response.text))
+        route = cast(AgentRoute, result)
         self._validate_route(route)
         return route
 
@@ -256,44 +217,15 @@ class SessionOrchestrator:
             "intent": intent.model_dump(),
         })
 
-        needs_input: bool
-        question: str | None
-        raw_suggestions: list[str]
+        from langchain_core.messages import HumanMessage, SystemMessage
 
-        if self._model_registry is not None:
-            from langchain_core.messages import HumanMessage, SystemMessage
-
-            model = self._model_registry.get("orchestrator")
-            decision = await model.with_structured_output(AskUserDecision).ainvoke(
-                [SystemMessage(ASK_USER_SYSTEM), HumanMessage(user_content)]
-            )
-            needs_input = decision.needs_input  # type: ignore[union-attr]
-            question = decision.question  # type: ignore[union-attr]
-            raw_suggestions = decision.suggestions or []  # type: ignore[union-attr]
-        else:
-            # fallback: legacy LLMClient path
-            from packages.agent.llm import LLMMessage
-
-            response = await self._llm_client.complete(
-                messages=[
-                    LLMMessage(role="system", content=ASK_USER_SYSTEM),
-                    LLMMessage(role="user", content=user_content),
-                ],
-                tools=None,
-                temperature=0.0,
-                max_tokens=256,
-                prompt_cache=False,
-                specialist_role="orchestrator",
-                agent_step_id=None,
-            )
-
-            try:
-                parsed = _json_obj(response.text)
-                needs_input = bool(parsed.get("needs_input", False))
-                question = parsed.get("question")
-                raw_suggestions = parsed.get("suggestions") or []
-            except Exception:
-                return {}
+        model = self._model_registry.get("orchestrator")  # type: ignore[union-attr]
+        decision = await model.with_structured_output(AskUserDecision).ainvoke(
+            [SystemMessage(ASK_USER_SYSTEM), HumanMessage(user_content)]
+        )
+        needs_input: bool = decision.needs_input  # type: ignore[union-attr]
+        question: str | None = decision.question  # type: ignore[union-attr]
+        raw_suggestions: list[str] = decision.suggestions or []  # type: ignore[union-attr]
 
         if not needs_input or not question:
             return {}

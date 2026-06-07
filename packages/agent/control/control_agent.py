@@ -89,6 +89,7 @@ class ControlAgent(AgentBasedSpecialist):
         llm_client: Any,
         tool_registry: Any,
         sse_queue: Any = None,
+        model_registry: Any = None,
     ) -> None:
         super().__init__(
             name="ControlAgent",
@@ -97,6 +98,7 @@ class ControlAgent(AgentBasedSpecialist):
             tool_registry=tool_registry,
             sse_queue=sse_queue,
             system_prompt=self._SYSTEM_PROMPT,
+            model_registry=model_registry,
         )
 
     async def run(

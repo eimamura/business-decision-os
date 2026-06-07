@@ -36,6 +36,7 @@ class AgentBasedSpecialist:
         sse_queue: Any = None,
         system_prompt: str | None = None,
         output_builder: OutputBuilder | None = None,
+        model_registry: Any = None,
     ) -> None:
         self.name = name
         self.role = role
@@ -47,6 +48,7 @@ class AgentBasedSpecialist:
             sse_queue=sse_queue,
             system_prompt=system_prompt,
             output_builder=output_builder,
+            model_registry=model_registry,
         )
 
     async def run(

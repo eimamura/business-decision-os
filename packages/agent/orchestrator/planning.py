@@ -23,7 +23,6 @@ from packages.agent.orchestrator.models import (
     SpecialistResult,
     TaskNode,
 )
-from packages.agent.orchestrator.parsing import _json_array, _json_obj
 from packages.agent.orchestrator.prompts import DAG_SYSTEM, PLAN_SYSTEM
 from packages.agent.orchestrator.roles import VALID_AGENT_ROLES
 
@@ -69,10 +68,13 @@ async def create_execution_plan(
     intent: SessionIntent,
     route: AgentRoute,
 ) -> ExecutionPlan:
-    from packages.agent.llm import LLMMessage
+    from typing import cast
+
+    from langchain_core.messages import HumanMessage, SystemMessage
+
     from packages.persistence.agent_steps_repo import make_step
 
-    step_id = await make_step(str(session_id), "planning")
+    _ = await make_step(str(session_id), "planning")
     user_content = json.dumps(
         {
             "query": orchestrator._query_text(query),
@@ -80,35 +82,11 @@ async def create_execution_plan(
             "route": route.model_dump(),
         }
     )
-
-    if orchestrator._model_registry is not None:
-        from typing import cast
-
-        from langchain_core.messages import HumanMessage, SystemMessage
-
-        model = orchestrator._model_registry.get("planner")
-        result = await model.with_structured_output(ExecutionPlan).ainvoke(
-            [SystemMessage(PLAN_SYSTEM), HumanMessage(user_content)]
-        )
-        plan = cast(ExecutionPlan, result)
-        for step in plan.steps:
-            _validate_agent_role(step.agent_role, source="plan")
-        return plan
-
-    # Legacy fallback: use LLMClient when model_registry is not available
-    response = await orchestrator._llm_client.complete(
-        messages=[
-            LLMMessage(role="system", content=PLAN_SYSTEM),
-            LLMMessage(role="user", content=user_content),
-        ],
-        tools=None,
-        temperature=0.0,
-        max_tokens=1024,
-        prompt_cache=False,
-        specialist_role="orchestrator",
-        agent_step_id=step_id,
+    model = orchestrator._model_registry.get("planner")
+    result = await model.with_structured_output(ExecutionPlan).ainvoke(
+        [SystemMessage(PLAN_SYSTEM), HumanMessage(user_content)]
     )
-    plan = ExecutionPlan(**_json_obj(response.text))
+    plan = cast(ExecutionPlan, result)
     for step in plan.steps:
         _validate_agent_role(step.agent_role, source="plan")
     return plan
@@ -149,10 +127,13 @@ async def create_task_nodes(
     intent: SessionIntent,
     route: AgentRoute,
 ) -> list[TaskNode]:
-    from packages.agent.llm import LLMMessage
+    from typing import cast
+
+    from langchain_core.messages import HumanMessage, SystemMessage
+
     from packages.persistence.agent_steps_repo import make_step
 
-    step_id = await make_step(str(session_id), "dag_planning")
+    _ = await make_step(str(session_id), "dag_planning")
     user_content = json.dumps(
         {
             "query": orchestrator._query_text(query),
@@ -160,38 +141,14 @@ async def create_task_nodes(
             "route": route.model_dump(),
         }
     )
-
-    if orchestrator._model_registry is not None:
-        from typing import cast
-
-        from langchain_core.messages import HumanMessage, SystemMessage
-
-        model = orchestrator._model_registry.get("planner")
-        result = await model.with_structured_output(DagPlan).ainvoke(
-            [SystemMessage(DAG_SYSTEM), HumanMessage(user_content)]
-        )
-        dag_plan = cast(DagPlan, result)
-        for node in dag_plan.nodes:
-            _validate_agent_role(node.agent_role, source="DAG")
-        return dag_plan.nodes
-
-    # Legacy fallback: use LLMClient when model_registry is not available
-    response = await orchestrator._llm_client.complete(
-        messages=[
-            LLMMessage(role="system", content=DAG_SYSTEM),
-            LLMMessage(role="user", content=user_content),
-        ],
-        tools=None,
-        temperature=0.0,
-        max_tokens=1024,
-        prompt_cache=False,
-        specialist_role="orchestrator",
-        agent_step_id=step_id,
+    model = orchestrator._model_registry.get("planner")
+    result = await model.with_structured_output(DagPlan).ainvoke(
+        [SystemMessage(DAG_SYSTEM), HumanMessage(user_content)]
     )
-    nodes = [TaskNode(**item) for item in _json_array(response.text)]
-    for node in nodes:
+    dag_plan = cast(DagPlan, result)
+    for node in dag_plan.nodes:
         _validate_agent_role(node.agent_role, source="DAG")
-    return nodes
+    return dag_plan.nodes
 
 
 # ---------------------------------------------------------------------------

@@ -12,9 +12,10 @@ from typing import AsyncIterator
 
 from packages.agent.llm import LLMMessage, LLMResponse, LLMStreamEvent, LLMToolSpec, LLMUsage
 from packages.agent.orchestrator import SessionOrchestrator, SessionUserQuery
+from packages.agent.orchestrator.models import AgentRoute, SessionIntent
 from packages.memory import StubMemoryStore
 from packages.tools import create_tool_registry
-from tests.unit.helpers import make_llm_usage
+from tests.unit.helpers import FakeLCModel, MultiRoleModelRegistry, make_llm_usage
 
 # ---------------------------------------------------------------------------
 # Helpers / fakes
@@ -98,11 +99,43 @@ class FailingLLMClient:
         raise RuntimeError("LLM unavailable")
 
 
-def _make_orchestrator(llm_client: Any) -> SessionOrchestrator:
+def _make_direct_chat_model_registry() -> Any:
+    """Returns a model_registry whose orchestrator model yields direct_chat structured outputs."""
+    from tests.unit.helpers import StructuredOutputFakeModel
+
+    model = StructuredOutputFakeModel([
+        SessionIntent(category="direct_chat", confidence=0.95, rationale="Greeting"),
+        AgentRoute(mode="direct_chat", agents=[], requires_planning=False,
+                   requires_dag=False, rationale="chat"),
+    ])
+    registry = MagicMock()
+    registry.get.return_value = model
+    return registry
+
+
+def _make_failing_model_registry() -> Any:
+    """Returns a model_registry whose orchestrator model raises RuntimeError."""
+
+    class _FailingModel:
+        model = "failing"
+
+        def with_structured_output(self, schema: Any) -> Any:
+            return self
+
+        async def ainvoke(self, messages: Any, **kwargs: Any) -> Any:
+            raise RuntimeError("LLM unavailable")
+
+    registry = MagicMock()
+    registry.get.return_value = _FailingModel()
+    return registry
+
+
+def _make_orchestrator(llm_client: Any, model_registry: Any = None) -> SessionOrchestrator:
     return SessionOrchestrator(
         llm_client=llm_client,
         tool_registry=create_tool_registry(),
         memory_store=StubMemoryStore(),
+        model_registry=model_registry,
     )
 
 
@@ -113,7 +146,9 @@ def _make_orchestrator(llm_client: Any) -> SessionOrchestrator:
 
 async def test_run_success_calls_running_then_completed() -> None:
     """On a successful run, update_status must be called with 'running' then 'completed'."""
-    orchestrator = _make_orchestrator(DirectChatLLMClient())
+    orchestrator = _make_orchestrator(
+        DirectChatLLMClient(), model_registry=_make_direct_chat_model_registry()
+    )
     session_id = uuid4()
     query = SessionUserQuery(text="hello")
 
@@ -139,7 +174,9 @@ async def test_run_success_calls_running_then_completed() -> None:
 
 async def test_run_failure_calls_running_then_failed() -> None:
     """When run() raises, update_status must be called with 'running' then 'failed'."""
-    orchestrator = _make_orchestrator(FailingLLMClient())
+    orchestrator = _make_orchestrator(
+        FailingLLMClient(), model_registry=_make_failing_model_registry()
+    )
     session_id = uuid4()
     query = SessionUserQuery(text="hello")
 
@@ -165,7 +202,9 @@ async def test_run_failure_calls_running_then_failed() -> None:
 
 async def test_run_status_update_uses_correct_session_id() -> None:
     """The session_id passed to update_status must match the one given to run()."""
-    orchestrator = _make_orchestrator(DirectChatLLMClient())
+    orchestrator = _make_orchestrator(
+        DirectChatLLMClient(), model_registry=_make_direct_chat_model_registry()
+    )
     session_id = uuid4()
     query = SessionUserQuery(text="hello")
 
@@ -188,7 +227,9 @@ async def test_run_status_update_uses_correct_session_id() -> None:
 
 async def test_db_error_does_not_propagate() -> None:
     """If update_status raises (e.g. DB not configured), run() must still succeed."""
-    orchestrator = _make_orchestrator(DirectChatLLMClient())
+    orchestrator = _make_orchestrator(
+        DirectChatLLMClient(), model_registry=_make_direct_chat_model_registry()
+    )
     session_id = uuid4()
     query = SessionUserQuery(text="hello")
 

@@ -13,7 +13,13 @@ from packages.agent.orchestrator.models import (
     SpecialistTask,
 )
 from packages.agent.runtime import AgentRuntime
-from tests.unit.helpers import RecordingLLMClient, make_llm_usage, make_stop_response
+from tests.unit.helpers import (
+    FakeLCModel,
+    RecordingLLMClient,
+    make_llm_usage,
+    make_model_registry,
+    make_stop_response,
+)
 
 
 def _tool_use_response(tool_name: str, tool_input: dict[str, Any]) -> LLMResponse:
@@ -104,6 +110,7 @@ def _make_task(
 def _make_runtime(
     llm_client: Any,
     tool_registry: Any,
+    model_registry: Any = None,
 ) -> AgentRuntime:
     return AgentRuntime(
         name="test_agent",
@@ -112,6 +119,7 @@ def _make_runtime(
         tool_registry=tool_registry,
         sse_queue=None,
         system_prompt="You are a test specialist.",
+        model_registry=model_registry,
     )
 
 
@@ -133,11 +141,9 @@ async def test_agent_runtime_hitl_tool_suspends_with_interrupt() -> None:
     interrupt() — the __interrupt__ key appears in the state output and
     tool.handle() is never called."""
     tool_input = {"action_summary": "Reorder 1000 units of SKU-A"}
-    llm = RecordingLLMClient([
-        _tool_use_response("request_approval", tool_input),
-    ])
+    lc_model = FakeLCModel([_tool_use_response("request_approval", tool_input)])
     registry = _FakeToolRegistry([_FakeHITLTool()])
-    runtime = _make_runtime(llm, registry)
+    runtime = _make_runtime(MagicMock(), registry, model_registry=make_model_registry(lc_model))
     task = _make_task()
     ctx = _FakeToolContext()
 
@@ -222,9 +228,9 @@ async def test_agent_runtime_hitl_handle_never_called() -> None:
             raise AssertionError("should not be called")
 
     tool_input = {"action_summary": "Send order to supplier"}
-    llm = RecordingLLMClient([_tool_use_response("request_approval", tool_input)])
+    lc_model = FakeLCModel([_tool_use_response("request_approval", tool_input)])
     registry = _FakeToolRegistry([_SentinelHITLTool()])
-    runtime = _make_runtime(llm, registry)
+    runtime = _make_runtime(MagicMock(), registry, model_registry=make_model_registry(lc_model))
     task = _make_task()
     ctx = _FakeToolContext()
 
@@ -291,13 +297,13 @@ async def test_agent_runtime_hitl_handle_never_called() -> None:
 
 async def test_agent_runtime_read_only_tool_does_not_interrupt() -> None:
     """read_only tools must proceed normally without interrupting."""
-    tool_input: dict[str, Any] = {}
-    llm = RecordingLLMClient([
-        _tool_use_response("sql_query", tool_input),
+    lc_model = FakeLCModel([
+        _tool_use_response("sql_query", {}),
         make_stop_response("Query complete"),
+        make_stop_response("pass"),
     ])
     registry = _FakeToolRegistry([_FakeReadOnlyTool()])
-    runtime = _make_runtime(llm, registry)
+    runtime = _make_runtime(MagicMock(), registry, model_registry=make_model_registry(lc_model))
     task = _make_task(allowed_tools=["sql_query"])
     ctx = _FakeToolContext()
 
@@ -313,9 +319,9 @@ async def test_agent_runtime_hitl_approval_id_from_repo() -> None:
     expected_id = "approval-from-db-001"
     tool_input = {"action_summary": "Critical action"}
 
-    llm = RecordingLLMClient([_tool_use_response("request_approval", tool_input)])
+    lc_model = FakeLCModel([_tool_use_response("request_approval", tool_input)])
     registry = _FakeToolRegistry([_FakeHITLTool()])
-    runtime = _make_runtime(llm, registry)
+    runtime = _make_runtime(MagicMock(), registry, model_registry=make_model_registry(lc_model))
     task = _make_task()
     ctx = _FakeToolContext()
 
@@ -381,9 +387,9 @@ async def test_agent_runtime_hitl_fallback_uuid_on_repo_error() -> None:
     non-empty UUID fallback as the approval_id."""
     tool_input = {"action_summary": "Action with DB error"}
 
-    llm = RecordingLLMClient([_tool_use_response("request_approval", tool_input)])
+    lc_model = FakeLCModel([_tool_use_response("request_approval", tool_input)])
     registry = _FakeToolRegistry([_FakeHITLTool()])
-    runtime = _make_runtime(llm, registry)
+    runtime = _make_runtime(MagicMock(), registry, model_registry=make_model_registry(lc_model))
     task = _make_task()
     ctx = _FakeToolContext()
 
@@ -483,16 +489,17 @@ async def test_session_orchestrator_awaiting_approval_status_via_sse() -> None:
     sse_queue: asyncio.Queue[Any] = asyncio.Queue()
 
     tool_input = {"action_summary": "Approve something"}
-    llm = RecordingLLMClient([_tool_use_response("request_approval", tool_input)])
+    lc_model = FakeLCModel([_tool_use_response("request_approval", tool_input)])
     registry = _FakeToolRegistry([_FakeHITLTool()])
 
     runtime = AgentRuntime(
         name="test_agent",
         role="data_engineer",
-        llm_client=llm,
+        llm_client=MagicMock(),
         tool_registry=registry,
         sse_queue=sse_queue,
         system_prompt="You are a test specialist.",
+        model_registry=make_model_registry(lc_model),
     )
     task = _make_task()
     ctx = _FakeToolContext()

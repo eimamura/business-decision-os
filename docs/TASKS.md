@@ -1116,13 +1116,13 @@ Dependencies: P53 Done
 
 Dependencies: none
 
-### Batch B-02 — Remove legacy fallback paths (App Builder) — Not Started
+### Batch B-02 — Remove legacy fallback paths (App Builder) — Done
 
 | Task | Description | Status |
 |---|---|---|
-| T-378 | `session_orchestrator.py` — remove `if self._model_registry is not None:` guards from `classify_intent()`, `select_execution_mode()`, `_node_prepare_ask_user()`; make LangChain path unconditional; keep `llm_client` param but remove its usage in these 3 methods | Not Started |
-| T-379 | `planning.py` — remove legacy `_llm_client.complete()` fallback from `create_execution_plan()` and `create_task_nodes()`; remove `from packages.agent.llm import LLMMessage` lazy imports in those functions | Not Started |
-| T-380 | `runtime.py` — remove legacy `_llm_client.complete()` fallback from `_call_model_node()`, `_verify_findings_node()`, and `_summarize_messages()`; make `lc_model` required (raise `RuntimeError` if `self._lc_model is None` at call time) | Not Started |
+| T-378 | `session_orchestrator.py` — remove `if self._model_registry is not None:` guards from `classify_intent()`, `select_execution_mode()`, `_node_prepare_ask_user()`; make LangChain path unconditional; keep `llm_client` param but remove its usage in these 3 methods | Done |
+| T-379 | `planning.py` — remove legacy `_llm_client.complete()` fallback from `create_execution_plan()` and `create_task_nodes()`; remove `from packages.agent.llm import LLMMessage` lazy imports in those functions | Done |
+| T-380 | `runtime.py` — remove legacy `_llm_client.complete()` fallback from `_call_model_node()`, `_verify_findings_node()`, and `_summarize_messages()`; make `lc_model` required (raise `RuntimeError` if `self._lc_model is None` at call time) | Done |
 
 Dependencies: B-01
 

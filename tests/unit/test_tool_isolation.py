@@ -15,6 +15,8 @@ from packages.agent.llm import (
     StubClaudeClient,
 )
 from packages.agent.orchestrator import SessionGoal, SessionOrchestrator, SessionUserQuery
+from packages.agent.orchestrator.models import AgentRoute, AskUserDecision, SessionIntent
+from tests.unit.helpers import FakeLCModel, MultiRoleModelRegistry, StructuredOutputFakeModel, make_stop_response
 from packages.agent.orchestrator.weights import (
     load_global_weights,
     load_sku_overrides,
@@ -586,6 +588,27 @@ def test_list_for_role_orchestrator_returns_empty():
     assert [t.name for t in tools] == ["job_dispatch"]
 
 
+def _make_single_agent_registry() -> MultiRoleModelRegistry:
+    """ModelRegistry that routes classify_intent → decision_support, select_mode → single_agent."""
+    orchestrator_model = StructuredOutputFakeModel([
+        SessionIntent(
+            category="decision_support", confidence=0.9,
+            rationale="Optimization requested", goal_text="optimize replenishment",
+        ),
+        # _node_prepare_ask_user fires for "decision_support" — return no-input decision
+        AskUserDecision(needs_input=False, question=None, suggestions=None),
+        AgentRoute(
+            mode="single_agent", agents=["control"],
+            requires_planning=False, requires_dag=False, rationale="control-only",
+        ),
+    ])
+    specialist_model = FakeLCModel([
+        make_stop_response("Supply chain analysis complete. No critical issues detected."),
+        make_stop_response("pass"),
+    ])
+    return MultiRoleModelRegistry({"orchestrator": orchestrator_model, "default": specialist_model})
+
+
 # ===== T-1003/T-1040: Orchestrator + MemoryStore =====
 
 async def test_orchestrator_run_returns_session_response():
@@ -599,6 +622,7 @@ async def test_orchestrator_run_returns_session_response():
         tool_registry=registry,
         memory_store=memory,
         sse_queue=sse_queue,
+        model_registry=_make_single_agent_registry(),
     )
 
     session_id = uuid4()
@@ -622,6 +646,7 @@ async def test_orchestrator_emits_sse_events():
         tool_registry=registry,
         memory_store=memory,
         sse_queue=sse_queue,
+        model_registry=_make_single_agent_registry(),
     )
 
     session_id = uuid4()
@@ -647,6 +672,7 @@ async def test_orchestrator_session_goal_weight_override():
         llm_client=client,
         tool_registry=registry,
         memory_store=memory,
+        model_registry=_make_single_agent_registry(),
     )
 
     session_id = uuid4()
@@ -677,9 +703,15 @@ def test_prompt_based_execution_roles_instantiate():
 async def test_specialist_run_returns_result():
     client = StubClaudeClient()
     registry = create_tool_registry()
+    specialist_model = FakeLCModel([
+        make_stop_response("analysis complete"),
+        make_stop_response("pass"),
+    ])
+    from tests.unit.helpers import make_model_registry
     specialist = AgentBasedSpecialist(
         name="data_engineer", role="data_engineer",
         llm_client=client, tool_registry=registry,
+        model_registry=make_model_registry(specialist_model),
     )
 
     from packages.agent.orchestrator import SpecialistTask

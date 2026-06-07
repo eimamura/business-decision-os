@@ -14,7 +14,8 @@ def create_domain_agents(
     llm_client: Any,
     tool_registry: Any,
     sse_queue: Any = None,
+    model_registry: Any = None,
 ) -> list[Any]:
     return [
-        ControlAgent(llm_client, tool_registry, sse_queue),
+        ControlAgent(llm_client, tool_registry, sse_queue, model_registry=model_registry),
     ]

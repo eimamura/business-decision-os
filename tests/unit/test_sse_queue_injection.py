@@ -8,7 +8,13 @@ from uuid import uuid4
 from packages.agent.llm import LLMMessage, LLMResponse
 from packages.agent.orchestrator.models import SpecialistTask
 from packages.agent.runtime import AgentRuntime
-from tests.unit.helpers import RecordingLLMClient, make_llm_usage, make_stop_response
+from tests.unit.helpers import (
+    FakeLCModel,
+    RecordingLLMClient,
+    make_llm_usage,
+    make_model_registry,
+    make_stop_response,
+)
 
 
 def _tool_use_response(tool_name: str, tool_input: dict[str, Any]) -> LLMResponse:
@@ -137,9 +143,10 @@ async def test_t070_tool_events_pushed_to_config_sse_queue() -> None:
     config_queue: asyncio.Queue[Any] = asyncio.Queue()
     constructor_queue: asyncio.Queue[Any] = asyncio.Queue()
 
-    llm = RecordingLLMClient([
+    lc_model = FakeLCModel([
         _tool_use_response("sql_query", {}),
         make_stop_response("Query complete."),
+        make_stop_response("pass"),
     ])
     registry = _FakeToolRegistry([_FakeReadOnlyTool()])
 
@@ -147,10 +154,11 @@ async def test_t070_tool_events_pushed_to_config_sse_queue() -> None:
     runtime = AgentRuntime(
         name="test_agent",
         role="data_engineer",
-        llm_client=llm,
+        llm_client=MagicMock(),
         tool_registry=registry,
         sse_queue=constructor_queue,
         system_prompt="You are a test specialist.",
+        model_registry=make_model_registry(lc_model),
     )
 
     task = _make_task(allowed_tools=["sql_query"])
@@ -203,16 +211,17 @@ async def test_t070_hitl_events_pushed_to_config_sse_queue() -> None:
     config_queue: asyncio.Queue[Any] = asyncio.Queue()
 
     tool_input = {"action_summary": "Critical action"}
-    llm = RecordingLLMClient([_tool_use_response("request_approval", tool_input)])
+    lc_model_hitl = FakeLCModel([_tool_use_response("request_approval", tool_input)])
     registry = _FakeToolRegistry([_FakeHITLTool()])
 
     runtime = AgentRuntime(
         name="test_agent",
         role="data_engineer",
-        llm_client=llm,
+        llm_client=MagicMock(),
         tool_registry=registry,
         sse_queue=None,
         system_prompt="You are a test specialist.",
+        model_registry=make_model_registry(lc_model_hitl),
     )
 
     task = _make_task(allowed_tools=["request_approval"])
@@ -262,19 +271,21 @@ async def test_t070_no_sse_queue_in_config_does_not_crash() -> None:
 
     from packages.agent.llm import LLMToolSpec
 
-    llm = RecordingLLMClient([
+    lc_model_no_sse = FakeLCModel([
         _tool_use_response("sql_query", {}),
         make_stop_response("Done."),
+        make_stop_response("pass"),
     ])
     registry = _FakeToolRegistry([_FakeReadOnlyTool()])
 
     runtime = AgentRuntime(
         name="test_agent",
         role="data_engineer",
-        llm_client=llm,
+        llm_client=MagicMock(),
         tool_registry=registry,
         sse_queue=None,
         system_prompt="You are a test specialist.",
+        model_registry=make_model_registry(lc_model_no_sse),
     )
 
     task = _make_task(allowed_tools=["sql_query"])

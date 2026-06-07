@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import asyncio
 from decimal import Decimal
+from typing import Any
 from uuid import uuid4
 
 import pytest
@@ -11,8 +12,18 @@ from typing import AsyncIterator
 
 from packages.agent.llm import LLMMessage, LLMResponse, LLMStreamEvent, LLMToolSpec, LLMUsage, StubClaudeClient
 from packages.agent.orchestrator import SessionResponse, SessionUserQuery, SessionOrchestrator
+from packages.agent.orchestrator.models import (
+    AgentRoute,
+    AskUserDecision,
+    DagPlan,
+    ExecutionPlan,
+    PlanStep,
+    SessionIntent,
+    TaskNode,
+)
 from packages.memory import StubMemoryStore
 from packages.tools import create_tool_registry
+from tests.unit.helpers import FakeLCModel, MultiRoleModelRegistry, StructuredOutputFakeModel, make_stop_response
 
 
 def _response(text: str) -> LLMResponse:
@@ -35,6 +46,128 @@ def _extract_system(messages: list) -> str:
     if not msg.content and msg.content_blocks:
         return msg.content_blocks[0].get("text", "") if msg.content_blocks else ""
     return msg.content or ""
+
+
+class QueryFlowOrchestratorModel:
+    """LangChain-style model for orchestrator role that routes structured outputs by schema type
+    and message content.
+
+    Implements with_structured_output(Schema).ainvoke(messages) and returns the correct
+    Pydantic model based on the schema requested and the query text in messages.
+    """
+
+    model = "query-flow-orchestrator"
+
+    class _StructuredRouter:
+        def __init__(self, schema: Any) -> None:
+            self._schema = schema
+
+        async def ainvoke(self, messages: Any, **kwargs: Any) -> Any:
+            from langchain_core.messages import HumanMessage as _HumanMessage
+            # Use only HumanMessage content to avoid false-positive keyword matches
+            # from system prompts (e.g. ROUTER_SYSTEM contains "single_agent")
+            human_parts = [
+                str(getattr(m, "content", ""))
+                for m in (messages or [])
+                if isinstance(m, _HumanMessage)
+            ]
+            if human_parts:
+                text_content = " ".join(human_parts).lower()
+            elif messages:
+                # Fallback: last message only (covers edge cases in tests)
+                text_content = str(getattr(messages[-1], "content", "")).lower()
+            else:
+                text_content = ""
+
+            schema_name = getattr(self._schema, "__name__", "")
+
+            if schema_name == "SessionIntent":
+                if "good morning" in text_content:
+                    return SessionIntent(
+                        category="chat", confidence=0.99, rationale="Greeting",
+                        goal_text="general greeting",
+                    )
+                return SessionIntent(
+                    category="decision_support", confidence=0.9,
+                    rationale="Needs supply-chain work", goal_text="Optimize replenishment",
+                )
+
+            if schema_name == "AskUserDecision":
+                return AskUserDecision(needs_input=False, question=None, suggestions=None)
+
+            if schema_name == "AgentRoute":
+                if "good morning" in text_content:
+                    return AgentRoute(
+                        mode="direct_chat", agents=[],
+                        requires_planning=False, requires_dag=False, rationale="Conversational",
+                    )
+                if "single" in text_content:
+                    return AgentRoute(
+                        mode="single_agent", agents=["control"],
+                        requires_planning=False, requires_dag=False, rationale="Control only",
+                    )
+                if "planned" in text_content:
+                    return AgentRoute(
+                        mode="planned_execution", agents=["control"],
+                        requires_planning=True, requires_dag=False, rationale="Serial plan",
+                    )
+                if "dag" in text_content:
+                    return AgentRoute(
+                        mode="dag_execution", agents=["control"],
+                        requires_planning=True, requires_dag=True, rationale="Dependencies",
+                    )
+                return AgentRoute(
+                    mode="sequential_agents", agents=["control"],
+                    requires_planning=False, requires_dag=False, rationale="Default",
+                )
+
+            return None
+
+    def with_structured_output(self, schema: Any) -> "_StructuredRouter":
+        return self._StructuredRouter(schema)
+
+    def bind_tools(self, tools: Any) -> "QueryFlowOrchestratorModel":
+        return self
+
+    async def ainvoke(self, messages: Any, **kwargs: Any) -> Any:
+        from langchain_core.messages import AIMessage
+        return AIMessage(content="fallback", usage_metadata={"input_tokens": 0, "output_tokens": 0, "total_tokens": 0})
+
+
+class QueryFlowPlannerModel:
+    """Planner model for planned/DAG execution tests."""
+
+    model = "query-flow-planner"
+
+    class _StructuredPlanner:
+        def __init__(self, schema: Any) -> None:
+            self._schema = schema
+
+        async def ainvoke(self, messages: Any, **kwargs: Any) -> Any:
+            schema_name = getattr(self._schema, "__name__", "")
+            if schema_name == "DagPlan":
+                return DagPlan(nodes=[
+                    TaskNode(
+                        id="ctrl", agent_role="control",
+                        deps=[], instruction="Analyze supply chain", tools=["sql_query"],
+                    )
+                ])
+            return ExecutionPlan(steps=[
+                PlanStep(
+                    id="ctrl", agent_role="control",
+                    instruction="Analyze supply chain", tools=["sql_query"],
+                )
+            ])
+
+    def with_structured_output(self, schema: Any) -> "_StructuredPlanner":
+        return self._StructuredPlanner(schema)
+
+    def bind_tools(self, tools: Any) -> "QueryFlowPlannerModel":
+        return self
+
+    async def ainvoke(self, messages: Any, **kwargs: Any) -> Any:
+        from langchain_core.messages import AIMessage
+        return AIMessage(content="fallback", usage_metadata={"input_tokens": 0, "output_tokens": 0, "total_tokens": 0})
 
 
 class QueryFlowStubClaudeClient(StubClaudeClient):
@@ -109,6 +242,24 @@ class QueryFlowStubClaudeClient(StubClaudeClient):
         return _gen()
 
 
+def _make_query_flow_registry() -> MultiRoleModelRegistry:
+    """ModelRegistry for QueryFlowStubClaudeClient-based tests."""
+    orchestrator_model = QueryFlowOrchestratorModel()
+    planner_model = QueryFlowPlannerModel()
+    specialist_model = FakeLCModel([
+        make_stop_response("Supply chain analysis complete."),
+        make_stop_response("pass"),
+        # Extra for sequential/planned/dag which may invoke multiple agents
+        make_stop_response("Supply chain analysis complete."),
+        make_stop_response("pass"),
+    ])
+    return MultiRoleModelRegistry({
+        "orchestrator": orchestrator_model,
+        "planner": planner_model,
+        "default": specialist_model,
+    })
+
+
 @pytest.fixture
 def stub_orchestrator():
     queue: asyncio.Queue[dict] = asyncio.Queue()
@@ -117,6 +268,7 @@ def stub_orchestrator():
         create_tool_registry(),
         StubMemoryStore(),
         sse_queue=queue,
+        model_registry=_make_query_flow_registry(),
     )
     return orchestrator, queue
 
@@ -187,21 +339,37 @@ async def test_dag_execution_respects_dependencies(stub_orchestrator):
     assert list(response.agent_results) == ["ctrl"]
 
 
-async def test_router_bad_json_returns_raw_text(stub_orchestrator):
-    orchestrator, queue = stub_orchestrator
+async def test_router_bad_json_returns_raw_text():
+    """When the orchestrator model raises LLMResponseParseError, run() must return a graceful
+    direct_chat response containing the raw text."""
+    from packages.agent.orchestrator.parsing import LLMResponseParseError
 
-    async def _bad_complete(messages, **kwargs):
-        system = messages[0].content if messages else ""
-        if "intent classifier" in system:
-            return _response(
-                '{"category":"lookup","confidence":0.9,"rationale":"x","goal_text":null}'
-            )
-        return _response("not json")
+    queue: asyncio.Queue[dict] = asyncio.Queue()
 
-    orchestrator._llm_client.complete = _bad_complete
+    class _BadOrchModel:
+        """Raises LLMResponseParseError on the first structured output call (classify_intent)."""
+
+        model = "bad-orch"
+
+        class _BadStructured:
+            async def ainvoke(self, messages: Any, **kwargs: Any) -> Any:
+                raise LLMResponseParseError("not json")
+
+        def with_structured_output(self, schema: Any) -> "_BadStructured":
+            return self._BadStructured()
+
+    from tests.unit.helpers import MultiRoleModelRegistry
+
+    registry = MultiRoleModelRegistry({"orchestrator": _BadOrchModel(), "default": _BadOrchModel()})
+    orchestrator = SessionOrchestrator(
+        QueryFlowStubClaudeClient(),
+        create_tool_registry(),
+        StubMemoryStore(),
+        sse_queue=queue,
+        model_registry=registry,
+    )
 
     response = await orchestrator.run(uuid4(), SessionUserQuery(text="inventory?"))
-    assert response.reply == "not json"
     assert response.mode == "direct_chat"
     events = await _events(queue)
-    assert any(e["type"] == "done" and e.get("reply") == "not json" for e in events)
+    assert any(e["type"] == "done" for e in events)

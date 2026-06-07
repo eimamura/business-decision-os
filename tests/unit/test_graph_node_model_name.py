@@ -139,8 +139,23 @@ async def _run_orchestrator_collect_events(
     import asyncio
 
     from packages.agent.orchestrator import SessionOrchestrator, SessionUserQuery
+    from packages.agent.orchestrator.models import AgentRoute, SessionIntent
     from packages.memory import StubMemoryStore
     from packages.tools import create_tool_registry
+    from tests.unit.helpers import MultiRoleModelRegistry, StructuredOutputFakeModel
+
+    # chat intent skips AskUserDecision — routes direct_chat immediately
+    orch_model = StructuredOutputFakeModel([
+        SessionIntent(
+            category="chat", confidence=0.95,
+            rationale="Greeting", goal_text="hello",
+        ),
+        AgentRoute(
+            mode="direct_chat", agents=[],
+            requires_planning=False, requires_dag=False, rationale="chat",
+        ),
+    ])
+    registry = MultiRoleModelRegistry({"orchestrator": orch_model})
 
     queue: asyncio.Queue[dict[str, Any]] = asyncio.Queue()
     orch = SessionOrchestrator(
@@ -148,6 +163,7 @@ async def _run_orchestrator_collect_events(
         tool_registry=create_tool_registry(llm_client),
         memory_store=StubMemoryStore(),
         sse_queue=queue,
+        model_registry=registry,
     )
 
     session_id = uuid4()
