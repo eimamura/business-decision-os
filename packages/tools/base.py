@@ -52,7 +52,7 @@ _ROLE_TOOL_ALLOWLIST: dict[str, list[str]] = {
         "evaluate_forecast_accuracy", "detect_demand_anomalies",
         "analyze_seasonality", "analyze_demand_drivers",
         "segment_demand", "compare_demand_periods",
-        "calculate_supply_gap", "get_open_supply_orders",
+        "get_delayed_supply_orders", "calculate_supply_gap", "get_open_supply_orders",
         "analyze_supply_lead_time", "calculate_days_of_supply",
         "analyze_supply_risk",
         "calculate_holding_cost_impact", "calculate_stockout_cost_impact",

@@ -37,6 +37,49 @@ _PAST_DECISIONS_HEADER = "\n\n---\n## Past Decisions\n\n"
 
 _DOMAIN_KNOWLEDGE_HEADER = "\n\n---\n## Domain Knowledge\n\n"
 
+# Narrow the tool set per intent so local models aren't overwhelmed by 23+ definitions.
+# Fallback: if intent not in map, all control tools remain available.
+_INTENT_TOOL_SUBSET: dict[str, list[str]] = {
+    "supply_chain": [
+        "sql_query",
+        "get_delayed_supply_orders",
+        "get_open_supply_orders",
+        "calculate_supply_gap",
+        "analyze_supply_lead_time",
+        "calculate_days_of_supply",
+        "analyze_supply_risk",
+        "calculate_stockout_risk",
+        "calculate_stockout_cost_impact",
+        "calculate_expedite_cost",
+    ],
+    "demand": [
+        "sql_query",
+        "profile_demand_data",
+        "analyze_demand_trend",
+        "evaluate_forecast_accuracy",
+        "detect_demand_anomalies",
+        "analyze_seasonality",
+        "analyze_demand_drivers",
+        "segment_demand",
+        "compare_demand_periods",
+    ],
+    "inventory": [
+        "sql_query",
+        "calculate_days_of_inventory",
+        "calculate_stockout_risk",
+        "calculate_excess_inventory_risk",
+        "get_available_to_promise",
+        "get_open_supply_orders",
+    ],
+    "finance": [
+        "sql_query",
+        "calculate_holding_cost_impact",
+        "calculate_stockout_cost_impact",
+        "calculate_expedite_cost",
+        "compare_cost_scenarios",
+    ],
+}
+
 
 class ControlAgent(AgentBasedSpecialist):
     _SYSTEM_PROMPT: str = _SYSTEM_PROMPT
@@ -131,6 +174,10 @@ class ControlAgent(AgentBasedSpecialist):
                     "LongTermMemoryStore.search failed; continuing without domain knowledge",
                     extra={"intent_category": intent_category},
                 )
+
+        # --- Narrow allowed tools by intent (helps local models with many tool definitions) ---
+        if intent_category and intent_category in _INTENT_TOOL_SUBSET:
+            task = task.model_copy(update={"allowed_tools": _INTENT_TOOL_SUBSET[intent_category]})
 
         # --- Delegate to base runtime ---
         result: "SpecialistResult | None" = None
