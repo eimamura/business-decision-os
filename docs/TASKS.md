@@ -910,3 +910,70 @@ Dependencies: B-01
 | T-324 | `make test-unit` + `make lint` + `make typecheck` | Done |
 
 Dependencies: B-01, B-02
+
+---
+
+## P46 — Skill & Tool Enrichment
+
+**Goal:** Fix Q3 (shipment delay) by adding a `GetDelayedSupplyOrdersTool` that queries
+actual delayed orders without requiring a specific order ID, and revise the `shipment_delay_root_cause`
+and `exception_detection` Skill files to align with the real DB schema
+(`supply_orders`, `inventory_snapshot`, `demand_history`).
+
+Dependencies: P43 Done
+
+### Batch B-01 — Delayed orders tool + Skill revisions (App Builder) — Done
+
+| Task | Description | Status |
+|---|---|---|
+| T-325 | `packages/tools/supply_delayed_orders_tool.py` — `GetDelayedSupplyOrdersTool`; queries `supply_orders WHERE expected_arrival < TODAY AND status != 'delivered'`; optional `sku_id` filter; returns list of `{sku_id, supplier_id, expected_arrival, days_overdue, quantity, status}` per row; `days_overdue = (today - expected_arrival).days` | Done |
+| T-326 | Register `GetDelayedSupplyOrdersTool` in `packages/tools/__init__.py` `create_tool_registry()` | Done |
+| T-327 | Revise `packages/knowledge/skills/shipment_delay_root_cause.md` — step 1 changes from "retrieve by provided identifier" to "call `get_delayed_supply_orders` to find all orders where expected_arrival < today and status != delivered"; remove assumption about `order_id` parameter; preserve the 8-step diagnosis structure | Done |
+| T-328 | Revise `packages/knowledge/skills/exception_detection.md` — replace `inventory` table references with `inventory_snapshot`, replace `supply` table references with `supply_orders`; align step 2/3 with actual `supply_orders` columns (`expected_arrival`, `status`); preserve the 8-step structure | Done |
+
+Dependencies: none
+
+### Batch B-02 — Tests (Test/Review) — Not Started
+
+| Task | Description | Status |
+|---|---|---|
+| T-329 | Unit test `tests/unit/test_supply_delayed_orders_tool.py` — AsyncMock pool; tests: (a) returns orders with `days_overdue` computed correctly, (b) returns empty list when no overdue orders, (c) DB error returns `{"error": ...}` dict | Not Started |
+| T-330 | `make test-unit && make lint && make typecheck` — all pass | Not Started |
+
+Dependencies: B-01
+
+---
+
+## P47 — Long-Term Memory Physical Implementation
+
+**Goal:** Add `LongTermMemoryStore` backed by a new `long_term_memory` table so that the
+ControlAgent can persist and retrieve long-horizon patterns, user preferences, and domain
+knowledge across sessions — completing the memory layer defined in DESIGN.md §Memory Design.
+
+Dependencies: P41 Done (Memory Layer base classes)
+
+### Batch B-01 — DB migration (Infra) — Not Started
+
+| Task | Description | Status |
+|---|---|---|
+| T-331 | `apps/api/alembic/versions/0017_long_term_memory.py` — create table `long_term_memory(id UUID PK DEFAULT gen_random_uuid(), memory_type VARCHAR(32) NOT NULL, scope VARCHAR(128) NOT NULL DEFAULT '', content TEXT NOT NULL, metadata_json TEXT NOT NULL DEFAULT '{}', created_at TIMESTAMPTZ NOT NULL DEFAULT NOW())`; index `ix_long_term_memory_type_scope` on `(memory_type, scope)`; `down_revision='0016'` | Not Started |
+
+Dependencies: none
+
+### Batch B-02 — LongTermMemoryStore implementation (App Builder) — Not Started
+
+| Task | Description | Status |
+|---|---|---|
+| T-332 | `packages/memory/long_term.py` — `LongTermMemoryStore` standalone async class (same pattern as `DecisionMemoryStore`); `write(record)` requires keys `memory_type`, `content`; optional `scope` (default `''`), `metadata` (default `{}`); parameterized INSERT; `search(query, k=5)` — parses `"type:<type>"` or `"scope:<scope>"` prefix to add WHERE filter; returns `list[dict]` with keys `id, memory_type, scope, content, metadata_json, created_at`; ORDER BY `created_at DESC LIMIT k` | Not Started |
+| T-333 | `packages/memory/__init__.py` — add `from packages.memory.long_term import LongTermMemoryStore` at top-level imports; add `"LongTermMemoryStore"` to `__all__` | Not Started |
+
+Dependencies: B-01
+
+### Batch B-03 — Tests (Test/Review) — Not Started
+
+| Task | Description | Status |
+|---|---|---|
+| T-334 | Unit tests `tests/unit/test_long_term_memory_store.py` — AsyncMock asyncpg pool (same pattern as `test_decision_memory_store`); tests: write inserts correct fields, search with `type:` prefix adds WHERE filter, search with `scope:` prefix adds WHERE filter, search with bare query returns k records without filter, invalid/empty query returns records without filter, DB error in write propagates | Not Started |
+| T-335 | `make test-unit && make lint && make typecheck` — all pass | Not Started |
+
+Dependencies: B-01, B-02

@@ -27,15 +27,15 @@ See `docs/archive/v3/STATE.md` for P0–P23 per-phase details.
 
 ## Active Phase
 
-None — all planned phases complete.
+P46 — Skill & Tool Enrichment
 
 ## Active Lease
 
-None.
+P46-B-02
 
 ## Last Completed
 
-P43-B-03 — Quality gate: 769 unit + 32 Playwright passed, lint+typecheck clean (2026-06-06)
+P46-B-01 — GetDelayedSupplyOrdersTool + Skill revisions: 769 passed, lint+typecheck clean (2026-06-06)
 
 ## Blockers
 

@@ -33,6 +33,7 @@ from packages.tools.optimizer_tool import OptimizerTool
 from packages.tools.simulation_tool import SimulationTool
 from packages.tools.sql_tool import SqlQueryTool
 from packages.tools.supply_days_tool import CalculateDaysOfSupplyTool
+from packages.tools.supply_delayed_orders_tool import GetDelayedSupplyOrdersTool
 from packages.tools.supply_gap_tool import CalculateSupplyGapTool
 from packages.tools.supply_lead_time_tool import AnalyzeSupplyLeadTimeTool
 from packages.tools.supply_open_orders_tool import GetOpenSupplyOrdersTool
@@ -71,6 +72,7 @@ __all__ = [
     "CalculateDaysOfSupplyTool",
     "CalculateSupplyGapTool",
     "AnalyzeSupplyLeadTimeTool",
+    "GetDelayedSupplyOrdersTool",
     "GetOpenSupplyOrdersTool",
     "AnalyzeSupplyRiskTool",
     "GetAvailableToPromiseTool",
@@ -111,6 +113,7 @@ def create_tool_registry(
     registry.register(DemandSegmentTool(db_session=db_session))
     registry.register(DemandCompareTool(db_session=db_session))
     registry.register(GetOpenSupplyOrdersTool(db_session=db_session))
+    registry.register(GetDelayedSupplyOrdersTool(db_session=db_session))
     registry.register(CalculateSupplyGapTool(db_session=db_session))
     registry.register(AnalyzeSupplyLeadTimeTool(db_session=db_session))
     registry.register(CalculateDaysOfSupplyTool(db_session=db_session))
