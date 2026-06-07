@@ -35,7 +35,7 @@ None
 
 ## Last Completed
 
-P52-B-03 — Structured Output 移行: 791 unit tests passed, lint + typecheck clean (2026-06-07)
+P52-B-04 — Tests: 798 unit tests passed, lint + typecheck clean (2026-06-07)
 
 ## Blockers
 

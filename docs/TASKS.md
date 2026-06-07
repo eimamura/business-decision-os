@@ -1049,13 +1049,13 @@ Dependencies: B-01
 
 Dependencies: B-02
 
-### Batch B-04 — Tests (Test/Review) — Not Started
+### Batch B-04 — Tests (Test/Review) — Done
 
 | Task | Description | Status |
 |---|---|---|
-| T-362 | `tests/unit/test_model_registry.py` — 4 ケース: (a) `LLM_PROVIDER=anthropic` → `ChatAnthropic` インスタンス、(b) `LLM_PROVIDER=ollama` → `ChatOllama` インスタンス、(c) orchestrator ロールの Ollama モデルに `think=False` が設定されている、(d) unknown role → `ValueError` | Not Started |
-| T-363 | `tests/unit/test_session_orchestrator_structured.py` — `with_structured_output` パスの 3 ケース: (a) `classify_intent` が `SessionIntent` を返す（`MagicMock` で `with_structured_output().ainvoke()` をスタブ）、(b) `select_execution_mode` が `AgentRoute` を返す、(c) `model_registry=None` のとき既存フォールバックパスが使われる | Not Started |
-| T-364 | `make test-unit && make lint && make typecheck` — 全通過 | Not Started |
+| T-362 | `tests/unit/test_model_registry.py` — 4 ケース: (a) `LLM_PROVIDER=anthropic` → `ChatAnthropic` インスタンス、(b) `LLM_PROVIDER=ollama` → `ChatOllama` インスタンス、(c) orchestrator ロールの Ollama モデルに `num_predict=512`、(d) unknown role → `ValueError` | Done |
+| T-363 | `tests/unit/test_session_orchestrator_structured.py` — `with_structured_output` パスの 3 ケース: (a) `classify_intent` が `SessionIntent` を返す（`MagicMock` で `with_structured_output().ainvoke()` をスタブ）、(b) `select_execution_mode` が `AgentRoute` を返す、(c) `model_registry=None` のとき既存フォールバックパスが使われる | Done |
+| T-364 | `make test-unit && make lint && make typecheck` — 全通過: 798 passed, lint clean, typecheck clean (2026-06-07) | Done |
 
 Dependencies: B-03
 
