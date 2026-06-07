@@ -735,6 +735,7 @@ class OllamaClient:
         }
         if tools:
             payload["tools"] = self._to_openai_tools(tools)
+            payload["tool_choice"] = "auto"
 
         start = time.monotonic()
         try:
