@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 import time
 import warnings
 from decimal import Decimal
@@ -613,6 +614,23 @@ class ClaudeClient:
 _logger = logging.getLogger(__name__)
 
 
+def _normalize_llm_text(message: dict[str, Any], model_name: str) -> str:
+    content: str = message.get("content") or ""
+    # Strip <think>...</think> blocks emitted by Qwen3 / DeepSeek thinking models.
+    content = re.sub(r"<think>.*?</think>", "", content, flags=re.DOTALL).strip()
+    if not content:
+        side_channel: str = message.get("reasoning") or message.get("thinking") or ""
+        if side_channel:
+            _logger.warning(
+                "OllamaClient: model returned empty content with reasoning/thinking field "
+                "(%d chars) for model %s. Using side-channel as text.",
+                len(side_channel),
+                model_name,
+            )
+            return side_channel.strip()
+    return content
+
+
 class OllamaClient:
     """LLMClient implementation that calls a locally-running Ollama server.
 
@@ -768,7 +786,7 @@ class OllamaClient:
         choice = data["choices"][0]
         message = choice["message"]
 
-        text: str = message.get("content") or ""
+        text: str = _normalize_llm_text(message, self._model)
         raw_tool_calls: list[dict[str, Any]] = message.get("tool_calls") or []
         tool_calls: list[dict[str, Any]] = []
         for tc in raw_tool_calls:

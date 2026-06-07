@@ -22,7 +22,12 @@ from packages.agent.orchestrator.models import (
     SessionResponse,
     SessionUserQuery,
 )
-from packages.agent.orchestrator.parsing import _iso_now, _json_obj, json_safe
+from packages.agent.orchestrator.parsing import (
+    LLMResponseParseError,
+    _iso_now,
+    _json_obj,
+    json_safe,
+)
 from packages.agent.orchestrator.prompts import ASK_USER_SYSTEM, INTENT_SYSTEM, ROUTER_SYSTEM
 from packages.agent.orchestrator.routing import validate_route
 from packages.agent.orchestrator.runtime import (
@@ -566,6 +571,17 @@ class SessionOrchestrator:
     # Public run()
     # ------------------------------------------------------------------
 
+    def _parse_error_response(
+        self, session_id: UUID, exc: LLMResponseParseError
+    ) -> SessionResponse:
+        reply = exc.raw_text.strip() or "（モデルが応答を返しませんでした）"
+        return SessionResponse(
+            mode="direct_chat",
+            reply=reply,
+            intent=SessionIntent(category="unknown", confidence=0.0, rationale="llm_parse_error"),
+            route=AgentRoute(mode="direct_chat", rationale="llm_parse_error"),
+        )
+
     async def run(self, session_id: UUID, query: SessionUserQuery) -> SessionResponse:
         if isinstance(query, SessionGoal):
             query = SessionUserQuery(
@@ -596,6 +612,16 @@ class SessionOrchestrator:
 
         try:
             final_state = await self._astream_run(initial_state, config)
+        except LLMResponseParseError as exc:
+            resp = self._parse_error_response(session_id, exc)
+            self._schedule_status_update(session_id, "completed")
+            await self._push({
+                "type": "done",
+                "session_id": str(session_id),
+                "reply": resp.reply,
+                "timestamp": _iso_now(),
+            })
+            return resp
         except Exception as exc:
             self._schedule_status_update(session_id, "failed")
             await self._push({
@@ -632,6 +658,16 @@ class SessionOrchestrator:
 
         try:
             final_state = await self._astream_run(None, config)
+        except LLMResponseParseError as exc:
+            resp = self._parse_error_response(session_id, exc)
+            self._schedule_status_update(session_id, "completed")
+            await self._push({
+                "type": "done",
+                "session_id": str(session_id),
+                "reply": resp.reply,
+                "timestamp": _iso_now(),
+            })
+            return resp
         except Exception as exc:
             self._schedule_status_update(session_id, "failed")
             await self._push({
@@ -661,6 +697,16 @@ class SessionOrchestrator:
 
         try:
             final_state = await self._astream_run(Command(resume={"answer": answer}), config)
+        except LLMResponseParseError as exc:
+            resp = self._parse_error_response(session_id, exc)
+            self._schedule_status_update(session_id, "completed")
+            await self._push({
+                "type": "done",
+                "session_id": str(session_id),
+                "reply": resp.reply,
+                "timestamp": _iso_now(),
+            })
+            return resp
         except Exception as exc:
             self._schedule_status_update(session_id, "failed")
             await self._push({

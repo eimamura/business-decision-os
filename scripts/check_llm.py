@@ -7,9 +7,12 @@ Usage:
 Exit code 0 = all checks passed. Non-zero = at least one check failed.
 
 Checks:
-  1. Basic completion  — model responds at all
-  2. Function calling  — model calls a tool instead of generating apology text
-  3. Multi-turn loop   — model generates a coherent answer after receiving a tool result
+  1. Basic completion       — model responds at all
+  2. Function calling       — model calls a tool instead of generating apology text
+  3. Multi-turn loop        — model generates a coherent answer after receiving a tool result
+  4. JSON structured output — model returns valid JSON when instructed (required for intent
+                              classification and routing; models that only output <think> blocks
+                              or free text will fail this check)
 """
 
 from __future__ import annotations
@@ -94,7 +97,9 @@ async def check_multi_turn(client: object) -> bool:
         return False  # function calling already failed — skip
 
     call = resp1.tool_calls[0]
-    tool_result_content = json.dumps({"sku_id": "SKU-001", "risk_level": "high", "days_of_supply": 3})
+    tool_result_content = json.dumps(
+        {"sku_id": "SKU-001", "risk_level": "high", "days_of_supply": 3}
+    )
 
     # Round 2: inject tool result and ask for a final answer
     resp2 = await client.complete(  # type: ignore[attr-defined]
@@ -130,6 +135,78 @@ async def check_multi_turn(client: object) -> bool:
     return bool(resp2.text and resp2.text.strip() and not resp2.tool_calls)
 
 
+async def check_json_output(client: object) -> bool:
+    """Model returns valid JSON when asked for structured output (no tools).
+
+    Intent classification and routing both require the model to respond with a
+    JSON object. Fails for:
+    - Models that ignore the format instruction entirely
+    - Qwen3 thinking models (e.g. qwen3.5:2b) that return content="" + reasoning="..."
+      via Ollama's OpenAI-compat endpoint — the actual JSON never lands in content
+    - Models that output only <think> blocks with no follow-up JSON
+    """
+    import re
+
+    resp = await client.complete(  # type: ignore[attr-defined]
+        messages=[
+            LLMMessage(
+                role="system",
+                content=(
+                    "You are a classifier. "
+                    "Always respond with a JSON object only — no prose, no markdown fences. "
+                    'Example: {"label": "positive", "score": 0.9}'
+                ),
+            ),
+            LLMMessage(
+                role="user",
+                content=(
+                    'Classify the sentiment of: "I love this product!"\n'
+                    'Respond with {"label": "positive"|"negative"|"neutral", "score": <float 0-1>}'
+                ),
+            ),
+        ],
+        tools=None,
+        temperature=0.0,
+        max_tokens=128,
+    )
+    if not resp.text:
+        print(
+            "\n    [!] Model returned empty text. If using Ollama, this may be a Qwen3 "
+            "thinking model (e.g. qwen3.5:2b) that puts output in 'reasoning' rather "
+            "than 'content'. These models are not compatible — switch to a non-thinking "
+            "variant (qwen2.5:7b, llama3.1:8b, mistral-nemo, etc.).",
+            end="",
+        )
+        return False
+    text = resp.text.strip()
+    # strip <think>...</think> blocks (non-thinking output should follow)
+    text = re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL).strip()
+    if not text:
+        print(
+            "\n    [!] Model returned only a <think> block with no follow-up JSON. "
+            "Disable thinking mode or switch to a non-thinking model.",
+            end="",
+        )
+        return False
+    # strip optional markdown code fence
+    if text.startswith("```"):
+        text = "\n".join(
+            line for line in text.splitlines() if not line.startswith("```")
+        ).strip()
+    try:
+        parsed = json.loads(text)
+        return isinstance(parsed, dict) and "label" in parsed
+    except (json.JSONDecodeError, ValueError):
+        m = re.search(r"\{.*\}", text, re.DOTALL)
+        if not m:
+            return False
+        try:
+            parsed = json.loads(m.group())
+            return isinstance(parsed, dict) and "label" in parsed
+        except (json.JSONDecodeError, ValueError):
+            return False
+
+
 async def main() -> int:
     provider = os.environ.get("LLM_PROVIDER", "anthropic").lower()
     if provider == "ollama":
@@ -151,9 +228,10 @@ async def main() -> int:
     results: list[tuple[str, bool | str]] = []
 
     checks: list[tuple[str, object]] = [
-        ("1. Basic completion ", check_basic),
-        ("2. Function calling ", check_function_calling),
-        ("3. Multi-turn loop  ", check_multi_turn),
+        ("1. Basic completion      ", check_basic),
+        ("2. Function calling      ", check_function_calling),
+        ("3. Multi-turn loop       ", check_multi_turn),
+        ("4. JSON structured output", check_json_output),
     ]
 
     for name, fn in checks:
@@ -173,9 +251,15 @@ async def main() -> int:
 
     if passed < total:
         print(
-            "\n  Tip: models must support OpenAI-style function calling.\n"
-            "  Confirmed working: claude-haiku/sonnet (LLM_PROVIDER=anthropic),\n"
-            "  llama3.1, qwen2.5, mistral-nemo (LLM_PROVIDER=ollama).\n"
+            "\n  Tip: models must support function calling AND return valid JSON when\n"
+            "  instructed (checks 2–4).\n"
+            "\n"
+            "  Known-good models (LLM_PROVIDER=ollama):\n"
+            "    qwen2.5:7b, llama3.1:8b, mistral-nemo, deepseek-r1:14b\n"
+            "\n"
+            "  Known-failing (Qwen3 thinking models — content empty via OpenAI-compat API):\n"
+            "    qwen3.5:2b, qwen3:8b and other qwen3.x variants\n"
+            "    → Switch to qwen2.5 or set OLLAMA_MODEL to a non-thinking model.\n"
         )
         return 1
     return 0

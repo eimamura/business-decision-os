@@ -27,22 +27,29 @@ def json_safe(value: Any) -> Any:
     return value
 
 
-def _strip_thinking(text: str) -> str:
-    """Remove <think>...</think> blocks emitted by Qwen3 / DeepSeek thinking models."""
-    return re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL).strip()
+class LLMResponseParseError(ValueError):
+    """Raised when the LLM returns text that cannot be parsed as the expected JSON structure."""
+
+    def __init__(self, raw_text: str) -> None:
+        super().__init__("no JSON object in LLM response")
+        self.raw_text = raw_text
 
 
 def _json_obj(text: str) -> dict[str, Any]:
-    text = _strip_thinking(text)
     match = re.search(r"\{.*\}", text, re.DOTALL)
     if not match:
-        raise ValueError("no JSON object in LLM response")
-    return cast(dict[str, Any], json.loads(match.group()))
+        raise LLMResponseParseError(text)
+    try:
+        return cast(dict[str, Any], json.loads(match.group()))
+    except json.JSONDecodeError:
+        raise LLMResponseParseError(text)
 
 
 def _json_array(text: str) -> list[dict[str, Any]]:
-    text = _strip_thinking(text)
     match = re.search(r"\[.*\]", text, re.DOTALL)
     if not match:
-        raise ValueError("no JSON array in LLM response")
-    return cast(list[dict[str, Any]], json.loads(match.group()))
+        raise LLMResponseParseError(text)
+    try:
+        return cast(list[dict[str, Any]], json.loads(match.group()))
+    except json.JSONDecodeError:
+        raise LLMResponseParseError(text)
