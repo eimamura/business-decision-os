@@ -33,11 +33,11 @@ See `docs/archive/v3/STATE.md` for P0–P23 per-phase details.
 
 ## Active Phase
 
-None
+P58 — list_stockout_risk Bulk Tool
 
 ## Active Lease
 
-None
+P58-B-03 (Tests — awaiting quality gate T-382)
 
 ## Last Completed
 

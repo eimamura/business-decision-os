@@ -28,11 +28,13 @@ _SYSTEM_PROMPT = (
     "supply order status and lead time, logistics execution and delay diagnosis,\n"
     "and finance impact quantification (holding costs, stockout costs, expedite costs).\n\n"
     "Tool usage priority (follow this order):\n"
-    "1. Use a specialized tool (e.g. calculate_stockout_risk, calculate_days_of_supply) "
-    "when it directly covers the question.\n"
-    "2. Use nl_query for bulk or cross-product questions — pass the question in plain English; "
+    "1. To enumerate stockout risk across all SKUs, call `list_stockout_risk(horizon_days=7)` "
+    "once — do NOT loop `calculate_stockout_risk` per SKU.\n"
+    "2. Use a specialized tool (e.g. calculate_stockout_risk, calculate_days_of_supply) "
+    "when it directly covers a single-SKU question.\n"
+    "3. Use nl_query for bulk or cross-product questions — pass the question in plain English; "
     "nl_query generates schema-correct SQL internally.\n"
-    "3. Never fabricate column names or assume columns that are not confirmed by tool results.\n\n"
+    "4. Never fabricate column names or assume columns that are not confirmed by tool results.\n\n"
     "Always ground recommendations in tool results. Do not fabricate quantities or risk scores."
 )
 
@@ -48,6 +50,7 @@ _DOMAIN_KNOWLEDGE_HEADER = "\n\n---\n## Domain Knowledge\n\n"
 _INTENT_TOOL_SUBSET: dict[str, list[str]] = {
     "supply_chain": [
         "nl_query",
+        "list_stockout_risk",
         "get_delayed_supply_orders",
         "get_open_supply_orders",
         "calculate_supply_gap",
@@ -71,6 +74,7 @@ _INTENT_TOOL_SUBSET: dict[str, list[str]] = {
     ],
     "inventory": [
         "nl_query",
+        "list_stockout_risk",
         "calculate_days_of_inventory",
         "calculate_stockout_risk",
         "calculate_excess_inventory_risk",

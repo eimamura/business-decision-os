@@ -38,6 +38,7 @@ _ROLE_TOOL_ALLOWLIST: dict[str, list[str]] = {
     "inventory": [
         "nl_query", "simulate_inventory",
         "calculate_days_of_inventory", "calculate_stockout_risk",
+        "list_stockout_risk",
         "calculate_excess_inventory_risk", "get_available_to_promise",
     ],
     "replenishment": ["nl_query", "simulate_inventory", "optimize_replenishment"],
@@ -58,6 +59,7 @@ _ROLE_TOOL_ALLOWLIST: dict[str, list[str]] = {
         "calculate_holding_cost_impact", "calculate_stockout_cost_impact",
         "calculate_expedite_cost", "compare_cost_scenarios",
         "calculate_days_of_inventory", "calculate_stockout_risk",
+        "list_stockout_risk",
         "calculate_excess_inventory_risk", "get_available_to_promise",
     ],
 }

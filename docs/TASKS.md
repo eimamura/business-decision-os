@@ -1328,3 +1328,39 @@ Dependencies: none
 | T-375 | `make test-unit && make lint && make typecheck` — 品質ゲート全通過確認 | Done |
 
 Dependencies: B-01
+
+---
+
+## P58 — list_stockout_risk Bulk Tool
+
+**Goal:** Add `list_stockout_risk` tool that retrieves stockout risk for all SKUs in a single SQL query, eliminating the N-round-trip loop pattern on `calculate_stockout_risk`.
+
+Root cause class: `missing_tool` — identified via LLM-as-a-Judge session.
+
+### Batch B-01 — Tool implementation (App Builder) — Done
+
+| Task | Description | Status |
+|---|---|---|
+| T-376 | Create `packages/tools/list_stockout_risk_tool.py` — `ListStockoutRiskTool`; name=`list_stockout_risk`; inputs `horizon_days` (int, default 7) and `min_risk_level` (string enum `["low","medium","high","critical"]`, default `"medium"`); single JOIN query across `inventory_snapshot + supply_orders + demand_history`; reuses `_classify_stockout_risk` thresholds; output `{ items: [...], count: int }`; `safety_level = "read_only"` | Done |
+
+Dependencies: none
+
+### Batch B-02 — Wiring (App Builder) — Done
+
+| Task | Description | Status |
+|---|---|---|
+| T-377 | `packages/tools/base.py` — add `"list_stockout_risk"` to `_ROLE_TOOL_ALLOWLIST["inventory"]` and `_ROLE_TOOL_ALLOWLIST["control"]` | Done |
+| T-378 | `packages/tools/__init__.py` — import `ListStockoutRiskTool`, add to `__all__`, register in `create_tool_registry()` | Done |
+| T-379 | `packages/agent/control/control_agent.py` — add `"list_stockout_risk"` to `_INTENT_TOOL_SUBSET["supply_chain"]` and `_INTENT_TOOL_SUBSET["inventory"]`; update `_SYSTEM_PROMPT` to include: "For enumeration of stockout risk across all SKUs, call `list_stockout_risk(horizon_days=7)` once instead of looping `calculate_stockout_risk` per SKU" | Done |
+
+Dependencies: B-01
+
+### Batch B-03 — Tests (Test/Review) — Not Started
+
+| Task | Description | Status |
+|---|---|---|
+| T-380 | `tests/unit/tools/test_list_stockout_risk_tool.py` — unit tests with AsyncMock pool: (a) returns all SKUs filtered by `min_risk_level`; (b) `count` matches `len(items)`; (c) stockout_date_estimate computed correctly for critical SKU; (d) empty result when no SKUs meet threshold; (e) DB error returns `{"error": ...}` dict; (f) `min_risk_level="low"` returns all non-none risk items | Done |
+| T-381 | `tests/integration/test_list_stockout_risk_tool_integration.py` — integration test against real DB: tool returns list, each item has required keys, count matches | Done |
+| T-382 | `make test-unit && make lint && make typecheck` — all pass | Not Started |
+
+Dependencies: B-01, B-02
