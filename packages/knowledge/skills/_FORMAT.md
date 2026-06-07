@@ -49,7 +49,7 @@ After the frontmatter, every Skill file must contain the following two sections 
 
 A numbered list of steps the agent must follow to answer the user's question. Steps should be
 concrete and tool-actionable — refer to specific tool names (e.g., `calculate_stockout_risk`,
-`sql_query`) where appropriate.
+`nl_query`) where appropriate.
 
 ```markdown
 # Procedure

@@ -34,21 +34,6 @@ def canonicalize_table_names(sql: str) -> str:
         lambda m: _LEGACY_TABLE_MAP[m.group(0).lower()], sql
     )
 
-_WRITE_KEYWORDS = re.compile(
-    r"\b(INSERT|UPDATE|DELETE|DROP|CREATE|ALTER|TRUNCATE)\b", re.IGNORECASE
-)
-_TABLE_PATTERN = re.compile(r"\bFROM\s+(\w+)|\bJOIN\s+(\w+)", re.IGNORECASE)
-
 
 def check_allowed(table_name: str) -> bool:
     return table_name.lower() in ALLOWED_READ_TABLES
-
-
-def validate_query(sql: str) -> None:
-    """Raises ValueError if the query touches non-allowlisted tables or performs writes."""
-    if _WRITE_KEYWORDS.search(sql):
-        raise ValueError("Write statements are not allowed")
-    for match in _TABLE_PATTERN.finditer(sql):
-        table = (match.group(1) or match.group(2)).lower()
-        if table not in ALLOWED_READ_TABLES:
-            raise ValueError(f"Table '{table}' is not in the allowlist")

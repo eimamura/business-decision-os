@@ -122,23 +122,15 @@ _result_cache: dict[str, tuple[list[dict[str, Any]], str, float]] = {}
 validate_sql = validate_read_sql
 
 
-async def _load_positive_examples() -> str:
-    return ""
-
-
 async def _generate_sql(
     question: str,
     model: Any,
     error_context: str = "",
-    dynamic_examples: str = "",
 ) -> str:
     from langchain_core.messages import HumanMessage, SystemMessage
 
     user_content = question + error_context
     system_parts = _build_system_text()
-    if dynamic_examples:
-        system_parts = system_parts + "\n\n" + dynamic_examples
-
     ai_msg = await model.ainvoke([SystemMessage(system_parts), HumanMessage(user_content)])
     sql = str(ai_msg.content).strip()
     if sql.startswith("```"):
@@ -157,11 +149,10 @@ async def generate_and_run(
         logger.debug("Cache hit for question hash %s", cache_key[:8])
         return cached[0], cached[1]
 
-    dynamic_examples = await _load_positive_examples()
     error_context = ""
     for attempt in range(MAX_RETRIES + 1):
         sql = canonicalize_table_names(
-            await _generate_sql(question, model, error_context, dynamic_examples)
+            await _generate_sql(question, model, error_context)
         )
         try:
             validate_sql(sql)

@@ -143,7 +143,7 @@ describe("useAgentProgress", () => {
       toolCalls: [
         {
           toolCallId: "tc-1",
-          toolName: "sql_query",
+          toolName: "nl_query",
           status: "completed",
           durationMs: 120,
         },
