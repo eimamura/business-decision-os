@@ -49,6 +49,7 @@ test:
 	uv run pytest tests/ -x -q
 
 test-unit:
+	uv sync --package api --quiet
 	uv run pytest tests/unit -q
 
 test-integration:
