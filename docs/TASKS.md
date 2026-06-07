@@ -61,6 +61,7 @@ Full task history for P0–P23 is archived at `docs/archive/v3/TASKS.md`.
 | P50 — LLM Response Normalization Layer | T-343–T-347 | 2026-06-07 |
 | P51 — Qwen3 Thinking Disable for Structured Output Calls | T-348–T-352 | 2026-06-07 |
 | P56 — nl_query クリーンアップ後処理 | T-363–T-369 | 2026-06-07 |
+| P57 — nl_query 品質強化 | T-370–T-375 | 2026-06-07 |
 
 > **Design Realignment Note (2026-06-05):** P29–P36 built Specialist Domain Agents (DemandAgent,
 > InventoryAgent, SupplyPlanningAgent, FinanceImpactAgent, SopAgent) as independent runtime units.
@@ -1297,5 +1298,33 @@ Dependencies: none
 | T-367 | `tests/unit/test_tool_isolation.py:96` — LLMスタブレスポンスの `"tools":["sql_query"]` → `"tools":["nl_query"]` に更新 | Done |
 | T-368 | `tests/unit/test_tool_layer_integration.py:152,158,215,220` — スタブの `tools=["sql_query"]` → `tools=["nl_query"]` に更新 | Done |
 | T-369 | `make test-unit && make lint && make typecheck` — 品質ゲート全通過確認 | Done |
+
+Dependencies: B-01
+
+---
+
+## P57 — nl_query 品質強化
+
+**Goal:** 評価で発見した問題（エラーキー不整合・空スキーマのフェイルサイレント・キャッシュ上限なし・クエリタイムアウト不在）を修正し、テストカバレッジを補完する。
+
+Dependencies: P56 Done
+
+### Batch B-01 — 実装修正 (App Builder) — Done
+
+| Task | Description | Status |
+|---|---|---|
+| T-370 | `packages/tools/nl_query_tool.py` — `handle()` 冒頭で `get_schema_context()` が空文字のとき `RuntimeError("Schema context not loaded — call load_schema_context() at startup")` を raise | Done |
+| T-371 | `packages/tools/nl_query_tool.py` — エラーパス3箇所（SQLGuardrailError, RuntimeError, Exception）のキーを `results`→`rows`, `count`→`row_count` に統一; `output_schema.properties` に `error` と `note` を追加 | Done |
+| T-372 | `packages/persistence/query_repo.py` — `conn.fetch(_inject_limit(query, MAX_ROWS))` に `timeout=30.0` 引数を追加（asyncpg statement timeout 30秒） | Done |
+| T-373 | `packages/tools/nl_query_tool.py` — `_result_cache` に最大512エントリ制限を追加: キャッシュ書き込み前に `len(_result_cache) > 512` なら最古エントリ（`min(..., key=lambda k: _result_cache[k][2])`）を削除 | Done |
+
+Dependencies: none
+
+### Batch B-02 — テスト補完 + 品質ゲート (Test/Review) — Done
+
+| Task | Description | Status |
+|---|---|---|
+| T-374 | `tests/unit/test_tool_isolation.py` — NlQueryTool の追加テスト3件: (1) `get_schema_context()` が空のとき `RuntimeError` が発生する, (2) SQLGuardrailError発生時レスポンスに `rows`/`row_count` キーが存在する, (3) キャッシュヒット時に DB クエリが呼ばれないことを確認 | Done |
+| T-375 | `make test-unit && make lint && make typecheck` — 品質ゲート全通過確認 | Done |
 
 Dependencies: B-01
