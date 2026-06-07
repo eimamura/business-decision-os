@@ -158,6 +158,9 @@ async def generate_and_run(
             validate_sql(sql)
             query_result = await execute_read_query(sql)
             result = query_result["rows"]
+            if len(_result_cache) >= 512:
+                oldest_key = min(_result_cache, key=lambda k: _result_cache[k][2])
+                del _result_cache[oldest_key]
             _result_cache[cache_key] = (result, sql, time.time())
             return result, sql
         except SQLGuardrailError:
@@ -194,6 +197,8 @@ class NlQueryTool:
             "truncated": {"type": "boolean"},
             "columns": {"type": "array"},
             "sql": {"type": "string"},
+            "error": {"type": "string"},
+            "note": {"type": "string"},
         },
     }
 
@@ -208,6 +213,11 @@ class NlQueryTool:
 
         question: str = input.get("question", "")
 
+        if not get_schema_context():
+            raise RuntimeError(
+                "Schema context not loaded — call load_schema_context() at startup"
+            )
+
         try:
             results, sql = await generate_and_run(question, self._model)
             real_count = len(results)
@@ -218,16 +228,16 @@ class NlQueryTool:
             )
         except SQLGuardrailError as exc:
             return ToolResult(
-                output={"results": [], "count": 0, "sql": "", "error": str(exc)},
-                audit_payload={"question": question, "sql": "", "count": 0, "error": str(exc)},
+                output={"rows": [], "row_count": 0, "sql": "", "error": str(exc)},
+                audit_payload={"question": question, "sql": "", "row_count": 0, "error": str(exc)},
             )
         except RuntimeError as exc:
             return ToolResult(
-                output={"results": [], "count": 0, "sql": "", "note": str(exc)},
-                audit_payload={"question": question, "sql": "", "count": 0},
+                output={"rows": [], "row_count": 0, "sql": "", "note": str(exc)},
+                audit_payload={"question": question, "sql": "", "row_count": 0},
             )
         except Exception as exc:
             return ToolResult(
-                output={"results": [], "count": 0, "sql": "", "error": str(exc)},
-                audit_payload={"question": question, "sql": "", "count": 0, "error": str(exc)},
+                output={"rows": [], "row_count": 0, "sql": "", "error": str(exc)},
+                audit_payload={"question": question, "sql": "", "row_count": 0, "error": str(exc)},
             )

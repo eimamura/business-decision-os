@@ -29,7 +29,7 @@ class QueryResult(TypedDict):
 async def execute_read_query(query: str) -> QueryResult:
     pool = await get_pool()
     async with pool.acquire() as conn:
-        rows = await conn.fetch(_inject_limit(query, MAX_ROWS))
+        rows = await conn.fetch(_inject_limit(query, MAX_ROWS), timeout=30.0)
         row_dicts = [dict(row) for row in rows]
         row_dicts = row_dicts[:MAX_ROWS]
         column_names = list(row_dicts[0].keys()) if row_dicts else []
