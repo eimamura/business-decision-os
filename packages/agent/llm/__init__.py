@@ -623,7 +623,8 @@ def _normalize_llm_text(message: dict[str, Any], model_name: str) -> str:
         if side_channel:
             _logger.warning(
                 "OllamaClient: model returned empty content with reasoning/thinking field "
-                "(%d chars) for model %s. Using side-channel as text.",
+                "(%d chars) for model %s. Using side-channel as text. "
+                "Set think=False in the request payload to prevent this.",
                 len(side_channel),
                 model_name,
             )
@@ -762,11 +763,17 @@ class OllamaClient:
         if tools:
             payload["tools"] = self._to_openai_tools(tools)
             payload["tool_choice"] = "auto"
+            # Disable thinking for tool calls: thinking degrades function-calling accuracy
+            # and wastes tokens on models like qwen3.5:2b that emit thinking before tool calls.
+            payload["think"] = False
         elif specialist_role == "orchestrator":
             # Orchestrator calls (intent classification, routing) must return JSON.
             # JSON mode forces valid JSON output from models that struggle to follow
             # "Return ONLY a JSON object" instructions (e.g. small 2B models).
             payload["response_format"] = {"type": "json_object"}
+            # Disable thinking: on thinking models (e.g. qwen3.5:2b) the reasoning phase
+            # can exhaust max_tokens before content is emitted, leaving content="".
+            payload["think"] = False
 
         start = time.monotonic()
         try:
