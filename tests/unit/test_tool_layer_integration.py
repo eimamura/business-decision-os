@@ -187,7 +187,7 @@ async def test_dag_execution_respects_dependencies(stub_orchestrator):
     assert list(response.agent_results) == ["ctrl"]
 
 
-async def test_router_bad_json_fails_explicitly(stub_orchestrator):
+async def test_router_bad_json_returns_raw_text(stub_orchestrator):
     orchestrator, queue = stub_orchestrator
 
     async def _bad_complete(messages, **kwargs):
@@ -200,6 +200,8 @@ async def test_router_bad_json_fails_explicitly(stub_orchestrator):
 
     orchestrator._llm_client.complete = _bad_complete
 
-    with pytest.raises(ValueError, match="no JSON object"):
-        await orchestrator.run(uuid4(), SessionUserQuery(text="inventory?"))
-    assert any(event["type"] == "error" for event in await _events(queue))
+    response = await orchestrator.run(uuid4(), SessionUserQuery(text="inventory?"))
+    assert response.reply == "not json"
+    assert response.mode == "direct_chat"
+    events = await _events(queue)
+    assert any(e["type"] == "done" and e.get("reply") == "not json" for e in events)
