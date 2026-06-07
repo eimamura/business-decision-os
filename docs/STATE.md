@@ -31,11 +31,11 @@ P47 — Long-Term Memory Physical Implementation
 
 ## Active Lease
 
-P47-B-01
+P47-B-02
 
 ## Last Completed
 
-P46-B-02 — GetDelayedSupplyOrdersTool tests: 774 passed, lint+typecheck clean (2026-06-06)
+P47-B-01 — long_term_memory Alembic migration: lint+typecheck clean (2026-06-06)
 
 ## Blockers
 

@@ -953,11 +953,11 @@ knowledge across sessions — completing the memory layer defined in DESIGN.md �
 
 Dependencies: P41 Done (Memory Layer base classes)
 
-### Batch B-01 — DB migration (Infra) — Not Started
+### Batch B-01 — DB migration (Infra) — Done
 
 | Task | Description | Status |
 |---|---|---|
-| T-331 | `apps/api/alembic/versions/0017_long_term_memory.py` — create table `long_term_memory(id UUID PK DEFAULT gen_random_uuid(), memory_type VARCHAR(32) NOT NULL, scope VARCHAR(128) NOT NULL DEFAULT '', content TEXT NOT NULL, metadata_json TEXT NOT NULL DEFAULT '{}', created_at TIMESTAMPTZ NOT NULL DEFAULT NOW())`; index `ix_long_term_memory_type_scope` on `(memory_type, scope)`; `down_revision='0016'` | Not Started |
+| T-331 | `apps/api/alembic/versions/0017_long_term_memory.py` — create table `long_term_memory(id UUID PK DEFAULT gen_random_uuid(), memory_type VARCHAR(32) NOT NULL, scope VARCHAR(128) NOT NULL DEFAULT '', content TEXT NOT NULL, metadata_json TEXT NOT NULL DEFAULT '{}', created_at TIMESTAMPTZ NOT NULL DEFAULT NOW())`; index `ix_long_term_memory_type_scope` on `(memory_type, scope)`; `down_revision='0016'` | Done |
 
 Dependencies: none
 
