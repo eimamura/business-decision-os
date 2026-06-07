@@ -57,6 +57,7 @@ Full task history for P0–P23 is archived at `docs/archive/v3/TASKS.md`.
 | P43 — MVP Validation (3 Questions) | T-305–T-310 | 2026-06-06 |
 | P46 — Skill & Tool Enrichment | T-325–T-330 | 2026-06-06 |
 | P47 — Long-Term Memory Physical Implementation | T-331–T-335 | 2026-06-06 |
+| P48 — LongTermMemory Integration + Test Accuracy Fix | T-336–T-339 | 2026-06-06 |
 
 > **Design Realignment Note (2026-06-05):** P29–P36 built Specialist Domain Agents (DemandAgent,
 > InventoryAgent, SupplyPlanningAgent, FinanceImpactAgent, SopAgent) as independent runtime units.
@@ -999,11 +1000,11 @@ Dependencies: P47 Done
 
 Dependencies: none
 
-### Batch B-02 — Tests + quality gate (Test/Review) — Not Started
+### Batch B-02 — Tests + quality gate (Test/Review) — Done
 
 | Task | Description | Status |
 |---|---|---|
-| T-338 | Unit tests for LongTermMemory integration in ControlAgent — add 2 tests to a new file `tests/unit/agent/test_control_agent_long_term.py`: (a) when `LongTermMemoryStore.search` returns records, `## Domain Knowledge` block appears in task.instruction passed to `super().run`; (b) when `LongTermMemoryStore.search` raises, ControlAgent does not raise and continues normally | Not Started |
-| T-339 | `make test-unit && make lint && make typecheck` — all pass | Not Started |
+| T-338 | Unit tests for LongTermMemory integration in ControlAgent — add 2 tests to a new file `tests/unit/agent/test_control_agent_long_term.py`: (a) when `LongTermMemoryStore.search` returns records, `## Domain Knowledge` block appears in task.instruction passed to `super().run`; (b) when `LongTermMemoryStore.search` raises, ControlAgent does not raise and continues normally | Done |
+| T-339 | `make test-unit && make lint && make typecheck` — all pass | Done |
 
 Dependencies: B-01

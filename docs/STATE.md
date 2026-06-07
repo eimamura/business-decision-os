@@ -8,7 +8,7 @@ Full history archived at `docs/archive/v3/STATE.md`.
 
 ## Completed Phases
 
-P0–P38, P39–P47 all Done (T-001–T-271, T-273–T-335).
+P0–P38, P39–P48 all Done (T-001–T-271, T-273–T-339).
 
 P32–P36 S&OP MVP (2026-06-04):
 - P32 — SupplyPlanningAgent + 5 supply tools (T-210–T-223)
@@ -27,15 +27,15 @@ See `docs/archive/v3/STATE.md` for P0–P23 per-phase details.
 
 ## Active Phase
 
-P48 — LongTermMemory Integration + Test Accuracy Fix
+None — all planned phases complete.
 
 ## Active Lease
 
-P48-B-02
+None.
 
 ## Last Completed
 
-P48-B-01 — LongTermMemory in ControlAgent + Playwright test fix: 781 passed, lint+typecheck clean (2026-06-06)
+P48-B-02 — LongTermMemory integration tests: 783 passed, lint+typecheck clean (2026-06-06)
 
 ## Blockers
 
