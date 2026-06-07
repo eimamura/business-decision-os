@@ -56,6 +56,7 @@ Full task history for P0–P23 is archived at `docs/archive/v3/TASKS.md`.
 | P42 — Context Engineering Integration | T-299–T-304 | 2026-06-06 |
 | P43 — MVP Validation (3 Questions) | T-305–T-310 | 2026-06-06 |
 | P46 — Skill & Tool Enrichment | T-325–T-330 | 2026-06-06 |
+| P47 — Long-Term Memory Physical Implementation | T-331–T-335 | 2026-06-06 |
 
 > **Design Realignment Note (2026-06-05):** P29–P36 built Specialist Domain Agents (DemandAgent,
 > InventoryAgent, SupplyPlanningAgent, FinanceImpactAgent, SopAgent) as independent runtime units.
@@ -970,11 +971,11 @@ Dependencies: none
 
 Dependencies: B-01
 
-### Batch B-03 — Tests (Test/Review) — Not Started
+### Batch B-03 — Tests (Test/Review) — Done
 
 | Task | Description | Status |
 |---|---|---|
-| T-334 | Unit tests `tests/unit/test_long_term_memory_store.py` — AsyncMock asyncpg pool (same pattern as `test_decision_memory_store`); tests: write inserts correct fields, search with `type:` prefix adds WHERE filter, search with `scope:` prefix adds WHERE filter, search with bare query returns k records without filter, invalid/empty query returns records without filter, DB error in write propagates | Not Started |
-| T-335 | `make test-unit && make lint && make typecheck` — all pass | Not Started |
+| T-334 | Unit tests `tests/unit/test_long_term_memory_store.py` — AsyncMock asyncpg pool (same pattern as `test_decision_memory_store`); tests: write inserts correct fields, search with `type:` prefix adds WHERE filter, search with `scope:` prefix adds WHERE filter, search with bare query returns k records without filter, invalid/empty query returns records without filter, DB error in write propagates | Done |
+| T-335 | `make test-unit && make lint && make typecheck` — all pass | Done |
 
 Dependencies: B-01, B-02

@@ -8,7 +8,7 @@ Full history archived at `docs/archive/v3/STATE.md`.
 
 ## Completed Phases
 
-P0–P38, P39–P45 all Done (T-001–T-271, T-273–T-324).
+P0–P38, P39–P47 all Done (T-001–T-271, T-273–T-335).
 
 P32–P36 S&OP MVP (2026-06-04):
 - P32 — SupplyPlanningAgent + 5 supply tools (T-210–T-223)
@@ -27,15 +27,15 @@ See `docs/archive/v3/STATE.md` for P0–P23 per-phase details.
 
 ## Active Phase
 
-P47 — Long-Term Memory Physical Implementation
+None — all planned phases complete.
 
 ## Active Lease
 
-P47-B-03
+None.
 
 ## Last Completed
 
-P47-B-02 — LongTermMemoryStore + __init__ update: 774 passed, lint+typecheck clean (2026-06-06)
+P47-B-03 — LongTermMemoryStore tests: 781 passed, lint+typecheck clean (2026-06-06)
 
 ## Blockers
 
