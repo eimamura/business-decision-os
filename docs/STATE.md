@@ -29,15 +29,15 @@ See `docs/archive/v3/STATE.md` for P0–P23 per-phase details.
 
 ## Active Phase
 
-None
+P54 — LangChain ChatModel Migration Phase 3: NlQueryTool + LLMClient Deletion
 
 ## Active Lease
 
-None
+P54-B-02 — Remove legacy fallback paths
 
 ## Last Completed
 
-P53-B-03 — Tests: 806 unit tests passed, lint + typecheck clean (2026-06-07)
+P54-B-01 — NlQueryTool + history.py + app wiring: 806 passed, lint + typecheck clean (2026-06-07)
 
 ## Blockers
 

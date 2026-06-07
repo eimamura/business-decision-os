@@ -8,7 +8,7 @@ from collections.abc import Callable
 from typing import Any
 from uuid import UUID
 
-from packages.agent.llm import LLMUsage, create_llm_client
+from packages.agent.llm import LLMUsage
 from packages.agent.orchestrator import SessionOrchestrator
 from packages.agent.runner import AcaJobsRunner, CeleryJobRunner, InProcessJobRunner
 from packages.memory import PgVectorMemoryStore, StubMemoryStore
@@ -197,11 +197,14 @@ def make_event_persister(session_id: str) -> Callable[[dict[str, Any]], Any]:
 
 
 def get_orchestrator(sse_queue: Any | None = None) -> SessionOrchestrator:
-    llm_client = create_llm_client(usage_writer=_real_usage_writer)
+    from packages.agent.model_registry import create_model_registry
+
+    registry = create_model_registry()
     runner = _build_runner()
-    tool_registry = create_tool_registry(runner=runner, llm_client=llm_client)
+    tool_registry = create_tool_registry(runner=runner, model=registry.get("control"))
     memory_store = _build_memory_store()
     return SessionOrchestrator(
-        llm_client, tool_registry, memory_store, sse_queue,
+        registry.get("control"), tool_registry, memory_store, sse_queue,
         checkpoint_pool=_shared_pool,
+        model_registry=registry,
     )

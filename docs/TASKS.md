@@ -1099,6 +1099,54 @@ Dependencies: B-02
 
 ---
 
+## P54 — LangChain ChatModel Migration Phase 3: NlQueryTool + LLMClient Deletion
+
+**Goal:** Complete LangChain migration — update `NlQueryTool` and `history.py`, remove all legacy `LLMClient` fallback paths, and delete `LLMClient` Protocol, `ClaudeClient`, `OllamaClient`, and `create_llm_client()`.
+
+Dependencies: P53 Done
+
+### Batch B-01 — NlQueryTool + history.py + app wiring (App Builder) — Done
+
+| Task | Description | Status |
+|---|---|---|
+| T-374 | `nl_query_tool.py` — `_generate_sql(model: BaseChatModel, ...)` uses `model.ainvoke([SystemMessage, HumanMessage])` and extracts `.content`; `generate_and_run(model: BaseChatModel)`; `NlQueryTool.__init__(model: BaseChatModel \| None)` replacing `llm_client`; update guard error message | Done |
+| T-375 | `packages/tools/__init__.py` — `create_tool_registry(model: BaseChatModel \| None = None)` replacing `llm_client: LLMClient \| None`; remove `LLMClient` import; update `NlQueryTool(model=model)` call | Done |
+| T-376 | `packages/agent/history.py` — replace `create_llm_client()` with `create_model_registry().get("control").ainvoke([SystemMessage, HumanMessage])` in `_summarize()`; remove `create_llm_client` import; add `langchain_core.messages` imports | Done |
+| T-377 | `apps/api/state.py` — replace `create_llm_client()` with `create_model_registry()`; pass `model=registry.get("control")` to `create_tool_registry()`; pass `model_registry=registry` to `SessionOrchestrator`; remove `create_llm_client` import | Done |
+
+Dependencies: none
+
+### Batch B-02 — Remove legacy fallback paths (App Builder) — Not Started
+
+| Task | Description | Status |
+|---|---|---|
+| T-378 | `session_orchestrator.py` — remove `if self._model_registry is not None:` guards from `classify_intent()`, `select_execution_mode()`, `_node_prepare_ask_user()`; make LangChain path unconditional; keep `llm_client` param but remove its usage in these 3 methods | Not Started |
+| T-379 | `planning.py` — remove legacy `_llm_client.complete()` fallback from `create_execution_plan()` and `create_task_nodes()`; remove `from packages.agent.llm import LLMMessage` lazy imports in those functions | Not Started |
+| T-380 | `runtime.py` — remove legacy `_llm_client.complete()` fallback from `_call_model_node()`, `_verify_findings_node()`, and `_summarize_messages()`; make `lc_model` required (raise `RuntimeError` if `self._lc_model is None` at call time) | Not Started |
+
+Dependencies: B-01
+
+### Batch B-03 — Delete LLMClient, ClaudeClient, OllamaClient (App Builder) — Not Started
+
+| Task | Description | Status |
+|---|---|---|
+| T-381 | `packages/agent/llm/__init__.py` — delete `ClaudeClient` class (~lines 351–634); remove from `__all__` if present | Not Started |
+| T-382 | `packages/agent/llm/__init__.py` — delete `OllamaClient` class and `_normalize_llm_text` module-level helper (~lines 635–913); remove from `__all__` if present | Not Started |
+| T-383 | `packages/agent/llm/__init__.py` — delete `LLMClient(Protocol)` class (~lines 131–172) and `create_llm_client()` factory (~lines 914+); remove from `__all__`; keep `LLMMessage`, `LLMToolSpec`, `LLMResponse`, `LLMUsage`, `LLMStreamEvent`, `StubClaudeClient`, `ScenarioStubClaudeClient` | Not Started |
+
+Dependencies: B-02
+
+### Batch B-04 — Tests (Test/Review) — Not Started
+
+| Task | Description | Status |
+|---|---|---|
+| T-384 | Update `tests/unit/test_tool_isolation.py` line ~366: replace `NlQueryTool(llm_client=SQLStubClaudeClient(...))` with `NlQueryTool(model=mock_model)` where `mock_model` is a `MagicMock(spec=BaseChatModel)` with `ainvoke = AsyncMock(return_value=AIMessage(content="SELECT pg_sleep(10)"))` | Not Started |
+| T-385 | `make test-unit && make lint && make typecheck` — all pass | Not Started |
+
+Dependencies: B-03
+
+---
+
 ## P51 — Qwen3 Thinking Disable for Structured Output Calls
 
 **Goal:** `OllamaClient.complete()` の orchestrator ロール呼び出しおよびツール呼び出しに `"think": False` を追加し、Qwen3 thinking モデルが thinking フェーズで max_tokens を消費して `content=""` になる問題を解消する。

@@ -359,11 +359,18 @@ async def test_sql_tool_guardrail_blocks_without_execution(
 async def test_nl_query_tool_guardrail_blocks_without_execution(
     monkeypatch: pytest.MonkeyPatch,
 ):
+    class _FakeAIMessage:
+        content = "SELECT pg_sleep(10)"
+
+    class _StubModel:
+        async def ainvoke(self, messages: object, **kwargs: object) -> _FakeAIMessage:
+            return _FakeAIMessage()
+
     async def fail_execute(query: str):
         raise AssertionError(f"query should not execute: {query}")
 
     monkeypatch.setattr("packages.tools.nl_query_tool.execute_read_query", fail_execute)
-    tool = NlQueryTool(llm_client=SQLStubClaudeClient("SELECT pg_sleep(10)"))
+    tool = NlQueryTool(model=_StubModel())
     result = await tool.handle({"question": "wait"}, _ctx())
     assert "error" in result.output
     assert result.output["results"] == []

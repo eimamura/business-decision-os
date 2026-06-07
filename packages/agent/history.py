@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import logging
 
-from packages.agent.llm import LLMMessage, create_llm_client
 from packages.memory import ConversationTurn
 
 logger = logging.getLogger(__name__)
@@ -37,17 +36,17 @@ async def compress_history(
 
 
 async def _summarize(messages: list[ConversationTurn]) -> str:
+    from langchain_core.messages import HumanMessage, SystemMessage
+
+    from packages.agent.model_registry import create_model_registry
+
     transcript = "\n".join(f"{m.role.upper()}: {m.content}" for m in messages)
-    llm = create_llm_client()
-    llm_messages: list[LLMMessage] = [
-        LLMMessage(
-            role="system",
-            content=(
-                "Summarize the following conversation history concisely. "
-                "Focus on the business decisions discussed and key facts. Plain text only."
-            ),
+    model = create_model_registry().get("control")
+    ai_msg = await model.ainvoke([
+        SystemMessage(
+            "Summarize the following conversation history concisely. "
+            "Focus on the business decisions discussed and key facts. Plain text only."
         ),
-        LLMMessage(role="user", content=transcript),
-    ]
-    response = await llm.complete(llm_messages, max_tokens=512)
-    return response.text.strip()
+        HumanMessage(transcript),
+    ])
+    return str(ai_msg.content).strip()

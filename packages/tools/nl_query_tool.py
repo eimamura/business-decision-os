@@ -6,7 +6,6 @@ import time
 from typing import Any, Literal
 
 from packages.agent.context_sanitizer import sanitize_sql_results
-from packages.agent.llm import LLMClient, LLMMessage
 from packages.persistence import execute_read_query
 from packages.tools.base import ToolContext, ToolResult
 from packages.tools.schema_context import get_schema_context
@@ -69,21 +68,19 @@ async def _load_positive_examples() -> str:
 
 async def _generate_sql(
     question: str,
-    llm_client: LLMClient,
+    model: Any,
     error_context: str = "",
     dynamic_examples: str = "",
 ) -> str:
+    from langchain_core.messages import HumanMessage, SystemMessage
+
     user_content = question + error_context
     system_parts = _build_system_text()
     if dynamic_examples:
         system_parts = system_parts + "\n\n" + dynamic_examples
 
-    llm_messages: list[LLMMessage] = [
-        LLMMessage(role="system", content=system_parts),
-        LLMMessage(role="user", content=user_content),
-    ]
-    response = await llm_client.complete(llm_messages, max_tokens=512)
-    sql = response.text.strip()
+    ai_msg = await model.ainvoke([SystemMessage(system_parts), HumanMessage(user_content)])
+    sql = str(ai_msg.content).strip()
     if sql.startswith("```"):
         lines = sql.split("\n")
         sql = "\n".join(lines[1:-1] if lines[-1] == "```" else lines[1:])
@@ -92,7 +89,7 @@ async def _generate_sql(
 
 async def generate_and_run(
     question: str,
-    llm_client: LLMClient,
+    model: Any,
 ) -> tuple[list[dict[str, Any]], str]:
     cache_key = hashlib.sha256(question.encode()).hexdigest()
     cached = _result_cache.get(cache_key)
@@ -103,7 +100,7 @@ async def generate_and_run(
     dynamic_examples = await _load_positive_examples()
     error_context = ""
     for attempt in range(MAX_RETRIES + 1):
-        sql = await _generate_sql(question, llm_client, error_context, dynamic_examples)
+        sql = await _generate_sql(question, model, error_context, dynamic_examples)
         try:
             validate_sql(sql)
             query_result = await execute_read_query(sql)
@@ -147,19 +144,19 @@ class NlQueryTool:
         },
     }
 
-    def __init__(self, llm_client: LLMClient | None = None) -> None:
-        self._llm_client = llm_client
+    def __init__(self, model: Any | None = None) -> None:
+        self._model = model
 
     async def handle(self, input: dict[str, Any], ctx: ToolContext) -> ToolResult:
-        if self._llm_client is None:
+        if self._model is None:
             raise RuntimeError(
-                "NlQueryTool requires an LLMClient — pass llm_client to create_tool_registry()"
+                "NlQueryTool requires a model — pass model to create_tool_registry()"
             )
 
         question: str = input.get("question", "")
 
         try:
-            results, sql = await generate_and_run(question, self._llm_client)
+            results, sql = await generate_and_run(question, self._model)
             real_count = len(results)
             sanitized = sanitize_sql_results(results, max_rows=100)
             return ToolResult(
