@@ -60,6 +60,7 @@ Full task history for P0–P23 is archived at `docs/archive/v3/TASKS.md`.
 | P48 — LongTermMemory Integration + Test Accuracy Fix | T-336–T-339 | 2026-06-06 |
 | P50 — LLM Response Normalization Layer | T-343–T-347 | 2026-06-07 |
 | P51 — Qwen3 Thinking Disable for Structured Output Calls | T-348–T-352 | 2026-06-07 |
+| P56 — nl_query クリーンアップ後処理 | T-363–T-369 | 2026-06-07 |
 
 > **Design Realignment Note (2026-06-05):** P29–P36 built Specialist Domain Agents (DemandAgent,
 > InventoryAgent, SupplyPlanningAgent, FinanceImpactAgent, SopAgent) as independent runtime units.
@@ -1269,3 +1270,32 @@ Dependencies: B-01
 | T-362 | `make test-unit && make lint && make typecheck` — 749 passed, all checks passed, no issues | Done |
 
 Dependencies: B-01, B-02
+
+---
+
+## P56 — nl_query クリーンアップ後処理
+
+**Goal:** P55検証で発見された残存`sql_query`参照・デッドコード・スタブを全て除去し、コードベースを一貫させる。
+
+Dependencies: P55 Done
+
+### Batch B-01 — パッケージコードのデッドコード削除 (App Builder) — Done
+
+| Task | Description | Status |
+|---|---|---|
+| T-363 | `packages/tools/sql_allowlist.py` — `validate_query()` 関数を削除（どこからもインポートされていないデッドコード） | Done |
+| T-364 | `packages/tools/nl_query_tool.py` — `_load_positive_examples()` スタブを削除し、`generate_and_run` 内の呼び出し (`dynamic_examples = await _load_positive_examples()`) と `_generate_sql` の `dynamic_examples` パラメータを削除 | Done |
+| T-365 | `packages/knowledge/skills/_FORMAT.md:52` — 例の中の `sql_query` を `nl_query` に更新 | Done |
+| T-366 | `apps/web/hooks/__tests__/useAgentProgress.test.ts:146` — `toolName: "sql_query"` → `toolName: "nl_query"` に更新 | Done |
+
+Dependencies: none
+
+### Batch B-02 — Python テストスタブ修正 + 品質ゲート (Test/Review) — Done
+
+| Task | Description | Status |
+|---|---|---|
+| T-367 | `tests/unit/test_tool_isolation.py:96` — LLMスタブレスポンスの `"tools":["sql_query"]` → `"tools":["nl_query"]` に更新 | Done |
+| T-368 | `tests/unit/test_tool_layer_integration.py:152,158,215,220` — スタブの `tools=["sql_query"]` → `tools=["nl_query"]` に更新 | Done |
+| T-369 | `make test-unit && make lint && make typecheck` — 品質ゲート全通過確認 | Done |
+
+Dependencies: B-01
