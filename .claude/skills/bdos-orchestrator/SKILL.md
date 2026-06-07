@@ -226,7 +226,7 @@ Specialists update only their own assigned task rows. They MUST NOT change batch
 
 - **Read-only** on all code and infra directories: `apps/`, `packages/`, `infra/`, `tests/`, `.github/`
 - May write to: `docs/TASKS.md` (status updates only), `docs/DECISIONS.md` (append only), `docs/adr/` (new files only)
-- Tools: Read, Write, Edit, Grep, Glob
+- Tools: Read, Write, Edit, Grep, Glob, Agent (to spawn bdos-app-builder / bdos-infra / bdos-test-review)
 
 ## Constraints
 
