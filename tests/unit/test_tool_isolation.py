@@ -49,6 +49,15 @@ def _ctx() -> ToolContext:
     )
 
 
+class _NlQueryFakeAIMessage:
+    content = "SELECT pg_sleep(10)"
+
+
+class _StubModel:
+    async def ainvoke(self, messages: object, **kwargs: object) -> _NlQueryFakeAIMessage:
+        return _NlQueryFakeAIMessage()
+
+
 def _extract_system_text(messages: list) -> str:
     """Read system text from plain content or content_blocks (T-008 3-block caching)."""
     if not messages:
@@ -294,23 +303,81 @@ def test_sql_guardrail_rejects_unsafe_sql(sql: str):
 async def test_nl_query_tool_guardrail_blocks_without_execution(
     monkeypatch: pytest.MonkeyPatch,
 ):
-    class _FakeAIMessage:
-        content = "SELECT pg_sleep(10)"
-
-    class _StubModel:
-        async def ainvoke(self, messages: object, **kwargs: object) -> _FakeAIMessage:
-            return _FakeAIMessage()
-
     async def fail_execute(query: str):
         raise AssertionError(f"query should not execute: {query}")
 
     monkeypatch.setattr("packages.tools.nl_query_tool.execute_read_query", fail_execute)
+    monkeypatch.setattr("packages.tools.nl_query_tool.get_schema_context", lambda: "sku_master(sku_id, name)")
     tool = NlQueryTool(model=_StubModel())
     result = await tool.handle({"question": "wait"}, _ctx())
     assert "error" in result.output
-    assert result.output["results"] == []
-    assert result.output["count"] == 0
+    assert result.output["rows"] == []
+    assert result.output["row_count"] == 0
     assert result.output["sql"] == ""
+
+
+async def test_nl_query_tool_raises_when_schema_empty(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    monkeypatch.setattr("packages.tools.nl_query_tool.get_schema_context", lambda: "")
+    tool = NlQueryTool(model=_StubModel())
+    with pytest.raises(RuntimeError, match="Schema context not loaded"):
+        await tool.handle({"question": "show me all SKUs"}, _ctx())
+
+
+async def test_nl_query_error_response_uses_rows_key(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    async def fail_execute(query: str) -> dict:
+        raise AssertionError(f"should not execute: {query}")
+
+    monkeypatch.setattr("packages.tools.nl_query_tool.execute_read_query", fail_execute)
+    monkeypatch.setattr(
+        "packages.tools.nl_query_tool.get_schema_context",
+        lambda: "inventory_snapshot(sku_id TEXT, on_hand INTEGER)",
+    )
+    tool = NlQueryTool(model=_StubModel())
+    result = await tool.handle({"question": "wait"}, _ctx())
+    assert "rows" in result.output
+    assert "row_count" in result.output
+    assert result.output["rows"] == []
+    assert result.output["row_count"] == 0
+
+
+async def test_nl_query_cache_hit_skips_db(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    import packages.tools.nl_query_tool as nqt
+
+    monkeypatch.setattr(
+        "packages.tools.nl_query_tool.get_schema_context",
+        lambda: "inventory_snapshot(sku_id TEXT, on_hand INTEGER)",
+    )
+
+    call_count = 0
+
+    async def fake_generate(question: str, model: object, error_context: str = "") -> str:
+        return "SELECT sku_id FROM inventory_snapshot LIMIT 10"
+
+    async def fake_execute(sql: str) -> dict:
+        nonlocal call_count
+        call_count += 1
+        return {"rows": [{"sku_id": "SKU001"}], "column_names": ["sku_id"], "row_count": 1}
+
+    monkeypatch.setattr("packages.tools.nl_query_tool._generate_sql", fake_generate)
+    monkeypatch.setattr("packages.tools.nl_query_tool.execute_read_query", fake_execute)
+    monkeypatch.setattr("packages.tools.nl_query_tool.validate_sql", lambda sql: None)
+
+    # Clear cache to ensure a clean state
+    nqt._result_cache.clear()
+
+    tool = NlQueryTool(model=object())
+    question = "unique_cache_test_question_xyz"
+    await tool.handle({"question": question}, _ctx())
+    assert call_count == 1  # first call executes DB
+
+    await tool.handle({"question": question}, _ctx())
+    assert call_count == 1  # cache hit: DB not called again
 
 
 # ===== T-1011: ApprovalTool =====
