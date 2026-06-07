@@ -1,5 +1,6 @@
 "use client";
 
+import { useState, useCallback } from "react";
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeSanitize from "rehype-sanitize";
@@ -95,6 +96,16 @@ export default function AssistantBubble({
   message,
   onFeedback,
 }: AssistantBubbleProps): React.JSX.Element {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = useCallback(async (): Promise<void> => {
+    await navigator.clipboard.writeText(message.content);
+    setCopied(true);
+    setTimeout(() => {
+      setCopied(false);
+    }, 2000);
+  }, [message.content]);
+
   const avatar = (
     <span className="text-[10px] text-white font-bold tracking-tight">AI</span>
   );
@@ -105,6 +116,16 @@ export default function AssistantBubble({
         <BubbleShell side="left" avatar={avatar} timestamp={message.created_at}>
           <AnalysisCard message={message} />
         </BubbleShell>
+        {!message.isStreaming && !!message.content && !message.isError && (
+          <button
+            type="button"
+            aria-label={copied ? "copied" : "copy response"}
+            onClick={handleCopy}
+            className="text-xs text-white/40 hover:text-white/70 transition-colors ml-10 mt-0.5"
+          >
+            {copied ? "Copied!" : "Copy"}
+          </button>
+        )}
         {!message.isStreaming && message.messageId && onFeedback && (
           <FeedbackBar
             messageId={message.messageId}
@@ -150,6 +171,16 @@ export default function AssistantBubble({
           ) : null}
         </div>
       </BubbleShell>
+      {!message.isStreaming && !!message.content && !message.isError && (
+        <button
+          type="button"
+          aria-label={copied ? "copied" : "copy response"}
+          onClick={handleCopy}
+          className="text-xs text-white/40 hover:text-white/70 transition-colors ml-10 mt-0.5"
+        >
+          {copied ? "Copied!" : "Copy"}
+        </button>
+      )}
       {!message.isStreaming && message.messageId && onFeedback && (
         <FeedbackBar
           messageId={message.messageId}
