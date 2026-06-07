@@ -44,7 +44,7 @@ None
 
 ## Last Completed
 
-P62 — Verifier Rule 1b: Nil-Claim Guard for Non-Empty Tool Results (2026-06-07)
+P63 — ControlAgent Intent-to-Tool Subset Alignment (2026-06-07)
 
 ## Blockers
 

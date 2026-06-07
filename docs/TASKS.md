@@ -1527,3 +1527,24 @@ Dependencies: B-01
 | T-403 | `make test-unit && make lint && make typecheck` — all pass | Done |
 
 Dependencies: none
+
+---
+
+## P63 — ControlAgent Intent-to-Tool Subset Alignment
+
+**Goal:** Fix `_INTENT_TOOL_SUBSET` in `control_agent.py` — replace dead keys (`"demand"`, `"inventory"`, `"finance"`) with actual `INTENT_REGISTRY` categories (`"lookup"`, `"domain_analysis"`, `"cross_domain_analysis"`, `"decision_support"`) so tool narrowing activates for every intent, not just `"supply_chain"`.
+
+Root cause: key names in `_INTENT_TOOL_SUBSET` were written for hypothetical domain-specialist routing (pre-P38 architecture); after P38 consolidated routing to ControlAgent with INTENT_REGISTRY categories, the subset keys were never updated.
+
+Dependencies: P62 Done
+
+### Batch B-01 — Fix _INTENT_TOOL_SUBSET + unit test (App Builder) — Done
+
+| Task | Description | Status |
+|---|---|---|
+| T-404 | `packages/agent/control/control_agent.py` — replace `_INTENT_TOOL_SUBSET` body: keep `"supply_chain"` as-is; add `"lookup"` (7 tools), `"domain_analysis"` (24 tools), `"cross_domain_analysis"` (28 tools), `"decision_support"` (22 tools) | Done |
+| T-405 | `tests/unit/test_control_agent_intent_tool_subset.py` — assert every key in `_INTENT_TOOL_SUBSET` is in `INTENT_REGISTRY`; assert every tool name in each subset is in the set returned by `create_tool_registry()._tools.keys()`; assert `"supply_chain"` subset is unchanged | Done |
+| T-406 | `make test-unit && make lint && make typecheck` — all pass | Done |
+
+Dependencies: none
+
