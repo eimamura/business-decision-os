@@ -52,6 +52,64 @@ def test_create_model_registry_ollama_orchestrator_has_num_predict():
         assert model.num_predict == 512  # type: ignore[union-attr]
 
 
+@pytest.mark.parametrize("role", ["orchestrator", "planner", "control"])
+def test_create_model_registry_ollama_all_roles_have_think_false(role: str):
+    env = {
+        "LLM_PROVIDER": "ollama",
+        "OLLAMA_BASE_URL": "http://localhost:11434",
+        "OLLAMA_MODEL": "qwen2.5:7b",
+    }
+    with patch.dict(os.environ, env, clear=False):
+        from packages.agent.model_registry import create_model_registry
+
+        registry = create_model_registry()
+        model = registry.get(role)
+        assert model.reasoning is False  # type: ignore[union-attr]
+
+
+def test_create_model_registry_openai_returns_chat_openai():
+    env = {
+        "LLM_PROVIDER": "openai",
+        "OPENAI_API_KEY": "sk-test-key",
+        "OPENAI_MODEL": "gpt-4o",
+    }
+    with patch.dict(os.environ, env, clear=False):
+        from langchain_openai import ChatOpenAI
+
+        from packages.agent.model_registry import create_model_registry
+
+        registry = create_model_registry()
+        model = registry.get("orchestrator")
+        assert isinstance(model, ChatOpenAI)
+
+
+def test_create_model_registry_openai_missing_key_raises():
+    env = {"LLM_PROVIDER": "openai"}
+    with patch.dict(os.environ, env, clear=False):
+        import os as _os
+        _os.environ.pop("OPENAI_API_KEY", None)
+
+        from packages.agent.model_registry import create_model_registry
+
+        with pytest.raises(RuntimeError, match="OPENAI_API_KEY"):
+            create_model_registry()
+
+
+def test_create_model_registry_openai_base_url_forwarded():
+    env = {
+        "LLM_PROVIDER": "openai",
+        "OPENAI_API_KEY": "sk-test-key",
+        "OPENAI_MODEL": "gpt-4o-mini",
+        "OPENAI_BASE_URL": "https://my-proxy.example.com/v1",
+    }
+    with patch.dict(os.environ, env, clear=False):
+        from packages.agent.model_registry import create_model_registry
+
+        registry = create_model_registry()
+        model = registry.get("control")
+        assert str(model.openai_api_base) == "https://my-proxy.example.com/v1"  # type: ignore[union-attr]
+
+
 def test_model_registry_get_unknown_role_raises_value_error():
     from langchain_core.language_models.chat_models import BaseChatModel
     from unittest.mock import MagicMock

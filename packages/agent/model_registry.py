@@ -35,7 +35,7 @@ def create_model_registry() -> ModelRegistry:
     """Build a ModelRegistry from environment variables.
 
     Required env vars:
-        LLM_PROVIDER: 'anthropic' or 'ollama'
+        LLM_PROVIDER: 'anthropic', 'ollama', or 'openai'
 
     For anthropic:
         ANTHROPIC_API_KEY: API key
@@ -44,6 +44,11 @@ def create_model_registry() -> ModelRegistry:
     For ollama:
         OLLAMA_BASE_URL: base URL (default: 'http://localhost:11434')
         OLLAMA_MODEL: model name (default: 'qwen2.5:7b')
+
+    For openai:
+        OPENAI_API_KEY: API key
+        OPENAI_MODEL: model name (default: 'gpt-4o')
+        OPENAI_BASE_URL: optional base URL for OpenAI-compatible endpoints
     """
     provider = os.environ.get("LLM_PROVIDER", "anthropic").lower()
 
@@ -69,18 +74,23 @@ def create_model_registry() -> ModelRegistry:
 
         base_url = os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434")
         model_name = os.environ.get("OLLAMA_MODEL", "qwen2.5:7b")
-        # orchestrator/planner: limit output tokens to prevent token exhaustion before JSON output
+        # orchestrator/planner: structured output needs think=False to prevent thinking models
+        # from exhausting num_predict before emitting JSON content
+        # reasoning=False maps to Ollama's think=False — prevents thinking models from
+        # exhausting num_predict before emitting JSON content
         structured_model = ChatOllama(
             model=model_name,
             base_url=base_url,
             temperature=0.0,
             num_predict=512,
+            reasoning=False,
         )
-        # control: full context for tool calling and analysis
+        # reasoning=False required for tool calling accuracy; same instance used for text generation
         control_model = ChatOllama(
             model=model_name,
             base_url=base_url,
             temperature=0.0,
+            reasoning=False,
         )
         return ModelRegistry(
             {
@@ -90,7 +100,37 @@ def create_model_registry() -> ModelRegistry:
             }
         )
 
+    elif provider == "openai":
+        from langchain_openai import ChatOpenAI
+        from pydantic import SecretStr
+
+        api_key = os.environ.get("OPENAI_API_KEY")
+        if not api_key:
+            raise RuntimeError("OPENAI_API_KEY is required when LLM_PROVIDER=openai")
+        model_name = os.environ.get("OPENAI_MODEL", "gpt-4o")
+        openai_base_url: str | None = os.environ.get("OPENAI_BASE_URL")
+        if openai_base_url:
+            openai_model = ChatOpenAI(
+                model=model_name,
+                api_key=SecretStr(api_key),
+                temperature=0.0,
+                base_url=openai_base_url,
+            )
+        else:
+            openai_model = ChatOpenAI(
+                model=model_name,
+                api_key=SecretStr(api_key),
+                temperature=0.0,
+            )
+        return ModelRegistry(
+            {
+                "orchestrator": openai_model,
+                "planner": openai_model,
+                "control": openai_model,
+            }
+        )
+
     else:
         raise RuntimeError(
-            f"Unsupported LLM_PROVIDER: {provider!r}. Use 'anthropic' or 'ollama'."
+            f"Unsupported LLM_PROVIDER: {provider!r}. Use 'anthropic', 'ollama', or 'openai'."
         )
