@@ -1019,7 +1019,7 @@ Dependencies: B-01
 
 Dependencies: P51 Done
 
-### Batch B-01 — ADR + 依存パッケージ追加 (Infra) — Not Started
+### Batch B-01 — ADR + 依存パッケージ追加 (Infra) — Done
 
 | Task | Description | Status |
 |---|---|---|

@@ -20,6 +20,7 @@ P32–P36 S&OP MVP (2026-06-04):
 P37 — Playwright E2E: Remove Mocks, Consolidate (2026-06-05; SSE-mock approach reversed by P44)
 P38 — Architecture Realignment: deactivate specialist routing, clean up Tool Scenario UI (2026-06-06)
 P44 — Playwright Tests: Revert to Mock SSE; 29 tests in 1.4 min (2026-06-06)
+P52 — LangChain ChatModel 移行 Phase 1: ModelRegistry + Structured Output (2026-06-07)
 
 See `docs/archive/v3/STATE.md` for P0–P23 per-phase details.
 
@@ -27,7 +28,7 @@ See `docs/archive/v3/STATE.md` for P0–P23 per-phase details.
 
 ## Active Phase
 
-P52 — LangChain ChatModel 移行 Phase 1: ModelRegistry + Structured Output
+None
 
 ## Active Lease
 
