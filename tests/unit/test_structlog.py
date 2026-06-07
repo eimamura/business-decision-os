@@ -94,7 +94,7 @@ class TestStructlogJsonOutput:
         _configure_structlog_for_test()
 
         log = structlog.get_logger("test_structlog_tool")
-        log.info("tool_started", session_id="sess-002", tool_name="sql_query", agent_role="data_engineer")
+        log.info("tool_started", session_id="sess-002", tool_name="nl_query", agent_role="data_engineer")
 
         output = cap.getvalue().strip()
         lines = [line for line in output.splitlines() if line.strip()]
@@ -103,7 +103,7 @@ class TestStructlogJsonOutput:
         parsed = json.loads(lines[-1])
         assert parsed["event"] == "tool_started"
         assert parsed["session_id"] == "sess-002"
-        assert parsed["tool_name"] == "sql_query"
+        assert parsed["tool_name"] == "nl_query"
         assert parsed["agent_role"] == "data_engineer"
 
         root_logger.removeHandler(handler)

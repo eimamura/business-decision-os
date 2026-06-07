@@ -20,7 +20,7 @@ from tests.unit.helpers import (
 
 
 class _FakeTool:
-    name = "sql_query"
+    name = "nl_query"
     description = "Run SQL"
     input_schema: dict[str, Any] = {}
 
@@ -581,7 +581,7 @@ async def test_t073_compress_history_active_above_threshold_reduces_to_11() -> N
 
 
 class _RecordingFakeTool:
-    name = "sql_query"
+    name = "nl_query"
     description = "Run SQL"
     input_schema: dict[str, Any] = {}
 
@@ -595,7 +595,7 @@ def _make_tool_result(output: dict[str, Any]) -> Any:
 
 
 class _FailingTool:
-    name = "sql_query"
+    name = "nl_query"
     description = "Run SQL"
     input_schema: dict[str, Any] = {}
 
@@ -610,7 +610,7 @@ async def test_execute_tools_tool_call_handle_is_called_and_result_fed_to_next_l
     registry = _FakeToolRegistry([tool])
 
     llm = FakeLCModel([
-        make_tool_call_response("sql_query", {"query": "SELECT 1"}),
+        make_tool_call_response("nl_query", {"query": "SELECT 1"}),
         make_stop_response("Tool result processed."),
         make_stop_response("pass"),
     ])
@@ -662,7 +662,7 @@ async def test_execute_tools_failing_tool_propagates_exception() -> None:
     registry = _FakeToolRegistry([_FailingTool()])
 
     llm = FakeLCModel([
-        make_tool_call_response("sql_query", {}),
+        make_tool_call_response("nl_query", {}),
     ])
     runtime = _make_runtime(llm, tool_registry=registry)
     task = _make_task()

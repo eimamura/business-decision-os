@@ -30,7 +30,6 @@ from packages.tools.job_dispatch_tool import JobDispatchTool
 from packages.tools.nl_query_tool import NlQueryTool
 from packages.tools.optimizer_tool import OptimizerTool
 from packages.tools.simulation_tool import SimulationTool
-from packages.tools.sql_tool import SqlQueryTool
 from packages.tools.supply_days_tool import CalculateDaysOfSupplyTool
 from packages.tools.supply_delayed_orders_tool import GetDelayedSupplyOrdersTool
 from packages.tools.supply_gap_tool import CalculateSupplyGapTool
@@ -67,7 +66,6 @@ __all__ = [
     "NlQueryTool",
     "OptimizerTool",
     "SimulationTool",
-    "SqlQueryTool",
     "CalculateDaysOfSupplyTool",
     "CalculateSupplyGapTool",
     "AnalyzeSupplyLeadTimeTool",
@@ -90,7 +88,6 @@ def create_tool_registry(
     model: Any = None,
 ) -> ToolRegistry:
     registry = ToolRegistry()
-    registry.register(SqlQueryTool(db_session=db_session))
     registry.register(NlQueryTool(model=model))
     registry.register(ApprovalTool())
     registry.register(AuditLogTool())

@@ -8,16 +8,15 @@ from packages.tools.base import _ROLE_TOOL_ALLOWLIST
 @pytest.mark.parametrize(
     "role,expected_tools",
     [
-        ("demand", ["sql_query", "nl_query", "forecast", "train_forecast"]),
-        ("inventory", ["sql_query", "nl_query", "simulate_inventory"]),
+        ("demand", ["nl_query", "forecast", "train_forecast"]),
+        ("inventory", ["nl_query", "simulate_inventory"]),
         (
             "replenishment",
-            ["sql_query", "nl_query", "simulate_inventory", "optimize_replenishment"],
+            ["nl_query", "simulate_inventory", "optimize_replenishment"],
         ),
         (
             "data_engineer",
             [
-                "sql_query",
                 "nl_query",
                 "data_catalog_search",
                 "table_schema_reader",

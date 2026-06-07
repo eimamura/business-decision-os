@@ -41,14 +41,14 @@ Cost rules:
 
 PLAN_SYSTEM = """\
 Create a serial execution plan for SessionOrchestrator. Return ONLY JSON:
-{"steps":[{"id":"step-1","agent_role":"control","instruction":"...","tools":["sql_query","nl_query"]}]}
+{"steps":[{"id":"step-1","agent_role":"control","instruction":"...","tools":["nl_query"]}]}
 Allowed agent_role values are:
 control.
 """
 
 DAG_SYSTEM = """\
 Create dependency nodes for SessionOrchestrator. Return ONLY a JSON array:
-[{"id":"data", "agent_role":"control", "deps":[], "instruction":"...", "tools":["sql_query"]}]
+[{"id":"data", "agent_role":"control", "deps":[], "instruction":"...", "tools":["nl_query"]}]
 Allowed agent_role values are:
 control.
 Do not include parallel execution instructions; the initial runtime executes in

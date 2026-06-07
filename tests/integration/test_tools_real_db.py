@@ -18,7 +18,6 @@ from packages.tools.base import ToolContext
 from packages.tools.data_catalog_search_tool import DataCatalogSearchTool
 from packages.tools.data_quality_checker_tool import DataQualityCheckerTool
 from packages.tools.sql_allowlist import ALLOWED_READ_TABLES
-from packages.tools.sql_tool import SqlQueryTool
 from packages.tools.table_schema_reader_tool import TableSchemaReaderTool
 
 _HAS_DB = bool(os.environ.get("DATABASE_URL"))
@@ -51,63 +50,6 @@ async def reset_db_pool() -> None:  # type: ignore[misc]
     if db_module._pool is not None:
         await db_module._pool.close()
         db_module._pool = None
-
-
-# ---------------------------------------------------------------------------
-# SqlQueryTool
-# ---------------------------------------------------------------------------
-
-
-@_SKIP_NO_DB
-async def test_sql_query_tool_health_check_executes_without_error() -> None:
-    tool = SqlQueryTool()
-    result = await tool.handle({"query": "SELECT COUNT(*) AS n FROM sku_master"}, _ctx())
-    assert "error" not in result.output
-    assert "note" not in result.output
-    assert result.output["row_count"] >= 0
-    assert isinstance(result.output["rows"], list)
-    assert isinstance(result.output["columns"], list)
-
-
-@_SKIP_NO_DB
-async def test_sql_query_tool_returns_correct_column_names_for_sku_master() -> None:
-    tool = SqlQueryTool()
-    result = await tool.handle(
-        {"query": "SELECT sku_id, name, category FROM sku_master LIMIT 1"},
-        _ctx(),
-    )
-    assert "error" not in result.output
-    assert "note" not in result.output
-    assert result.output["columns"] == ["sku_id", "name", "category"]
-
-
-@_SKIP_NO_DB
-async def test_sql_query_tool_parameterized_query_uses_no_string_concat() -> None:
-    """Confirm that the tool executes through execute_read_query (parameterized layer)
-    and never uses raw string concatenation for the query itself.
-
-    The guardrail runs before DB access, so a valid allowlisted query that reaches
-    execute_read_query must use the parameterized execution path.
-    """
-    tool = SqlQueryTool()
-    result = await tool.handle(
-        {"query": "SELECT sku_id FROM demand_history LIMIT 5"},
-        _ctx(),
-    )
-    assert "error" not in result.output
-    assert result.output["row_count"] >= 0
-    assert "executed_query" in result.output
-
-
-@_SKIP_NO_DB
-async def test_sql_query_tool_write_statement_is_rejected_before_db() -> None:
-    tool = SqlQueryTool()
-    result = await tool.handle(
-        {"query": "DELETE FROM sku_master WHERE 1=1"},
-        _ctx(),
-    )
-    assert "error" in result.output
-    assert result.output["row_count"] == 0
 
 
 # ---------------------------------------------------------------------------

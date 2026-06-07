@@ -27,6 +27,12 @@ _SYSTEM_PROMPT = (
     "Domains in scope: demand forecasting and trend analysis, inventory positioning and risk,\n"
     "supply order status and lead time, logistics execution and delay diagnosis,\n"
     "and finance impact quantification (holding costs, stockout costs, expedite costs).\n\n"
+    "Tool usage priority (follow this order):\n"
+    "1. Use a specialized tool (e.g. calculate_stockout_risk, calculate_days_of_supply) "
+    "when it directly covers the question.\n"
+    "2. Use nl_query for bulk or cross-product questions — pass the question in plain English; "
+    "nl_query generates schema-correct SQL internally.\n"
+    "3. Never fabricate column names or assume columns that are not confirmed by tool results.\n\n"
     "Always ground recommendations in tool results. Do not fabricate quantities or risk scores."
 )
 
@@ -41,7 +47,7 @@ _DOMAIN_KNOWLEDGE_HEADER = "\n\n---\n## Domain Knowledge\n\n"
 # Fallback: if intent not in map, all control tools remain available.
 _INTENT_TOOL_SUBSET: dict[str, list[str]] = {
     "supply_chain": [
-        "sql_query",
+        "nl_query",
         "get_delayed_supply_orders",
         "get_open_supply_orders",
         "calculate_supply_gap",
@@ -53,7 +59,7 @@ _INTENT_TOOL_SUBSET: dict[str, list[str]] = {
         "calculate_expedite_cost",
     ],
     "demand": [
-        "sql_query",
+        "nl_query",
         "profile_demand_data",
         "analyze_demand_trend",
         "evaluate_forecast_accuracy",
@@ -64,7 +70,7 @@ _INTENT_TOOL_SUBSET: dict[str, list[str]] = {
         "compare_demand_periods",
     ],
     "inventory": [
-        "sql_query",
+        "nl_query",
         "calculate_days_of_inventory",
         "calculate_stockout_risk",
         "calculate_excess_inventory_risk",
@@ -72,7 +78,7 @@ _INTENT_TOOL_SUBSET: dict[str, list[str]] = {
         "get_open_supply_orders",
     ],
     "finance": [
-        "sql_query",
+        "nl_query",
         "calculate_holding_cost_impact",
         "calculate_stockout_cost_impact",
         "calculate_expedite_cost",

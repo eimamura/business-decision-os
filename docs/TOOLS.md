@@ -93,17 +93,17 @@ Defined in `packages/tools/base.py` as `_ROLE_TOOL_ALLOWLIST`. Each agent role h
 | Role | Permitted Tools |
 |---|---|
 | `orchestrator` | *(none — orchestrator delegates; does not call tools directly)* |
-| `data_engineer` | `sql_query`, `nl_query`, `data_catalog_search`, `table_schema_reader`, `data_quality_checker` |
-| `anomaly_detector` | `sql_query`, `nl_query`, `data_catalog_search`, `table_schema_reader`, `data_quality_checker` |
+| `data_engineer` | `nl_query`, `data_catalog_search`, `table_schema_reader`, `data_quality_checker` |
+| `anomaly_detector` | `nl_query`, `data_catalog_search`, `table_schema_reader`, `data_quality_checker` |
 | `simulation_optimizer` | `simulate_inventory`, `optimize_replenishment` |
 | `evaluator` | `evaluate_candidates`, `write_audit_log` |
-| `demand` | `sql_query`, `nl_query`, `forecast`, `train_forecast`, `profile_demand_data`, `analyze_demand_trend`, `evaluate_forecast_accuracy`, `detect_demand_anomalies`, `analyze_seasonality`, `analyze_demand_drivers`, `segment_demand`, `compare_demand_periods` |
-| `inventory` | `sql_query`, `nl_query` |
-| `replenishment` | `sql_query`, `nl_query` |
-| `procurement` | `sql_query`, `nl_query` |
-| `supplier` | `sql_query`, `nl_query` |
-| `production` | `sql_query`, `nl_query` |
-| `logistics` | `sql_query`, `nl_query` |
+| `demand` | `nl_query`, `forecast`, `train_forecast`, `profile_demand_data`, `analyze_demand_trend`, `evaluate_forecast_accuracy`, `detect_demand_anomalies`, `analyze_seasonality`, `analyze_demand_drivers`, `segment_demand`, `compare_demand_periods` |
+| `inventory` | `nl_query` |
+| `replenishment` | `nl_query` |
+| `procurement` | `nl_query` |
+| `supplier` | `nl_query` |
+| `production` | `nl_query` |
+| `logistics` | `nl_query` |
 
 ### Layer 2: Task-Level Tool List
 
@@ -146,7 +146,7 @@ The following tools are required first to achieve the minimum viable agent capab
 | Priority | Tool | Status | Rationale |
 |---|---|---|---|
 | 1 | `data_catalog_search` | ✅ Implemented | Discover what data is available |
-| 2 | `sql_query` | ✅ Implemented | Retrieve actual operational data |
+| 2 | `nl_query` | ✅ Implemented | Retrieve actual operational data via schema-aware SQL |
 | 3 | `table_schema_reader` | ✅ Implemented | Understand data structure |
 | 4 | `data_quality_checker` | ✅ Implemented | Detect missing values and anomalies |
 | 5 | `business_rules_reader` | Deferred | Enforce business constraints |
@@ -254,39 +254,6 @@ Check for missing values in an operational table. Reports NULL counts and NULL p
 **Security note:** `table_name` is validated against `ALLOWED_READ_TABLES` (a compile-time frozenset) before any SQL is issued. Column names are sourced from `information_schema.columns` for that specific table and are safe to interpolate.
 
 **Audit payload:** `{table_name, total_rows}`
-
----
-
-#### `sql_query`
-
-Execute a read-only SQL query against operational tables.
-
-**Class:** `SqlQueryTool` (`packages/tools/sql_tool.py`)
-**Requires approval:** No
-
-**Input**
-
-| Field | Type | Required | Description |
-|---|---|---|---|
-| `query` | string | Yes | Read-only SQL (SELECT only; must reference allowlisted tables) |
-
-**Output**
-
-| Field | Type | Description |
-|---|---|---|
-| `rows` | array | List of row dicts |
-| `column_names` | array | Column names |
-| `row_count` | integer | Number of rows returned |
-| `executed_query` | string | Echoed query (on success) |
-| `error` | string | Validation error message (on rejection) |
-
-**Failure handling**
-
-- SQL guardrail rejection: returns `error`, empty `rows`, empty `column_names`, and `row_count: 0`; the query is not executed.
-- Database unreachable: returns empty rows, `note: "no database connection"`.
-- SQL/schema execution error after guardrail validation: returns `error` with the database exception message.
-
-**Audit payload:** `{query, row_count}`
 
 ---
 

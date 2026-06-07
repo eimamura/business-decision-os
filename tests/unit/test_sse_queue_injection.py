@@ -31,7 +31,7 @@ def _tool_use_response(tool_name: str, tool_input: dict[str, Any]) -> LLMRespons
 
 
 class _FakeReadOnlyTool:
-    name = "sql_query"
+    name = "nl_query"
     description = "Run SQL"
     input_schema: dict[str, Any] = {}
     output_schema: dict[str, Any] = {}
@@ -144,7 +144,7 @@ async def test_t070_tool_events_pushed_to_config_sse_queue() -> None:
     constructor_queue: asyncio.Queue[Any] = asyncio.Queue()
 
     lc_model = FakeLCModel([
-        _tool_use_response("sql_query", {}),
+        _tool_use_response("nl_query", {}),
         make_stop_response("Query complete."),
         make_stop_response("pass"),
     ])
@@ -161,13 +161,13 @@ async def test_t070_tool_events_pushed_to_config_sse_queue() -> None:
         model_registry=make_model_registry(lc_model),
     )
 
-    task = _make_task(allowed_tools=["sql_query"])
+    task = _make_task(allowed_tools=["nl_query"])
     ctx = _FakeToolContext()
 
     llm_tools = [
         LLMToolSpec(name=t.name, description=t.description, input_schema=t.input_schema)
         for t in registry.list_for_role("data_engineer")
-        if t.name in {"sql_query"}
+        if t.name in {"nl_query"}
     ]
     checkpointer = MemorySaver()
     graph = runtime._build_graph(checkpointer)
@@ -272,7 +272,7 @@ async def test_t070_no_sse_queue_in_config_does_not_crash() -> None:
     from packages.agent.llm import LLMToolSpec
 
     lc_model_no_sse = FakeLCModel([
-        _tool_use_response("sql_query", {}),
+        _tool_use_response("nl_query", {}),
         make_stop_response("Done."),
         make_stop_response("pass"),
     ])
@@ -288,13 +288,13 @@ async def test_t070_no_sse_queue_in_config_does_not_crash() -> None:
         model_registry=make_model_registry(lc_model_no_sse),
     )
 
-    task = _make_task(allowed_tools=["sql_query"])
+    task = _make_task(allowed_tools=["nl_query"])
     ctx = _FakeToolContext()
 
     llm_tools = [
         LLMToolSpec(name=t.name, description=t.description, input_schema=t.input_schema)
         for t in registry.list_for_role("data_engineer")
-        if t.name in {"sql_query"}
+        if t.name in {"nl_query"}
     ]
     checkpointer = MemorySaver()
     graph = runtime._build_graph(checkpointer)

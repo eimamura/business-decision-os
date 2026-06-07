@@ -486,7 +486,7 @@ Specialized analysis tools (high-value, reused):
   analyze_stockout_risk / analyze_sales_decline / detect_shipment_delay / ...
 
 Low-level tools:
-  sql_query_tool           ← free-form SQL; ad-hoc exploration only
+  nl_query_tool            ← text-to-SQL; schema-aware SQL generation
   dataframe_analysis_tool
   kpi_calculation_tool
   alert_detection_tool
@@ -1060,7 +1060,7 @@ Document / knowledge search:
   get_business_rules(domain)
 ```
 
-The `sql_query_tool` (free-form SQL) is reserved for ad-hoc exploration by the agent during investigation — not as the primary interface for structured queries. All structured queries go through domain query tools to keep tool input predictable and auditable.
+The `nl_query_tool` (text-to-SQL) is the primary data query interface — it accepts a natural-language question and internally generates schema-correct SQL via `get_schema_context()`. All structured bulk queries go through `nl_query` or domain-specific tools.
 
 ### Constraints
 
@@ -1170,7 +1170,7 @@ When confidence is low or business risk is high, agents prioritize requesting hu
 
 #### SQL Read Guardrail
 
-- `SqlQueryTool` and `NlQueryTool` MUST validate SQL through `packages/tools/sql_guardrail.py:validate_read_sql()` before calling any persistence repository function.
+- `NlQueryTool` MUST validate SQL through `packages/tools/sql_guardrail.py:validate_read_sql()` before calling any persistence repository function.
 - SQL read guardrail policy MUST stay in the Tool Layer. `packages/persistence/` executes validated queries and MUST NOT become the policy owner for table allowlisting or SQL safety.
 - User- or LLM-provided SQL MUST be a single `SELECT` statement, reference at least one allowlisted table, and avoid non-read operations or dangerous database features.
 - SQL guardrail tests MUST cover direct SQL, generated SQL, quoted identifiers, schema-qualified names, joins, comma joins, CTEs, subqueries, and `UNION` references.

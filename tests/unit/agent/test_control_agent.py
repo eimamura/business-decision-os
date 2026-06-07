@@ -65,8 +65,8 @@ def test_control_role_present_in_tool_allowlist() -> None:
     assert "control" in _ROLE_TOOL_ALLOWLIST
 
 
-def test_control_tool_allowlist_contains_sql_query() -> None:
-    assert "sql_query" in _ROLE_TOOL_ALLOWLIST["control"]
+def test_control_tool_allowlist_contains_nl_query() -> None:
+    assert "nl_query" in _ROLE_TOOL_ALLOWLIST["control"]
 
 
 def test_control_tool_allowlist_contains_calculate_days_of_inventory() -> None:

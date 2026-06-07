@@ -14,8 +14,8 @@ def _data_engineer_output_builder(
     tool_results: dict[str, Any], response: Any
 ) -> dict[str, Any]:
     text = response.text if response else ""
-    if "sql_query" in tool_results:
-        return {"data_summary": tool_results["sql_query"], "text": text}
+    if "nl_query" in tool_results:
+        return {"data_summary": tool_results["nl_query"], "text": text}
     return {"text": text}
 
 

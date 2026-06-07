@@ -36,7 +36,6 @@ from packages.tools.optimizer_tool import OptimizerTool
 from packages.tools.simulation_tool import SimulationTool
 from packages.tools.sql_allowlist import ALLOWED_READ_TABLES
 from packages.tools.sql_guardrail import SQLGuardrailError, validate_read_sql
-from packages.tools.sql_tool import SqlQueryTool
 from packages.tools.table_schema_reader_tool import TableSchemaReaderTool
 
 
@@ -292,55 +291,6 @@ def test_sql_guardrail_rejects_unsafe_sql(sql: str):
         validate_read_sql(sql)
 
 
-async def test_sql_tool_no_db_returns_empty(monkeypatch: pytest.MonkeyPatch) -> None:
-    import packages.persistence.db as _db
-    monkeypatch.delenv("DATABASE_URL", raising=False)
-    _db._pool = None
-    tool = SqlQueryTool()
-    result = await tool.handle({"query": "SELECT * FROM sku_master"}, _ctx())
-    assert result.output["row_count"] == 0
-    # "note" is present when DB is unavailable; otherwise rows are empty from a live DB
-    assert "error" not in result.output
-
-
-async def test_sql_tool_blocks_write_statements():
-    tool = SqlQueryTool()
-    result = await tool.handle({"query": "DELETE FROM sku_master WHERE 1=1"}, _ctx())
-    assert "error" in result.output
-
-
-async def test_sql_tool_blocks_non_allowlist_table():
-    tool = SqlQueryTool()
-    result = await tool.handle({"query": "SELECT * FROM users"}, _ctx())
-    assert "error" in result.output
-
-
-@pytest.mark.parametrize(
-    "sql",
-    [
-        "SELECT 1",
-        "SELECT pg_sleep(10)",
-        "SELECT * FROM sku_master; DELETE FROM sku_master WHERE 1=1",
-        'SELECT * FROM sku_master JOIN "users" u ON u.id = sku_master.sku_id',
-        "WITH u AS (SELECT * FROM users) SELECT * FROM sku_master",
-    ],
-)
-async def test_sql_tool_guardrail_blocks_without_execution(
-    sql: str,
-    monkeypatch: pytest.MonkeyPatch,
-):
-    async def fail_execute(query: str):
-        raise AssertionError(f"query should not execute: {query}")
-
-    monkeypatch.setattr("packages.tools.sql_tool.execute_read_query", fail_execute)
-    tool = SqlQueryTool()
-    result = await tool.handle({"query": sql}, _ctx())
-    assert "error" in result.output
-    assert result.output["rows"] == []
-    assert result.output["column_names"] == []
-    assert result.output["row_count"] == 0
-
-
 async def test_nl_query_tool_guardrail_blocks_without_execution(
     monkeypatch: pytest.MonkeyPatch,
 ):
@@ -521,21 +471,6 @@ def test_sanitize_for_llm_returns_string():
     assert parsed["key"] == "value"
 
 
-async def test_sql_tool_output_is_sanitized(monkeypatch: pytest.MonkeyPatch):
-    fake_rows = [{"id": i, "val": float(i)} for i in range(200)]
-
-    async def fake_execute(query: str) -> dict:
-        return {"rows": fake_rows, "column_names": ["id", "val"], "row_count": 200}
-
-    monkeypatch.setattr("packages.tools.sql_tool.execute_read_query", fake_execute)
-    tool = SqlQueryTool()
-    result = await tool.handle({"query": "SELECT * FROM sku_master"}, _ctx())
-    assert len(result.output["rows"]) <= 100
-    assert result.output["truncated"] is True
-    assert result.output["row_count"] == 200
-    assert result.audit_payload["row_count"] == 200
-
-
 def test_nl_query_rules_include_limit():
     from packages.tools.nl_query_tool import _SQL_RULES
     assert "LIMIT" in _SQL_RULES
@@ -546,7 +481,7 @@ def test_nl_query_rules_include_limit():
 def test_create_tool_registry_has_all_tools():
     registry = create_tool_registry()
     expected = [
-        "sql_query", "request_approval", "write_audit_log",
+        "nl_query", "request_approval", "write_audit_log",
         "forecast", "simulate_inventory", "optimize_replenishment",
         "evaluate_candidates",
         "data_catalog_search", "table_schema_reader", "data_quality_checker",
@@ -702,7 +637,7 @@ async def test_specialist_run_returns_result():
         task_id=uuid4(),
         instruction="analyze demand",
         context_payload={},
-        allowed_tools=["sql_query", "forecast"],
+        allowed_tools=["nl_query", "forecast"],
     )
 
     ctx = ToolContext(

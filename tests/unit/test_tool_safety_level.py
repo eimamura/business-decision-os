@@ -121,7 +121,6 @@ def test_tool_context_accepts_custom_user_role() -> None:
 
 
 @pytest.mark.parametrize("tool_name,expected_level", [
-    ("sql_query", "read_only"),
     ("nl_query", "read_only"),
     ("data_catalog_search", "read_only"),
     ("table_schema_reader", "read_only"),

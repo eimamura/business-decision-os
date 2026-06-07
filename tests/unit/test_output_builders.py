@@ -88,7 +88,7 @@ def test_default_output_builder_with_tool_results_includes_them() -> None:
     class _FakeResponse:
         text = "Done."
 
-    result = builder({"sql_query": {"rows": []}}, _FakeResponse())
+    result = builder({"nl_query": {"rows": []}}, _FakeResponse())
 
     assert "tool_results" in result
 
@@ -204,22 +204,22 @@ def test_simulation_optimizer_output_builder_none_response_fallback() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_data_engineer_output_builder_with_sql_query() -> None:
-    """When 'sql_query' key is present, return {'data_summary': ..., 'text': ...}."""
-    sql_result = {"rows": [{"sku": "X", "stock": 50}]}
-    tool_results = {"sql_query": sql_result}
+def test_data_engineer_output_builder_with_nl_query() -> None:
+    """When 'nl_query' key is present, return {'data_summary': ..., 'text': ...}."""
+    nl_result = {"rows": [{"sku": "X", "stock": 50}]}
+    tool_results = {"nl_query": nl_result}
 
     class _FakeResponse:
         text = "Here is the data."
 
     result = _data_engineer_output_builder(tool_results, _FakeResponse())
 
-    assert result["data_summary"] == sql_result
+    assert result["data_summary"] == nl_result
     assert result["text"] == "Here is the data."
 
 
-def test_data_engineer_output_builder_without_sql_query() -> None:
-    """When 'sql_query' is not in tool_results, return {'text': ...} only."""
+def test_data_engineer_output_builder_without_nl_query() -> None:
+    """When 'nl_query' is not in tool_results, return {'text': ...} only."""
     class _FakeResponse:
         text = "No SQL ran."
 
@@ -229,7 +229,7 @@ def test_data_engineer_output_builder_without_sql_query() -> None:
 
 
 def test_data_engineer_output_builder_none_response_fallback() -> None:
-    """When response is None and no sql_query key, text is empty string."""
+    """When response is None and no nl_query key, text is empty string."""
     result = _data_engineer_output_builder({}, None)
 
     assert result == {"text": ""}

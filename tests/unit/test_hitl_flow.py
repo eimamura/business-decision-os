@@ -57,7 +57,7 @@ class _FakeHITLTool:
 class _FakeReadOnlyTool:
     """A tool with safety_level == 'read_only'."""
 
-    name = "sql_query"
+    name = "nl_query"
     description = "Run SQL"
     input_schema: dict[str, Any] = {}
     output_schema: dict[str, Any] = {}
@@ -298,13 +298,13 @@ async def test_agent_runtime_hitl_handle_never_called() -> None:
 async def test_agent_runtime_read_only_tool_does_not_interrupt() -> None:
     """read_only tools must proceed normally without interrupting."""
     lc_model = FakeLCModel([
-        _tool_use_response("sql_query", {}),
+        _tool_use_response("nl_query", {}),
         make_stop_response("Query complete"),
         make_stop_response("pass"),
     ])
     registry = _FakeToolRegistry([_FakeReadOnlyTool()])
     runtime = _make_runtime(MagicMock(), registry, model_registry=make_model_registry(lc_model))
-    task = _make_task(allowed_tools=["sql_query"])
+    task = _make_task(allowed_tools=["nl_query"])
     ctx = _FakeToolContext()
 
     # Non-HITL tool should complete normally (no interrupt)

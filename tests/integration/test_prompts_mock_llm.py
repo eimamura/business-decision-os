@@ -885,32 +885,28 @@ async def test_admin_user_role_includes_all_tool_safety_levels() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Scenario 14: sql_query tool — invoked when LLM requests it
+# Scenario 14: nl_query tool — invoked when LLM requests it
 # ---------------------------------------------------------------------------
 
 
 @_SKIP_NO_DB
-async def test_sql_query_tool_invoked() -> None:
-    """When LLM requests 'sql_query' tool, SqlQueryTool handle() must be called.
-
-    Complements Scenarios 1–4 which cover forecast, simulate_inventory,
-    optimize_replenishment, and nl_query.
-    """
+async def test_nl_query_tool_invoked() -> None:
+    """When LLM requests 'nl_query' tool, NlQueryTool handle() must be called."""
     recorder = _InvocationRecorder()
-    sql_tool = _make_recording_tool("sql_query", "read_only", recorder)
+    nl_tool = _make_recording_tool("nl_query", "read_only", recorder)
 
-    sql_input = {"query": "SELECT * FROM inventory_items WHERE sku_id = 'SKU-001' LIMIT 10"}
+    nl_input = {"question": "Show raw inventory rows for SKU-001"}
 
     llm = _ScriptedLLMClient([
         _stop(text=_intent_json("lookup", goal_text="raw inventory rows for SKU-001")),
         _stop(text=_route_json("single_agent", ["data_engineer"])),
-        _tool_call_response("sql_query", sql_input),
+        _tool_call_response("nl_query", nl_input),
         _stop("verify pass"),
         _stop("Query returned 10 rows."),
         _stop("verify pass"),
     ])
 
-    registry = _make_registry_with_tool(sql_tool)
+    registry = _make_registry_with_tool(nl_tool)
     orchestrator = _make_orchestrator(llm, registry)
     session_id = uuid4()
     query = SessionUserQuery(text="Show raw inventory rows for SKU-001")
@@ -933,4 +929,4 @@ async def test_sql_query_tool_invoked() -> None:
         await asyncio.sleep(0)
 
     invoked_names = [name for name, _ in recorder.calls]
-    assert "sql_query" in invoked_names
+    assert "nl_query" in invoked_names
