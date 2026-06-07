@@ -58,26 +58,34 @@ class _LCUsage:
 
 OutputBuilder = Callable[[dict[str, Any], Any], dict[str, Any]]
 
-_VERIFIER_PROMPT = (
-    "You are a findings verifier. Review the tool results and the agent's proposed conclusion.\n"
-    "\n"
-    "Check for:\n"
-    "1. Are conclusions grounded in actual tool execution results? (Not invented data)\n"
-    "2. Do numerical claims match what the tool results returned?\n"
-    "3. Are all fetched tool results reflected — even implicitly — in the conclusion?\n"
-    "\n"
-    "Tool results:\n"
-    "{tool_results_summary}\n"
-    "\n"
-    "Agent conclusion:\n"
-    "{conclusion}\n"
-    "\n"
-    'Respond with exactly one of: "pass", "needs_revision", or "blocked"\n'
-    "followed by a brief reason on the same line.\n"
-    'Use "blocked" only if there is evidence of fabricated data or unauthorized action.\n'
-    'Use "needs_revision" if minor corrections are needed.\n'
-    'Use "pass" if the conclusion is well-grounded.'
-)
+_FALLBACK_DEGENERATE = "Could not produce a complete response. Please try again."
+
+# Patterns that indicate a fabricated no-data conclusion when no tools were called.
+_FABRICATED_NO_DATA_RE = re.compile(r"\d|no\b|none\b|なし", re.IGNORECASE)
+
+
+def _rule_based_verify(
+    tool_results: list[dict[str, Any]],
+    conclusion: str,
+) -> str:
+    """Rule-based findings verifier — no LLM call.
+
+    Rule 1: No tool calls made AND conclusion contains a number or "no"/"none"/"なし"
+            → fabricated data → "blocked"
+    Rule 2: Tool calls were made AND conclusion is shorter than _DEGENERATE_RESPONSE_MIN_LEN
+            → response too short to be meaningful → "blocked"
+    Rule 3: All other cases → "pass"
+    """
+    has_tool_results = bool(tool_results)
+    conclusion_stripped = conclusion.strip()
+
+    if not has_tool_results and _FABRICATED_NO_DATA_RE.search(conclusion_stripped):
+        return "blocked"
+
+    if has_tool_results and len(conclusion_stripped) < _DEGENERATE_RESPONSE_MIN_LEN:
+        return "blocked"
+
+    return "pass"
 
 
 def _default_output_builder(name: str) -> OutputBuilder:
@@ -89,15 +97,6 @@ def _default_output_builder(name: str) -> OutputBuilder:
         return output
 
     return _build
-
-
-def _parse_verifier_status(text: str) -> str:
-    """Extract 'pass', 'needs_revision', or 'blocked' from verifier response text."""
-    lowered = text.strip().lower()
-    for status in ("blocked", "needs_revision", "pass"):
-        if re.search(rf"\b{re.escape(status)}\b", lowered):
-            return status
-    return "pass"
 
 
 # ---------------------------------------------------------------------------
@@ -673,48 +672,19 @@ class AgentRuntime:
     # ------------------------------------------------------------------
 
     async def _verify_findings_node(
-        self, state: AgentState, config: RunnableConfig
+        self, state: AgentState, config: RunnableConfig  # noqa: ARG002
     ) -> dict[str, Any]:
-        """Single LLM call to verify the agent's conclusion against tool results.
+        """Rule-based findings verifier — no LLM call.
 
-        Conditional exit:
-          "pass"           -> END
-          "needs_revision" -> call_model (one retry only, guarded by iteration count)
-          "blocked"        -> END with blocked status
+        Applies three deterministic rules (see _rule_based_verify) and transitions:
+          "pass"    -> END (status = "completed")
+          "blocked" -> END (status = "blocked")
         """
         response = state.get("response")
         conclusion = response.text if response is not None else ""
+        tool_results: list[dict[str, Any]] = state.get("tool_results") or []
 
-        # Flatten tool_results list of dicts into a single dict for the prompt
-        merged_tool_results: dict[str, Any] = {}
-        for item in state.get("tool_results") or []:
-            merged_tool_results.update(item)
-
-        tool_results_summary = "\n".join(
-            f"  {name}: {json.dumps(result, default=str)[:300]}"
-            for name, result in merged_tool_results.items()
-        ) or "  (no tool calls made)"
-
-        verifier_content = _VERIFIER_PROMPT.format(
-            tool_results_summary=tool_results_summary,
-            conclusion=conclusion[:2000],
-        )
-
-        if self._lc_model is None:
-            raise RuntimeError("AgentRuntime requires model_registry — _lc_model is not set")
-
-        _log.info("running verify_findings", agent_role=self.role)
-        try:
-            from langchain_core.messages import HumanMessage
-
-            ai_msg = await self._lc_model.ainvoke([HumanMessage(verifier_content)])
-            verify_status = _parse_verifier_status(str(ai_msg.content))
-        except Exception:
-            _log.exception(
-                "verify_findings LLM call failed; defaulting to pass",
-                agent_role=self.role,
-            )
-            verify_status = "pass"
+        verify_status = _rule_based_verify(tool_results, conclusion)
 
         _log.info(
             "verify_findings complete",
@@ -725,26 +695,14 @@ class AgentRuntime:
         if verify_status == "blocked":
             return {"status": "blocked"}
 
-        if verify_status == "needs_revision":
-            # Store the verify status in status field temporarily
-            # The conditional edge reads this to decide whether to retry
-            return {"status": "needs_revision"}
-
-        # "pass"
         return {"status": "completed"}
 
     # ------------------------------------------------------------------
     # Conditional edge after verify_findings
     # ------------------------------------------------------------------
 
-    def _after_verify(self, state: AgentState) -> str:
-        status = state.get("status", "completed")
-        if status == "needs_revision":
-            # Only retry once — check iteration count against a threshold
-            # Each verify_findings that triggers a retry adds a revision user message
-            # We guard by checking that we haven't already retried once
-            # State "needs_revision" is only set once; second verify will be "pass"/"blocked"
-            return "revise"
+    def _after_verify(self, state: AgentState) -> str:  # noqa: ARG002
+        # Rule-based verifier only emits "pass" (completed) or "blocked" — always END.
         return END
 
     # ------------------------------------------------------------------
@@ -784,10 +742,19 @@ class AgentRuntime:
     async def _call_model_final_node(
         self, state: AgentState, config: RunnableConfig
     ) -> dict[str, Any]:
-        """Retry LLM call after needs_revision. No subsequent verify_findings."""
+        """Retry LLM call after needs_revision. Lightweight degenerate check before returning."""
         result = await self._call_model_node(state, config)
-        # Mark as completed immediately — no second verify pass
-        result["status"] = "completed"
+        response = result.get("response")
+        final_text = (response.text or "").strip() if response is not None else ""
+        if not final_text or len(final_text) < _DEGENERATE_RESPONSE_MIN_LEN:
+            _log.warning(
+                "call_model_final produced degenerate response — marking blocked",
+                agent_role=self.role,
+                response_len=len(final_text),
+            )
+            result["status"] = "blocked"
+        else:
+            result["status"] = "completed"
         return result
 
     # ------------------------------------------------------------------
@@ -837,8 +804,6 @@ class AgentRuntime:
         sg.add_node("wait_for_approval", self._wait_for_approval_node)
         sg.add_node("execute_tools", self._execute_tools_node)
         sg.add_node("verify_findings", self._verify_findings_node)
-        sg.add_node("add_revision_message", self._add_revision_message_node)
-        sg.add_node("call_model_final", self._call_model_final_node)
 
         sg.add_edge(START, "compress_history")
         sg.add_edge("compress_history", "call_model")
@@ -854,16 +819,7 @@ class AgentRuntime:
         sg.add_edge("prepare_hitl", "wait_for_approval")
         sg.add_edge("wait_for_approval", "execute_tools")
         sg.add_edge("execute_tools", "call_model")
-        sg.add_conditional_edges(
-            "verify_findings",
-            self._after_verify,
-            {
-                "revise": "add_revision_message",
-                END: END,
-            },
-        )
-        sg.add_edge("add_revision_message", "call_model_final")
-        sg.add_edge("call_model_final", END)
+        sg.add_edge("verify_findings", END)
 
         return sg.compile(checkpointer=checkpointer)
 
@@ -985,24 +941,29 @@ class AgentRuntime:
         # Collect tool_calls_made from context — approximate using step_id repeated per tool result
         tool_calls_made = [ctx.agent_step_id] * len(merged_tool_results)
 
-        # Guard: warn on degenerate (too-short) final text responses.
+        # Guard: detect degenerate (too-short) final text responses.
         # Skip when last_response is None or when the final turn ended with tool_use
         # (in which case there is no final assistant text to evaluate).
         final_text = (last_response.text or "").strip() if last_response else ""
-        if (
+        is_degenerate = (
             last_response is not None
             and last_response.finish_reason != "tool_use"
-            and final_text
+            and bool(final_text)
             and len(final_text) < _DEGENERATE_RESPONSE_MIN_LEN
-        ):
+        )
+        if is_degenerate:
             _log.warning(
-                "Degenerate LLM response detected",
+                "Degenerate LLM response detected — overriding output",
                 role=self.role,
                 response_len=len(final_text),
                 response_preview=final_text,
             )
+            specialist_status = "failed"
 
         output = self._output_builder(merged_tool_results, last_response)
+        if is_degenerate:
+            if isinstance(output, dict):
+                output["text"] = _FALLBACK_DEGENERATE
         if run_status == "blocked":
             if isinstance(output, dict):
                 output["text"] = (

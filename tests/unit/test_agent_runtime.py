@@ -136,44 +136,16 @@ async def test_t008_system_block_texts_are_correct_types() -> None:
 
 
 # ---------------------------------------------------------------------------
-# T-007: verify_findings step
+# T-007: verify_findings step (rule-based — P61)
 # ---------------------------------------------------------------------------
 
 
-async def test_t007_needs_revision_retries_loop_once() -> None:
-    """When the verifier returns 'needs_revision', the tool loop runs a second
-    time (retry), and then the runtime produces a final SpecialistResult."""
-    # Call sequence:
-    #   1. Main tool loop LLM call  -> stop response (conclusion)
-    #   2. Verifier LLM call        -> "needs_revision: some issues found"
-    #   3. Retry tool loop LLM call -> stop response (revised conclusion)
-    # Total: 3 LLM calls
-    main_response = make_stop_response("Demand is trending upward based on analysis.")
-    verifier_response = make_stop_response("needs_revision: conclusion overstates the data")
-    retry_response = make_stop_response("Demand is stable based on the SQL results.")
-
-    llm = FakeLCModel([main_response, verifier_response, retry_response])
-    runtime = _make_runtime(llm)
-    task = _make_task()
-    ctx = _FakeToolContext()
-
-    result = await runtime.run(task, ctx)
-
-    # Must produce a completed result (not raise)
-    assert result.status == "completed"
-
-    # 3 calls: main loop, verifier, retry loop
-    assert len(llm._calls) == 3, (
-        f"Expected 3 LLM calls (main + verifier + retry), got {len(llm._calls)}"
-    )
-
-
 async def test_t007_pass_does_not_retry() -> None:
-    """When the verifier returns 'pass', no retry happens — only 2 LLM calls total."""
-    main_response = make_stop_response("Demand is stable.")
-    verifier_response = make_stop_response("pass: conclusion is well-grounded")
+    """Rule-based verifier: a normal long-enough conclusion passes without any
+    additional LLM call — exactly 1 call total (no separate verifier call)."""
+    main_response = make_stop_response("Demand is stable and within normal range.")
 
-    llm = FakeLCModel([main_response, verifier_response])
+    llm = FakeLCModel([main_response])
     runtime = _make_runtime(llm)
     task = _make_task()
     ctx = _FakeToolContext()
@@ -181,20 +153,20 @@ async def test_t007_pass_does_not_retry() -> None:
     result = await runtime.run(task, ctx)
 
     assert result.status == "completed"
-    # 2 calls: main loop + verifier
-    assert len(llm._calls) == 2, (
-        f"Expected 2 LLM calls (main + verifier), got {len(llm._calls)}"
+    # Only 1 call: main loop. Rule-based verifier makes zero LLM calls.
+    assert len(llm._calls) == 1, (
+        f"Expected 1 LLM call (main only — rule-based verifier), got {len(llm._calls)}"
     )
 
 
-async def test_t007_blocked_does_not_retry() -> None:
-    """When the verifier returns 'blocked', the loop does NOT retry.
+async def test_t007_blocked_on_fabricated_no_data_response() -> None:
+    """Rule-based verifier: no tool calls + conclusion with 'no' keyword → blocked.
     Since P60-B-04 the runtime maps blocked → status='failed' so that the
-    orchestrator can surface a safe fallback message rather than fabricated text."""
-    main_response = make_stop_response("Demand is stable.")
-    verifier_response = make_stop_response("blocked: fabricated data detected")
+    orchestrator surfaces a safe fallback message."""
+    # "no stockouts" with no tool calls triggers Rule 1 — fabricated data
+    main_response = make_stop_response("There are no stockouts in the warehouse currently.")
 
-    llm = FakeLCModel([main_response, verifier_response])
+    llm = FakeLCModel([main_response])
     runtime = _make_runtime(llm)
     task = _make_task()
     ctx = _FakeToolContext()
@@ -202,66 +174,10 @@ async def test_t007_blocked_does_not_retry() -> None:
     result = await runtime.run(task, ctx)
 
     assert result.status == "failed"
-    # 2 calls: main loop + verifier only (no retry on blocked)
-    assert len(llm._calls) == 2, (
-        f"Expected 2 LLM calls (main + verifier), got {len(llm._calls)}"
+    # Only 1 call: main loop. Rule-based verifier makes zero LLM calls.
+    assert len(llm._calls) == 1, (
+        f"Expected 1 LLM call (no verifier call), got {len(llm._calls)}"
     )
-
-
-async def test_t007_needs_revision_only_retries_once() -> None:
-    """When verifier returns 'needs_revision', the tool loop retries exactly once.
-    After the retry, the runtime builds the final result without another verification
-    round (_verify_findings_done guard prevents an infinite loop).
-
-    Call sequence:
-      1. Main tool loop call  -> stop response
-      2. Verifier call        -> needs_revision
-      3. Retry tool loop call -> stop response (final — no second verifier call)
-    Total: 3 LLM calls.
-    """
-    main_response = make_stop_response("Demand is stable.")
-    verifier_response = make_stop_response("needs_revision: missing detail")
-    retry_response = make_stop_response("Here is the revised answer.")
-
-    llm = FakeLCModel([main_response, verifier_response, retry_response])
-    runtime = _make_runtime(llm)
-    task = _make_task()
-    ctx = _FakeToolContext()
-
-    result = await runtime.run(task, ctx)
-
-    assert result.status == "completed"
-    # Exactly 3 calls: main loop + verifier + retry loop.
-    # The _verify_findings_done flag prevents a second verification pass.
-    assert len(llm._calls) == 3, (
-        f"Expected 3 LLM calls (main + verifier + retry), got {len(llm._calls)}"
-    )
-
-
-async def test_t007_verifier_failure_defaults_to_pass() -> None:
-    """If the verifier LLM call raises an exception, runtime defaults to 'pass'
-    and returns a completed result without retrying."""
-    call_count = 0
-
-    class _FailOnSecondCall(FakeLCModel):
-        """Returns a valid response on the first ainvoke, raises on the second."""
-
-        async def ainvoke(self, messages: Any, **kwargs: Any) -> Any:
-            nonlocal call_count
-            call_count += 1
-            if call_count == 1:
-                return await super().ainvoke(messages, **kwargs)
-            raise RuntimeError("LLM API error")
-
-    llm = _FailOnSecondCall([make_stop_response("Demand is stable.")])
-    runtime = _make_runtime(llm)
-    task = _make_task()
-    ctx = _FakeToolContext()
-
-    result = await runtime.run(task, ctx)
-
-    assert result.status == "completed"
-    assert call_count == 2  # main call + failed verifier call (no retry)
 
 
 # ---------------------------------------------------------------------------
@@ -278,9 +194,9 @@ async def test_output_builder_receives_final_response() -> None:
         captured["text"] = response.text if response else ""
         return {"text": captured["text"]}
 
+    # P61: rule-based verifier — only 1 LLM call needed.
     llm = FakeLCModel([
-        make_stop_response("Final answer from agent."),
-        make_stop_response("pass"),
+        make_stop_response("Final answer from agent, fully grounded and detailed."),
     ])
     runtime = AgentRuntime(
         name="test",
@@ -295,7 +211,7 @@ async def test_output_builder_receives_final_response() -> None:
 
     result = await runtime.run(task, ctx)
 
-    assert result.output.get("text") == "Final answer from agent."
+    assert result.output.get("text") == "Final answer from agent, fully grounded and detailed."
 
 
 # ---------------------------------------------------------------------------
@@ -305,13 +221,10 @@ async def test_output_builder_receives_final_response() -> None:
 
 async def test_t072_compress_history_noop_below_threshold() -> None:
     """When message count is at or below SUMMARY_THRESHOLD, compress_history
-    makes zero LLM calls."""
-    # 2 system/user initial messages + SUMMARY_THRESHOLD - 2 extra user messages
-    # equals exactly SUMMARY_THRESHOLD total — no compression should occur.
-    # We expect: 1 main LLM call + 1 verifier call = 2 total.
-    stop_resp = make_stop_response("All good.")
-    verifier_resp = make_stop_response("pass: well-grounded")
-    llm = FakeLCModel([stop_resp, verifier_resp])
+    makes zero LLM calls. P61: rule-based verifier also makes no LLM call,
+    so exactly 1 total call is expected."""
+    stop_resp = make_stop_response("All good and within expected parameters.")
+    llm = FakeLCModel([stop_resp])
     runtime = _make_runtime(llm)
     task = _make_task()
     ctx = _FakeToolContext()
@@ -319,9 +232,9 @@ async def test_t072_compress_history_noop_below_threshold() -> None:
     result = await runtime.run(task, ctx)
 
     assert result.status == "completed"
-    # Exactly 2 calls: main + verifier. No summarization call.
-    assert len(llm._calls) == 2, (
-        f"Expected 2 LLM calls (no compression), got {len(llm._calls)}"
+    # Exactly 1 call: main loop only. Rule-based verifier + no compression → zero extra calls.
+    assert len(llm._calls) == 1, (
+        f"Expected 1 LLM call (no compression, rule-based verifier), got {len(llm._calls)}"
     )
 
 
@@ -370,9 +283,8 @@ async def test_t072_compress_history_reduces_messages_to_11() -> None:
 
 async def test_t072_compress_history_at_threshold_boundary_is_noop() -> None:
     """Exactly SUMMARY_THRESHOLD messages must NOT trigger compression."""
-    stop_resp = make_stop_response("done")
-    verifier_resp = make_stop_response("pass")
-    llm = FakeLCModel([stop_resp, verifier_resp])
+    stop_resp = make_stop_response("done — all checks completed")
+    llm = FakeLCModel([stop_resp])
 
     # Test the node directly
     runtime = _make_runtime(llm)
@@ -437,8 +349,9 @@ def test_t073_graph_has_expected_nodes() -> None:
     )
 
 
-def test_t073_graph_also_has_revision_nodes() -> None:
-    """Graph must also contain the add_revision_message and call_model_final nodes."""
+def test_t073_graph_does_not_have_removed_revision_nodes() -> None:
+    """P61: add_revision_message and call_model_final were removed from the graph
+    when needs_revision was eliminated. Verify the graph is clean."""
     from langgraph.checkpoint.memory import MemorySaver
 
     llm = FakeLCModel([])
@@ -447,16 +360,17 @@ def test_t073_graph_also_has_revision_nodes() -> None:
 
     node_names = set(graph.nodes.keys())
     for name in ("add_revision_message", "call_model_final"):
-        assert name in node_names, (
-            f"Expected node '{name}' in graph, found: {node_names}"
+        assert name not in node_names, (
+            f"Node '{name}' should have been removed from graph in P61, found in: {node_names}"
         )
 
 
 async def test_t073_specialist_result_shape_after_run() -> None:
-    """SpecialistResult returned by run() must have the correct shape."""
+    """SpecialistResult returned by run() must have the correct shape.
+    With rule-based verifier (P61), only 1 LLM call is made."""
     from packages.agent.orchestrator import SpecialistResult
 
-    llm = FakeLCModel([make_stop_response("Analysis complete."), make_stop_response("pass")])
+    llm = FakeLCModel([make_stop_response("Analysis complete and fully grounded.")])
     runtime = _make_runtime(llm)
     task = _make_task()
     ctx = _FakeToolContext()
@@ -476,29 +390,25 @@ async def test_t073_specialist_result_shape_after_run() -> None:
 
 
 @pytest.mark.parametrize(
-    "verifier_text,expected_call_count,expected_status",
+    "conclusion,expected_status",
     [
-        ("needs_revision: minor issues found", 3, "completed"),
-        ("pass: all good", 2, "completed"),
-        # Since P60-B-04 blocked maps to specialist_status="failed"
-        ("blocked: fabricated data", 2, "failed"),
+        # Normal long conclusion with no tool calls and no fabrication markers → pass
+        ("The demand pattern appears to be within expected seasonal range.", "completed"),
+        # No tool calls + "no" keyword → rule-based verifier blocks (fabricated data)
+        ("There are no anomalies detected in supply chain.", "failed"),
+        # No tool calls + digit in conclusion → rule-based verifier blocks
+        ("There are 3 critical SKUs with stockout risk.", "failed"),
     ],
-    ids=["needs_revision_calls_model_twice", "pass_calls_model_once", "blocked_calls_model_once"],
+    ids=["pass_normal_conclusion", "blocked_no_keyword", "blocked_digit_fabricated"],
 )
-async def test_t073_verify_findings_retry_call_counts(
-    verifier_text: str, expected_call_count: int, expected_status: str
+async def test_t073_verify_findings_rule_based_outcomes(
+    conclusion: str, expected_status: str
 ) -> None:
-    """verify_findings retry behavior: needs_revision triggers a second call_model invocation.
-    Since P60-B-04, blocked → specialist_status='failed'."""
-    main_resp = make_stop_response("Initial conclusion.")
-    verifier_resp = make_stop_response(verifier_text)
-    retry_resp = make_stop_response("Revised conclusion.")
+    """P61: rule-based verifier — no LLM calls. Outcomes depend only on
+    conclusion content + presence/absence of tool results."""
+    main_resp = make_stop_response(conclusion)
 
-    responses = [main_resp, verifier_resp]
-    if expected_call_count == 3:
-        responses.append(retry_resp)
-
-    llm = FakeLCModel(responses)
+    llm = FakeLCModel([main_resp])
     runtime = _make_runtime(llm)
     task = _make_task()
     ctx = _FakeToolContext()
@@ -506,20 +416,19 @@ async def test_t073_verify_findings_retry_call_counts(
     result = await runtime.run(task, ctx)
 
     assert result.status == expected_status, (
-        f"verifier='{verifier_text}': expected status '{expected_status}', got '{result.status}'"
+        f"conclusion='{conclusion}': expected status '{expected_status}', got '{result.status}'"
     )
-    assert len(llm._calls) == expected_call_count, (
-        f"verifier='{verifier_text}': expected {expected_call_count} LLM calls, "
-        f"got {len(llm._calls)}"
+    # Rule-based verifier makes zero LLM calls — only main call consumed
+    assert len(llm._calls) == 1, (
+        f"Expected 1 LLM call (rule-based verifier), got {len(llm._calls)}"
     )
 
 
 async def test_t073_compress_history_noop_below_threshold_zero_summarize_calls() -> None:
     """When len(messages) <= SUMMARY_THRESHOLD, compress_history makes zero LLM calls
-    (the summarize LLM call is never made)."""
-    stop_resp = make_stop_response("ok")
-    verifier_resp = make_stop_response("pass")
-    llm = FakeLCModel([stop_resp, verifier_resp])
+    (the summarize LLM call is never made). P61: rule-based verifier also uses zero calls."""
+    stop_resp = make_stop_response("ok — verified and complete")
+    llm = FakeLCModel([stop_resp])
     runtime = _make_runtime(llm)
 
     # Exactly 2 messages (system + user) — well below threshold
@@ -614,10 +523,10 @@ async def test_execute_tools_tool_call_handle_is_called_and_result_fed_to_next_l
     tool = _RecordingFakeTool()
     registry = _FakeToolRegistry([tool])
 
+    # P61: rule-based verifier makes no LLM call — 2 calls total (tool call + conclusion)
     llm = FakeLCModel([
         make_tool_call_response("nl_query", {"query": "SELECT 1"}),
-        make_stop_response("Tool result processed."),
-        make_stop_response("pass"),
+        make_stop_response("Tool result processed successfully."),
     ])
     runtime = _make_runtime(llm, tool_registry=registry)
     task = _make_task()
@@ -626,7 +535,7 @@ async def test_execute_tools_tool_call_handle_is_called_and_result_fed_to_next_l
     result = await runtime.run(task, ctx)
 
     assert result.status == "completed"
-    assert len(llm._calls) == 3
+    assert len(llm._calls) == 2
 
     tool.handle.assert_called_once()
 
@@ -645,10 +554,11 @@ async def test_execute_tools_unknown_tool_skips_handle_and_no_tool_message_added
 
     registry = _FakeToolRegistry([])
 
+    # P61: rule-based verifier makes no LLM call — 2 calls total.
+    # Conclusion text must avoid digits and "no"/"none" (Rule 1 guard with empty tool_results).
     llm = FakeLCModel([
         make_tool_call_response("nonexistent_tool", {}),
-        make_stop_response("Skipped unknown tool."),
-        make_stop_response("pass"),
+        make_stop_response("Unknown tool was skipped during execution."),
     ])
     runtime = _make_runtime(llm, tool_registry=registry)
     task = _make_task()

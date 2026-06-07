@@ -63,7 +63,8 @@ Full task history for P0–P23 is archived at `docs/archive/v3/TASKS.md`.
 | P56 — nl_query クリーンアップ後処理 | T-363–T-369 | 2026-06-07 |
 | P57 — nl_query 品質強化 | T-370–T-375 | 2026-06-07 |
 | P59 — Control Agent Degenerate Response Guard | T-383–T-387 | 2026-06-07 |
-| P60 — Control Agent Tool-Loop Guard | T-388–T-394 | — |
+| P60 — Control Agent Tool-Loop Guard | T-388–T-394 | 2026-06-07 |
+| P61 — Quality Hardening: Degenerate Guard / Rule-Based Verifier | T-395–T-400 | 2026-06-07 |
 
 > **Design Realignment Note (2026-06-05):** P29–P36 built Specialist Domain Agents (DemandAgent,
 > InventoryAgent, SupplyPlanningAgent, FinanceImpactAgent, SopAgent) as independent runtime units.
@@ -1476,5 +1477,37 @@ Dependencies: none
 |---|---|---|
 | T-386 | `tests/unit/test_agent_runtime_degenerate_guard.py` — 2 unit tests: (a) when `last_response.text` is a string of fewer than 80 characters (e.g. `"Based"`), `AgentRuntime.run()` raises `RuntimeError` containing `"Degenerate LLM response"`; (b) when `last_response.text` is 80+ characters, no error is raised and `SpecialistResult.output["text"]` equals the response text | Done |
 | T-387 | `make test-unit && make lint && make typecheck` — all pass | Done |
+
+Dependencies: B-01
+
+---
+
+## P61 — Quality Hardening: Degenerate Guard / Rule-Based Verifier
+
+**Goal:** Fix three residual quality problems in `packages/agent/runtime.py`: (1) degenerate guard
+overrides output text and sets `specialist_status = "failed"` instead of warn-only; (2) `call_model_final`
+applies the same lightweight degenerate check before returning; (3) `verify_findings` converted from LLM
+self-verification to rule-based checks — eliminating `needs_revision`, `add_revision_message`, and
+`call_model_final` nodes and the associated LLM call.
+
+Dependencies: P60 Done
+
+### Batch B-01 — runtime.py quality fixes (App Builder) — Done
+
+| Task | Description | Status |
+|---|---|---|
+| T-395 | `packages/agent/runtime.py` — degenerate guard in `run()`: when `final_text` is non-empty and `len(final_text) < _DEGENERATE_RESPONSE_MIN_LEN`, override `output["text"]` to `"Could not produce a complete response. Please try again."` and set `specialist_status = "failed"` (instead of warn-only) | Done |
+| T-396 | `packages/agent/runtime.py` — `_call_model_final_node()`: after `await self._call_model_node()`, if the response text is empty or shorter than `_DEGENERATE_RESPONSE_MIN_LEN`, set `result["status"] = "blocked"` and log a warning; otherwise set `result["status"] = "completed"` | Done |
+| T-397 | `packages/agent/runtime.py` — convert `_verify_findings_node()` to rule-based: delete `_VERIFIER_PROMPT`, `_parse_verifier_status`; implement rules: (a) `tool_results` empty AND conclusion contains digit or "no"/"none"/"なし" → "blocked"; (b) `tool_results` non-empty AND `len(conclusion) < _DEGENERATE_RESPONSE_MIN_LEN` → "blocked"; (c) otherwise → "pass"; remove `needs_revision` status, `_after_verify` revise branch, `add_revision_message` node, `call_model_final` node; update graph wiring accordingly | Done |
+
+Dependencies: none
+
+### Batch B-02 — Tests (Test/Review) — Done
+
+| Task | Description | Status |
+|---|---|---|
+| T-398 | Update `tests/unit/test_agent_runtime_degenerate_guard.py` — replace `status == "completed"` with `status == "failed"` assertion; assert `result.output["text"] == "Could not produce a complete response. Please try again."` | Done |
+| T-399 | New `tests/unit/test_agent_runtime_verifier_rule_based.py` — 4 unit tests: (a) no tool calls + conclusion with number → blocked; (b) no tool calls + conclusion "no stockouts" → blocked; (c) tool calls present + short conclusion → blocked; (d) tool calls present + long conclusion → pass | Done |
+| T-400 | `make test-unit && make lint && make typecheck` — all pass | Done |
 
 Dependencies: B-01

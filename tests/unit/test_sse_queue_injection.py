@@ -273,8 +273,7 @@ async def test_t070_no_sse_queue_in_config_does_not_crash() -> None:
 
     lc_model_no_sse = FakeLCModel([
         _tool_use_response("nl_query", {}),
-        make_stop_response("Done."),
-        make_stop_response("pass"),
+        make_stop_response("Query completed successfully with results."),
     ])
     registry = _FakeToolRegistry([_FakeReadOnlyTool()])
 

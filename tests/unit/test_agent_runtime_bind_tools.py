@@ -140,8 +140,8 @@ async def test_call_model_node_maps_tool_calls_args_to_input() -> None:
     assert tc["id"] == "tc-1"
 
 
-async def test_verify_findings_uses_lc_model_when_set() -> None:
-    """_verify_findings_node uses _lc_model.ainvoke when _lc_model is set."""
+async def test_verify_findings_is_rule_based() -> None:
+    """_verify_findings_node uses rule-based logic — no LLM call."""
     runtime = _make_runtime()
 
     lc_model = MagicMock()
@@ -149,7 +149,7 @@ async def test_verify_findings_uses_lc_model_when_set() -> None:
     runtime._lc_model = lc_model
 
     mock_response = MagicMock()
-    mock_response.text = "my conclusion"
+    mock_response.text = "The stockout risk analysis is complete. Three SKUs are at risk."
 
     state = _make_agent_state(response=mock_response)
     ctx_mock = MagicMock()
@@ -162,7 +162,7 @@ async def test_verify_findings_uses_lc_model_when_set() -> None:
 
     result = await runtime._verify_findings_node(state, config)  # type: ignore[arg-type]
 
-    lc_model.ainvoke.assert_called_once()
+    lc_model.ainvoke.assert_not_called()
     assert result["status"] == "completed"
 
 

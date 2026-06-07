@@ -1,8 +1,12 @@
-"""T-386: Unit tests for the degenerate LLM response guard in AgentRuntime.
+"""T-398: Unit tests for the degenerate LLM response guard in AgentRuntime.
 
-The guard emits a WARNING log when the final assistant text is non-empty but
-shorter than _DEGENERATE_RESPONSE_MIN_LEN (10) characters, and still returns
-a completed result so callers are not hard-broken.
+When the final assistant text is non-empty but shorter than _DEGENERATE_RESPONSE_MIN_LEN
+(10 chars), AgentRuntime.run() must:
+  - emit a WARNING log containing 'Degenerate LLM response'
+  - override output["text"] with _FALLBACK_DEGENERATE
+  - return SpecialistResult.status == "failed"
+
+When text is >= _DEGENERATE_RESPONSE_MIN_LEN, run() completes normally.
 """
 from __future__ import annotations
 
@@ -12,7 +16,7 @@ from uuid import uuid4
 import pytest
 
 from packages.agent.orchestrator.models import SpecialistTask
-from packages.agent.runtime import AgentRuntime
+from packages.agent.runtime import AgentRuntime, _FALLBACK_DEGENERATE
 from tests.unit.helpers import FakeLCModel, make_model_registry, make_stop_response
 
 
@@ -67,16 +71,18 @@ def _make_runtime(lc_model: FakeLCModel) -> AgentRuntime:
 # ---------------------------------------------------------------------------
 
 
-async def test_degenerate_response_logs_warning_when_text_under_10_chars(
+async def test_degenerate_response_logs_warning_and_overrides_output(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
     """When the final LLM response text is fewer than 10 characters, AgentRuntime.run()
-    must emit a WARNING log containing 'Degenerate LLM response' and still complete."""
+    must emit a WARNING log, override output["text"] with the fallback message, and
+    return status == "failed"."""
     short_text = "Based"  # 5 chars — below the 10-char threshold
+    # Rule-based verifier: no tool calls + no digit/no/none → passes through as "completed"
+    # but degenerate guard in run() fires on the short text before output is built
     main_response = make_stop_response(short_text)
-    verifier_response = make_stop_response("pass: stub verification")
 
-    llm = FakeLCModel([main_response, verifier_response])
+    llm = FakeLCModel([main_response])
     runtime = _make_runtime(llm)
     task = _make_task()
     ctx = _FakeToolContext()
@@ -84,7 +90,9 @@ async def test_degenerate_response_logs_warning_when_text_under_10_chars(
     with caplog.at_level(logging.WARNING, logger="packages.agent.runtime"):
         result = await runtime.run(task, ctx)
 
-    assert result.status == "completed"
+    assert result.status == "failed"
+    assert isinstance(result.output, dict)
+    assert result.output["text"] == _FALLBACK_DEGENERATE
     assert any("Degenerate" in r.message for r in caplog.records)
 
 
@@ -95,9 +103,8 @@ async def test_degenerate_response_no_warning_when_text_10_chars_or_more(
     must complete normally without emitting a degenerate warning."""
     exact_10_text = "C" * 10  # exactly 10 chars — at the threshold, should pass
     main_response = make_stop_response(exact_10_text)
-    verifier_response = make_stop_response("pass: stub verification")
 
-    llm = FakeLCModel([main_response, verifier_response])
+    llm = FakeLCModel([main_response])
     runtime = _make_runtime(llm)
     task = _make_task()
     ctx = _FakeToolContext()
