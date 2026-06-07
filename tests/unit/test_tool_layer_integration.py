@@ -149,13 +149,13 @@ class QueryFlowPlannerModel:
                 return DagPlan(nodes=[
                     TaskNode(
                         id="ctrl", agent_role="control",
-                        deps=[], instruction="Analyze supply chain", tools=["sql_query"],
+                        deps=[], instruction="Analyze supply chain", tools=["nl_query"],
                     )
                 ])
             return ExecutionPlan(steps=[
                 PlanStep(
                     id="ctrl", agent_role="control",
-                    instruction="Analyze supply chain", tools=["sql_query"],
+                    instruction="Analyze supply chain", tools=["nl_query"],
                 )
             ])
 
@@ -212,12 +212,12 @@ class QueryFlowStubClaudeClient(StubClaudeClient):
         if "Create a serial execution plan" in system:
             return _response(
                 '{"steps":['
-                '{"id":"ctrl","agent_role":"control","instruction":"Analyze supply chain","tools":["sql_query"]}]}'
+                '{"id":"ctrl","agent_role":"control","instruction":"Analyze supply chain","tools":["nl_query"]}]}'
             )
         if "Create dependency nodes" in system:
             return _response(
                 '[{"id":"ctrl","agent_role":"control","deps":[],"instruction":"Analyze supply chain",'
-                '"tools":["sql_query"]}]'
+                '"tools":["nl_query"]}]'
             )
         # ControlAgent system prompt
         if "cross-domain operational judgment center" in system:

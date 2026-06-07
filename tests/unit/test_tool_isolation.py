@@ -93,7 +93,7 @@ class PlanningStubClaudeClient(StubClaudeClient):
             return LLMResponse(
                 text=(
                     '[{"id":"domain","specialist_type":"demand","deps":[],"tools":[]},'
-                    '{"id":"data","specialist_type":"data_engineer","deps":[],"tools":["sql_query"]},'
+                    '{"id":"data","specialist_type":"data_engineer","deps":[],"tools":["nl_query"]},'
                     '{"id":"sim","specialist_type":"simulation_optimizer","deps":["data"],'
                     '"tools":["simulate_inventory","optimize_replenishment"]},'
                     '{"id":"eval","specialist_type":"evaluator","deps":["sim"],'
