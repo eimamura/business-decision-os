@@ -1008,3 +1008,30 @@ Dependencies: none
 | T-339 | `make test-unit && make lint && make typecheck` — all pass | Done |
 
 Dependencies: B-01
+
+---
+
+## P49 — AI Response Copy Button
+
+**Goal:** `AssistantBubble` にコピーボタンを追加し、AI 回答のテキストをワンクリックでクリップボードにコピーできるようにする。
+
+Dependencies: P48 Done
+
+### Batch B-01 — AssistantBubble コピーボタン実装 (App Builder) — Done
+
+| Task | Description | Status |
+|---|---|---|
+| T-340 | `apps/web/components/chat/bubbles/AssistantBubble.tsx` — `useState` + clipboard ハンドラを追加し、コンテンツがあり streaming 中でない場合に "Copy / Copied!" ボタンを BubbleShell 下に描画する（`ml-10` でアバター分インデント、`aria-label="copy response"` / `aria-label="copied"`） | Done |
+
+Dependencies: none
+
+### Batch B-02 — テスト + 品質ゲート (Test/Review) — Done
+
+| Task | Description | Status |
+|---|---|---|
+| T-341 | `apps/web/components/__tests__/AssistantCopyButton.test.tsx` — SqlCopyButton テストと同パターンで 4 ケース: (a) コンテンツあり → ボタン描画、(b) コンテンツなし → ボタン非表示、(c) クリック → clipboard.writeText 呼び出し、(d) クリック後 "Copied!" → 2000ms 後に "Copy" に戻る | Done |
+| T-342 | `make lint && make typecheck && make test-unit` — 全通過 | Done |
+
+Dependencies: B-01
+
+Dependencies: B-01

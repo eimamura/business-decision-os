@@ -35,7 +35,7 @@ None.
 
 ## Last Completed
 
-P48-B-02 — LongTermMemory integration tests: 783 passed, lint+typecheck clean (2026-06-06)
+P49-B-02 — AssistantBubble copy button: 783 unit tests passed, tsc + eslint clean (2026-06-07)
 
 ## Blockers
 
