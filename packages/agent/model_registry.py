@@ -75,20 +75,23 @@ def create_model_registry() -> ModelRegistry:
         base_url = os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434")
         model_name = os.environ.get("OLLAMA_MODEL", "qwen2.5:7b")
         # ChatOllama field: reasoning=False → sent to Ollama API as think=false
-        # Prevents thinking models (qwen3, deepseek-r1) from exhausting num_predict
+        # Prevents thinking models (qwen3, deepseek-r1, gemma4) from exhausting num_predict
         # before emitting JSON content. Note: ChatOllama(think=False) is silently ignored.
+        # temperature=0.1: gemma4 is tuned for temperature=1.0; 0.0 causes greedy-decoding loops.
         structured_model = ChatOllama(
             model=model_name,
             base_url=base_url,
-            temperature=0.0,
+            temperature=0.1,
             num_predict=512,
             reasoning=False,
         )
-        # reasoning=False (→ Ollama API: think=false) required for tool calling accuracy
+        # reasoning=False (→ Ollama API: think=false) required for tool calling accuracy.
+        # num_predict=2048: surfaces truncation via output_tokens warning log if thinking leaks.
         control_model = ChatOllama(
             model=model_name,
             base_url=base_url,
-            temperature=0.0,
+            temperature=0.1,
+            num_predict=2048,
             reasoning=False,
         )
         return ModelRegistry(
