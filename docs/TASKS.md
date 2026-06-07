@@ -1225,3 +1225,47 @@ Dependencies: none
 Dependencies: B-01
 
 Dependencies: B-01
+
+---
+
+## P55 — nl_query 単一 Text2SQL ツール化 + sql_query 削除
+
+**Goal:** `sql_query` を削除し `nl_query` を全ロールで唯一の Text2SQL ツールとする。小規模ローカルモデルがスキーマ外カラム名を幻覚する問題を構造的に排除する。
+
+Dependencies: P54 Done
+
+### Batch B-01 — 幻覚防止バグ修正 (App Builder) — Done
+
+| Task | Description | Status |
+|---|---|---|
+| T-348 | `packages/tools/sql_allowlist.py` — `canonicalize_table_names()` 追加: `inventory`→`inventory_snapshot` 等のレガシーテーブル名をガードレール検証前に正規化する `_LEGACY_TABLE_MAP` + `_LEGACY_PATTERN` + 変換関数 | Done |
+| T-349 | `packages/tools/nl_query_tool.py` — 静的 `FEW_SHOT_EXAMPLES` 定数を削除し、`_parse_schema_cols()` + `_build_few_shot_examples()` で `get_schema_context()` から動的生成に置換（AGENTS.md §73-74 準拠） | Done |
+| T-350 | `packages/tools/schema_context.py` — スキーマコンテキスト文字列末尾に IMPORTANT ノート追記（正確なテーブル名使用を促す） | Done |
+| T-351 | `packages/simulation/inventory.py` — `FROM inventory` → `FROM inventory_snapshot` に修正 | Done |
+
+Dependencies: none
+
+### Batch B-02 — sql_query 削除 + nl_query 昇格 (App Builder) — Done
+
+| Task | Description | Status |
+|---|---|---|
+| T-352 | `packages/tools/sql_tool.py` — `SqlQueryTool` ファイルを削除 | Done |
+| T-353 | `packages/tools/__init__.py` — `SqlQueryTool` のインポート・エクスポート・レジストリ登録を削除 | Done |
+| T-354 | `packages/tools/base.py` — `_ROLE_TOOL_ALLOWLIST` の全ロール（control, data_engineer, demand, inventory, supply_planning, finance_impact, replenishment, procurement, supplier, production, logistics, sop, anomaly_detector）から `sql_query` を削除し `nl_query` のみ残す | Done |
+| T-355 | `packages/agent/control/control_agent.py` — `_INTENT_TOOL_SUBSET` の全インテント（supply_chain / demand / inventory / finance）で `sql_query` → `nl_query` に置換; `_SYSTEM_PROMPT` にツール優先順位（専門ツール→nl_query→カラム名幻覚禁止）を追記 | Done |
+| T-356 | `packages/agent/cross_domain/data_engineer.py` — output_builder の `"sql_query"` キー参照を `"nl_query"` に更新 | Done |
+| T-357 | `packages/agent/orchestrator/prompts.py` — PLAN_SYSTEM / DAG_SYSTEM のサンプル JSON を `nl_query` に更新 | Done |
+| T-358 | `docs/TOOLS.md`, `docs/DESIGN.md` — `sql_query` / `SqlQueryTool` 参照を `nl_query` に更新 | Done |
+| T-359 | `docs/adr/2026-06-07-nl-query-sole-text2sql.md` — ADR 作成 | Done |
+
+Dependencies: B-01
+
+### Batch B-03 — テスト + 品質ゲート (Test/Review) — Done
+
+| Task | Description | Status |
+|---|---|---|
+| T-360 | `tests/unit/` および `tests/integration/` — `SqlQueryTool` テストを削除、全 `sql_query` stub 名を `nl_query` に更新（test_tool_isolation.py, test_output_builders.py, test_sse_queue_injection.py, test_agent_runtime.py, test_hitl_flow.py, test_tool_safety_level.py, test_structlog.py, test_tool_allowlists.py, test_control_agent.py, test_prompts_mock_llm.py, test_tools_real_db.py） | Done |
+| T-361 | `packages/agent/llm/__init__.py` — `astream()` の不要な `# type: ignore[override]` を削除 | Done |
+| T-362 | `make test-unit && make lint && make typecheck` — 749 passed, all checks passed, no issues | Done |
+
+Dependencies: B-01, B-02

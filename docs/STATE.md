@@ -23,6 +23,7 @@ P44 — Playwright Tests: Revert to Mock SSE; 29 tests in 1.4 min (2026-06-06)
 P52 — LangChain ChatModel 移行 Phase 1: ModelRegistry + Structured Output (2026-06-07)
 P53 — LangChain ChatModel 移行 Phase 2: Planner + ControlAgent (2026-06-07)
 P54 — LangChain ChatModel 移行 Phase 3: NlQueryTool + LLMClient Deletion (2026-06-07)
+P55 — nl_query 単一 Text2SQL ツール化 + sql_query 削除 (2026-06-07)
 
 See `docs/archive/v3/STATE.md` for P0–P23 per-phase details.
 
@@ -38,7 +39,7 @@ None
 
 ## Last Completed
 
-P54 — LangChain ChatModel Migration Phase 3 complete: 753 passed, make build OK (2026-06-07)
+P55 — nl_query sole Text2SQL: 749 passed, lint OK, typecheck OK (2026-06-07)
 
 ## Blockers
 
