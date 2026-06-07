@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useCallback } from "react";
-import { ClipboardIcon, CheckIcon } from "lucide-react";
+import { CopyIcon, CheckIcon } from "lucide-react";
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeSanitize from "rehype-sanitize";
@@ -117,7 +117,7 @@ export default function AssistantBubble({
         {copied ? (
           <CheckIcon className="h-3.5 w-3.5" />
         ) : (
-          <ClipboardIcon className="h-3.5 w-3.5" />
+          <CopyIcon className="h-3.5 w-3.5" />
         )}
       </button>
     ) : undefined;

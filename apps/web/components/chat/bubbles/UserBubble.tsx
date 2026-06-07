@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { ClipboardIcon, CheckIcon } from "lucide-react";
+import { CopyIcon, CheckIcon } from "lucide-react";
 import type { ChatMessage } from "@/types/chat";
 import BubbleShell from "./BubbleShell";
 
@@ -30,7 +30,7 @@ export default function UserBubble({ message }: UserBubbleProps): React.JSX.Elem
       {copyState === "copied" ? (
         <CheckIcon className="h-3.5 w-3.5" />
       ) : (
-        <ClipboardIcon className="h-3.5 w-3.5" />
+        <CopyIcon className="h-3.5 w-3.5" />
       )}
     </button>
   );
