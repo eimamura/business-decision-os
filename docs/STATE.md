@@ -35,7 +35,7 @@ None.
 
 ## Last Completed
 
-P50-B-02 — _normalize_llm_text tests: 789 unit tests passed, lint + typecheck clean (2026-06-07)
+P51-B-02 — think=False tests: 791 unit tests passed, lint + typecheck + build clean (2026-06-07)
 
 ## Blockers
 

@@ -59,6 +59,7 @@ Full task history for P0–P23 is archived at `docs/archive/v3/TASKS.md`.
 | P47 — Long-Term Memory Physical Implementation | T-331–T-335 | 2026-06-06 |
 | P48 — LongTermMemory Integration + Test Accuracy Fix | T-336–T-339 | 2026-06-06 |
 | P50 — LLM Response Normalization Layer | T-343–T-347 | 2026-06-07 |
+| P51 — Qwen3 Thinking Disable for Structured Output Calls | T-348–T-352 | 2026-06-07 |
 
 > **Design Realignment Note (2026-06-05):** P29–P36 built Specialist Domain Agents (DemandAgent,
 > InventoryAgent, SupplyPlanningAgent, FinanceImpactAgent, SopAgent) as independent runtime units.
@@ -1007,6 +1008,33 @@ Dependencies: none
 |---|---|---|
 | T-338 | Unit tests for LongTermMemory integration in ControlAgent — add 2 tests to a new file `tests/unit/agent/test_control_agent_long_term.py`: (a) when `LongTermMemoryStore.search` returns records, `## Domain Knowledge` block appears in task.instruction passed to `super().run`; (b) when `LongTermMemoryStore.search` raises, ControlAgent does not raise and continues normally | Done |
 | T-339 | `make test-unit && make lint && make typecheck` — all pass | Done |
+
+Dependencies: B-01
+
+---
+
+## P51 — Qwen3 Thinking Disable for Structured Output Calls
+
+**Goal:** `OllamaClient.complete()` の orchestrator ロール呼び出しおよびツール呼び出しに `"think": False` を追加し、Qwen3 thinking モデルが thinking フェーズで max_tokens を消費して `content=""` になる問題を解消する。
+
+Dependencies: P50 Done
+
+### Batch B-01 — OllamaClient `think=False` 追加 (App Builder) — Done
+
+| Task | Description | Status |
+|---|---|---|
+| T-348 | `packages/agent/llm/__init__.py` — `OllamaClient.complete()` の `if tools:` ブロック内に `payload["think"] = False` を追加（`tool_choice` 設定の直後）。thinking と function calling は相性が悪く、tool 呼び出し精度を下げるため | Done |
+| T-349 | `packages/agent/llm/__init__.py` — `elif specialist_role == "orchestrator":` ブロック内に `payload["think"] = False` を追加（`response_format` 設定の直後）。分類・ルーティング呼び出しでは thinking 不要、かつ thinking フェーズが max_tokens を消費して `content=""` になる問題の根本対処 | Done |
+| T-350 | `packages/agent/llm/__init__.py` — `_normalize_llm_text` の warning メッセージ末尾に `"Set think=False in the request payload to prevent this."` を追加 | Done |
+
+Dependencies: none
+
+### Batch B-02 — Tests (Test/Review) — Done
+
+| Task | Description | Status |
+|---|---|---|
+| T-351 | `tests/unit/` 内の OllamaClient 既存ユニットテスト（`test_ollama_client.py` または相当ファイル）に 2 ケース追加: (a) `specialist_role="orchestrator"` で `complete()` 呼び出し → payload に `"think": False` が含まれる、(b) `tools=[...]` 指定で `complete()` 呼び出し → payload に `"think": False` が含まれる | Done |
+| T-352 | `make test-unit && make lint && make typecheck` — 全通過 | Done |
 
 Dependencies: B-01
 
