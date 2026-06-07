@@ -62,6 +62,7 @@ Full task history for P0–P23 is archived at `docs/archive/v3/TASKS.md`.
 | P51 — Qwen3 Thinking Disable for Structured Output Calls | T-348–T-352 | 2026-06-07 |
 | P56 — nl_query クリーンアップ後処理 | T-363–T-369 | 2026-06-07 |
 | P57 — nl_query 品質強化 | T-370–T-375 | 2026-06-07 |
+| P59 — Control Agent Degenerate Response Guard | T-383–T-387 | 2026-06-07 |
 
 > **Design Realignment Note (2026-06-05):** P29–P36 built Specialist Domain Agents (DemandAgent,
 > InventoryAgent, SupplyPlanningAgent, FinanceImpactAgent, SopAgent) as independent runtime units.
@@ -1364,3 +1365,36 @@ Dependencies: B-01
 | T-382 | `make test-unit && make lint && make typecheck` — all pass | Not Started |
 
 Dependencies: B-01, B-02
+
+---
+
+## P59 — Control Agent Degenerate Response Guard
+
+**Goal:** Prevent the Control Agent from delivering truncated one-word answers (e.g., "Based") to the
+UI by adding a minimum-length guard in `runtime.py`, raising `max_tokens` defaults in stub LLM
+classes, and emitting a WARNING log when `output_tokens` approaches `max_tokens`.
+
+Root cause class: `model_limitation` — identified via LLM-as-a-Judge session: two consecutive
+truncated responses ("…However," and "Based") traced to Ollama local model output-token exhaustion
+and quantized-model quality degradation.
+
+Dependencies: P58 Done
+
+### Batch B-01 — Degenerate response guard + max_tokens raise + token saturation log (App Builder) — Done
+
+| Task | Description | Status |
+|---|---|---|
+| T-383 | `packages/agent/runtime.py` — before calling `self._output_builder(merged_tool_results, last_response)` (line ~961), extract `final_text = last_response.text if last_response else ""`; if `final_text` is not empty and `len(final_text) < 80`, raise `RuntimeError(f"Degenerate LLM response (len={len(final_text)}): {final_text!r}")` | Done |
+| T-384 | `packages/agent/llm/__init__.py` — raise the `max_tokens: int = 4096` default to `8192` on all four `complete()` / `stream()` signatures inside `StubClaudeClient` and `ScenarioStubClaudeClient` (lines ~90, ~120, ~183, ~251) | Done |
+| T-385 | `packages/agent/runtime.py` — add module-level constant `_MAX_TOKENS_WARN_THRESHOLD = 4000`; in `_call_model_node()` after the existing `"specialist LLM response received"` log block: if `response.output_tokens >= _MAX_TOKENS_WARN_THRESHOLD`, emit `_log.warning("output_tokens near max_tokens limit — response may be truncated", output_tokens=response.output_tokens, threshold=_MAX_TOKENS_WARN_THRESHOLD, agent_role=self.role)` | Done |
+
+Dependencies: none
+
+### Batch B-02 — Tests (Test/Review) — Done
+
+| Task | Description | Status |
+|---|---|---|
+| T-386 | `tests/unit/test_agent_runtime_degenerate_guard.py` — 2 unit tests: (a) when `last_response.text` is a string of fewer than 80 characters (e.g. `"Based"`), `AgentRuntime.run()` raises `RuntimeError` containing `"Degenerate LLM response"`; (b) when `last_response.text` is 80+ characters, no error is raised and `SpecialistResult.output["text"]` equals the response text | Done |
+| T-387 | `make test-unit && make lint && make typecheck` — all pass | Done |
+
+Dependencies: B-01

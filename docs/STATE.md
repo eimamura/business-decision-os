@@ -26,6 +26,7 @@ P54 — LangChain ChatModel 移行 Phase 3: NlQueryTool + LLMClient Deletion (20
 P55 — nl_query 単一 Text2SQL ツール化 + sql_query 削除 (2026-06-07)
 P56 — nl_query クリーンアップ後処理 (2026-06-07)
 P57 — nl_query 品質強化 (2026-06-07)
+P59 — Control Agent Degenerate Response Guard (2026-06-07)
 
 See `docs/archive/v3/STATE.md` for P0–P23 per-phase details.
 
@@ -33,15 +34,15 @@ See `docs/archive/v3/STATE.md` for P0–P23 per-phase details.
 
 ## Active Phase
 
-P58 — list_stockout_risk Bulk Tool
+None
 
 ## Active Lease
 
-P58-B-03 (Tests — awaiting quality gate T-382)
+None
 
 ## Last Completed
 
-P57 — nl_query hardening: 752 passed, lint OK, typecheck OK, build OK (2026-06-07)
+P59 — Control Agent Degenerate Response Guard: degenerate guard + max_tokens 8192 + token saturation log (2026-06-07)
 
 ## Blockers
 

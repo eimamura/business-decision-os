@@ -24,6 +24,8 @@ _log = structlog.get_logger(__name__)
 
 _MAX_ITERATIONS = 10
 SUMMARY_THRESHOLD = 30
+_MAX_TOKENS_WARN_THRESHOLD = 4000
+_DEGENERATE_RESPONSE_MIN_LEN = 10
 
 
 @dataclass
@@ -310,6 +312,13 @@ class AgentRuntime:
             tool_call_count=len(response.tool_calls),
             model=response.model,
         )
+        if response.output_tokens >= _MAX_TOKENS_WARN_THRESHOLD:
+            _log.warning(
+                "output_tokens near max_tokens limit — response may be truncated",
+                output_tokens=response.output_tokens,
+                threshold=_MAX_TOKENS_WARN_THRESHOLD,
+                agent_role=self.role,
+            )
 
         # Append the assistant response as content blocks to messages
         new_messages: list[Any] = []
@@ -955,6 +964,23 @@ class AgentRuntime:
 
         # Collect tool_calls_made from context — approximate using step_id repeated per tool result
         tool_calls_made = [ctx.agent_step_id] * len(merged_tool_results)
+
+        # Guard: warn on degenerate (too-short) final text responses.
+        # Skip when last_response is None or when the final turn ended with tool_use
+        # (in which case there is no final assistant text to evaluate).
+        final_text = (last_response.text or "").strip() if last_response else ""
+        if (
+            last_response is not None
+            and last_response.finish_reason != "tool_use"
+            and final_text
+            and len(final_text) < _DEGENERATE_RESPONSE_MIN_LEN
+        ):
+            _log.warning(
+                "Degenerate LLM response detected",
+                role=self.role,
+                response_len=len(final_text),
+                response_preview=final_text,
+            )
 
         return SpecialistResult(
             task_id=task.task_id,
