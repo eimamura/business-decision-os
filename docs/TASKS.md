@@ -1087,13 +1087,13 @@ Dependencies: none
 
 Dependencies: B-01
 
-### Batch B-03 — Tests (Test/Review) — Not Started
+### Batch B-03 — Tests (Test/Review) — Done
 
 | Task | Description | Status |
 |---|---|---|
-| T-371 | `tests/unit/test_planner_structured.py` — mock `orchestrator._model_registry`; verify `create_execution_plan` returns `ExecutionPlan` via `with_structured_output`; verify `create_task_nodes` returns `list[TaskNode]` via `DagPlan`; verify fallback path for both | Not Started |
-| T-372 | `tests/unit/test_agent_runtime_bind_tools.py` — mock `_lc_model`; verify `bind_tools` is called with tool dicts; verify `tool_calls` mapping from `args` to `input`; verify `_verify_findings_node` uses `_lc_model.ainvoke` when set; verify legacy fallback | Not Started |
-| T-373 | `make test-unit && make lint && make typecheck` — all pass | Not Started |
+| T-371 | `tests/unit/test_planner_structured.py` — mock `orchestrator._model_registry`; verify `create_execution_plan` returns `ExecutionPlan` via `with_structured_output`; verify `create_task_nodes` returns `list[TaskNode]` via `DagPlan`; verify fallback path for both | Done |
+| T-372 | `tests/unit/test_agent_runtime_bind_tools.py` — mock `_lc_model`; verify `bind_tools` is called with tool dicts; verify `tool_calls` mapping from `args` to `input`; verify `_verify_findings_node` uses `_lc_model.ainvoke` when set; verify legacy fallback | Done |
+| T-373 | `make test-unit && make lint && make typecheck` — all pass | Done |
 
 Dependencies: B-02
 
