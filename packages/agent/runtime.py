@@ -73,7 +73,11 @@ def _parse_verifier_status(text: str) -> str:
 # ---------------------------------------------------------------------------
 
 
-async def _summarize_messages(messages: list[Any], llm_client: Any) -> str:
+async def _summarize_messages(
+    messages: list[Any],
+    llm_client: Any,
+    lc_model: Any | None = None,
+) -> str:
     """Cheap LLM call to summarize a slice of conversation history."""
     from packages.agent.llm import LLMMessage
 
@@ -81,6 +85,17 @@ async def _summarize_messages(messages: list[Any], llm_client: Any) -> str:
         f"{m.role}: {m.content if isinstance(m.content, str) else '[tool call]'}"
         for m in messages
     )
+
+    if lc_model is not None:
+        from langchain_core.messages import HumanMessage, SystemMessage
+
+        ai_msg = await lc_model.ainvoke([
+            SystemMessage("Summarize this conversation history in 2-3 sentences."),
+            HumanMessage(text_content),
+        ])
+        return str(ai_msg.content)
+
+    # Legacy fallback: use LLMClient when lc_model is not available
     response = await llm_client.complete(
         messages=[
             LLMMessage(
@@ -691,7 +706,9 @@ class AgentRuntime:
             len(oldest),
             agent_role=self.role,
         )
-        summary_text = await _summarize_messages(oldest, self._llm_client)
+        summary_text = await _summarize_messages(
+            oldest, self._llm_client, lc_model=getattr(self, "_lc_model", None)
+        )
 
         from packages.agent.llm import LLMMessage
 

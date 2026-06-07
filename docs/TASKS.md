@@ -1061,6 +1061,44 @@ Dependencies: B-03
 
 ---
 
+## P53 — LangChain ChatModel Migration Phase 2: Planner + ControlAgent
+
+**Goal:** Migrate `planning.py` (Planner) and `runtime.py` (ControlAgent) LLM calls to LangChain `with_structured_output()` / `bind_tools()`, eliminating remaining `_llm_client.complete()` calls from the orchestration core.
+
+Dependencies: P52 Done
+
+### Batch B-01 — Planner migration (App Builder) — Done
+
+| Task | Description | Status |
+|---|---|---|
+| T-365 | `create_execution_plan()` in `planning.py` — when `orchestrator._model_registry is not None`, use `model.with_structured_output(ExecutionPlan).ainvoke([SystemMessage(PLAN_SYSTEM), HumanMessage(user_content)])` instead of `_llm_client.complete()`; keep legacy fallback path when registry is None | Done |
+| T-366 | `create_task_nodes()` in `planning.py` — add `DagPlan(BaseModel)` wrapper with `nodes: list[TaskNode]` to `orchestrator/models.py`; use `model.with_structured_output(DagPlan).ainvoke(...)` when registry present; extract `plan.nodes`; keep legacy fallback | Done |
+| T-367 | `_summarize_messages()` in `runtime.py` — add `lc_model: BaseChatModel | None = None` parameter; when provided use `lc_model.ainvoke([SystemMessage(...), HumanMessage(text_content)])` and return `response.content`; fallback to existing `llm_client.complete()` path | Done |
+
+Dependencies: none
+
+### Batch B-02 — ControlAgent bind_tools migration (App Builder) — Not Started
+
+| Task | Description | Status |
+|---|---|---|
+| T-368 | `AgentRuntime.__init__` — add `model_registry: ModelRegistry \| None = None` parameter; store `self._lc_model: BaseChatModel \| None = model_registry.get("control") if model_registry else None` | Not Started |
+| T-369 | `_call_model_node()` — when `self._lc_model is not None`, build LangChain message list from `effective_messages`; call `self._lc_model.bind_tools(tool_dicts).ainvoke(lc_messages)`; map `AIMessage.tool_calls` `[{"name", "args", "id"}]` to existing `response.tool_calls` shape `[{"name", "input", "id"}]`; continue loop while `ai_msg.tool_calls` is non-empty; break when empty (analogous to `finish_reason == "stop"`); keep full legacy path when `_lc_model is None` | Not Started |
+| T-370 | `_verify_findings_node()` — when `self._lc_model is not None`, call `self._lc_model.ainvoke([HumanMessage(verifier_content)])` and extract `.content` for `_parse_verifier_status()`; keep legacy fallback | Not Started |
+
+Dependencies: B-01
+
+### Batch B-03 — Tests (Test/Review) — Not Started
+
+| Task | Description | Status |
+|---|---|---|
+| T-371 | `tests/unit/test_planner_structured.py` — mock `orchestrator._model_registry`; verify `create_execution_plan` returns `ExecutionPlan` via `with_structured_output`; verify `create_task_nodes` returns `list[TaskNode]` via `DagPlan`; verify fallback path for both | Not Started |
+| T-372 | `tests/unit/test_agent_runtime_bind_tools.py` — mock `_lc_model`; verify `bind_tools` is called with tool dicts; verify `tool_calls` mapping from `args` to `input`; verify `_verify_findings_node` uses `_lc_model.ainvoke` when set; verify legacy fallback | Not Started |
+| T-373 | `make test-unit && make lint && make typecheck` — all pass | Not Started |
+
+Dependencies: B-02
+
+---
+
 ## P51 — Qwen3 Thinking Disable for Structured Output Calls
 
 **Goal:** `OllamaClient.complete()` の orchestrator ロール呼び出しおよびツール呼び出しに `"think": False` を追加し、Qwen3 thinking モデルが thinking フェーズで max_tokens を消費して `content=""` になる問題を解消する。

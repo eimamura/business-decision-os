@@ -28,15 +28,15 @@ See `docs/archive/v3/STATE.md` for P0–P23 per-phase details.
 
 ## Active Phase
 
-None
+P53 — LangChain ChatModel Migration Phase 2: Planner + ControlAgent
 
 ## Active Lease
 
-None
+P53-B-02 — ControlAgent bind_tools migration
 
 ## Last Completed
 
-P52-B-04 — Tests: 798 unit tests passed, lint + typecheck clean (2026-06-07)
+P53-B-01 — Planner migration: 798 unit tests passed, lint + typecheck clean (2026-06-07)
 
 ## Blockers
 

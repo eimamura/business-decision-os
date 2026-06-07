@@ -15,6 +15,7 @@ from typing_extensions import TypedDict
 from packages.agent.orchestrator.decision import _synthesize_response
 from packages.agent.orchestrator.models import (
     AgentRoute,
+    DagPlan,
     ExecutionPlan,
     SessionIntent,
     SessionResponse,
@@ -72,19 +73,33 @@ async def create_execution_plan(
     from packages.persistence.agent_steps_repo import make_step
 
     step_id = await make_step(str(session_id), "planning")
+    user_content = json.dumps(
+        {
+            "query": orchestrator._query_text(query),
+            "intent": intent.model_dump(),
+            "route": route.model_dump(),
+        }
+    )
+
+    if orchestrator._model_registry is not None:
+        from typing import cast
+
+        from langchain_core.messages import HumanMessage, SystemMessage
+
+        model = orchestrator._model_registry.get("planner")
+        result = await model.with_structured_output(ExecutionPlan).ainvoke(
+            [SystemMessage(PLAN_SYSTEM), HumanMessage(user_content)]
+        )
+        plan = cast(ExecutionPlan, result)
+        for step in plan.steps:
+            _validate_agent_role(step.agent_role, source="plan")
+        return plan
+
+    # Legacy fallback: use LLMClient when model_registry is not available
     response = await orchestrator._llm_client.complete(
         messages=[
             LLMMessage(role="system", content=PLAN_SYSTEM),
-            LLMMessage(
-                role="user",
-                content=json.dumps(
-                    {
-                        "query": orchestrator._query_text(query),
-                        "intent": intent.model_dump(),
-                        "route": route.model_dump(),
-                    }
-                ),
-            ),
+            LLMMessage(role="user", content=user_content),
         ],
         tools=None,
         temperature=0.0,
@@ -138,19 +153,33 @@ async def create_task_nodes(
     from packages.persistence.agent_steps_repo import make_step
 
     step_id = await make_step(str(session_id), "dag_planning")
+    user_content = json.dumps(
+        {
+            "query": orchestrator._query_text(query),
+            "intent": intent.model_dump(),
+            "route": route.model_dump(),
+        }
+    )
+
+    if orchestrator._model_registry is not None:
+        from typing import cast
+
+        from langchain_core.messages import HumanMessage, SystemMessage
+
+        model = orchestrator._model_registry.get("planner")
+        result = await model.with_structured_output(DagPlan).ainvoke(
+            [SystemMessage(DAG_SYSTEM), HumanMessage(user_content)]
+        )
+        dag_plan = cast(DagPlan, result)
+        for node in dag_plan.nodes:
+            _validate_agent_role(node.agent_role, source="DAG")
+        return dag_plan.nodes
+
+    # Legacy fallback: use LLMClient when model_registry is not available
     response = await orchestrator._llm_client.complete(
         messages=[
             LLMMessage(role="system", content=DAG_SYSTEM),
-            LLMMessage(
-                role="user",
-                content=json.dumps(
-                    {
-                        "query": orchestrator._query_text(query),
-                        "intent": intent.model_dump(),
-                        "route": route.model_dump(),
-                    }
-                ),
-            ),
+            LLMMessage(role="user", content=user_content),
         ],
         tools=None,
         temperature=0.0,

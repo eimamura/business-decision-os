@@ -67,6 +67,10 @@ class TaskNode(BaseModel):
         return self.agent_role
 
 
+class DagPlan(BaseModel):
+    nodes: list[TaskNode]
+
+
 class SessionGoal(BaseModel):
     text: str
     weight_override_json: dict[str, Any] | None = None
