@@ -405,3 +405,55 @@ async def test_ollama_client_complete_truncates_long_tool_calls_json() -> None:
         await client.complete([LLMMessage(role="user", content="hi")])
 
     assert len(captured_usage["usage"].tool_calls_json) <= _TOOL_CALLS_MAX_LEN
+
+
+# ---------------------------------------------------------------------------
+# T-351: think=False payload tests
+# ---------------------------------------------------------------------------
+
+
+async def test_ollama_client_orchestrator_role_disables_thinking() -> None:
+    """OllamaClient.complete() includes think=False in payload for orchestrator role."""
+    from packages.agent.llm import OllamaClient
+
+    json_body = {
+        "id": "test",
+        "choices": [{"message": {"content": "{}", "tool_calls": None}, "finish_reason": "stop"}],
+        "usage": {},
+    }
+    mock_response = _make_response(200, json_body)
+    mock_client = _make_mock_client(mock_response)
+
+    client = OllamaClient()
+    with patch("httpx.AsyncClient", return_value=mock_client):
+        await client.complete(_minimal_messages(), specialist_role="orchestrator")
+
+    _call_kwargs = mock_client.post.call_args
+    posted_payload: dict = _call_kwargs.kwargs.get("json") or _call_kwargs.args[1]
+    assert posted_payload.get("think") is False
+
+
+async def test_ollama_client_tools_call_disables_thinking() -> None:
+    """OllamaClient.complete() includes think=False in payload when tools are provided."""
+    from packages.agent.llm import LLMToolSpec, OllamaClient
+
+    json_body = {
+        "id": "test",
+        "choices": [{"message": {"content": "{}", "tool_calls": None}, "finish_reason": "stop"}],
+        "usage": {},
+    }
+    mock_response = _make_response(200, json_body)
+    mock_client = _make_mock_client(mock_response)
+
+    tool = LLMToolSpec(
+        name="my_tool",
+        description="A tool for testing",
+        input_schema={"type": "object", "properties": {}},
+    )
+    client = OllamaClient()
+    with patch("httpx.AsyncClient", return_value=mock_client):
+        await client.complete(_minimal_messages(), tools=[tool])
+
+    _call_kwargs = mock_client.post.call_args
+    posted_payload: dict = _call_kwargs.kwargs.get("json") or _call_kwargs.args[1]
+    assert posted_payload.get("think") is False
