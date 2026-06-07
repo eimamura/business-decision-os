@@ -1,9 +1,11 @@
-"""T-399: Unit tests for the rule-based verify_findings in AgentRuntime.
+"""T-399 / T-402: Unit tests for the rule-based verify_findings in AgentRuntime.
 
-_rule_based_verify() applies three deterministic rules:
-  Rule 1: No tool calls AND conclusion contains digit or "no"/"none"/"なし" → "blocked"
-  Rule 2: Tool calls present AND conclusion shorter than _DEGENERATE_RESPONSE_MIN_LEN → "blocked"
-  Rule 3: Everything else → "pass"
+_rule_based_verify() applies four deterministic rules:
+  Rule 1:  No tool calls AND conclusion contains digit or "no"/"none"/"なし" → "blocked"
+  Rule 1b: Tool calls present AND result has data (count>0 or non-empty items)
+           AND conclusion matches nil-claim pattern → "blocked"
+  Rule 2:  Tool calls present AND conclusion shorter than _DEGENERATE_RESPONSE_MIN_LEN → "blocked"
+  Rule 3:  Everything else → "pass"
 """
 from __future__ import annotations
 
@@ -116,5 +118,66 @@ def test_rule3_no_tools_and_no_fabrication_markers_returns_pass() -> None:
     result = _rule_based_verify(
         tool_results=[],
         conclusion="What specific warehouse region would you like me to analyze?",
+    )
+    assert result == "pass", f"Expected 'pass', got {result!r}"
+
+
+# ---------------------------------------------------------------------------
+# Rule 1b — tool results contain data but conclusion claims nil
+# ---------------------------------------------------------------------------
+
+
+def test_rule1b_count_gt0_with_nil_claim_returns_blocked() -> None:
+    """T-402a: list_stockout_risk returns count=3 but conclusion claims no exceptions → blocked."""
+    result = _rule_based_verify(
+        tool_results=[
+            {
+                "list_stockout_risk": {
+                    "count": 3,
+                    "items": [
+                        {"sku_id": "SKU-001", "days_of_supply": 1},
+                        {"sku_id": "SKU-002", "days_of_supply": 2},
+                        {"sku_id": "SKU-003", "days_of_supply": 0},
+                    ],
+                }
+            }
+        ],
+        conclusion="There are no stockout exceptions today.",
+    )
+    assert result == "blocked", f"Expected 'blocked', got {result!r}"
+
+
+def test_rule1b_count_zero_with_nil_claim_returns_pass() -> None:
+    """T-402b: list_stockout_risk returns count=0 — nil claim is correct → pass."""
+    result = _rule_based_verify(
+        tool_results=[
+            {
+                "list_stockout_risk": {
+                    "count": 0,
+                    "items": [],
+                }
+            }
+        ],
+        conclusion="There are no stockout risks.",
+    )
+    assert result == "pass", f"Expected 'pass', got {result!r}"
+
+
+def test_rule1b_count_gt0_without_nil_claim_returns_pass() -> None:
+    """T-402c: list_stockout_risk returns count=3 and conclusion names the SKUs → pass."""
+    result = _rule_based_verify(
+        tool_results=[
+            {
+                "list_stockout_risk": {
+                    "count": 3,
+                    "items": [
+                        {"sku_id": "SKU-001", "days_of_supply": 1},
+                        {"sku_id": "SKU-002", "days_of_supply": 2},
+                        {"sku_id": "SKU-003", "days_of_supply": 0},
+                    ],
+                }
+            }
+        ],
+        conclusion="Three SKUs are at risk: SKU-001, SKU-002, SKU-003.",
     )
     assert result == "pass", f"Expected 'pass', got {result!r}"

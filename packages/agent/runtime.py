@@ -63,6 +63,40 @@ _FALLBACK_DEGENERATE = "Could not produce a complete response. Please try again.
 # Patterns that indicate a fabricated no-data conclusion when no tools were called.
 _FABRICATED_NO_DATA_RE = re.compile(r"\d|no\b|none\b|なし", re.IGNORECASE)
 
+# Patterns that indicate a nil-claim conclusion (used by Rule 1b).
+_NIL_CLAIM_RE = re.compile(
+    r"\b(no |none|nothing|ない|なし|ゼロ|0件|例外なし|リスクなし)",
+    re.IGNORECASE,
+)
+
+
+def _has_non_empty_tool_data(tool_results: list[dict[str, Any]]) -> bool:
+    """Return True if any result in tool_results contains data (count > 0 or non-empty items)."""
+    for entry in tool_results:
+        # Each entry is {tool_name: result_dict}
+        for result in entry.values():
+            if not isinstance(result, dict):
+                continue
+            # Check top-level "count" key
+            count = result.get("count")
+            if isinstance(count, int) and count > 0:
+                return True
+            # Check top-level "items" key
+            items = result.get("items")
+            if isinstance(items, list) and len(items) > 0:
+                return True
+            # Check one level of nesting (e.g. result["data"]["count"])
+            for v in result.values():
+                if not isinstance(v, dict):
+                    continue
+                nested_count = v.get("count")
+                if isinstance(nested_count, int) and nested_count > 0:
+                    return True
+                nested_items = v.get("items")
+                if isinstance(nested_items, list) and len(nested_items) > 0:
+                    return True
+    return False
+
 
 def _rule_based_verify(
     tool_results: list[dict[str, Any]],
@@ -70,16 +104,23 @@ def _rule_based_verify(
 ) -> str:
     """Rule-based findings verifier — no LLM call.
 
-    Rule 1: No tool calls made AND conclusion contains a number or "no"/"none"/"なし"
-            → fabricated data → "blocked"
-    Rule 2: Tool calls were made AND conclusion is shorter than _DEGENERATE_RESPONSE_MIN_LEN
-            → response too short to be meaningful → "blocked"
-    Rule 3: All other cases → "pass"
+    Rule 1:  No tool calls made AND conclusion contains a number or "no"/"none"/"なし"
+             → fabricated data → "blocked"
+    Rule 1b: Tool calls were made AND any result has count > 0 or non-empty items list
+             AND conclusion matches a nil-claim pattern → "blocked"
+    Rule 2:  Tool calls were made AND conclusion is shorter than _DEGENERATE_RESPONSE_MIN_LEN
+             → response too short to be meaningful → "blocked"
+    Rule 3:  All other cases → "pass"
     """
     has_tool_results = bool(tool_results)
     conclusion_stripped = conclusion.strip()
 
     if not has_tool_results and _FABRICATED_NO_DATA_RE.search(conclusion_stripped):
+        return "blocked"
+
+    if has_tool_results and _has_non_empty_tool_data(tool_results) and _NIL_CLAIM_RE.search(
+        conclusion_stripped
+    ):
         return "blocked"
 
     if has_tool_results and len(conclusion_stripped) < _DEGENERATE_RESPONSE_MIN_LEN:
@@ -676,7 +717,7 @@ class AgentRuntime:
     ) -> dict[str, Any]:
         """Rule-based findings verifier — no LLM call.
 
-        Applies three deterministic rules (see _rule_based_verify) and transitions:
+        Applies four deterministic rules (see _rule_based_verify) and transitions:
           "pass"    -> END (status = "completed")
           "blocked" -> END (status = "blocked")
         """

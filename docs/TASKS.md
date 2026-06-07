@@ -1511,3 +1511,19 @@ Dependencies: none
 | T-400 | `make test-unit && make lint && make typecheck` — all pass | Done |
 
 Dependencies: B-01
+
+---
+
+## P62 — Verifier Rule 1b: Nil-Claim Guard for Non-Empty Tool Results
+
+**Goal:** Extend `_rule_based_verify` with Rule 1b — block conclusions that claim "no exceptions / no risks / 例外なし" when tool results contain a non-zero `count` field or a non-empty `items` list, closing the gap where a fabricated nil answer slipped past the existing rules.
+
+### Batch B-01 — Rule 1b implementation + unit tests (App Builder) — In Progress
+
+| Task | Description | Status |
+|---|---|---|
+| T-401 | Add Rule 1b to `_rule_based_verify` in `packages/agent/runtime.py`: walk `tool_results` list; if any result dict has `"count"` (int > 0) or `"items"` (non-empty list) AND conclusion matches nil-claim regex → "blocked" | Done |
+| T-402 | Add 3 unit tests for Rule 1b in `tests/unit/test_agent_runtime_verifier_rule_based.py` | Done |
+| T-403 | `make test-unit && make lint && make typecheck` — all pass | In Progress |
+
+Dependencies: none

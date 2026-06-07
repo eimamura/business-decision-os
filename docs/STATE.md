@@ -36,11 +36,11 @@ See `docs/archive/v3/STATE.md` for P0–P23 per-phase details.
 
 ## Active Phase
 
-None
+P62 — Verifier Rule 1b: Nil-Claim Guard for Non-Empty Tool Results
 
 ## Active Lease
 
-None
+P62-B-01 (awaiting quality gate: make test-unit && make lint && make typecheck)
 
 ## Last Completed
 
