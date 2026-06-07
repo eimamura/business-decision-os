@@ -35,7 +35,7 @@ None.
 
 ## Last Completed
 
-P49-B-02 — AssistantBubble copy button: 783 unit tests passed, tsc + eslint clean (2026-06-07)
+P50-B-02 — _normalize_llm_text tests: 789 unit tests passed, lint + typecheck clean (2026-06-07)
 
 ## Blockers
 

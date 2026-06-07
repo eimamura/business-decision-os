@@ -58,6 +58,7 @@ Full task history for P0–P23 is archived at `docs/archive/v3/TASKS.md`.
 | P46 — Skill & Tool Enrichment | T-325–T-330 | 2026-06-06 |
 | P47 — Long-Term Memory Physical Implementation | T-331–T-335 | 2026-06-06 |
 | P48 — LongTermMemory Integration + Test Accuracy Fix | T-336–T-339 | 2026-06-06 |
+| P50 — LLM Response Normalization Layer | T-343–T-347 | 2026-06-07 |
 
 > **Design Realignment Note (2026-06-05):** P29–P36 built Specialist Domain Agents (DemandAgent,
 > InventoryAgent, SupplyPlanningAgent, FinanceImpactAgent, SopAgent) as independent runtime units.
@@ -1006,6 +1007,33 @@ Dependencies: none
 |---|---|---|
 | T-338 | Unit tests for LongTermMemory integration in ControlAgent — add 2 tests to a new file `tests/unit/agent/test_control_agent_long_term.py`: (a) when `LongTermMemoryStore.search` returns records, `## Domain Knowledge` block appears in task.instruction passed to `super().run`; (b) when `LongTermMemoryStore.search` raises, ControlAgent does not raise and continues normally | Done |
 | T-339 | `make test-unit && make lint && make typecheck` — all pass | Done |
+
+Dependencies: B-01
+
+---
+
+## P50 — LLM Response Normalization Layer
+
+**Goal:** `_normalize_llm_text()` を `llm/__init__.py` 内に導入し、thinking タグ・side-channel reasoning フィールド・空コンテンツをLLM層で吸収。`LLMResponse.text` が常にクリーンな状態で返るようにし、`parsing.py` からモデル固有知識を排除する。
+
+Dependencies: P49 Done
+
+### Batch B-01 — ResponseNormalizer 実装 (App Builder) — Done
+
+| Task | Description | Status |
+|---|---|---|
+| T-343 | `packages/agent/llm/__init__.py` — `_normalize_llm_text(message: dict[str, Any], model_name: str) -> str` を追加。①`content = message.get("content") or ""`、②`re.sub(r"<think>.*?</think>", "", content, flags=re.DOTALL).strip()` で thinking タグ除去、③除去後も空なら `message.get("reasoning") or message.get("thinking")` を fallback テキストとして使用しWarningログ出力、④正規化テキストを返す | Done |
+| T-344 | `OllamaClient.complete()` の thinking 警告ブロック + `text: str = content` を `text = _normalize_llm_text(message, self._model)` 1行に置換 | Done |
+| T-345 | `packages/agent/orchestrator/parsing.py` — `_json_obj` / `_json_array` 内の `_strip_thinking()` 呼び出しを削除（LLM 層で既に除去済み）; `_strip_thinking` 関数自体も削除 | Done |
+
+Dependencies: none
+
+### Batch B-02 — Tests (Test/Review) — Done
+
+| Task | Description | Status |
+|---|---|---|
+| T-346 | `tests/unit/test_normalize_llm_text.py` — `_normalize_llm_text` を直接インポートして 6 ケース: (a) 通常 content → そのまま返る、(b) `<think>…</think>` あり → 除去後テキスト返る、(c) 複数 `<think>` ブロック → 全除去、(d) content 空 + reasoning フィールド → reasoning を返し `logger.warning` 発火、(e) content 空 + thinking フィールド → thinking を返し `logger.warning` 発火、(f) content 空 + side-channel なし → `""` を返す | Done |
+| T-347 | `make test-unit && make lint && make typecheck` — 全通過 | Done |
 
 Dependencies: B-01
 
