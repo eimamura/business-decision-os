@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, Any
 from packages.agent.base import AgentBasedSpecialist
 from packages.knowledge import SkillLoader
 from packages.memory.decision import DecisionMemoryStore
+from packages.memory.long_term import LongTermMemoryStore
 
 if TYPE_CHECKING:
     from packages.agent.orchestrator import SpecialistResult, SpecialistTask
@@ -33,6 +34,8 @@ _SKILL_HEADER = "\n\n---\n## Analysis Procedures\n\n"
 _SKILL_SEPARATOR = "\n\n---\n\n"
 
 _PAST_DECISIONS_HEADER = "\n\n---\n## Past Decisions\n\n"
+
+_DOMAIN_KNOWLEDGE_HEADER = "\n\n---\n## Domain Knowledge\n\n"
 
 
 class ControlAgent(AgentBasedSpecialist):
@@ -108,7 +111,26 @@ class ControlAgent(AgentBasedSpecialist):
                     extra={"session_id": session_id},
                 )
 
-        # NOTE: DomainMemoryStore retrieval is skipped in MVP — no physical implementation.
+        # --- Domain Knowledge block (from LongTermMemoryStore, by intent scope) ---
+        if intent_category:
+            try:
+                domain_records = await LongTermMemoryStore().search(
+                    f"scope:{intent_category}", k=3
+                )
+                if domain_records:
+                    knowledge_lines: list[str] = [
+                        r.get("content", "") for r in domain_records if r.get("content")
+                    ]
+                    if knowledge_lines:
+                        knowledge_block = _DOMAIN_KNOWLEDGE_HEADER + "\n\n".join(knowledge_lines)
+                        task = task.model_copy(
+                            update={"instruction": task.instruction + knowledge_block}
+                        )
+            except Exception:
+                _log.exception(
+                    "LongTermMemoryStore.search failed; continuing without domain knowledge",
+                    extra={"intent_category": intent_category},
+                )
 
         # --- Delegate to base runtime ---
         result: "SpecialistResult | None" = None

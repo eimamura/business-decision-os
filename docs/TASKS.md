@@ -979,3 +979,31 @@ Dependencies: B-01
 | T-335 | `make test-unit && make lint && make typecheck` — all pass | Done |
 
 Dependencies: B-01, B-02
+
+---
+
+## P48 — LongTermMemory Integration + Test Accuracy Fix
+
+**Goal:** Wire `LongTermMemoryStore` into `ControlAgent.run()` for pre-call domain knowledge
+retrieval (replacing the MVP stub comment), and fix `tool_scenario_modal.spec.ts` to reflect
+the 6 categories now present in the modal (including the Supply Chain category added in P43).
+
+Dependencies: P47 Done
+
+### Batch B-01 — ControlAgent integration + Playwright fix (App Builder) — Done
+
+| Task | Description | Status |
+|---|---|---|
+| T-336 | `packages/agent/control/control_agent.py` — replace the `# NOTE: DomainMemoryStore retrieval is skipped` comment (line 111) with an actual `LongTermMemoryStore().search(f"scope:{intent_category}", k=3)` call; if records returned inject as `## Domain Knowledge\n\n<records>` block appended to instruction after Skills; non-fatal (catch all exceptions, log, continue) | Done |
+| T-337 | `tests/e2e/playwright/tool_scenario_modal.spec.ts` — rename test from "all 5 category tabs are visible" to "all 6 category tabs are visible"; add `await expect(dialog.getByText("Supply Chain")).toBeVisible()` assertion alongside existing 5 checks | Done |
+
+Dependencies: none
+
+### Batch B-02 — Tests + quality gate (Test/Review) — Not Started
+
+| Task | Description | Status |
+|---|---|---|
+| T-338 | Unit tests for LongTermMemory integration in ControlAgent — add 2 tests to a new file `tests/unit/agent/test_control_agent_long_term.py`: (a) when `LongTermMemoryStore.search` returns records, `## Domain Knowledge` block appears in task.instruction passed to `super().run`; (b) when `LongTermMemoryStore.search` raises, ControlAgent does not raise and continues normally | Not Started |
+| T-339 | `make test-unit && make lint && make typecheck` — all pass | Not Started |
+
+Dependencies: B-01

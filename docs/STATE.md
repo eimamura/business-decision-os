@@ -27,15 +27,15 @@ See `docs/archive/v3/STATE.md` for P0–P23 per-phase details.
 
 ## Active Phase
 
-None — all planned phases complete.
+P48 — LongTermMemory Integration + Test Accuracy Fix
 
 ## Active Lease
 
-None.
+P48-B-02
 
 ## Last Completed
 
-P47-B-03 — LongTermMemoryStore tests: 781 passed, lint+typecheck clean (2026-06-06)
+P48-B-01 — LongTermMemory in ControlAgent + Playwright test fix: 781 passed, lint+typecheck clean (2026-06-06)
 
 ## Blockers
 

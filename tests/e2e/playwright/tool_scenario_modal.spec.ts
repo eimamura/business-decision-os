@@ -58,7 +58,7 @@ test.describe("ToolScenarioModal (real API backend)", () => {
     await expect(page.getByText("Tool Scenarios")).toBeVisible();
   });
 
-  test("all 5 category tabs are visible in the open modal", async ({
+  test("all 6 category tabs are visible in the open modal", async ({
     page,
     request,
     createdSessionIds,
@@ -77,6 +77,7 @@ test.describe("ToolScenarioModal (real API backend)", () => {
     await expect(dialog.getByText("Simulation & Optimization")).toBeVisible();
     await expect(dialog.getByText("Ask User (HITL)")).toBeVisible();
     await expect(dialog.getByText("Job Dispatch (HITL)")).toBeVisible();
+    await expect(dialog.getByText("Supply Chain")).toBeVisible();
 
     // Supply Planning, Finance & Cost, and S&OP were removed in P38-B-02
     await expect(dialog.getByText("Supply Planning")).not.toBeVisible();
