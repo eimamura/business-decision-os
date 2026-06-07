@@ -25,24 +25,64 @@ _SQL_RULES = (
     "- Always include LIMIT 100 or less at the end of every query.\n"
 )
 
-FEW_SHOT_EXAMPLES = """
-Examples:
-Q: Which SKUs have the highest inventory?
-A: SELECT s.sku_id, s.name, SUM(i.on_hand) AS total_on_hand
-   FROM inventory i JOIN sku_master s ON i.sku_id = s.sku_id
-   GROUP BY s.sku_id, s.name ORDER BY total_on_hand DESC LIMIT 10;
+_NON_METRIC_COLS: frozenset[str] = frozenset(
+    {"id", "sku_id", "warehouse_id", "location_id", "supplier_id", "customer_id",
+     "created_at", "updated_at", "snapshot_date", "order_date", "expected_arrival",
+     "date", "status", "name", "region", "country", "is_missing"}
+)
 
-Q: What is the demand trend for the last 6 months?
-A: SELECT date, SUM(quantity) AS total_demand
-   FROM demand_history
-   WHERE date >= CURRENT_DATE - INTERVAL '6 months'
-   GROUP BY date ORDER BY date LIMIT 90;
 
-Q: Which suppliers have pending supply orders?
-A: SELECT supplier_id, COUNT(*) AS orders, SUM(quantity) AS total_qty
-   FROM supply WHERE expected_arrival >= CURRENT_DATE
-   GROUP BY supplier_id ORDER BY total_qty DESC LIMIT 90;
-"""
+def _parse_schema_cols(schema: str) -> dict[str, list[str]]:
+    result: dict[str, list[str]] = {}
+    for line in schema.splitlines():
+        if "(" not in line or line.startswith("Join rule"):
+            continue
+        table, _, rest = line.partition("(")
+        cols = [c.strip().split()[0] for c in rest.rstrip(")").split(",") if c.strip()]
+        result[table.strip()] = cols
+    return result
+
+
+def _build_few_shot_examples() -> str:
+    schema = get_schema_context()
+    if not schema:
+        return ""
+
+    tc = _parse_schema_cols(schema)
+    parts: list[str] = ["\nExamples:"]
+
+    inv = tc.get("inventory_snapshot", [])
+    metric = next((c for c in inv if c not in _NON_METRIC_COLS), None)
+    if inv and metric:
+        parts.append(
+            f"Q: Which SKUs have the highest {metric.replace('_', ' ')}?\n"
+            f"A: SELECT s.sku_id, s.name, SUM(i.{metric}) AS total\n"
+            f"   FROM inventory_snapshot i JOIN sku_master s ON i.sku_id = s.sku_id\n"
+            f"   GROUP BY s.sku_id, s.name ORDER BY total DESC LIMIT 10;"
+        )
+
+    dh = tc.get("demand_history", [])
+    if dh and "quantity" in dh:
+        date_col = "date" if "date" in dh else dh[0]
+        parts.append(
+            f"Q: What is the demand trend for the last 6 months?\n"
+            f"A: SELECT {date_col}, SUM(quantity) AS total_demand\n"
+            f"   FROM demand_history\n"
+            f"   WHERE {date_col} >= CURRENT_DATE - INTERVAL '6 months'\n"
+            f"   GROUP BY {date_col} ORDER BY {date_col} LIMIT 90;"
+        )
+
+    so = tc.get("supply_orders", [])
+    if so and "supplier_id" in so and "quantity" in so:
+        arr_col = "expected_arrival" if "expected_arrival" in so else "order_date"
+        parts.append(
+            f"Q: Which suppliers have pending supply orders?\n"
+            f"A: SELECT supplier_id, COUNT(*) AS orders, SUM(quantity) AS total_qty\n"
+            f"   FROM supply_orders WHERE {arr_col} >= CURRENT_DATE\n"
+            f"   GROUP BY supplier_id ORDER BY total_qty DESC LIMIT 90;"
+        )
+
+    return "\n".join(parts)
 
 
 def _build_system_text() -> str:
@@ -54,7 +94,7 @@ def _build_system_text() -> str:
     )
     return (
         "You are a SQL expert. Generate a PostgreSQL SELECT query.\n\n"
-        f"{schema_section}{FEW_SHOT_EXAMPLES}"
+        f"{schema_section}{_build_few_shot_examples()}"
     )
 
 _result_cache: dict[str, tuple[list[dict[str, Any]], str, float]] = {}

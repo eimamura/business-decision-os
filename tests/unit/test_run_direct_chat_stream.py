@@ -2,11 +2,10 @@ from __future__ import annotations
 
 """T-115: Unit tests for run_direct_chat() streaming path."""
 
+from types import SimpleNamespace
 from typing import Any
-from unittest.mock import AsyncMock, patch
 from uuid import uuid4
 
-from packages.agent.llm import LLMStreamEvent
 from packages.agent.orchestrator.models import AgentRoute, SessionIntent, SessionUserQuery
 
 
@@ -23,21 +22,18 @@ def _make_query(text: str = "hello") -> SessionUserQuery:
 
 
 class _MockOrchestrator:
-    def __init__(self, stream_events: list[LLMStreamEvent]) -> None:
+    def __init__(self, tokens: list[str]) -> None:
         self._pushed: list[dict[str, Any]] = []
 
         class _LLM:
-            def __init__(self, events: list[LLMStreamEvent]) -> None:
-                self._events = events
+            def __init__(self, chunks: list[str]) -> None:
+                self._chunks = chunks
 
-            async def stream(self, **kwargs: Any) -> Any:
-                async def _gen() -> Any:
-                    for e in self._events:
-                        yield e
+            async def astream(self, input: Any, config: Any = None, **kwargs: Any) -> Any:
+                for text in self._chunks:
+                    yield SimpleNamespace(content=text)
 
-                return _gen()
-
-        self._llm_client = _LLM(stream_events)
+        self._llm_client = _LLM(tokens)
 
     async def _push(self, event: dict[str, Any]) -> None:
         self._pushed.append(event)
@@ -46,30 +42,22 @@ class _MockOrchestrator:
         return query.text
 
 
-def _patch_make_step() -> Any:
-    return patch(
-        "packages.persistence.agent_steps_repo.make_step",
-        new=AsyncMock(return_value=uuid4()),
-    )
-
-
 async def _run(orchestrator: _MockOrchestrator, session_id: Any) -> Any:
     from packages.agent.orchestrator.runtime import run_direct_chat
 
-    with _patch_make_step():
-        return await run_direct_chat(
-            orchestrator=orchestrator,
-            session_id=session_id,
-            query=_make_query(),
-            intent=_make_intent(),
-            route=_make_route(),
-        )
+    return await run_direct_chat(
+        orchestrator=orchestrator,
+        session_id=session_id,
+        query=_make_query(),
+        intent=_make_intent(),
+        route=_make_route(),
+    )
 
 
 async def test_run_direct_chat_streams_tokens_and_builds_reply() -> None:
     """Pushes one text_delta per token in order; reply is the concatenation."""
     tokens = ["tok1", "tok2", "tok3"]
-    orch = _MockOrchestrator([LLMStreamEvent(event="text_delta", data=t) for t in tokens])
+    orch = _MockOrchestrator(tokens)
 
     response = await _run(orch, uuid4())
 
@@ -93,7 +81,7 @@ async def test_run_direct_chat_empty_stream() -> None:
 async def test_run_direct_chat_text_delta_carries_session_id() -> None:
     """Each pushed text_delta event includes the session_id field."""
     session_id = uuid4()
-    orch = _MockOrchestrator([LLMStreamEvent(event="text_delta", data="hello")])
+    orch = _MockOrchestrator(["hello"])
 
     await _run(orch, session_id)
 

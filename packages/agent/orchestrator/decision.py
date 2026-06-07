@@ -246,20 +246,16 @@ async def _synthesize_response(
             orchestrator, session_id, query, intent, route, agent_results
         )
 
-    from packages.agent.llm import LLMMessage
-    from packages.persistence.agent_steps_repo import make_step
+    from langchain_core.messages import HumanMessage, SystemMessage
 
-    step_id = await make_step(str(session_id), "synthesis")
-    messages = [
-        LLMMessage(
-            role="system",
+    lc_messages = [
+        SystemMessage(
             content=(
                 "Synthesize the agent results into a concise assistant reply. "
                 "Use the same language as the user. Do not invent raw inventory rows."
-            ),
+            )
         ),
-        LLMMessage(
-            role="user",
+        HumanMessage(
             content=json.dumps(
                 {
                     "query": query.text,
@@ -267,24 +263,18 @@ async def _synthesize_response(
                     "agent_results": {k: v.output for k, v in agent_results.items()},
                 },
                 default=lambda o: float(o) if isinstance(o, Decimal) else str(o),
-            ),
+            )
         ),
     ]
     parts: list[str] = []
-    async for evt in await orchestrator._llm_client.stream(
-        messages=messages,
-        tools=None,
-        temperature=0.0,
-        max_tokens=1024,
-        specialist_role="orchestrator",
-        agent_step_id=step_id,
-    ):
-        if evt.get("event") == "text_delta" and evt.get("data"):
-            parts.append(evt["data"])
+    async for chunk in orchestrator._llm_client.astream(lc_messages):
+        delta = chunk.content if isinstance(chunk.content, str) else ""
+        if delta:
+            parts.append(delta)
             await orchestrator._push({
                 "type": "text_delta",
                 "session_id": str(session_id),
-                "delta": evt["data"],
+                "delta": delta,
                 "timestamp": _iso_now(),
             })
     response_text = "".join(parts)

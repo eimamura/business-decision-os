@@ -57,7 +57,7 @@ class InventorySimulator:
         )
 
         inventory_row = await session.execute(
-            text("SELECT on_hand FROM inventory WHERE sku_id = :sku_id LIMIT 1"),
+            text("SELECT on_hand FROM inventory_snapshot WHERE sku_id = :sku_id LIMIT 1"),
             {"sku_id": input.sku_id},
         )
         inv = inventory_row.fetchone()

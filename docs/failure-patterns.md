@@ -9,6 +9,8 @@ Escalation actions tracked in `docs/prevention-policy.md §Applied Lever Log`.
 
 | ID | Date | Defect | Root Cause Class | Pattern | Count | Lever Applied |
 |---|---|---|---|---|---|---|
+| FP-001 | 2026-06-07 | ad-hoc (P54後) | `test-gap` | `StubClaudeClient` が旧カスタム API (`stream(messages=...)`) を実装したまま残ったため、P54 で `_llm_client` が `BaseChatModel` に置き換わった後も `decision.py`・`runtime.py` の呼び出し漏れをユニットテストが検出できなかった | 1 | — |
+| FP-002 | 2026-06-07 | ad-hoc (migration 0009後) | `agent-behavior` | `nl_query_tool.py` の `FEW_SHOT_EXAMPLES` にテーブル名をハードコードし AGENTS.md 73-74 の禁止ルールに違反したため、migration 0009 のテーブルリネーム (`inventory`→`inventory_snapshot`, `supply`→`supply_orders`) 後も few-shot 例が更新されず LLM が無効な SQL を生成し続けた | 1 | — |
 
 ---
 

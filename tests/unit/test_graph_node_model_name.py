@@ -126,6 +126,22 @@ class _DirectChatLLMClient:
 
         return _gen()
 
+    async def astream(self, input: Any, config: Any = None, **kwargs: Any) -> Any:
+        from packages.agent.llm import LLMMessage
+        from types import SimpleNamespace
+
+        msgs = [
+            LLMMessage(
+                role="system" if getattr(m, "type", "") == "system" else (
+                    "assistant" if getattr(m, "type", "") == "ai" else "user"
+                ),
+                content=getattr(m, "content", ""),
+            )
+            for m in (input if isinstance(input, list) else [])
+        ]
+        resp = await self.complete(msgs)
+        yield SimpleNamespace(content=resp.text)
+
 
 async def _run_orchestrator_collect_events(
     llm_client: Any,

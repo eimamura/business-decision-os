@@ -164,35 +164,26 @@ async def run_direct_chat(
     intent: SessionIntent,
     route: AgentRoute,
 ) -> SessionResponse:
-    from packages.agent.llm import LLMMessage
-    from packages.persistence.agent_steps_repo import make_step
+    from langchain_core.messages import HumanMessage, SystemMessage
 
-    step_id = await make_step(str(session_id), "direct_chat")
     parts: list[str] = []
-    async for evt in await orchestrator._llm_client.stream(
-        messages=[
-            LLMMessage(
-                role="system",
-                content=(
-                    "You are a helpful supply chain decision assistant. Reply briefly "
-                    "and naturally in the same language the user writes in. Do not make "
-                    "a decision recommendation unless the user asks for one."
-                ),
-            ),
-            LLMMessage(role="user", content=orchestrator._query_text(query)),
-        ],
-        tools=None,
-        temperature=0.0,
-        max_tokens=512,
-        specialist_role="orchestrator",
-        agent_step_id=step_id,
-    ):
-        if evt.get("event") == "text_delta" and evt.get("data"):
-            parts.append(evt["data"])
+    async for chunk in orchestrator._llm_client.astream([
+        SystemMessage(
+            content=(
+                "You are a helpful supply chain decision assistant. Reply briefly "
+                "and naturally in the same language the user writes in. Do not make "
+                "a decision recommendation unless the user asks for one."
+            )
+        ),
+        HumanMessage(content=orchestrator._query_text(query)),
+    ]):
+        delta = chunk.content if isinstance(chunk.content, str) else ""
+        if delta:
+            parts.append(delta)
             await orchestrator._push({
                 "type": "text_delta",
                 "session_id": str(session_id),
-                "delta": evt["data"],
+                "delta": delta,
                 "timestamp": _iso_now(),
             })
     full_text = "".join(parts)

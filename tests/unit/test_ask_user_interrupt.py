@@ -76,6 +76,20 @@ class _AskUserYesLLMClient:
 
         return _gen()
 
+    async def astream(self, input: Any, config: Any = None, **kwargs: Any) -> AsyncIterator[Any]:
+        from types import SimpleNamespace
+        msgs = [
+            LLMMessage(
+                role="system" if getattr(m, "type", "") == "system" else (
+                    "assistant" if getattr(m, "type", "") == "ai" else "user"
+                ),
+                content=getattr(m, "content", ""),
+            )
+            for m in (input if isinstance(input, list) else [])
+        ]
+        resp = await self.complete(msgs)
+        yield SimpleNamespace(content=resp.text)
+
 
 def _make_orchestrator(llm_client: Any, needs_input: bool = True) -> Any:
     """Build a SessionOrchestrator with a model_registry that returns domain_analysis intent.
@@ -279,6 +293,20 @@ async def test_ask_user_non_analytical_passes_through() -> None:
                 yield LLMStreamEvent(event="text_delta", data=llm_response.text)
 
             return _gen()
+
+        async def astream(self, input: Any, config: Any = None, **kwargs: Any) -> AsyncIterator[Any]:
+            from types import SimpleNamespace
+            msgs = [
+                LLMMessage(
+                    role="system" if getattr(m, "type", "") == "system" else (
+                        "assistant" if getattr(m, "type", "") == "ai" else "user"
+                    ),
+                    content=getattr(m, "content", ""),
+                )
+                for m in (input if isinstance(input, list) else [])
+            ]
+            resp = await self.complete(msgs)
+            yield SimpleNamespace(content=resp.text)
 
     from packages.agent.orchestrator import SessionOrchestrator
     from packages.memory import StubMemoryStore

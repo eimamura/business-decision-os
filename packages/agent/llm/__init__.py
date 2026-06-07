@@ -127,6 +127,21 @@ class StubClaudeClient:
 
         return _gen()
 
+    async def astream(self, input: Any, config: Any = None, **kwargs: Any) -> AsyncIterator[Any]:  # type: ignore[override]
+        from types import SimpleNamespace
+        lc_msgs = input if isinstance(input, list) else []
+        msgs = [
+            LLMMessage(
+                role="system" if getattr(m, "type", "") == "system" else (
+                    "assistant" if getattr(m, "type", "") == "ai" else "user"
+                ),
+                content=getattr(m, "content", ""),
+            )
+            for m in lc_msgs
+        ]
+        response = await self.complete(msgs)
+        yield SimpleNamespace(content=response.text)
+
     async def embed(
         self,
         texts: list[str],
@@ -245,6 +260,21 @@ class ScenarioStubClaudeClient:
             )
 
         return _gen()
+
+    async def astream(self, input: Any, config: Any = None, **kwargs: Any) -> AsyncIterator[Any]:  # type: ignore[override]
+        from types import SimpleNamespace
+        lc_msgs = input if isinstance(input, list) else []
+        msgs = [
+            LLMMessage(
+                role="system" if getattr(m, "type", "") == "system" else (
+                    "assistant" if getattr(m, "type", "") == "ai" else "user"
+                ),
+                content=getattr(m, "content", ""),
+            )
+            for m in lc_msgs
+        ]
+        response = await self.complete(msgs)
+        yield SimpleNamespace(content=response.text)
 
     async def embed(
         self,
