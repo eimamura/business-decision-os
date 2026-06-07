@@ -27,15 +27,15 @@ See `docs/archive/v3/STATE.md` for P0–P23 per-phase details.
 
 ## Active Phase
 
-None — all planned phases complete.
+P52 — LangChain ChatModel 移行 Phase 1: ModelRegistry + Structured Output
 
 ## Active Lease
 
-None.
+None
 
 ## Last Completed
 
-P51-B-02 — think=False tests: 791 unit tests passed, lint + typecheck + build clean (2026-06-07)
+P52-B-03 — Structured Output 移行: 791 unit tests passed, lint + typecheck clean (2026-06-07)
 
 ## Blockers
 

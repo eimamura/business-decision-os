@@ -38,6 +38,12 @@ class AgentRoute(BaseModel):
     rationale: str
 
 
+class AskUserDecision(BaseModel):
+    needs_input: bool
+    question: str | None = None
+    suggestions: list[str] | None = None
+
+
 class PlanStep(BaseModel):
     id: str
     agent_role: str

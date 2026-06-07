@@ -1013,6 +1013,54 @@ Dependencies: B-01
 
 ---
 
+## P52 — LangChain ChatModel 移行 Phase 1: ModelRegistry + Structured Output
+
+**Goal:** LangChain `BaseChatModel` を導入し、`ModelRegistry` でロール別モデル選択を実現。orchestrator ロールの 3 LLM 呼び出し（intent 分類、ルーティング、ask_user 判定）を `with_structured_output()` に移行して手動 JSON パースを排除する。
+
+Dependencies: P51 Done
+
+### Batch B-01 — ADR + 依存パッケージ追加 (Infra) — Not Started
+
+| Task | Description | Status |
+|---|---|---|
+| T-353 | ADR `docs/adr/2026-06-07-langchain-chatmodel-migration.md` — 作成済み | Done |
+| T-354 | `pyproject.toml` に `langchain-core>=0.3`, `langchain-anthropic>=0.3`, `langchain-ollama>=0.3` を追加。`uv add langchain-core langchain-anthropic langchain-ollama` で実行し `uv.lock` を更新する | Done |
+
+Dependencies: none
+
+### Batch B-02 — ModelRegistry 実装 (App Builder) — Done
+
+| Task | Description | Status |
+|---|---|---|
+| T-355 | `packages/agent/model_registry.py` に `ModelRegistry` クラスを実装。`get(role: str) -> BaseChatModel` メソッド: role は `"orchestrator"` / `"planner"` / `"control"` を受け付け、unknown role は `ValueError` を raise。`LLM_PROVIDER=anthropic` の場合 `ChatAnthropic(model=..., temperature=0.0)`、`LLM_PROVIDER=ollama` の場合 `ChatOllama(model=..., base_url=..., temperature=0.0)` を返す。orchestrator/planner ロールの Ollama モデルには `num_predict=512, think=False` を追加。`create_model_registry() -> ModelRegistry` factory 関数を公開し環境変数 (`LLM_PROVIDER`, `ANTHROPIC_API_KEY`, `ANTHROPIC_MODEL`, `OLLAMA_BASE_URL`, `OLLAMA_MODEL`) から構築する。`ANTHROPIC_MODEL` が未設定なら `"claude-sonnet-4-6"` をデフォルトとする。 | Done |
+| T-356 | `packages/agent/__init__.py` に `from packages.agent.model_registry import ModelRegistry, create_model_registry` を追加し `__all__` に含める | Done |
+
+Dependencies: B-01
+
+### Batch B-03 — Structured Output 移行 (App Builder) — Done
+
+| Task | Description | Status |
+|---|---|---|
+| T-357 | `packages/agent/orchestrator/models.py` に `AskUserDecision(BaseModel)` を追加: `needs_input: bool`, `question: str \| None = None`, `suggestions: list[str] \| None = None` | Done |
+| T-358 | `SessionOrchestrator.__init__` に `model_registry: ModelRegistry \| None = None` パラメータを追加（デフォルト `None`）。`self._orchestrator_model: BaseChatModel \| None = model_registry.get("orchestrator") if model_registry else None` を設定する | Done |
+| T-359 | `classify_intent()` を書き換え: `model_registry` が提供されていれば `self._orchestrator_model.with_structured_output(SessionIntent).ainvoke([SystemMessage(INTENT_SYSTEM), HumanMessage(query_text)])` を使用、未提供なら既存の `_llm_client.complete()` パスへフォールバック。`make_step` ステップ記録は両パスで維持する | Done |
+| T-360 | `select_execution_mode()` を同パターンで書き換え: `self._orchestrator_model.with_structured_output(AgentRoute).ainvoke(...)` または既存フォールバック | Done |
+| T-361 | `_node_prepare_ask_user()` の ask_user 判定部分を書き換え: `self._orchestrator_model.with_structured_output(AskUserDecision).ainvoke(...)` または既存フォールバック。`ASK_USER_SYSTEM` プロンプトはそのまま使用 | Done |
+
+Dependencies: B-02
+
+### Batch B-04 — Tests (Test/Review) — Not Started
+
+| Task | Description | Status |
+|---|---|---|
+| T-362 | `tests/unit/test_model_registry.py` — 4 ケース: (a) `LLM_PROVIDER=anthropic` → `ChatAnthropic` インスタンス、(b) `LLM_PROVIDER=ollama` → `ChatOllama` インスタンス、(c) orchestrator ロールの Ollama モデルに `think=False` が設定されている、(d) unknown role → `ValueError` | Not Started |
+| T-363 | `tests/unit/test_session_orchestrator_structured.py` — `with_structured_output` パスの 3 ケース: (a) `classify_intent` が `SessionIntent` を返す（`MagicMock` で `with_structured_output().ainvoke()` をスタブ）、(b) `select_execution_mode` が `AgentRoute` を返す、(c) `model_registry=None` のとき既存フォールバックパスが使われる | Not Started |
+| T-364 | `make test-unit && make lint && make typecheck` — 全通過 | Not Started |
+
+Dependencies: B-03
+
+---
+
 ## P51 — Qwen3 Thinking Disable for Structured Output Calls
 
 **Goal:** `OllamaClient.complete()` の orchestrator ロール呼び出しおよびツール呼び出しに `"think": False` を追加し、Qwen3 thinking モデルが thinking フェーズで max_tokens を消費して `content=""` になる問題を解消する。
