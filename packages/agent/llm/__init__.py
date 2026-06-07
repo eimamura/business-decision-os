@@ -623,19 +623,27 @@ class OllamaClient:
 
     DEFAULT_BASE_URL = "http://localhost:11434"
     DEFAULT_MODEL = "gpt-oss:20b"
+    DEFAULT_TIMEOUT = 300.0  # 20B+ local models can take several minutes per call
 
     def __init__(
         self,
         base_url: str = DEFAULT_BASE_URL,
         model: str = DEFAULT_MODEL,
         usage_writer: UsageWriter | None = None,
+        timeout: float | None = None,
     ) -> None:
         if not base_url:
             raise RuntimeError("OllamaClient: base_url must not be empty — set OLLAMA_BASE_URL")
         self._base_url = base_url.rstrip("/")
         self._model = model
         self._usage_writer: UsageWriter = usage_writer or _noop_usage_writer
-        _logger.info("OllamaClient initialized: base_url=%s model=%s", self._base_url, self._model)
+        self._timeout: float = timeout if timeout is not None else float(
+            os.environ.get("OLLAMA_TIMEOUT", self.DEFAULT_TIMEOUT)
+        )
+        _logger.info(
+            "OllamaClient initialized: base_url=%s model=%s timeout=%.0fs",
+            self._base_url, self._model, self._timeout,
+        )
 
     # ------------------------------------------------------------------
     # Internal helpers
@@ -743,7 +751,7 @@ class OllamaClient:
                 resp = await client.post(
                     f"{self._base_url}/v1/chat/completions",
                     json=payload,
-                    timeout=120.0,
+                    timeout=self._timeout,
                 )
                 resp.raise_for_status()
         except httpx.HTTPError as exc:
@@ -836,7 +844,7 @@ class OllamaClient:
                         "POST",
                         f"{base_url}/v1/chat/completions",
                         json=payload,
-                        timeout=120.0,
+                        timeout=self._timeout,
                     ) as resp:
                         resp.raise_for_status()
                         async for line in resp.aiter_lines():
