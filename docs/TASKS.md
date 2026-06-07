@@ -1099,7 +1099,7 @@ Dependencies: B-02
 
 ---
 
-## P54 — LangChain ChatModel Migration Phase 3: NlQueryTool + LLMClient Deletion
+## P54 — LangChain ChatModel Migration Phase 3: NlQueryTool + LLMClient Deletion — Done
 
 **Goal:** Complete LangChain migration — update `NlQueryTool` and `history.py`, remove all legacy `LLMClient` fallback paths, and delete `LLMClient` Protocol, `ClaudeClient`, `OllamaClient`, and `create_llm_client()`.
 
