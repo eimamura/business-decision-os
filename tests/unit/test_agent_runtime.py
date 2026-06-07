@@ -188,8 +188,9 @@ async def test_t007_pass_does_not_retry() -> None:
 
 
 async def test_t007_blocked_does_not_retry() -> None:
-    """When the verifier returns 'blocked', the loop does NOT retry — runtime
-    still returns a completed result (blocked is not an error, it continues)."""
+    """When the verifier returns 'blocked', the loop does NOT retry.
+    Since P60-B-04 the runtime maps blocked → status='failed' so that the
+    orchestrator can surface a safe fallback message rather than fabricated text."""
     main_response = make_stop_response("Demand is stable.")
     verifier_response = make_stop_response("blocked: fabricated data detected")
 
@@ -200,7 +201,7 @@ async def test_t007_blocked_does_not_retry() -> None:
 
     result = await runtime.run(task, ctx)
 
-    assert result.status == "completed"
+    assert result.status == "failed"
     # 2 calls: main loop + verifier only (no retry on blocked)
     assert len(llm._calls) == 2, (
         f"Expected 2 LLM calls (main + verifier), got {len(llm._calls)}"
@@ -475,18 +476,20 @@ async def test_t073_specialist_result_shape_after_run() -> None:
 
 
 @pytest.mark.parametrize(
-    "verifier_text,expected_call_count",
+    "verifier_text,expected_call_count,expected_status",
     [
-        ("needs_revision: minor issues found", 3),
-        ("pass: all good", 2),
-        ("blocked: fabricated data", 2),
+        ("needs_revision: minor issues found", 3, "completed"),
+        ("pass: all good", 2, "completed"),
+        # Since P60-B-04 blocked maps to specialist_status="failed"
+        ("blocked: fabricated data", 2, "failed"),
     ],
     ids=["needs_revision_calls_model_twice", "pass_calls_model_once", "blocked_calls_model_once"],
 )
 async def test_t073_verify_findings_retry_call_counts(
-    verifier_text: str, expected_call_count: int
+    verifier_text: str, expected_call_count: int, expected_status: str
 ) -> None:
-    """verify_findings retry behavior: needs_revision triggers a second call_model invocation."""
+    """verify_findings retry behavior: needs_revision triggers a second call_model invocation.
+    Since P60-B-04, blocked → specialist_status='failed'."""
     main_resp = make_stop_response("Initial conclusion.")
     verifier_resp = make_stop_response(verifier_text)
     retry_resp = make_stop_response("Revised conclusion.")
@@ -502,7 +505,9 @@ async def test_t073_verify_findings_retry_call_counts(
 
     result = await runtime.run(task, ctx)
 
-    assert result.status == "completed"
+    assert result.status == expected_status, (
+        f"verifier='{verifier_text}': expected status '{expected_status}', got '{result.status}'"
+    )
     assert len(llm._calls) == expected_call_count, (
         f"verifier='{verifier_text}': expected {expected_call_count} LLM calls, "
         f"got {len(llm._calls)}"

@@ -35,7 +35,14 @@ _SYSTEM_PROMPT = (
     "3. Use nl_query for bulk or cross-product questions — pass the question in plain English; "
     "nl_query generates schema-correct SQL internally.\n"
     "4. Never fabricate column names or assume columns that are not confirmed by tool results.\n\n"
-    "Always ground recommendations in tool results. Do not fabricate quantities or risk scores."
+    "Always ground recommendations in tool results. Do not fabricate quantities or risk scores.\n"
+    "Once you have sufficient data from tools, stop calling tools"
+    " and produce a final text response.\n"
+    "Never call the same tool twice in one session. "
+    "After receiving results from list_stockout_risk, synthesise them immediately"
+    " into a final answer — do NOT call any tool again.\n"
+    "For exception/delay questions, call get_delayed_supply_orders() to surface"
+    " supply chain delays alongside list_stockout_risk for stockout enumeration.\n"
 )
 
 _SKILL_HEADER = "\n\n---\n## Analysis Procedures\n\n"

@@ -27,6 +27,7 @@ P55 — nl_query 単一 Text2SQL ツール化 + sql_query 削除 (2026-06-07)
 P56 — nl_query クリーンアップ後処理 (2026-06-07)
 P57 — nl_query 品質強化 (2026-06-07)
 P59 — Control Agent Degenerate Response Guard (2026-06-07)
+P60 — Control Agent Tool-Loop Guard (2026-06-07)
 
 See `docs/archive/v3/STATE.md` for P0–P23 per-phase details.
 
@@ -42,7 +43,7 @@ None
 
 ## Last Completed
 
-P59 — Control Agent Degenerate Response Guard: degenerate guard + max_tokens 8192 + token saturation log (2026-06-07)
+P60 — Control Agent Tool-Loop Guard: prompt loop guard + runtime duplicate-tool detector + blocked-status fabrication fix (2026-06-07)
 
 ## Blockers
 

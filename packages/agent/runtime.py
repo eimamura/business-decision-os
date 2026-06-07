@@ -355,6 +355,24 @@ class AgentRuntime:
         response = state.get("response")
         if response is None:
             return "verify_findings"
+        if state["iteration"] >= _MAX_ITERATIONS:
+            _log.warning(
+                "max iterations reached — forcing verify_findings",
+                agent_role=self.role,
+                iteration=state["iteration"],
+            )
+            return "verify_findings"
+        # Detect duplicate tool calls — force verify_findings to break the loop
+        seen_tool_names: list[str] = []
+        for tr in (state.get("tool_results") or []):
+            seen_tool_names.extend(tr.keys())
+        if len(seen_tool_names) != len(set(seen_tool_names)):
+            _log.warning(
+                "duplicate tool call detected — forcing verify_findings",
+                agent_role=self.role,
+                seen_tools=seen_tool_names,
+            )
+            return "verify_findings"
         if not response.tool_calls or response.finish_reason == "stop":
             return "verify_findings"
         # Check if any pending HITL approval needs processing
@@ -955,8 +973,10 @@ class AgentRuntime:
 
         # Map internal graph status to SpecialistResult status
         specialist_status: str
-        if run_status in ("completed", "blocked"):
+        if run_status == "completed":
             specialist_status = "completed"
+        elif run_status == "blocked":
+            specialist_status = "failed"
         elif run_status == "error":
             specialist_status = "failed"
         else:
@@ -982,12 +1002,24 @@ class AgentRuntime:
                 response_preview=final_text,
             )
 
+        output = self._output_builder(merged_tool_results, last_response)
+        if run_status == "blocked":
+            if isinstance(output, dict):
+                output["text"] = (
+                    "Could not verify findings. Please rephrase your question or try again."
+                )
+        blocked_error = (
+            final_state.get("error") or "run blocked by tool-loop guard"
+            if run_status == "blocked"
+            else final_state.get("error")
+        )
+
         return SpecialistResult(
             task_id=task.task_id,
-            output=self._output_builder(merged_tool_results, last_response),
+            output=output,
             tool_calls_made=tool_calls_made,
             status=specialist_status,  # type: ignore[arg-type]
-            error=final_state.get("error"),
+            error=blocked_error,
             usage={
                 "input_tokens": final_state.get("input_tokens", 0),
                 "output_tokens": final_state.get("output_tokens", 0),

@@ -63,6 +63,7 @@ Full task history for P0–P23 is archived at `docs/archive/v3/TASKS.md`.
 | P56 — nl_query クリーンアップ後処理 | T-363–T-369 | 2026-06-07 |
 | P57 — nl_query 品質強化 | T-370–T-375 | 2026-06-07 |
 | P59 — Control Agent Degenerate Response Guard | T-383–T-387 | 2026-06-07 |
+| P60 — Control Agent Tool-Loop Guard | T-388–T-394 | — |
 
 > **Design Realignment Note (2026-06-05):** P29–P36 built Specialist Domain Agents (DemandAgent,
 > InventoryAgent, SupplyPlanningAgent, FinanceImpactAgent, SopAgent) as independent runtime units.
@@ -1365,6 +1366,85 @@ Dependencies: B-01
 | T-382 | `make test-unit && make lint && make typecheck` — all pass | Not Started |
 
 Dependencies: B-01, B-02
+
+---
+
+## P60 — Control Agent Tool-Loop Guard
+
+**Goal:** Prevent gemma4:12b (and other local models) from calling the same tool repeatedly in a
+single session instead of synthesising results. Fix has three layers: a prompt guard in
+`control_agent.py`, a runtime duplicate-tool detector in `runtime.py`, and a secondary prompt
+addition that ensures `get_delayed_supply_orders` is called for "exceptions" questions alongside
+`list_stockout_risk`.
+
+Root cause class: `model_limitation` — verified via container logs: `finish_reason: "tool_use"`,
+`tool_call_count: 1` repeated 10× before `verify_status: "blocked"`.
+
+Dependencies: P59 Done
+
+### Batch B-01 — Prompt guard in control_agent.py (App Builder) — Done
+
+Add a hard stop instruction to `_SYSTEM_PROMPT` in `packages/agent/control/control_agent.py`.
+The instruction must appear immediately after the existing tool usage priority block (after the
+"Always ground recommendations…" line) so that the model reads it before generating any tool call.
+
+| Task | Description | Status |
+|---|---|---|
+| T-388 | `packages/agent/control/control_agent.py` — append two sentences to `_SYSTEM_PROMPT`, after the "Always ground recommendations in tool results…" paragraph: `"Never call the same tool twice in one session. After receiving results from list_stockout_risk, synthesise them immediately into a final answer — do NOT call any tool again."` | Done |
+| T-389 | `packages/agent/control/control_agent.py` — append a third instruction to the same block for the exception/delay use-case: `"For exception/delay questions, call get_delayed_supply_orders() to surface supply chain delays alongside list_stockout_risk for stockout enumeration."` | Done |
+
+Dependencies: none
+
+### Batch B-02 — Runtime duplicate-tool detection in runtime.py (App Builder) — Done
+
+Add logic to `_should_continue()` in `packages/agent/runtime.py` that inspects the accumulated
+`state["tool_results"]` list for repeated tool names and forces an early transition to
+`verify_findings` before `_MAX_ITERATIONS` is reached.
+
+`state["tool_results"]` is `list[dict[str, Any]]` where each dict has a single key equal to the
+tool name. The duplicate check: collect all tool names from this list; if any name appears ≥ 2
+times, return `"verify_findings"` immediately and emit a WARNING log.
+
+| Task | Description | Status |
+|---|---|---|
+| T-390 | `packages/agent/runtime.py` — in `_should_continue()`, after the `_MAX_ITERATIONS` guard and before the `response.tool_calls` / `finish_reason` check, add: collect `seen_tool_names` by iterating `state.get("tool_results") or []` and extracting `list(d.keys())[0]` for each dict; if any name has count ≥ 2 in `seen_tool_names`, emit `_log.warning("duplicate tool call detected — forcing verify_findings", ...)` and return `"verify_findings"` | Done |
+
+Dependencies: none
+
+### Batch B-03 — Tests (Test/Review) — Done
+
+| Task | Description | Status |
+|---|---|---|
+| T-391 | `tests/unit/test_agent_runtime_tool_loop_guard.py` — 2 unit tests: (a) when `state["tool_results"]` contains `[{"list_stockout_risk": {...}}, {"list_stockout_risk": {...}}]`, `_should_continue()` returns `"verify_findings"` without reaching the `execute_tools` branch; (b) when the same tool appears only once, `_should_continue()` returns `"execute_tools"` normally | Done |
+| T-392 | `tests/unit/agent/test_control_agent_prompt.py` (or extend existing `test_control_agent.py`) — assert that `_SYSTEM_PROMPT` contains the substring `"Never call the same tool twice"` and the substring `"get_delayed_supply_orders"` | Done |
+| T-393 | `make test-unit && make lint && make typecheck` — all pass | Done |
+
+Dependencies: B-01, B-02
+
+### Batch B-04 — blocked-status fabrication fix (App Builder) — Done
+
+Fix `run()` in `packages/agent/runtime.py` so that when `run_status == "blocked"`, the upstream
+orchestrator receives `status="failed"` and a safe fallback message instead of the agent's
+fabricated conclusion text.
+
+**Problem:** Lines ~964–966 map `"blocked"` to `specialist_status = "completed"` and pass
+`last_response.text` unchanged into `SpecialistResult.output["text"]`. Because `verify_findings`
+is the final node when the tool-loop guard fires, the LLM may have emitted a fabricated summary
+before the block was detected. That text surfaces to users as a real answer.
+
+**Fix (in `run()`, final assembly block):**
+- When `run_status == "blocked"`: set `specialist_status = "failed"` and override the output text
+  with the safe fallback `"Could not verify findings. Please rephrase your question or try again."`.
+- Populate `SpecialistResult.error` with `"run blocked by tool-loop guard"` when the existing
+  `final_state.get("error")` is `None`, so the orchestrator has a machine-readable reason.
+- The `SpecialistResult.output` dict must still contain the `"text"` key (set to the fallback),
+  `"tool_results"` (unchanged), and all other keys already produced by `_output_builder`.
+
+| Task | Description | Status |
+|---|---|---|
+| T-394 | `packages/agent/runtime.py` — in the final assembly block of `run()` (~lines 963–970): replace the `if run_status in ("completed", "blocked"):` branch with separate handling: `"completed"` → `specialist_status = "completed"` (unchanged); `"blocked"` → `specialist_status = "failed"`, replace output text with `"Could not verify findings. Please rephrase your question or try again."`, set `error = final_state.get("error") or "run blocked by tool-loop guard"`. Also add a unit test `tests/unit/test_agent_runtime_blocked_status.py` asserting: (a) a run that returns `status="blocked"` produces `SpecialistResult.status == "failed"` and `SpecialistResult.output["text"]` equals the safe fallback string (not the LLM fabricated text); (b) `SpecialistResult.error` is non-empty. | Done |
+
+Dependencies: B-02
 
 ---
 
