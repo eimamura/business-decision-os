@@ -744,6 +744,11 @@ class OllamaClient:
         if tools:
             payload["tools"] = self._to_openai_tools(tools)
             payload["tool_choice"] = "auto"
+        elif specialist_role == "orchestrator":
+            # Orchestrator calls (intent classification, routing) must return JSON.
+            # JSON mode forces valid JSON output from models that struggle to follow
+            # "Return ONLY a JSON object" instructions (e.g. small 2B models).
+            payload["response_format"] = {"type": "json_object"}
 
         start = time.monotonic()
         try:

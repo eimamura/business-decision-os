@@ -132,6 +132,7 @@ def test_create_llm_client_returns_ollama_when_provider_env_set(
 ) -> None:
     monkeypatch.setenv("LLM_PROVIDER", "ollama")
     monkeypatch.delenv("MOCK_LLM", raising=False)
+    monkeypatch.delenv("OLLAMA_MODEL", raising=False)  # ensure DEFAULT_MODEL is used
     from packages.agent.llm import OllamaClient, create_llm_client
 
     client = create_llm_client()

@@ -27,7 +27,13 @@ def json_safe(value: Any) -> Any:
     return value
 
 
+def _strip_thinking(text: str) -> str:
+    """Remove <think>...</think> blocks emitted by Qwen3 / DeepSeek thinking models."""
+    return re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL).strip()
+
+
 def _json_obj(text: str) -> dict[str, Any]:
+    text = _strip_thinking(text)
     match = re.search(r"\{.*\}", text, re.DOTALL)
     if not match:
         raise ValueError("no JSON object in LLM response")
@@ -35,6 +41,7 @@ def _json_obj(text: str) -> dict[str, Any]:
 
 
 def _json_array(text: str) -> list[dict[str, Any]]:
+    text = _strip_thinking(text)
     match = re.search(r"\[.*\]", text, re.DOTALL)
     if not match:
         raise ValueError("no JSON array in LLM response")
