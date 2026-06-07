@@ -73,6 +73,9 @@ lint:
 typecheck:
 	uv run mypy packages/ apps/api/
 
+check-llm:
+	OLLAMA_BASE_URL=$${OLLAMA_BASE_URL:-http://localhost:11434} uv run python scripts/check_llm.py
+
 codegen:
 	uv run python scripts/generate_schemas.py
 	@echo "Verifying no TS compile errors after codegen..."
