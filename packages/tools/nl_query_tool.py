@@ -9,6 +9,7 @@ from packages.agent.context_sanitizer import sanitize_sql_results
 from packages.persistence import execute_read_query
 from packages.tools.base import ToolContext, ToolResult
 from packages.tools.schema_context import get_schema_context
+from packages.tools.sql_allowlist import canonicalize_table_names
 from packages.tools.sql_guardrail import SQLGuardrailError, validate_read_sql
 
 logger = logging.getLogger(__name__)
@@ -82,6 +83,25 @@ def _build_few_shot_examples() -> str:
             f"   GROUP BY supplier_id ORDER BY total_qty DESC LIMIT 90;"
         )
 
+    inv2 = tc.get("inventory_snapshot", [])
+    dh2 = tc.get("demand_history", [])
+    if "on_hand" in inv2 and "quantity" in dh2:
+        parts.append(
+            "Q: Which products are at stockout risk this week?\n"
+            "A: SELECT s.sku_id, s.name,\n"
+            "       SUM(i.on_hand) AS on_hand,\n"
+            "       ROUND(COALESCE(AVG(d.quantity), 0) * 7, 2) AS weekly_demand,\n"
+            "       SUM(i.on_hand) - COALESCE(AVG(d.quantity), 0) * 7 AS projected_7d\n"
+            "   FROM inventory_snapshot i\n"
+            "   JOIN sku_master s ON i.sku_id = s.sku_id\n"
+            "   LEFT JOIN demand_history d ON d.sku_id = i.sku_id\n"
+            "     AND d.date >= CURRENT_DATE - INTERVAL '30 days'\n"
+            "     AND d.is_missing IS NOT TRUE\n"
+            "   GROUP BY s.sku_id, s.name\n"
+            "   HAVING SUM(i.on_hand) < COALESCE(AVG(d.quantity), 0) * 7\n"
+            "   ORDER BY projected_7d ASC LIMIT 100;"
+        )
+
     return "\n".join(parts)
 
 
@@ -140,7 +160,9 @@ async def generate_and_run(
     dynamic_examples = await _load_positive_examples()
     error_context = ""
     for attempt in range(MAX_RETRIES + 1):
-        sql = await _generate_sql(question, model, error_context, dynamic_examples)
+        sql = canonicalize_table_names(
+            await _generate_sql(question, model, error_context, dynamic_examples)
+        )
         try:
             validate_sql(sql)
             query_result = await execute_read_query(sql)

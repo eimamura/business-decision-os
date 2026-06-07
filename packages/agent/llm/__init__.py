@@ -127,7 +127,7 @@ class StubClaudeClient:
 
         return _gen()
 
-    async def astream(self, input: Any, config: Any = None, **kwargs: Any) -> AsyncIterator[Any]:  # type: ignore[override]
+    async def astream(self, input: Any, config: Any = None, **kwargs: Any) -> AsyncIterator[Any]:
         from types import SimpleNamespace
         lc_msgs = input if isinstance(input, list) else []
         msgs = [
@@ -261,7 +261,7 @@ class ScenarioStubClaudeClient:
 
         return _gen()
 
-    async def astream(self, input: Any, config: Any = None, **kwargs: Any) -> AsyncIterator[Any]:  # type: ignore[override]
+    async def astream(self, input: Any, config: Any = None, **kwargs: Any) -> AsyncIterator[Any]:
         from types import SimpleNamespace
         lc_msgs = input if isinstance(input, list) else []
         msgs = [

@@ -31,6 +31,14 @@ async def load_schema_context() -> str:
             "Join rule: all sku_id columns are TEXT; "
             "join with ON table.sku_id = sku_master.sku_id (not UUID)."
         )
+        lines.append(
+            "IMPORTANT — use ONLY the exact table names listed above. "
+            "Common mistakes to avoid: "
+            "use 'inventory_snapshot' NOT 'inventory'; "
+            "use 'supply_orders' NOT 'supply'; "
+            "use 'cost_master' NOT 'cost'; "
+            "use 'customer_master' NOT 'customers'."
+        )
         _schema_context = "\n".join(lines)
         logger.info("Schema context loaded: %d tables", len(tables))
     except Exception as exc:

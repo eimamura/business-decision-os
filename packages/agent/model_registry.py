@@ -74,10 +74,9 @@ def create_model_registry() -> ModelRegistry:
 
         base_url = os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434")
         model_name = os.environ.get("OLLAMA_MODEL", "qwen2.5:7b")
-        # orchestrator/planner: structured output needs think=False to prevent thinking models
-        # from exhausting num_predict before emitting JSON content
-        # reasoning=False maps to Ollama's think=False — prevents thinking models from
-        # exhausting num_predict before emitting JSON content
+        # ChatOllama field: reasoning=False → sent to Ollama API as think=false
+        # Prevents thinking models (qwen3, deepseek-r1) from exhausting num_predict
+        # before emitting JSON content. Note: ChatOllama(think=False) is silently ignored.
         structured_model = ChatOllama(
             model=model_name,
             base_url=base_url,
@@ -85,7 +84,7 @@ def create_model_registry() -> ModelRegistry:
             num_predict=512,
             reasoning=False,
         )
-        # reasoning=False required for tool calling accuracy; same instance used for text generation
+        # reasoning=False (→ Ollama API: think=false) required for tool calling accuracy
         control_model = ChatOllama(
             model=model_name,
             base_url=base_url,

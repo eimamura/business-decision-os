@@ -13,6 +13,27 @@ ALLOWED_READ_TABLES: frozenset[str] = frozenset([
     "forecast_history",
 ])
 
+# Legacy table names that small LLMs generate from training data.
+# Applied before guardrail validation so queries still succeed.
+_LEGACY_TABLE_MAP: dict[str, str] = {
+    "inventory": "inventory_snapshot",
+    "supply": "supply_orders",
+    "cost": "cost_master",
+    "customers": "customer_master",
+}
+
+_LEGACY_PATTERN = re.compile(
+    r"\b(" + "|".join(re.escape(k) for k in _LEGACY_TABLE_MAP) + r")\b",
+    re.IGNORECASE,
+)
+
+
+def canonicalize_table_names(sql: str) -> str:
+    """Replace legacy table names with their current canonical names."""
+    return _LEGACY_PATTERN.sub(
+        lambda m: _LEGACY_TABLE_MAP[m.group(0).lower()], sql
+    )
+
 _WRITE_KEYWORDS = re.compile(
     r"\b(INSERT|UPDATE|DELETE|DROP|CREATE|ALTER|TRUNCATE)\b", re.IGNORECASE
 )
