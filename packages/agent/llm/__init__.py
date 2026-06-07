@@ -651,14 +651,35 @@ class OllamaClient:
                     "content": msg.content,
                 })
             elif msg.content_blocks:
-                # Flatten Anthropic-style content_blocks to plain text for OpenAI-compat endpoints.
-                # The system message is built with content="" and the real text in content_blocks.
+                # Anthropic-style content_blocks: separate text vs tool_use blocks.
                 text_parts = [
                     b["text"]
                     for b in msg.content_blocks
                     if b.get("type") == "text" and b.get("text")
                 ]
-                result.append({"role": msg.role, "content": "\n\n".join(text_parts)})
+                tool_use_blocks = [b for b in msg.content_blocks if b.get("type") == "tool_use"]
+                if tool_use_blocks:
+                    # Assistant message with tool calls — convert to OpenAI tool_calls format.
+                    oai_tool_calls = [
+                        {
+                            "id": b.get("id", ""),
+                            "type": "function",
+                            "function": {
+                                "name": b.get("name", ""),
+                                "arguments": json.dumps(b.get("input", {})),
+                            },
+                        }
+                        for b in tool_use_blocks
+                    ]
+                    entry: dict[str, Any] = {
+                        "role": msg.role,
+                        "content": "\n\n".join(text_parts) or None,
+                        "tool_calls": oai_tool_calls,
+                    }
+                    result.append(entry)
+                else:
+                    # System message or pure-text assistant message — flatten to plain text.
+                    result.append({"role": msg.role, "content": "\n\n".join(text_parts)})
             else:
                 result.append({"role": msg.role, "content": msg.content})
         return result
