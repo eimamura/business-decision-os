@@ -27,15 +27,15 @@ See `docs/archive/v3/STATE.md` for P0–P23 per-phase details.
 
 ## Active Phase
 
-P46 — Skill & Tool Enrichment
+P47 — Long-Term Memory Physical Implementation
 
 ## Active Lease
 
-P46-B-02
+P47-B-01
 
 ## Last Completed
 
-P46-B-01 — GetDelayedSupplyOrdersTool + Skill revisions: 769 passed, lint+typecheck clean (2026-06-06)
+P46-B-02 — GetDelayedSupplyOrdersTool tests: 774 passed, lint+typecheck clean (2026-06-06)
 
 ## Blockers
 

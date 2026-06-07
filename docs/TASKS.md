@@ -55,6 +55,7 @@ Full task history for P0–P23 is archived at `docs/archive/v3/TASKS.md`.
 | P41 — Memory Layer | T-290–T-298 | 2026-06-06 |
 | P42 — Context Engineering Integration | T-299–T-304 | 2026-06-06 |
 | P43 — MVP Validation (3 Questions) | T-305–T-310 | 2026-06-06 |
+| P46 — Skill & Tool Enrichment | T-325–T-330 | 2026-06-06 |
 
 > **Design Realignment Note (2026-06-05):** P29–P36 built Specialist Domain Agents (DemandAgent,
 > InventoryAgent, SupplyPlanningAgent, FinanceImpactAgent, SopAgent) as independent runtime units.
@@ -933,12 +934,12 @@ Dependencies: P43 Done
 
 Dependencies: none
 
-### Batch B-02 — Tests (Test/Review) — Not Started
+### Batch B-02 — Tests (Test/Review) — Done
 
 | Task | Description | Status |
 |---|---|---|
-| T-329 | Unit test `tests/unit/test_supply_delayed_orders_tool.py` — AsyncMock pool; tests: (a) returns orders with `days_overdue` computed correctly, (b) returns empty list when no overdue orders, (c) DB error returns `{"error": ...}` dict | Not Started |
-| T-330 | `make test-unit && make lint && make typecheck` — all pass | Not Started |
+| T-329 | Unit test `tests/unit/test_supply_delayed_orders_tool.py` — AsyncMock pool; tests: (a) returns orders with `days_overdue` computed correctly, (b) returns empty list when no overdue orders, (c) DB error returns `{"error": ...}` dict | Done |
+| T-330 | `make test-unit && make lint && make typecheck` — all pass | Done |
 
 Dependencies: B-01
 
