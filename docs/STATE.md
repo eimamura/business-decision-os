@@ -40,13 +40,17 @@ See `docs/archive/v3/STATE.md` for P0–P23 per-phase details.
 
 ## Active Phase
 
-P78 — Deterministic Routing Completion
+None
 
 ## Active Lease
 
-P78-B-01
+None
 
 ## Last Completed
+
+P78 — Deterministic Routing Completion (2026-06-10). D-005 Resolved: `select_execution_mode` builds `AgentRoute` deterministically for all intents (no LLM call; `ROUTER_SYSTEM` deleted); one LLM round-trip saved per non-supply_chain request. Sign-off PASS: unit 848 passed exit 0, lint 0, typecheck 0, build 0, playwright 32/32. Live verification: the exact failing query (lookup intent) now completes — steps intent_classification → routing → specialist_execution, assistant reply produced, 0 routing errors. FP-006 recorded (record-only).
+
+Previously:
 
 P77 — Runtime Error Surfacing Fixes (2026-06-10). D-004 Resolved: approvals router responses wrapped in `jsonable_encoder` (4 sites); regression tests added; web `ApiError` class distinguishes HTTP business errors (404 session-not-found message) from network failures. Sign-off PASS: unit 828 passed exit 0, lint 0, typecheck 0, build 0, playwright 32/32 (job_approval deterministic — P76's "flaky" was D-004, not SSE timing). FP-005 recorded (record-only).
 
