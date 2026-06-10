@@ -19,6 +19,8 @@ from packages.agent.orchestrator.ask_user import (
 from packages.agent.orchestrator.models import (
     AgentRoute,
     AskUserDecision,
+    GoalEvaluation,
+    GoalSpec,
     SessionGoal,
     SessionIntent,
     SessionResponse,
@@ -29,7 +31,13 @@ from packages.agent.orchestrator.parsing import (
     _iso_now,
     json_safe,
 )
-from packages.agent.orchestrator.prompts import ASK_USER_SYSTEM, INTENT_SYSTEM, ROUTER_SYSTEM
+from packages.agent.orchestrator.prompts import (
+    ASK_USER_SYSTEM,
+    EVALUATE_GOAL_SYSTEM,
+    INTENT_SYSTEM,
+    ROUTER_SYSTEM,
+    SET_GOAL_SYSTEM,
+)
 from packages.agent.orchestrator.routing import validate_route
 from packages.agent.orchestrator.runtime import (
     _run_agents_in_order,
@@ -57,6 +65,11 @@ class OrchestratorState(TypedDict):
     ask_user_id: str | None           # UUID set by prepare_ask_user
     ask_user_question: str | None     # question emitted by prepare_ask_user
     ask_user_answer: str | None       # answer injected by wait_for_answer on resume
+    # Goal evaluation loop fields
+    goal: dict[str, Any] | None       # GoalSpec.model_dump() or None for chat
+    goal_eval: dict[str, Any] | None  # GoalEvaluation.model_dump() or None
+    refine_count: int                 # number of refinement passes executed (max 1)
+    refinement_feedback: str | None   # missing text appended to instruction on refinement
 
 
 # ---------------------------------------------------------------------------
@@ -64,8 +77,9 @@ class OrchestratorState(TypedDict):
 # ---------------------------------------------------------------------------
 
 _ORCHESTRATOR_NODES = frozenset({
-    "classify_intent", "prepare_ask_user", "wait_for_answer",
+    "classify_intent", "set_goal", "prepare_ask_user", "wait_for_answer",
     "select_mode", "run_direct_chat", "run_sequential",
+    "evaluate_goal", "refine",
 })
 
 
@@ -91,6 +105,17 @@ def _extract_orch_meta(node_name: str, output: Any) -> dict[str, Any]:
         if route is not None:
             d = route.model_dump() if hasattr(route, "model_dump") else {}
             meta.update({"mode": d.get("mode", ""), "agents": d.get("agents", [])})
+    elif node_name == "set_goal":
+        goal = output.get("goal")
+        if goal is not None:
+            meta.update({"goal_text": goal.get("goal_text", "")})
+    elif node_name == "evaluate_goal":
+        goal_eval = output.get("goal_eval")
+        if goal_eval is not None:
+            meta.update({
+                "satisfied": goal_eval.get("satisfied", True),
+                "missing": goal_eval.get("missing"),
+            })
     return meta
 
 
@@ -197,6 +222,38 @@ class SessionOrchestrator:
         query = SessionUserQuery.model_validate(state["query"])
         intent = await self.classify_intent(query, session_id)
         return {"intent": intent}
+
+    async def _node_set_goal(
+        self, state: OrchestratorState, config: RunnableConfig
+    ) -> dict[str, Any]:
+        """Derive GoalSpec for non-chat intents via one structured-output call.
+
+        Fail-open: on any exception, use GoalSpec(goal_text=query_text,
+        success_criteria=[]) so the rest of the graph always gets a valid goal dict.
+        Chat intent: return goal=None and pass through without an LLM call.
+        """
+        from langchain_core.messages import HumanMessage, SystemMessage
+
+        intent = state.get("intent")
+        if intent is None or intent.category == "chat":
+            return {"goal": None}
+
+        query = SessionUserQuery.model_validate(state["query"])
+        user_content = self._query_text(query)
+        try:
+            model = self._model_registry.get("orchestrator")  # type: ignore[union-attr]
+            result = await model.with_structured_output(GoalSpec).ainvoke(
+                [SystemMessage(SET_GOAL_SYSTEM), HumanMessage(user_content)]
+            )
+            goal_spec = cast(GoalSpec, result)
+        except Exception as exc:
+            _log.warning(
+                "set_goal structured-output failed — using fail-open GoalSpec",
+                error=str(exc),
+            )
+            goal_spec = GoalSpec(goal_text=query.text, success_criteria=[])
+
+        return {"goal": goal_spec.model_dump()}
 
     async def _node_prepare_ask_user(
         self, state: OrchestratorState, config: RunnableConfig
@@ -310,19 +367,145 @@ class SessionOrchestrator:
         assert route is not None
 
         _query = SessionUserQuery.model_validate(state["query"])
+
+        # Inject refinement feedback into intent.goal_text so _run_agents_in_order
+        # picks it up as the instruction (planning.py uses `intent.goal_text or query.text`).
+        refinement_feedback = state.get("refinement_feedback")
+        if refinement_feedback:
+            base = intent.goal_text or _query.text
+            augmented_intent = SessionIntent(
+                category=intent.category,
+                confidence=intent.confidence,
+                rationale=intent.rationale,
+                goal_text=f"{base}\n\nAdditional guidance: {refinement_feedback}",
+            )
+        else:
+            augmented_intent = intent
+
         results = await _run_agents_in_order(
-            self, session_id, _query, route.agents, intent
+            self, session_id, _query, route.agents, augmented_intent
         )
         result = await _synthesize_response(
-            self, session_id, _query, intent, route, results
+            self, session_id, _query, augmented_intent, route, results
         )
         await self._push({"type": "response_ready", "mode": route.mode, "timestamp": _iso_now()})
         self._schedule_status_update(session_id, "completed")
         return {"result": result}
 
+    async def _node_evaluate_goal(
+        self, state: OrchestratorState, config: RunnableConfig
+    ) -> dict[str, Any]:
+        """Evaluate whether run_sequential's result satisfies the goal.
+
+        Gated to: non-chat intent AND goal present AND non-empty reply.
+        Fail-open: on any exception, treat as satisfied=True to avoid blocking the answer.
+        """
+        from langchain_core.messages import HumanMessage, SystemMessage
+
+        intent = state.get("intent")
+        goal = state.get("goal")
+        result = state.get("result")
+
+        # Skip evaluation for chat, or if no goal was derived, or if reply is empty.
+        if intent is None or intent.category == "chat" or not goal or not result:
+            return {"goal_eval": None}
+        if not result.reply.strip():
+            return {"goal_eval": None}
+
+        user_content = _json.dumps({
+            "goal_text": goal.get("goal_text", ""),
+            "success_criteria": goal.get("success_criteria", []),
+            "reply": result.reply,
+        })
+
+        try:
+            model = self._model_registry.get("orchestrator")  # type: ignore[union-attr]
+            verdict = await model.with_structured_output(GoalEvaluation).ainvoke(
+                [SystemMessage(EVALUATE_GOAL_SYSTEM), HumanMessage(user_content)]
+            )
+            goal_eval_obj = cast(GoalEvaluation, verdict)
+        except Exception as exc:
+            _log.warning(
+                "evaluate_goal structured-output failed — failing open as satisfied",
+                error=str(exc),
+            )
+            goal_eval_obj = GoalEvaluation(satisfied=True)
+
+        return {"goal_eval": goal_eval_obj.model_dump()}
+
+    async def _node_refine(
+        self, state: OrchestratorState, config: RunnableConfig
+    ) -> dict[str, Any]:
+        """Prepare for a single refinement pass back through run_sequential.
+
+        - Increments refine_count.
+        - Stores the evaluator's missing text as refinement_feedback (picked up by
+          _node_run_sequential to augment the instruction).
+        - If reroute_category names a valid, different non-chat INTENT_REGISTRY category,
+          replaces state["intent"].category (keeps confidence/rationale, notes re-route).
+        """
+        from packages.agent.orchestrator.intent_registry import INTENT_REGISTRY
+        from packages.agent.orchestrator.routing import _INTENT_MODE_MAP
+
+        intent = state.get("intent")
+        goal_eval = state.get("goal_eval") or {}
+        refine_count = state.get("refine_count") or 0
+
+        missing = goal_eval.get("missing") or ""
+        reroute_category = goal_eval.get("reroute_category")
+
+        updates: dict[str, Any] = {
+            "refine_count": refine_count + 1,
+            "refinement_feedback": missing if missing else None,
+        }
+
+        # Apply reroute if the category is valid, different, and non-chat.
+        if (
+            reroute_category
+            and reroute_category != "chat"
+            and reroute_category in INTENT_REGISTRY
+            and intent is not None
+            and reroute_category != intent.category
+        ):
+            new_mode = _INTENT_MODE_MAP.get(reroute_category, "single_agent")
+            reroute_note = (
+                f" [re-routed from {intent.category} to {reroute_category} by goal evaluator]"
+            )
+            updates["intent"] = SessionIntent(
+                category=reroute_category,
+                confidence=intent.confidence,
+                rationale=intent.rationale + reroute_note,
+                goal_text=intent.goal_text,
+            )
+            # Also update the route to match the new mode.
+            existing_route = state.get("route")
+            agents = existing_route.agents if existing_route is not None else ["control"]
+            updates["route"] = AgentRoute(
+                mode=new_mode,  # type: ignore[arg-type]
+                agents=agents,
+                requires_planning=False,
+                requires_dag=False,
+                rationale=f"Re-routed to {reroute_category} by goal evaluator",
+            )
+
+        return updates
+
     # ------------------------------------------------------------------
     # Conditional edges
     # ------------------------------------------------------------------
+
+    def _edge_after_evaluate_goal(self, state: OrchestratorState) -> str:
+        """Route after evaluate_goal:
+        - satisfied=True OR refine_count >= 1  → END
+        - otherwise                             → refine
+        """
+        goal_eval = state.get("goal_eval") or {}
+        refine_count = state.get("refine_count") or 0
+
+        satisfied = goal_eval.get("satisfied", True)
+        if satisfied or refine_count >= 1:
+            return END
+        return "refine"
 
     def _edge_after_select_mode(self, state: OrchestratorState) -> str:
         route = state.get("route")
@@ -343,14 +526,22 @@ class SessionOrchestrator:
         sg: StateGraph = StateGraph(OrchestratorState)  # type: ignore[type-arg]
 
         sg.add_node("classify_intent", self._node_classify_intent)
+        sg.add_node("set_goal", self._node_set_goal)
         sg.add_node("prepare_ask_user", self._node_prepare_ask_user)
         sg.add_node("wait_for_answer", self._node_wait_for_answer)
         sg.add_node("select_mode", self._node_select_mode)
         sg.add_node("run_direct_chat", self._node_run_direct_chat)
         sg.add_node("run_sequential", self._node_run_sequential)
+        sg.add_node("evaluate_goal", self._node_evaluate_goal)
+        sg.add_node("refine", self._node_refine)
 
         sg.add_edge(START, "classify_intent")
-        sg.add_edge("classify_intent", "prepare_ask_user")
+        # set_goal runs after classify_intent, before prepare_ask_user.
+        # This placement is safe for HITL resume: answer_ask_user uses Command(resume=...)
+        # which re-enters at wait_for_answer (LangGraph restores from checkpoint). The
+        # graph never replays classify_intent or set_goal on resume.
+        sg.add_edge("classify_intent", "set_goal")
+        sg.add_edge("set_goal", "prepare_ask_user")
         sg.add_edge("prepare_ask_user", "wait_for_answer")
         sg.add_edge("wait_for_answer", "select_mode")
         sg.add_conditional_edges(
@@ -363,7 +554,16 @@ class SessionOrchestrator:
             },
         )
         sg.add_edge("run_direct_chat", END)
-        sg.add_edge("run_sequential", END)
+        sg.add_edge("run_sequential", "evaluate_goal")
+        sg.add_conditional_edges(
+            "evaluate_goal",
+            self._edge_after_evaluate_goal,
+            {
+                "refine": "refine",
+                END: END,
+            },
+        )
+        sg.add_edge("refine", "run_sequential")
 
         return sg.compile(checkpointer=checkpointer)
 
@@ -532,6 +732,10 @@ class SessionOrchestrator:
             "ask_user_id": None,
             "ask_user_question": None,
             "ask_user_answer": None,
+            "goal": None,
+            "goal_eval": None,
+            "refine_count": 0,
+            "refinement_feedback": None,
         }
 
         config: dict[str, Any] = {
@@ -576,6 +780,12 @@ class SessionOrchestrator:
             raise RuntimeError("Orchestrator graph produced no result")
         if not isinstance(raw_result, SessionResponse):
             raise RuntimeError(f"Orchestrator graph returned unexpected type: {type(raw_result)}")
+
+        # Populate goal_evaluation from state when present.
+        goal_eval = final_state.get("goal_eval")
+        if goal_eval is not None:
+            raw_result = raw_result.model_copy(update={"goal_evaluation": goal_eval})
+
         return raw_result
 
     async def resume(self, session_id: UUID, approval_id: UUID) -> SessionResponse:

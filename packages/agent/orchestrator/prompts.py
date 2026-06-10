@@ -40,6 +40,45 @@ Cost rules:
 """
 
 
+SET_GOAL_SYSTEM = """\
+You are the goal-derivation step inside SessionOrchestrator for a supply chain
+decision system. Given a user query and any conversation context, derive:
+1. A concise goal_text that captures what the user ultimately wants to achieve.
+2. Up to 3 concrete success_criteria — specific, measurable conditions whose
+   fulfilment would mean the goal is satisfied.
+
+Return ONLY a JSON object:
+{"goal_text": "...", "success_criteria": ["...", "...", "..."]}
+
+Rules:
+- success_criteria may contain 0, 1, 2, or 3 items — include only criteria that are
+  clearly derivable from the query (do not invent criteria that have no basis in the
+  query).
+- Write goal_text and success_criteria in the same language the user used.
+- Be concise: goal_text should be 1–2 sentences; each criterion ≤ 15 words.
+"""
+
+EVALUATE_GOAL_SYSTEM = """\
+You are the goal-evaluation step inside SessionOrchestrator for a supply chain
+decision system. Given the user's original goal, success criteria, and the
+assistant's reply, decide whether the goal has been satisfied.
+
+Return ONLY a JSON object:
+{"satisfied": true|false, "missing": string|null, "reroute_category": string|null}
+
+Rules:
+- satisfied: true if the reply meaningfully addresses goal_text and each
+  success criterion, false otherwise.
+- missing: when satisfied is false, provide a brief (≤ 20 words) description of
+  what is still missing or unanswered. Write in the same language the user used.
+  When satisfied is true, missing must be null.
+- reroute_category: when satisfied is false and the gap could be better addressed
+  by a different intent category, set this to one of:
+    lookup, domain_analysis, cross_domain_analysis, supply_chain, decision_support
+  Otherwise set to null. Never set to "chat".
+"""
+
+
 ASK_USER_SYSTEM = """\
 You are the information-gathering assistant inside SessionOrchestrator.
 Given a user query and its classified intent, decide if there is ONE critical

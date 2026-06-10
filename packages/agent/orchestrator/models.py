@@ -7,6 +7,17 @@ from pydantic import BaseModel, Field
 
 from packages.schemas.recommendation import Candidate, TradeoffExplanation
 
+
+class GoalSpec(BaseModel):
+    goal_text: str
+    success_criteria: list[str] = Field(default_factory=list, max_length=3)
+
+
+class GoalEvaluation(BaseModel):
+    satisfied: bool
+    missing: str | None = None
+    reroute_category: str | None = None
+
 ExecutionMode = Literal[
     "direct_chat",
     "single_agent",
@@ -104,6 +115,7 @@ class SessionResponse(BaseModel):
     tradeoff: TradeoffExplanation | None = None
     risk_level: Literal["low", "medium", "high"] = "low"
     requires_approval: bool = False
+    goal_evaluation: dict[str, Any] | None = None
 
 
 class Orchestrator(Protocol):
