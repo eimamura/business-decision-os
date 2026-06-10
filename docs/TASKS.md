@@ -569,6 +569,14 @@ Dependencies: B-01 (parallel-eligible with B-02; runs after B-02 in practice)
 
 ### Batch B-04 — Tests + phase sign-off (Test/Review) — Done
 
+#### Defect: D-004
+
+- Discovered: 2026-06-10, post-sign-off, during user runtime session (API logs 21:45 UTC)
+- Symptom: `POST /api/v1/approvals` returns 500 — `TypeError: Object of type UUID is not JSON serializable`
+- Location: `apps/api/routers/approvals.py` `create_approval` — `JSONResponse(status_code=201, content=created)` serializes the raw repo row (UUID/datetime objects) with stdlib `json.dumps`. Same risk at `post_decision`'s `JSONResponse(content=updated)`.
+- Note: the repeated 500s coincide with the `job_approval` Playwright spec marked "pre-existing flaky" at P76 sign-off — the flakiness likely masks this real bug, not SSE timing. Pre-dates P76 (no P76 change touched approvals).
+- Status: Open
+
 | Task | Description | Status |
 |---|---|---|
 | T-482 | Add behavioral unit test for `train_forecast` `handle()` (only tool with indirect-only coverage in P75). | Done |
