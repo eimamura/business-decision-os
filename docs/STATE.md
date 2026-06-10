@@ -44,11 +44,13 @@ P76 — Tool Layer Conformance Remediation
 
 ## Active Lease
 
-P76-B-02
+P76-B-03
 
 ## Last Completed
 
-P76-B-01 — ADR authored: `docs/adr/2026-06-10-tool-output-contract-hybrid.md` (hybrid contract: domain dicts official, missing_data mandatory on DB tools, row caps, shared helpers, DOS→DOI merge, Context Pack escalation criteria). DECISIONS.md updated.
+P76-B-02 — Contract fixes (2026-06-10): `_shared.py` created (db_error_message, classify_stockout_risk); evaluator RuntimeError on missing yaml; LIMIT 101 + truncated flag on supply order tools; data_catalog_search error key; missing_data on all DB tools. Batch check: lint 0, typecheck 0, unit 795 passed/0 failed.
+
+Previously: P76-B-01 — ADR authored: `docs/adr/2026-06-10-tool-output-contract-hybrid.md`.
 
 Previously: P75 — Tool Layer Full Audit (2026-06-10): read-only audit of all 35 tool files. Verdicts: 30 keep / 1 merge-candidate (DOS→DOI) / 4 boundary-unclear; no tool deleted. Conformance: Tool Protocol 35/35; Context Pack contract 0/35 (doc-vs-code divergence → ADR in P76/T-477); `nl_query` returns raw rows; `missing_data` never populated. Implementation: SQL parameterization 35/35 clean; `evaluator_tool` silent config fallback (→T-478); unbounded supply-order queries (→T-479); copy-paste helpers (→T-480). Tests: 34/35 dedicated behavioral coverage (`train_forecast` indirect-only →T-482); proof: unit 795 passed exit 0, full-DSN integration 61 passed exit 0. Follow-up registered as P76 (Not Started, awaiting user prioritization). Verdict: 30 keep / 1 merge-candidate (`calculate_days_of_supply` → `calculate_days_of_inventory`; identical formula, DOI is warehouse-aware superset) / 4 boundary-unclear (`calculate_stockout_risk` vs `list_stockout_risk` copy-paste thresholds; `get_open_supply_orders`, `get_delayed_supply_orders`, `compare_demand_periods` thin-wrapper vs nl_query). Copy-paste maintenance risks: `_classify_stockout_risk` duplicated (high), `_db_error_message` duplicated in ~16 files (medium). Unregistered 3 tools all have real consumers — keep.
 

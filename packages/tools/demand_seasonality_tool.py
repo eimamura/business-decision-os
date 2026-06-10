@@ -4,6 +4,7 @@ import statistics
 from typing import Any, Literal
 
 from packages.persistence.db import get_pool
+from packages.tools._shared import db_error_message
 from packages.tools.base import ToolContext, ToolResult
 
 _DOW_NAMES = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
@@ -36,6 +37,7 @@ class DemandSeasonalityTool:
             "peak_periods": {"type": "array", "items": {"type": "string"}},
             "trough_periods": {"type": "array", "items": {"type": "string"}},
             "seasonality_index": {"type": "number"},
+            "missing_data": {"type": "array", "items": {"type": "string"}},
         },
     }
 
@@ -50,7 +52,7 @@ class DemandSeasonalityTool:
             rows = await _fetch_demand_rows(sku_id, lookback_days)
         except Exception as exc:
             return ToolResult(
-                output={"error": _connection_error_message(exc)},
+                output={"error": db_error_message(exc)},
                 audit_payload={"sku_id": sku_id, "lookback_days": lookback_days, "record_count": 0},
             )
 
@@ -67,6 +69,10 @@ class DemandSeasonalityTool:
                     "peak_periods": [],
                     "trough_periods": [],
                     "seasonality_index": 0.0,
+                    "missing_data": (
+                        [f"no demand_history rows for {sku_id} in last {lookback_days} days"]
+                        if record_count == 0 else []
+                    ),
                 },
                 audit_payload={
                     "sku_id": sku_id,
@@ -145,6 +151,7 @@ class DemandSeasonalityTool:
                 "peak_periods": peak_periods[:5],
                 "trough_periods": trough_periods[:5],
                 "seasonality_index": round(seasonality_index, 6),
+                "missing_data": [],
             },
             audit_payload={
                 "sku_id": sku_id,
@@ -173,16 +180,3 @@ async def _fetch_demand_rows(sku_id: str, lookback_days: int) -> list[dict[str, 
         return [dict(r) for r in rows]
 
 
-def _connection_error_message(exc: Exception) -> str:
-    message = str(exc).lower()
-    class_name = exc.__class__.__name__.lower()
-    module_name = exc.__class__.__module__.lower()
-    if isinstance(exc, RuntimeError) and "database_url" in message:
-        return "no database connection"
-    if "asyncpg" in module_name and (
-        "connection" in class_name
-        or "connection" in message
-        or "connect call failed" in message
-    ):
-        return "no database connection"
-    return str(exc)

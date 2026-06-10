@@ -4,6 +4,7 @@ import datetime
 from typing import Any, Literal
 
 from packages.persistence.db import get_pool
+from packages.tools._shared import db_error_message
 from packages.tools.base import ToolContext, ToolResult
 
 
@@ -30,6 +31,7 @@ class CalculateDaysOfSupplyTool:
             "days_of_supply": {"type": ["number", "null"]},
             "stockout_date_estimate": {"type": ["string", "null"]},
             "reorder_signal": {"type": "boolean"},
+            "missing_data": {"type": "array", "items": {"type": "string"}},
         },
     }
 
@@ -45,7 +47,7 @@ class CalculateDaysOfSupplyTool:
             )
         except Exception as exc:
             return ToolResult(
-                output={"error": _db_error_message(exc)},
+                output={"error": db_error_message(exc)},
                 audit_payload={
                     "sku_id": sku_id,
                     "on_hand_qty": None,
@@ -73,6 +75,10 @@ class CalculateDaysOfSupplyTool:
             days_of_supply is not None and days_of_supply < reorder_threshold
         )
 
+        missing_data: list[str] = []
+        if avg_daily_demand is None:
+            missing_data.append(f"no demand_history rows for {sku_id} in last 30 days")
+
         return ToolResult(
             output={
                 "sku_id": sku_id,
@@ -81,6 +87,7 @@ class CalculateDaysOfSupplyTool:
                 "days_of_supply": days_of_supply,
                 "stockout_date_estimate": stockout_date_estimate,
                 "reorder_signal": reorder_signal,
+                "missing_data": missing_data,
             },
             audit_payload={
                 "sku_id": sku_id,
@@ -133,16 +140,3 @@ async def _fetch_days_of_supply_data(
     return on_hand_qty, avg_daily_demand, lead_time_mean
 
 
-def _db_error_message(exc: Exception) -> str:
-    message = str(exc).lower()
-    class_name = exc.__class__.__name__.lower()
-    module_name = exc.__class__.__module__.lower()
-    if isinstance(exc, RuntimeError) and "database_url" in message:
-        return "no database connection"
-    if "asyncpg" in module_name and (
-        "connection" in class_name
-        or "connection" in message
-        or "connect call failed" in message
-    ):
-        return "no database connection"
-    return str(exc)

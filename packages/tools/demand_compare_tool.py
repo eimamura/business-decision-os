@@ -4,6 +4,7 @@ import datetime
 from typing import Any, Literal
 
 from packages.persistence.db import get_pool
+from packages.tools._shared import db_error_message
 from packages.tools.base import ToolContext, ToolResult
 
 
@@ -65,6 +66,7 @@ class DemandCompareTool:
             },
             "change_units": {"type": "number"},
             "change_pct": {"type": ["number", "null"]},
+            "missing_data": {"type": "array", "items": {"type": "string"}},
         },
     }
 
@@ -96,7 +98,7 @@ class DemandCompareTool:
             total_b = await _fetch_period_total(sku_id, b_start, b_end)
         except Exception as exc:
             return ToolResult(
-                output={"error": _connection_error_message(exc)},
+                output={"error": db_error_message(exc)},
                 audit_payload={
                     "sku_id": sku_id,
                     "period_a_start": a_start.isoformat(),
@@ -114,6 +116,19 @@ class DemandCompareTool:
         change_pct: float | None = None
         if total_a > 0:
             change_pct = round(change_units / total_a * 100, 6)
+
+        missing_data: list[str] = []
+        sku_label = sku_id or "all SKUs"
+        if total_a == 0.0:
+            missing_data.append(
+                f"no demand_history rows for {sku_label} in period_a "
+                f"({a_start.isoformat()} to {a_end.isoformat()})"
+            )
+        if total_b == 0.0:
+            missing_data.append(
+                f"no demand_history rows for {sku_label} in period_b "
+                f"({b_start.isoformat()} to {b_end.isoformat()})"
+            )
 
         return ToolResult(
             output={
@@ -134,6 +149,7 @@ class DemandCompareTool:
                 },
                 "change_units": round(change_units, 4),
                 "change_pct": change_pct,
+                "missing_data": missing_data,
             },
             audit_payload={
                 "sku_id": sku_id,
@@ -165,16 +181,3 @@ async def _fetch_period_total(
         return float(row["total_qty"]) if row else 0.0
 
 
-def _connection_error_message(exc: Exception) -> str:
-    message = str(exc).lower()
-    class_name = exc.__class__.__name__.lower()
-    module_name = exc.__class__.__module__.lower()
-    if isinstance(exc, RuntimeError) and "database_url" in message:
-        return "no database connection"
-    if "asyncpg" in module_name and (
-        "connection" in class_name
-        or "connection" in message
-        or "connect call failed" in message
-    ):
-        return "no database connection"
-    return str(exc)

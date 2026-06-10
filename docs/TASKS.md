@@ -545,15 +545,15 @@ approved (DOI is the warehouse-aware superset; DOS-unique `stockout_date_estimat
 
 Dependencies: none
 
-### Batch B-02 — Contract fixes (App Builder) — Not Started
+### Batch B-02 — Contract fixes (App Builder) — Done
 
 | Task | Description | Status |
 |---|---|---|
-| T-478 | `evaluator_tool.py`: raise `RuntimeError` when `risk_thresholds.yaml` is missing instead of silently falling back to hardcoded 0.85/0.95 defaults. | Not Started |
-| T-479 | `supply_open_orders_tool.py` / `supply_delayed_orders_tool.py`: add `LIMIT 100` + `truncated` output flag. | Not Started |
-| T-480 | Create `packages/tools/_shared.py` (name per App Builder judgment): extract `classify_stockout_risk` (2 copies) and `db_error_message` (~16 copies); update all importing tools. | Not Started |
-| T-481 | `data_catalog_search_tool.py`: surface DB failure via explicit `error` key instead of silently returning `row_count: None` rows. | Not Started |
-| T-484 | Add `missing_data: list[str]` population to the 28 DB-accessing tools per ADR: when a required source (master row, history rows, cost record) is unavailable, append a human-readable entry; field present and empty otherwise. Update each tool's `output_schema`. | Not Started |
+| T-478 | `evaluator_tool.py`: raise `RuntimeError` when `risk_thresholds.yaml` is missing instead of silently falling back to hardcoded 0.85/0.95 defaults. | Done |
+| T-479 | `supply_open_orders_tool.py` / `supply_delayed_orders_tool.py`: add `LIMIT 100` + `truncated` output flag. | Done |
+| T-480 | Create `packages/tools/_shared.py` (name per App Builder judgment): extract `classify_stockout_risk` (2 copies) and `db_error_message` (~16 copies); update all importing tools. | Done |
+| T-481 | `data_catalog_search_tool.py`: surface DB failure via explicit `error` key instead of silently returning `row_count: None` rows. | Done |
+| T-484 | Add `missing_data: list[str]` population to the 28 DB-accessing tools per ADR: when a required source (master row, history rows, cost record) is unavailable, append a human-readable entry; field present and empty otherwise. Update each tool's `output_schema`. | Done |
 
 Dependencies: B-01. Note: tests are updated by Test/Review in B-04; batch check = `make lint && make typecheck` + no NEW unit failures beyond those enumerated for B-04.
 

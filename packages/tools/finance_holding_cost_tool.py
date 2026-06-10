@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any, Literal
 
 from packages.persistence.db import get_pool
+from packages.tools._shared import db_error_message
 from packages.tools.base import ToolContext, ToolResult
 
 
@@ -31,6 +32,7 @@ class CalculateHoldingCostImpactTool:
             "total_holding_cost": {"type": ["number", "null"]},
             "annualized_holding_cost": {"type": ["number", "null"]},
             "period_label": {"type": ["string", "null"]},
+            "missing_data": {"type": "array", "items": {"type": "string"}},
         },
     }
 
@@ -61,7 +63,7 @@ class CalculateHoldingCostImpactTool:
                 )
         except Exception as exc:
             return ToolResult(
-                output={"error": _db_error_message(exc)},
+                output={"error": db_error_message(exc)},
                 audit_payload={
                     "sku_id": sku_id,
                     "excess_units": excess_units,
@@ -69,11 +71,14 @@ class CalculateHoldingCostImpactTool:
                 },
             )
 
+        missing_data: list[str] = []
         if row is not None:
             unit_holding_cost = float(row["holding_cost"])
             total_holding_cost = excess_units * unit_holding_cost
             annualized_holding_cost = total_holding_cost * 12
             period_label = row["period_start"].isoformat()
+        else:
+            missing_data.append(f"no cost_master row for {sku_id}")
 
         return ToolResult(
             output={
@@ -83,6 +88,7 @@ class CalculateHoldingCostImpactTool:
                 "total_holding_cost": total_holding_cost,
                 "annualized_holding_cost": annualized_holding_cost,
                 "period_label": period_label,
+                "missing_data": missing_data,
             },
             audit_payload={
                 "sku_id": sku_id,
@@ -92,16 +98,3 @@ class CalculateHoldingCostImpactTool:
         )
 
 
-def _db_error_message(exc: Exception) -> str:
-    message = str(exc).lower()
-    class_name = exc.__class__.__name__.lower()
-    module_name = exc.__class__.__module__.lower()
-    if isinstance(exc, RuntimeError) and "database_url" in message:
-        return "no database connection"
-    if "asyncpg" in module_name and (
-        "connection" in class_name
-        or "connection" in message
-        or "connect call failed" in message
-    ):
-        return "no database connection"
-    return str(exc)

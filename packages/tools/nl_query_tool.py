@@ -197,6 +197,7 @@ class NlQueryTool:
             "truncated": {"type": "boolean"},
             "columns": {"type": "array"},
             "sql": {"type": "string"},
+            "missing_data": {"type": "array", "items": {"type": "string"}},
             "error": {"type": "string"},
             "note": {"type": "string"},
         },
@@ -223,21 +224,30 @@ class NlQueryTool:
             real_count = len(results)
             sanitized = sanitize_sql_results(results, max_rows=100)
             return ToolResult(
-                output={**sanitized, "sql": sql, "executed_query": sql},
+                output={**sanitized, "sql": sql, "executed_query": sql, "missing_data": []},
                 audit_payload={"question": question, "sql": sql, "count": real_count},
             )
         except SQLGuardrailError as exc:
             return ToolResult(
-                output={"rows": [], "row_count": 0, "sql": "", "error": str(exc)},
+                output={
+                    "rows": [], "row_count": 0, "sql": "",
+                    "error": str(exc), "missing_data": [],
+                },
                 audit_payload={"question": question, "sql": "", "row_count": 0, "error": str(exc)},
             )
         except RuntimeError as exc:
             return ToolResult(
-                output={"rows": [], "row_count": 0, "sql": "", "note": str(exc)},
+                output={
+                    "rows": [], "row_count": 0, "sql": "",
+                    "note": str(exc), "missing_data": [],
+                },
                 audit_payload={"question": question, "sql": "", "row_count": 0},
             )
         except Exception as exc:
             return ToolResult(
-                output={"rows": [], "row_count": 0, "sql": "", "error": str(exc)},
+                output={
+                    "rows": [], "row_count": 0, "sql": "",
+                    "error": str(exc), "missing_data": [],
+                },
                 audit_payload={"question": question, "sql": "", "row_count": 0, "error": str(exc)},
             )

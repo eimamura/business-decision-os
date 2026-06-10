@@ -5,6 +5,7 @@ import statistics
 from typing import Any, Literal
 
 from packages.persistence.db import get_pool
+from packages.tools._shared import db_error_message
 from packages.tools.base import ToolContext, ToolResult
 
 
@@ -38,6 +39,7 @@ class AnalyzeSupplyLeadTimeTool:
             "max_lead_time_days": {"type": ["integer", "null"]},
             "lead_time_std": {"type": ["number", "null"]},
             "supplier_count": {"type": "integer"},
+            "missing_data": {"type": "array", "items": {"type": "string"}},
         },
     }
 
@@ -52,7 +54,7 @@ class AnalyzeSupplyLeadTimeTool:
             rows = await _fetch_lead_time_rows(sku_id, lookback_days)
         except Exception as exc:
             return ToolResult(
-                output={"error": _db_error_message(exc)},
+                output={"error": db_error_message(exc)},
                 audit_payload={
                     "sku_id": sku_id,
                     "lookback_days": lookback_days,
@@ -63,6 +65,7 @@ class AnalyzeSupplyLeadTimeTool:
         order_count = len(rows)
 
         if order_count == 0:
+            sku_label = sku_id or "all SKUs"
             return ToolResult(
                 output={
                     "sku_id": sku_id,
@@ -73,6 +76,9 @@ class AnalyzeSupplyLeadTimeTool:
                     "max_lead_time_days": None,
                     "lead_time_std": None,
                     "supplier_count": 0,
+                    "missing_data": [
+                        f"no supply_orders rows for {sku_label} in last {lookback_days} days"
+                    ],
                 },
                 audit_payload={
                     "sku_id": sku_id,
@@ -114,6 +120,7 @@ class AnalyzeSupplyLeadTimeTool:
                     "max_lead_time_days": None,
                     "lead_time_std": None,
                     "supplier_count": supplier_count,
+                    "missing_data": [],
                 },
                 audit_payload={
                     "sku_id": sku_id,
@@ -139,6 +146,7 @@ class AnalyzeSupplyLeadTimeTool:
                 "max_lead_time_days": max_lead_time,
                 "lead_time_std": lead_time_std,
                 "supplier_count": supplier_count,
+                "missing_data": [],
             },
             audit_payload={
                 "sku_id": sku_id,
@@ -167,16 +175,3 @@ async def _fetch_lead_time_rows(
         return [dict(r) for r in rows]
 
 
-def _db_error_message(exc: Exception) -> str:
-    message = str(exc).lower()
-    class_name = exc.__class__.__name__.lower()
-    module_name = exc.__class__.__module__.lower()
-    if isinstance(exc, RuntimeError) and "database_url" in message:
-        return "no database connection"
-    if "asyncpg" in module_name and (
-        "connection" in class_name
-        or "connection" in message
-        or "connect call failed" in message
-    ):
-        return "no database connection"
-    return str(exc)

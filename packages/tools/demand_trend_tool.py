@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any, Literal
 
 from packages.persistence.db import get_pool
+from packages.tools._shared import db_error_message
 from packages.tools.base import ToolContext, ToolResult
 
 
@@ -46,6 +47,7 @@ class DemandTrendTool:
                     },
                 },
             },
+            "missing_data": {"type": "array", "items": {"type": "string"}},
         },
     }
 
@@ -61,7 +63,7 @@ class DemandTrendTool:
             rows = await _fetch_demand_rows(sku_id, lookback_days)
         except Exception as exc:
             return ToolResult(
-                output={"error": _connection_error_message(exc)},
+                output={"error": db_error_message(exc)},
                 audit_payload={
                     "sku_id": sku_id,
                     "lookback_days": lookback_days,
@@ -83,6 +85,10 @@ class DemandTrendTool:
                     "peak_period": periods[0]["period"] if periods else None,
                     "trough_period": periods[0]["period"] if periods else None,
                     "periods": periods,
+                    "missing_data": (
+                        [f"no demand_history rows for {sku_id} in last {lookback_days} days"]
+                        if not periods else []
+                    ),
                 },
                 audit_payload={
                     "sku_id": sku_id,
@@ -129,6 +135,7 @@ class DemandTrendTool:
                 "peak_period": peak_period,
                 "trough_period": trough_period,
                 "periods": periods,
+                "missing_data": [],
             },
             audit_payload={
                 "sku_id": sku_id,
@@ -210,16 +217,3 @@ def _r_squared(xs: list[int], ys: list[float], slope: float, intercept: float) -
     return max(0.0, 1.0 - ss_res / ss_tot)
 
 
-def _connection_error_message(exc: Exception) -> str:
-    message = str(exc).lower()
-    class_name = exc.__class__.__name__.lower()
-    module_name = exc.__class__.__module__.lower()
-    if isinstance(exc, RuntimeError) and "database_url" in message:
-        return "no database connection"
-    if "asyncpg" in module_name and (
-        "connection" in class_name
-        or "connection" in message
-        or "connect call failed" in message
-    ):
-        return "no database connection"
-    return str(exc)

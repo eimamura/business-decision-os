@@ -35,6 +35,7 @@ class DataQualityCheckerTool:
                 },
             },
             "has_issues": {"type": "boolean"},
+            "missing_data": {"type": "array", "items": {"type": "string"}},
         },
     }
 
@@ -56,6 +57,7 @@ class DataQualityCheckerTool:
                     "total_rows": profile["total_rows"],
                     "columns": profile["columns"],
                     "has_issues": has_issues,
+                    "missing_data": [],
                 },
                 audit_payload={
                     "table_name": table_name,
@@ -70,6 +72,7 @@ class DataQualityCheckerTool:
                     "columns": [],
                     "has_issues": False,
                     "note": "no database connection",
+                    "missing_data": [],
                 },
                 audit_payload={"table_name": table_name},
             )

@@ -35,6 +35,7 @@ class TableSchemaReaderTool:
                 },
             },
             "column_count": {"type": "integer"},
+            "missing_data": {"type": "array", "items": {"type": "string"}},
         },
     }
 
@@ -58,6 +59,7 @@ class TableSchemaReaderTool:
                     "table_name": table_name,
                     "columns": columns,
                     "column_count": len(columns),
+                    "missing_data": [],
                 },
                 audit_payload={"table_name": table_name, "column_count": len(columns)},
             )
@@ -68,6 +70,7 @@ class TableSchemaReaderTool:
                     "columns": [],
                     "column_count": 0,
                     "note": "no database connection",
+                    "missing_data": [],
                 },
                 audit_payload={"table_name": table_name, "column_count": 0},
             )

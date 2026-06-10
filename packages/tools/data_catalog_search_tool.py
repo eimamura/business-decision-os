@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any, Literal
 
 from packages.persistence.catalog_repo import list_tables_with_counts
+from packages.tools._shared import db_error_message
 from packages.tools.base import ToolContext, ToolResult
 from packages.tools.sql_allowlist import ALLOWED_READ_TABLES
 
@@ -34,6 +35,8 @@ class DataCatalogSearchTool:
                 },
             },
             "count": {"type": "integer"},
+            "error": {"type": "string"},
+            "missing_data": {"type": "array", "items": {"type": "string"}},
         },
     }
 
@@ -43,10 +46,22 @@ class DataCatalogSearchTool:
 
         try:
             result = await list_tables_with_counts(tables)
-        except Exception:
-            result = [{"table_name": t, "row_count": None} for t in tables]
-
-        return ToolResult(
-            output={"tables": result, "count": len(result)},
-            audit_payload={"keyword": keyword, "table_count": len(result)},
-        )
+            return ToolResult(
+                output={
+                    "tables": result,
+                    "count": len(result),
+                    "missing_data": [],
+                },
+                audit_payload={"keyword": keyword, "table_count": len(result)},
+            )
+        except Exception as exc:
+            degraded = [{"table_name": t, "row_count": None} for t in tables]
+            return ToolResult(
+                output={
+                    "tables": degraded,
+                    "count": len(degraded),
+                    "error": db_error_message(exc),
+                    "missing_data": [],
+                },
+                audit_payload={"keyword": keyword, "table_count": len(degraded)},
+            )

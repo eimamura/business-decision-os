@@ -4,6 +4,7 @@ import statistics
 from typing import Any, Literal
 
 from packages.persistence.db import get_pool
+from packages.tools._shared import db_error_message
 from packages.tools.base import ToolContext, ToolResult
 
 
@@ -44,6 +45,7 @@ class DemandProfileTool:
                     "end": {"type": "string"},
                 },
             },
+            "missing_data": {"type": "array", "items": {"type": "string"}},
         },
     }
 
@@ -58,13 +60,14 @@ class DemandProfileTool:
             rows = await _fetch_demand_rows(sku_id, lookback_days)
         except Exception as exc:
             return ToolResult(
-                output={"error": _connection_error_message(exc)},
+                output={"error": db_error_message(exc)},
                 audit_payload={"sku_id": sku_id, "lookback_days": lookback_days, "record_count": 0},
             )
 
         record_count = len(rows)
 
         if record_count == 0:
+            sku_label = sku_id or "all SKUs"
             return ToolResult(
                 output={
                     "sku_id": sku_id,
@@ -77,6 +80,9 @@ class DemandProfileTool:
                     "cv": None,
                     "data_quality_score": 1.0,
                     "date_range": {"start": "", "end": ""},
+                    "missing_data": [
+                        f"no demand_history rows for {sku_label} in last {lookback_days} days"
+                    ],
                 },
                 audit_payload={"sku_id": sku_id, "lookback_days": lookback_days, "record_count": 0},
             )
@@ -120,6 +126,7 @@ class DemandProfileTool:
                 "cv": cv,
                 "data_quality_score": data_quality_score,
                 "date_range": {"start": date_start, "end": date_end},
+                "missing_data": [],
             },
             audit_payload={
                 "sku_id": sku_id,
@@ -157,16 +164,3 @@ async def _fetch_demand_rows(sku_id: str | None, lookback_days: int) -> list[dic
         return [dict(r) for r in rows]
 
 
-def _connection_error_message(exc: Exception) -> str:
-    message = str(exc).lower()
-    class_name = exc.__class__.__name__.lower()
-    module_name = exc.__class__.__module__.lower()
-    if isinstance(exc, RuntimeError) and "database_url" in message:
-        return "no database connection"
-    if "asyncpg" in module_name and (
-        "connection" in class_name
-        or "connection" in message
-        or "connect call failed" in message
-    ):
-        return "no database connection"
-    return str(exc)

@@ -4,6 +4,7 @@ import datetime
 from typing import Any, Literal
 
 from packages.persistence.db import get_pool
+from packages.tools._shared import db_error_message
 from packages.tools.base import ToolContext, ToolResult
 
 _OPEN_STATUSES = ["pending", "confirmed", "in_transit"]
@@ -33,6 +34,7 @@ class GetAvailableToPromiseTool:
             "on_order_incoming": {"type": "number"},
             "atp_units": {"type": "number"},
             "atp_date_horizon": {"type": "string"},
+            "missing_data": {"type": "array", "items": {"type": "string"}},
         },
     }
 
@@ -47,7 +49,7 @@ class GetAvailableToPromiseTool:
             on_hand_qty, on_order_incoming = await _fetch_atp_data(sku_id, warehouse_id)
         except Exception as exc:
             return ToolResult(
-                output={"error": _db_error_message(exc)},
+                output={"error": db_error_message(exc)},
                 audit_payload={
                     "sku_id": sku_id,
                     "warehouse_id": warehouse_id,
@@ -68,6 +70,7 @@ class GetAvailableToPromiseTool:
                 "on_order_incoming": on_order_incoming,
                 "atp_units": atp_units,
                 "atp_date_horizon": atp_date_horizon,
+                "missing_data": [],
             },
             audit_payload={
                 "sku_id": sku_id,
@@ -110,16 +113,3 @@ async def _fetch_atp_data(
     return on_hand_qty, on_order_incoming
 
 
-def _db_error_message(exc: Exception) -> str:
-    message = str(exc).lower()
-    class_name = exc.__class__.__name__.lower()
-    module_name = exc.__class__.__module__.lower()
-    if isinstance(exc, RuntimeError) and "database_url" in message:
-        return "no database connection"
-    if "asyncpg" in module_name and (
-        "connection" in class_name
-        or "connection" in message
-        or "connect call failed" in message
-    ):
-        return "no database connection"
-    return str(exc)

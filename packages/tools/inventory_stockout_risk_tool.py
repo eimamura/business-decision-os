@@ -4,6 +4,7 @@ import datetime
 from typing import Any, Literal
 
 from packages.persistence.db import get_pool
+from packages.tools._shared import classify_stockout_risk, db_error_message
 from packages.tools.base import ToolContext, ToolResult
 
 _OPEN_STATUSES = ["pending", "confirmed", "in_transit"]
@@ -34,6 +35,7 @@ class CalculateStockoutRiskTool:
             "projected_ending_stock": {"type": "number"},
             "stockout_date_estimate": {"type": ["string", "null"]},
             "risk_level": {"type": "string"},
+            "missing_data": {"type": "array", "items": {"type": "string"}},
         },
     }
 
@@ -50,7 +52,7 @@ class CalculateStockoutRiskTool:
             )
         except Exception as exc:
             return ToolResult(
-                output={"error": _db_error_message(exc)},
+                output={"error": db_error_message(exc)},
                 audit_payload={
                     "sku_id": sku_id,
                     "horizon_days": horizon_days,
@@ -75,7 +77,11 @@ class CalculateStockoutRiskTool:
             else:
                 stockout_date_estimate = None
 
-        risk_level = _classify_stockout_risk(projected_ending_stock, demand_forecast)
+        risk_level = classify_stockout_risk(projected_ending_stock, demand_forecast)
+
+        missing_data: list[str] = []
+        if avg_daily == 0:
+            missing_data.append(f"no demand_history rows for {sku_id} in last 30 days")
 
         return ToolResult(
             output={
@@ -87,6 +93,7 @@ class CalculateStockoutRiskTool:
                 "projected_ending_stock": projected_ending_stock,
                 "stockout_date_estimate": stockout_date_estimate,
                 "risk_level": risk_level,
+                "missing_data": missing_data,
             },
             audit_payload={
                 "sku_id": sku_id,
@@ -95,19 +102,6 @@ class CalculateStockoutRiskTool:
                 "risk_level": risk_level,
             },
         )
-
-
-def _classify_stockout_risk(projected_ending_stock: float, demand_forecast: float) -> str:
-    if demand_forecast == 0:
-        return "none"
-    if projected_ending_stock < 0:
-        return "critical"
-    ratio = projected_ending_stock / demand_forecast
-    if ratio >= 0.5:
-        return "low"
-    if ratio >= 0.1:
-        return "medium"
-    return "high"
 
 
 async def _fetch_stockout_risk_data(
@@ -155,16 +149,3 @@ async def _fetch_stockout_risk_data(
     return on_hand_qty, avg_daily, incoming_supply
 
 
-def _db_error_message(exc: Exception) -> str:
-    message = str(exc).lower()
-    class_name = exc.__class__.__name__.lower()
-    module_name = exc.__class__.__module__.lower()
-    if isinstance(exc, RuntimeError) and "database_url" in message:
-        return "no database connection"
-    if "asyncpg" in module_name and (
-        "connection" in class_name
-        or "connection" in message
-        or "connect call failed" in message
-    ):
-        return "no database connection"
-    return str(exc)

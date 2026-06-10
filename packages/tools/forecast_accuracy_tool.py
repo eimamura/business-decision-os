@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any, Literal
 
 from packages.persistence.db import get_pool
+from packages.tools._shared import db_error_message
 from packages.tools.base import ToolContext, ToolResult
 
 
@@ -39,6 +40,7 @@ class ForecastAccuracyTool:
                     "error_pct": {"type": "number"},
                 },
             },
+            "missing_data": {"type": "array", "items": {"type": "string"}},
         },
     }
 
@@ -54,13 +56,22 @@ class ForecastAccuracyTool:
             demand_count = await _fetch_demand_count(sku_id, lookback_days)
         except Exception as exc:
             return ToolResult(
-                output={"error": _connection_error_message(exc)},
+                output={"error": db_error_message(exc)},
                 audit_payload={"sku_id": sku_id, "lookback_days": lookback_days, "sample_size": 0},
             )
 
         sample_size = len(joined_rows)
 
         if sample_size == 0:
+            missing_data_no_forecast: list[str] = []
+            if demand_count == 0:
+                missing_data_no_forecast.append(
+                    f"no demand_history rows for {sku_id} in last {lookback_days} days"
+                )
+            else:
+                missing_data_no_forecast.append(
+                    f"no forecast_history rows for {sku_id} in last {lookback_days} days"
+                )
             return ToolResult(
                 output={
                     "sku_id": sku_id,
@@ -70,6 +81,7 @@ class ForecastAccuracyTool:
                     "bias": 0.0,
                     "coverage": 0.0,
                     "worst_period": None,
+                    "missing_data": missing_data_no_forecast,
                 },
                 audit_payload={"sku_id": sku_id, "lookback_days": lookback_days, "sample_size": 0},
             )
@@ -125,6 +137,7 @@ class ForecastAccuracyTool:
                 "bias": bias,
                 "coverage": coverage,
                 "worst_period": worst_period,
+                "missing_data": [],
             },
             audit_payload={
                 "sku_id": sku_id,
@@ -169,16 +182,3 @@ async def _fetch_demand_count(sku_id: str, lookback_days: int) -> int:
         return int(count) if count is not None else 0
 
 
-def _connection_error_message(exc: Exception) -> str:
-    message = str(exc).lower()
-    class_name = exc.__class__.__name__.lower()
-    module_name = exc.__class__.__module__.lower()
-    if isinstance(exc, RuntimeError) and "database_url" in message:
-        return "no database connection"
-    if "asyncpg" in module_name and (
-        "connection" in class_name
-        or "connection" in message
-        or "connect call failed" in message
-    ):
-        return "no database connection"
-    return str(exc)

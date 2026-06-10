@@ -18,11 +18,10 @@ def _load_thresholds() -> dict[str, Any]:
             data: dict[str, Any] = yaml.safe_load(f) or {}
         return data.get("thresholds", {})  # type: ignore[no-any-return]
     except FileNotFoundError:
-        import logging
-        logging.getLogger(__name__).warning(
-            "risk_thresholds.yaml not found at %s — using hardcoded defaults", _THRESHOLDS_PATH
-        )
-        return {}
+        raise RuntimeError(
+            f"risk_thresholds.yaml not found at {_THRESHOLDS_PATH}. "
+            "Ensure config/risk_thresholds.yaml is present before starting the service."
+        ) from None
 
 
 def _classify_risk(
@@ -32,9 +31,15 @@ def _classify_risk(
     high = thresholds.get("high", {})
     medium = thresholds.get("medium", {})
 
-    if service_level < high.get("service_level_max", 0.85):
+    if "service_level_max" not in high or "service_level_max" not in medium:
+        raise RuntimeError(
+            "risk_thresholds.yaml is missing required keys: "
+            "thresholds.high.service_level_max and/or thresholds.medium.service_level_max"
+        )
+
+    if service_level < float(high["service_level_max"]):
         return "high"
-    if service_level < medium.get("service_level_max", 0.95):
+    if service_level < float(medium["service_level_max"]):
         return "medium"
     return "low"
 

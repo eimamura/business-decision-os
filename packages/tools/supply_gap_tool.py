@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any, Literal
 
 from packages.persistence.db import get_pool
+from packages.tools._shared import db_error_message
 from packages.tools.base import ToolContext, ToolResult
 
 _OPEN_STATUSES = ["pending", "confirmed", "in_transit"]
@@ -35,6 +36,7 @@ class CalculateSupplyGapTool:
             "gap_units": {"type": "number"},
             "gap_pct": {"type": ["number", "null"]},
             "risk_level": {"type": "string"},
+            "missing_data": {"type": "array", "items": {"type": "string"}},
         },
     }
 
@@ -51,7 +53,7 @@ class CalculateSupplyGapTool:
             )
         except Exception as exc:
             return ToolResult(
-                output={"error": _db_error_message(exc)},
+                output={"error": db_error_message(exc)},
                 audit_payload={
                     "sku_id": sku_id,
                     "horizon_days": horizon_days,
@@ -72,6 +74,10 @@ class CalculateSupplyGapTool:
 
         risk_level = _classify_risk(gap_units, gap_pct)
 
+        missing_data: list[str] = []
+        if avg_daily_demand == 0:
+            missing_data.append(f"no demand_history rows for {sku_id} in last 90 days")
+
         return ToolResult(
             output={
                 "sku_id": sku_id,
@@ -83,6 +89,7 @@ class CalculateSupplyGapTool:
                 "gap_units": gap_units,
                 "gap_pct": gap_pct,
                 "risk_level": risk_level,
+                "missing_data": missing_data,
             },
             audit_payload={
                 "sku_id": sku_id,
@@ -151,16 +158,3 @@ async def _fetch_supply_gap_data(
     return on_hand_qty, incoming_qty, avg_daily_demand
 
 
-def _db_error_message(exc: Exception) -> str:
-    message = str(exc).lower()
-    class_name = exc.__class__.__name__.lower()
-    module_name = exc.__class__.__module__.lower()
-    if isinstance(exc, RuntimeError) and "database_url" in message:
-        return "no database connection"
-    if "asyncpg" in module_name and (
-        "connection" in class_name
-        or "connection" in message
-        or "connect call failed" in message
-    ):
-        return "no database connection"
-    return str(exc)

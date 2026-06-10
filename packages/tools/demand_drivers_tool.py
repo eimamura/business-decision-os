@@ -4,6 +4,7 @@ import json
 from typing import Any, Literal
 
 from packages.persistence.db import get_pool
+from packages.tools._shared import db_error_message
 from packages.tools.base import ToolContext, ToolResult
 
 
@@ -42,6 +43,7 @@ class DemandDriversTool:
             },
             "customer_concentration": {"type": "number"},
             "sku_risk_level": {"type": "string"},
+            "missing_data": {"type": "array", "items": {"type": "string"}},
         },
     }
 
@@ -57,7 +59,7 @@ class DemandDriversTool:
             customer_rows = await _fetch_customer_rows()
         except Exception as exc:
             return ToolResult(
-                output={"error": _connection_error_message(exc)},
+                output={"error": db_error_message(exc)},
                 audit_payload={
                     "sku_id": sku_id,
                     "lookback_days": lookback_days,
@@ -79,6 +81,11 @@ class DemandDriversTool:
                 matched.append((row["customer_id"], row.get("segment"), weight))
 
         if not matched or total_demand == 0.0:
+            missing_data_no_match: list[str] = []
+            if total_demand == 0.0:
+                missing_data_no_match.append(
+                    f"no demand_history rows for {sku_id} in last {lookback_days} days"
+                )
             return ToolResult(
                 output={
                     "sku_id": sku_id,
@@ -87,6 +94,7 @@ class DemandDriversTool:
                     "top_customers": [],
                     "customer_concentration": 0.0,
                     "sku_risk_level": "low",
+                    "missing_data": missing_data_no_match,
                 },
                 audit_payload={
                     "sku_id": sku_id,
@@ -132,6 +140,7 @@ class DemandDriversTool:
                 "top_customers": top_customers,
                 "customer_concentration": customer_concentration,
                 "sku_risk_level": sku_risk_level,
+                "missing_data": [],
             },
             audit_payload={
                 "sku_id": sku_id,
@@ -200,16 +209,3 @@ def _extract_sku_weight(affinity: dict[str, Any] | list[Any], sku_id: str) -> fl
     return None
 
 
-def _connection_error_message(exc: Exception) -> str:
-    message = str(exc).lower()
-    class_name = exc.__class__.__name__.lower()
-    module_name = exc.__class__.__module__.lower()
-    if isinstance(exc, RuntimeError) and "database_url" in message:
-        return "no database connection"
-    if "asyncpg" in module_name and (
-        "connection" in class_name
-        or "connection" in message
-        or "connect call failed" in message
-    ):
-        return "no database connection"
-    return str(exc)

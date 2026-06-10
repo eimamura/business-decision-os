@@ -4,6 +4,7 @@ import datetime
 from typing import Any, Literal
 
 from packages.persistence.db import get_pool
+from packages.tools._shared import classify_stockout_risk, db_error_message
 from packages.tools.base import ToolContext, ToolResult
 
 _OPEN_STATUSES = ["pending", "confirmed", "in_transit"]
@@ -73,6 +74,7 @@ class ListStockoutRiskTool:
                 },
             },
             "count": {"type": "integer"},
+            "missing_data": {"type": "array", "items": {"type": "string"}},
         },
     }
 
@@ -91,7 +93,7 @@ class ListStockoutRiskTool:
             raw_rows = await _fetch_all_stockout_risk(horizon_days)
         except Exception as exc:
             return ToolResult(
-                output={"error": _db_error_message(exc)},
+                output={"error": db_error_message(exc)},
                 audit_payload={
                     "horizon_days": horizon_days,
                     "min_risk_level": min_risk_level,
@@ -111,7 +113,7 @@ class ListStockoutRiskTool:
             demand_forecast = avg_daily * horizon_days
             projected_ending_stock = on_hand_qty + incoming_supply - demand_forecast
 
-            risk_level = _classify_stockout_risk(projected_ending_stock, demand_forecast)
+            risk_level = classify_stockout_risk(projected_ending_stock, demand_forecast)
 
             # Apply filter — skip "none" risk and items below the threshold.
             row_order = _RISK_LEVEL_ORDER.get(risk_level, 0)
@@ -149,27 +151,13 @@ class ListStockoutRiskTool:
         )
 
         return ToolResult(
-            output={"items": items, "count": len(items)},
+            output={"items": items, "count": len(items), "missing_data": []},
             audit_payload={
                 "horizon_days": horizon_days,
                 "min_risk_level": min_risk_level,
                 "count": len(items),
             },
         )
-
-
-def _classify_stockout_risk(projected_ending_stock: float, demand_forecast: float) -> str:
-    """Identical thresholds to ``CalculateStockoutRiskTool._classify_stockout_risk``."""
-    if demand_forecast == 0:
-        return "none"
-    if projected_ending_stock < 0:
-        return "critical"
-    ratio = projected_ending_stock / demand_forecast
-    if ratio >= 0.5:
-        return "low"
-    if ratio >= 0.1:
-        return "medium"
-    return "high"
 
 
 async def _fetch_all_stockout_risk(horizon_days: int) -> list[dict[str, Any]]:
@@ -210,16 +198,3 @@ async def _fetch_all_stockout_risk(horizon_days: int) -> list[dict[str, Any]]:
         return [dict(r) for r in rows]
 
 
-def _db_error_message(exc: Exception) -> str:
-    message = str(exc).lower()
-    class_name = exc.__class__.__name__.lower()
-    module_name = exc.__class__.__module__.lower()
-    if isinstance(exc, RuntimeError) and "database_url" in message:
-        return "no database connection"
-    if "asyncpg" in module_name and (
-        "connection" in class_name
-        or "connection" in message
-        or "connect call failed" in message
-    ):
-        return "no database connection"
-    return str(exc)

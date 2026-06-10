@@ -4,7 +4,10 @@ import datetime
 from typing import Any, Literal
 
 from packages.persistence.db import get_pool
+from packages.tools._shared import db_error_message
 from packages.tools.base import ToolContext, ToolResult
+
+_ROW_CAP = 100
 
 
 class GetOpenSupplyOrdersTool:
@@ -37,6 +40,8 @@ class GetOpenSupplyOrdersTool:
             "sku_id": {"type": ["string", "null"]},
             "order_count": {"type": "integer"},
             "total_incoming_qty": {"type": "number"},
+            "truncated": {"type": "boolean"},
+            "missing_data": {"type": "array", "items": {"type": "string"}},
             "orders": {
                 "type": "array",
                 "items": {
@@ -68,16 +73,19 @@ class GetOpenSupplyOrdersTool:
         )
 
         try:
-            rows = await _fetch_open_orders(sku_id, status_filter)
+            raw_rows = await _fetch_open_orders(sku_id, status_filter)
         except Exception as exc:
             return ToolResult(
-                output={"error": _db_error_message(exc)},
+                output={"error": db_error_message(exc)},
                 audit_payload={
                     "sku_id": sku_id,
                     "status_filter": status_filter,
                     "order_count": 0,
                 },
             )
+
+        truncated = len(raw_rows) > _ROW_CAP
+        rows = raw_rows[:_ROW_CAP]
 
         today = datetime.date.today()
         orders: list[dict[str, Any]] = []
@@ -132,12 +140,15 @@ class GetOpenSupplyOrdersTool:
                 "sku_id": sku_id,
                 "order_count": order_count,
                 "total_incoming_qty": total_incoming_qty,
+                "truncated": truncated,
+                "missing_data": [],
                 "orders": orders,
             },
             audit_payload={
                 "sku_id": sku_id,
                 "status_filter": status_filter,
                 "order_count": order_count,
+                "truncated": truncated,
             },
         )
 
@@ -145,6 +156,7 @@ class GetOpenSupplyOrdersTool:
 async def _fetch_open_orders(
     sku_id: str | None, status_filter: list[str]
 ) -> list[dict[str, Any]]:
+    """Fetch up to _ROW_CAP + 1 rows so the caller can detect truncation."""
     pool = await get_pool()
     async with pool.acquire() as conn:
         rows = await conn.fetch(
@@ -154,23 +166,9 @@ async def _fetch_open_orders(
             WHERE status = ANY($1)
               AND ($2::text IS NULL OR sku_id = $2)
             ORDER BY expected_arrival ASC NULLS LAST
+            LIMIT 101
             """,
             status_filter,
             sku_id,
         )
         return [dict(r) for r in rows]
-
-
-def _db_error_message(exc: Exception) -> str:
-    message = str(exc).lower()
-    class_name = exc.__class__.__name__.lower()
-    module_name = exc.__class__.__module__.lower()
-    if isinstance(exc, RuntimeError) and "database_url" in message:
-        return "no database connection"
-    if "asyncpg" in module_name and (
-        "connection" in class_name
-        or "connection" in message
-        or "connect call failed" in message
-    ):
-        return "no database connection"
-    return str(exc)

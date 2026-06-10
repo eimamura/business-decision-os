@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any, Literal
 
 from packages.persistence.db import get_pool
+from packages.tools._shared import db_error_message
 from packages.tools.base import ToolContext, ToolResult
 
 
@@ -52,6 +53,7 @@ class CompareCostScenariosTool:
             },
             "recommended_scenario": {"type": ["string", "null"]},
             "recommendation_reason": {"type": ["string", "null"]},
+            "missing_data": {"type": "array", "items": {"type": "string"}},
         },
     }
 
@@ -79,7 +81,7 @@ class CompareCostScenariosTool:
                 )
         except Exception as exc:
             return ToolResult(
-                output={"error": _db_error_message(exc)},
+                output={"error": db_error_message(exc)},
                 audit_payload={
                     "sku_id": sku_id,
                     "shortage_units": shortage_units,
@@ -119,6 +121,7 @@ class CompareCostScenariosTool:
                     "scenarios": empty_scenarios,
                     "recommended_scenario": None,
                     "recommendation_reason": None,
+                    "missing_data": [f"no cost_master row for {sku_id}"],
                 },
                 audit_payload={
                     "sku_id": sku_id,
@@ -203,6 +206,7 @@ class CompareCostScenariosTool:
                 "scenarios": scenarios,
                 "recommended_scenario": recommended_scenario,
                 "recommendation_reason": recommendation_reason,
+                "missing_data": [],
             },
             audit_payload={
                 "sku_id": sku_id,
@@ -212,16 +216,3 @@ class CompareCostScenariosTool:
         )
 
 
-def _db_error_message(exc: Exception) -> str:
-    message = str(exc).lower()
-    class_name = exc.__class__.__name__.lower()
-    module_name = exc.__class__.__module__.lower()
-    if isinstance(exc, RuntimeError) and "database_url" in message:
-        return "no database connection"
-    if "asyncpg" in module_name and (
-        "connection" in class_name
-        or "connection" in message
-        or "connect call failed" in message
-    ):
-        return "no database connection"
-    return str(exc)

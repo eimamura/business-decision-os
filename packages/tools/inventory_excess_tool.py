@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any, Literal
 
 from packages.persistence.db import get_pool
+from packages.tools._shared import db_error_message
 from packages.tools.base import ToolContext, ToolResult
 
 
@@ -30,6 +31,7 @@ class CalculateExcessInventoryRiskTool:
             "excess_units": {"type": ["number", "null"]},
             "excess_days": {"type": ["number", "null"]},
             "excess_risk_level": {"type": "string"},
+            "missing_data": {"type": "array", "items": {"type": "string"}},
         },
     }
 
@@ -44,7 +46,7 @@ class CalculateExcessInventoryRiskTool:
             on_hand_qty, avg_daily_demand = await _fetch_excess_data(sku_id, lookback_days)
         except Exception as exc:
             return ToolResult(
-                output={"error": _db_error_message(exc)},
+                output={"error": db_error_message(exc)},
                 audit_payload={
                     "sku_id": sku_id,
                     "lookback_days": lookback_days,
@@ -76,6 +78,12 @@ class CalculateExcessInventoryRiskTool:
             else:
                 excess_risk_level = "high"
 
+        missing_data: list[str] = []
+        if avg_daily_demand is None or avg_daily_demand == 0:
+            missing_data.append(
+                f"no demand_history rows for {sku_id} in last {lookback_days} days"
+            )
+
         return ToolResult(
             output={
                 "sku_id": sku_id,
@@ -85,6 +93,7 @@ class CalculateExcessInventoryRiskTool:
                 "excess_units": excess_units,
                 "excess_days": excess_days,
                 "excess_risk_level": excess_risk_level,
+                "missing_data": missing_data,
             },
             audit_payload={
                 "sku_id": sku_id,
@@ -128,16 +137,3 @@ async def _fetch_excess_data(
     return on_hand_qty, avg_daily_demand
 
 
-def _db_error_message(exc: Exception) -> str:
-    message = str(exc).lower()
-    class_name = exc.__class__.__name__.lower()
-    module_name = exc.__class__.__module__.lower()
-    if isinstance(exc, RuntimeError) and "database_url" in message:
-        return "no database connection"
-    if "asyncpg" in module_name and (
-        "connection" in class_name
-        or "connection" in message
-        or "connect call failed" in message
-    ):
-        return "no database connection"
-    return str(exc)

@@ -5,6 +5,7 @@ import statistics
 from typing import Any, Literal
 
 from packages.persistence.db import get_pool
+from packages.tools._shared import db_error_message
 from packages.tools.base import ToolContext, ToolResult
 
 
@@ -46,6 +47,7 @@ class DemandSegmentTool:
                     },
                 },
             },
+            "missing_data": {"type": "array", "items": {"type": "string"}},
         },
     }
 
@@ -64,7 +66,7 @@ class DemandSegmentTool:
                 segments, total_demand = await _compute_customer_segments(lookback_days, top_n)
         except Exception as exc:
             return ToolResult(
-                output={"error": _connection_error_message(exc)},
+                output={"error": db_error_message(exc)},
                 audit_payload={
                     "dimension": dimension,
                     "lookback_days": lookback_days,
@@ -79,6 +81,10 @@ class DemandSegmentTool:
                 "lookback_days": lookback_days,
                 "total_demand": round(float(total_demand), 4),
                 "segments": segments,
+                "missing_data": (
+                    [f"no demand_history rows in last {lookback_days} days"]
+                    if total_demand == 0.0 else []
+                ),
             },
             audit_payload={
                 "dimension": dimension,
@@ -276,16 +282,3 @@ def _affinity_to_weights(affinity: dict[str, Any] | list[Any]) -> dict[str, floa
     return {}
 
 
-def _connection_error_message(exc: Exception) -> str:
-    message = str(exc).lower()
-    class_name = exc.__class__.__name__.lower()
-    module_name = exc.__class__.__module__.lower()
-    if isinstance(exc, RuntimeError) and "database_url" in message:
-        return "no database connection"
-    if "asyncpg" in module_name and (
-        "connection" in class_name
-        or "connection" in message
-        or "connect call failed" in message
-    ):
-        return "no database connection"
-    return str(exc)
