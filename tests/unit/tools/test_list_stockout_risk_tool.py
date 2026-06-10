@@ -276,3 +276,85 @@ async def test_list_stockout_risk_sorted_critical_first():
     assert items[0]["sku_id"] == "SKU-CRIT"
     assert items[1]["sku_id"] == "SKU-HIGH"
     assert items[2]["sku_id"] == "SKU-LOW"
+
+
+# ---------------------------------------------------------------------------
+# missing_data: all SKUs have avg_daily=0 (no demand history in last 30 days)
+# ---------------------------------------------------------------------------
+
+
+async def test_list_stockout_risk_all_zero_demand_populates_missing_data():
+    """When every SKU has avg_daily=0 the tool reports missing_data for each SKU.
+
+    This distinguishes "no stockout risk" from "evaluation impossible due to
+    missing demand data" — the root cause of the Judge-FAIL (bdos-judge 2026-06-10).
+    """
+    rows = [
+        _row("SKU-001", on_hand_qty=100.0, avg_daily=0.0),
+        _row("SKU-002", on_hand_qty=200.0, avg_daily=0.0),
+        _row("SKU-003", on_hand_qty=50.0, avg_daily=0.0),
+    ]
+    mock_pool = make_pool(rows)
+
+    with patch("packages.tools.list_stockout_risk_tool.get_pool", return_value=mock_pool):
+        tool = ListStockoutRiskTool()
+        result = await tool.handle({"horizon_days": 7, "min_risk_level": "medium"}, make_ctx())
+
+    assert result.output["items"] == []
+    assert result.output["count"] == 0
+
+    missing = result.output["missing_data"]
+    assert len(missing) == 3
+    # Each entry names the SKU with no demand history
+    sku_ids_in_missing = {entry.split(": ")[-1] for entry in missing}
+    assert sku_ids_in_missing == {"SKU-001", "SKU-002", "SKU-003"}
+    # Entry format matches calculate_stockout_risk convention
+    for entry in missing:
+        assert entry.startswith("no demand history in last 30 days: ")
+
+
+# ---------------------------------------------------------------------------
+# missing_data: mixed — some SKUs have demand, others do not
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "rows,expected_missing_skus,expected_item_skus",
+    [
+        # Case 1: one SKU has demand, one does not; only the zero-demand SKU missing
+        (
+            [
+                _row("SKU-A", on_hand_qty=10.0, avg_daily=5.0),   # has demand → critical (horizon=7)
+                _row("SKU-B", on_hand_qty=500.0, avg_daily=0.0),  # no demand → missing
+            ],
+            {"SKU-B"},
+            {"SKU-A"},
+        ),
+        # Case 2: all SKUs have demand; missing_data must be empty
+        (
+            [
+                _row("SKU-X", on_hand_qty=5.0, avg_daily=5.0),    # critical
+                _row("SKU-Y", on_hand_qty=1000.0, avg_daily=5.0), # low/none
+            ],
+            set(),
+            {"SKU-X"},
+        ),
+    ],
+)
+async def test_list_stockout_risk_mixed_demand_missing_data(
+    rows: list[dict],
+    expected_missing_skus: set[str],
+    expected_item_skus: set[str],
+) -> None:
+    """Only zero-demand SKUs appear in missing_data; positive-demand SKUs are evaluated normally."""
+    mock_pool = make_pool(rows)
+
+    with patch("packages.tools.list_stockout_risk_tool.get_pool", return_value=mock_pool):
+        tool = ListStockoutRiskTool()
+        result = await tool.handle({"horizon_days": 7, "min_risk_level": "medium"}, make_ctx())
+
+    actual_missing_skus = {entry.split(": ")[-1] for entry in result.output["missing_data"]}
+    actual_item_skus = {item["sku_id"] for item in result.output["items"]}
+
+    assert actual_missing_skus == expected_missing_skus
+    assert actual_item_skus == expected_item_skus
