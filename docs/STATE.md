@@ -40,11 +40,11 @@ See `docs/archive/v3/STATE.md` for P0–P23 per-phase details.
 
 ## Active Phase
 
-None
+P78 — Deterministic Routing Completion
 
 ## Active Lease
 
-None
+P78-B-01
 
 ## Last Completed
 
