@@ -199,7 +199,7 @@ Dependencies: B-02
 
 ---
 
-## P67 — Tool Layer Rationalization — In Progress
+## P67 — Tool Layer Rationalization — Done (2026-06-10)
 
 **Goal:** ~40 tool modules exist; P64 made the control allowlist derived from
 `_INTENT_TOOL_SUBSET`, but the registry may still register tools no intent can reach
@@ -296,7 +296,7 @@ Dependencies: B-01
 
 ---
 
-## P70 — Test Suite & Documentation Consolidation — In Progress
+## P70 — Test Suite & Documentation Consolidation — Done (2026-06-10)
 
 **Goal:** Final pass once all deletions land: remove redundant test coverage, then bring the
 documentation set back in sync with the slimmed codebase.
