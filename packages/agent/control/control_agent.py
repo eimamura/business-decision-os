@@ -30,8 +30,9 @@ _SYSTEM_PROMPT = (
     "Tool usage priority (follow this order):\n"
     "1. To enumerate stockout risk across all SKUs, call `list_stockout_risk(horizon_days=7)` "
     "once — do NOT loop `calculate_stockout_risk` per SKU.\n"
-    "2. Use a specialized tool (e.g. calculate_stockout_risk, calculate_days_of_supply) "
-    "when it directly covers a single-SKU question.\n"
+    "2. Use a specialized tool (e.g. calculate_stockout_risk, calculate_days_of_inventory) "
+    "when it directly covers a single-SKU question, including days-of-cover "
+    "and when-do-we-run-out analysis.\n"
     "3. Use nl_query for bulk or cross-product questions — pass the question in plain English; "
     "nl_query generates schema-correct SQL internally.\n"
     "4. Never fabricate column names or assume columns that are not confirmed by tool results.\n\n"
@@ -67,7 +68,7 @@ _DOMAIN_KNOWLEDGE_HEADER = "\n\n---\n## Domain Knowledge\n\n"
 # Narrow the tool set per intent so local models aren't overwhelmed by 23+ definitions.
 # Fallback: if intent not in map, all control tools remain available.
 _INTENT_TOOL_SUBSET: dict[str, list[str]] = {
-    # supply_chain: unchanged — cross-domain stockout/gap/delay/cost diagnosis
+    # supply_chain: cross-domain stockout/gap/delay/cost diagnosis
     "supply_chain": [
         "nl_query",
         "list_stockout_risk",
@@ -75,7 +76,7 @@ _INTENT_TOOL_SUBSET: dict[str, list[str]] = {
         "get_open_supply_orders",
         "calculate_supply_gap",
         "analyze_supply_lead_time",
-        "calculate_days_of_supply",
+        "calculate_days_of_inventory",
         "analyze_supply_risk",
         "calculate_stockout_risk",
         "calculate_stockout_cost_impact",
@@ -111,7 +112,6 @@ _INTENT_TOOL_SUBSET: dict[str, list[str]] = {
         "get_delayed_supply_orders",
         "calculate_supply_gap",
         "analyze_supply_lead_time",
-        "calculate_days_of_supply",
         "analyze_supply_risk",
         "calculate_holding_cost_impact",
         "calculate_stockout_cost_impact",
@@ -141,7 +141,6 @@ _INTENT_TOOL_SUBSET: dict[str, list[str]] = {
         "get_delayed_supply_orders",
         "calculate_supply_gap",
         "analyze_supply_lead_time",
-        "calculate_days_of_supply",
         "analyze_supply_risk",
         "calculate_holding_cost_impact",
         "calculate_stockout_cost_impact",
@@ -160,7 +159,6 @@ _INTENT_TOOL_SUBSET: dict[str, list[str]] = {
         "get_delayed_supply_orders",
         "calculate_supply_gap",
         "analyze_supply_lead_time",
-        "calculate_days_of_supply",
         "analyze_supply_risk",
         "calculate_holding_cost_impact",
         "calculate_stockout_cost_impact",

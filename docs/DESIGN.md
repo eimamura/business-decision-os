@@ -1066,7 +1066,7 @@ The `nl_query_tool` (text-to-SQL) is the primary data query interface — it acc
 
 - Tools MAY execute data access, calculations, external API calls, simulations, and audit writes.
 - Tools MUST expose a clear input/output schema conforming to the `Tool` base class in `packages/tools/base.py`.
-- Tools MUST return results as a **Context Pack** (`summary`, `schema`, `key_metrics`, `missing_data`, `artifact_id`). The `missing_data` field MUST list any required data that was unavailable during execution — never leave it empty when data is absent. Raw query rows MUST NOT be returned directly; large data is stored as a blob artifact and referenced via `artifact_id`.
+- Tools MUST return a **domain-specific dict** conforming to their declared `output_schema` (see `docs/adr/2026-06-10-tool-output-contract-hybrid.md`). The former Context Pack 5-field mandate (`summary`, `schema`, `key_metrics`, `missing_data`, `artifact_id`) is superseded by this hybrid contract. Every DB-accessing tool MUST include `missing_data: list[str]` in its output: populated with short human-readable entries when required source data is absent (e.g. `"no cost_master row for SKU-123"`), and an empty list when all required data was found. Tools that return row arrays MUST cap row counts and include a `truncated: bool` flag; raw bulk rows MUST NOT be streamed unbounded into agent context.
 - Tools MUST raise `RuntimeError` on missing configuration (API keys, DB connection); never silently degrade to a no-op or stub.
 - Tools MUST NOT decide business strategy or routing; they are execution primitives, not decision-makers.
 - Tools MUST NOT route requests between agents.

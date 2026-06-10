@@ -557,12 +557,12 @@ Dependencies: none
 
 Dependencies: B-01. Note: tests are updated by Test/Review in B-04; batch check = `make lint && make typecheck` + no NEW unit failures beyond those enumerated for B-04.
 
-### Batch B-03 — DOS→DOI merge + doc amendments (App Builder) — Not Started
+### Batch B-03 — DOS→DOI merge + doc amendments (App Builder) — Done
 
 | Task | Description | Status |
 |---|---|---|
-| T-483 | Merge `calculate_days_of_supply` into `calculate_days_of_inventory`: add `stockout_date_estimate` output to DOI; delete `supply_days_tool.py`; remove registry entry; replace DOS with DOI in `_INTENT_TOOL_SUBSET` (`supply_chain`; dedupe in `domain_analysis`/`cross_domain_analysis`/`decision_support`) and in the ControlAgent system prompt. | Not Started |
-| T-485 | Amend `docs/DESIGN.md` §Tool Design Constraints to the hybrid contract per ADR (remove Context Pack 5-field mandate; add missing_data + row-cap rules); update `docs/AGENT_ARCHITECTURE.md` (tool count 35→from-registry, Tier 2 DOS reference, "35 registered tools" figure → actual). | Not Started |
+| T-483 | Merge `calculate_days_of_supply` into `calculate_days_of_inventory`: add `stockout_date_estimate` output to DOI; delete `supply_days_tool.py`; remove registry entry; replace DOS with DOI in `_INTENT_TOOL_SUBSET` (`supply_chain`; dedupe in `domain_analysis`/`cross_domain_analysis`/`decision_support`) and in the ControlAgent system prompt. | Done |
+| T-485 | Amend `docs/DESIGN.md` §Tool Design Constraints to the hybrid contract per ADR (remove Context Pack 5-field mandate; add missing_data + row-cap rules); update `docs/AGENT_ARCHITECTURE.md` (tool count 35→from-registry, Tier 2 DOS reference, "35 registered tools" figure → actual). | Done |
 
 Dependencies: B-01 (parallel-eligible with B-02; runs after B-02 in practice)
 

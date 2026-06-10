@@ -31,7 +31,6 @@ from packages.tools.list_stockout_risk_tool import ListStockoutRiskTool
 from packages.tools.nl_query_tool import NlQueryTool
 from packages.tools.optimizer_tool import OptimizerTool
 from packages.tools.simulation_tool import SimulationTool
-from packages.tools.supply_days_tool import CalculateDaysOfSupplyTool
 from packages.tools.supply_delayed_orders_tool import GetDelayedSupplyOrdersTool
 from packages.tools.supply_gap_tool import CalculateSupplyGapTool
 from packages.tools.supply_lead_time_tool import AnalyzeSupplyLeadTimeTool
@@ -67,7 +66,6 @@ __all__ = [
     "NlQueryTool",
     "OptimizerTool",
     "SimulationTool",
-    "CalculateDaysOfSupplyTool",
     "CalculateSupplyGapTool",
     "AnalyzeSupplyLeadTimeTool",
     "GetDelayedSupplyOrdersTool",
@@ -111,7 +109,6 @@ def create_tool_registry(
     registry.register(GetDelayedSupplyOrdersTool(db_session=db_session))
     registry.register(CalculateSupplyGapTool(db_session=db_session))
     registry.register(AnalyzeSupplyLeadTimeTool(db_session=db_session))
-    registry.register(CalculateDaysOfSupplyTool(db_session=db_session))
     registry.register(AnalyzeSupplyRiskTool(db_session=db_session))
     registry.register(CalculateHoldingCostImpactTool(db_session=db_session))
     registry.register(CalculateStockoutCostImpactTool(db_session=db_session))

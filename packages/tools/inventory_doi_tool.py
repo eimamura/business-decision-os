@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import datetime
 from typing import Any, Literal
 
 from packages.persistence.db import get_pool
@@ -10,7 +11,11 @@ from packages.tools.base import ToolContext, ToolResult
 class CalculateDaysOfInventoryTool:
     name = "calculate_days_of_inventory"
     description = (
-        "Calculate days of inventory remaining for a SKU based on current on-hand and demand rate"
+        "Calculate days of inventory remaining for a SKU based on current on-hand and demand rate. "
+        "Optionally scoped to a single warehouse_id; omit for the aggregate across all warehouses. "
+        "Returns stockout_date_estimate (ISO date string) indicating when inventory is expected to "
+        "reach zero at the current burn rate, or null when demand data is unavailable. "
+        "Use this tool for single-SKU days-of-cover questions and when-do-we-run-out analysis."
     )
     safety_level: Literal["read_only", "write", "hitl"] = "read_only"
     input_schema: dict[str, Any] = {
@@ -29,6 +34,7 @@ class CalculateDaysOfInventoryTool:
             "on_hand_qty": {"type": "number"},
             "avg_daily_demand": {"type": ["number", "null"]},
             "days_of_inventory": {"type": ["number", "null"]},
+            "stockout_date_estimate": {"type": ["string", "null"]},
             "reorder_signal": {"type": "boolean"},
             "missing_data": {"type": "array", "items": {"type": "string"}},
         },
@@ -57,10 +63,15 @@ class CalculateDaysOfInventoryTool:
             )
 
         days_of_inventory: float | None
+        stockout_date_estimate: str | None
         if avg_daily_demand is not None and avg_daily_demand > 0:
             days_of_inventory = on_hand_qty / avg_daily_demand
+            today = datetime.date.today()
+            stockout_date = today + datetime.timedelta(days=days_of_inventory)
+            stockout_date_estimate = stockout_date.isoformat()
         else:
             days_of_inventory = None
+            stockout_date_estimate = None
 
         reorder_threshold = 14.0
         if lead_time_mean is not None:
@@ -81,6 +92,7 @@ class CalculateDaysOfInventoryTool:
                 "on_hand_qty": on_hand_qty,
                 "avg_daily_demand": avg_daily_demand,
                 "days_of_inventory": days_of_inventory,
+                "stockout_date_estimate": stockout_date_estimate,
                 "reorder_signal": reorder_signal,
                 "missing_data": missing_data,
             },

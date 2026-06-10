@@ -25,13 +25,13 @@ Valid agent roles: `{"control"}` — defined in `packages/agent/orchestrator/rol
 Tool selection is a sequential filter pipeline:
 
 ```
-35 registered tools
+31 registered tools
       │
       ▼  Layer 1: Agent role allowlist  (packages/tools/base.py  _ROLE_TOOL_ALLOWLIST)
- ≤35 tools  control role ceiling — auto-derived as union of all Layer 3 subsets (P67)
+ ≤31 tools  control role ceiling — auto-derived as union of all Layer 3 subsets (P67)
       │
       ▼  Layer 2: User role safety filter  (packages/tools/base.py  filter_for_user_role)
- ≤35 tools  analyst=read_only only / manager=read_only+hitl / admin=all
+ ≤31 tools  analyst=read_only only / manager=read_only+hitl / admin=all
       │
       ▼  Layer 3: Intent subset  (packages/agent/control/control_agent.py  _INTENT_TOOL_SUBSET)
  5–28 tools  narrowed to the intent's relevant tool set
@@ -86,8 +86,8 @@ verifies that every Layer 3 tool name is reachable from Layer 1.
 
 1. `list_stockout_risk(horizon_days=7)` — call once for cross-SKU risk enumeration;
    never loop `calculate_stockout_risk` per SKU.
-2. Specialized tools (`calculate_stockout_risk`, `calculate_days_of_supply`, …) —
-   for single-SKU questions.
+2. Specialized tools (`calculate_stockout_risk`, `calculate_days_of_inventory`, …) —
+   for single-SKU questions, including days-of-cover and when-do-we-run-out analysis.
 3. `nl_query` — for bulk or cross-product questions; generates schema-correct SQL internally.
 4. Never fabricate column names.
 
@@ -105,7 +105,7 @@ verifies that every Layer 3 tool name is reachable from Layer 1.
 
 ### Tier 2 — Supply chain essentials
 
-`get_delayed_supply_orders`, `calculate_days_of_supply`, `calculate_supply_gap`,
+`get_delayed_supply_orders`, `calculate_days_of_inventory`, `calculate_supply_gap`,
 `analyze_supply_lead_time`, `get_open_supply_orders`, `calculate_expedite_cost`
 
 ### Tier 3 — Inventory health
