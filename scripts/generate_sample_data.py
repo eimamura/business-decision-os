@@ -16,7 +16,9 @@ from pathlib import Path
 
 CsvRow = dict[str, str]
 
-START_DATE = date(2025, 1, 1)
+# START_DATE is relative to today so that demand_history always covers the last 365 days
+# and the tools' 30-day rolling window always has data on re-seed.
+START_DATE = date.today() - timedelta(days=365)
 
 DETERMINISTIC_NULL_SKUS = {"SKU-003", "SKU-005", "SKU-007"}
 CONTIGUOUS_GAP_SKU = "SKU-001"
@@ -133,7 +135,8 @@ def generate_demand_history(
 def generate_inventory(
     skus: list[CsvRow], rng: random.Random, out_dir: Path, config: SampleDataConfig
 ) -> None:
-    snapshot_date = date(2026, 5, 19).isoformat()
+    # Snapshot is ~3 weeks before today to simulate a recent but not same-day snapshot.
+    snapshot_date = (date.today() - timedelta(days=22)).isoformat()
     fields = ["sku_id", "warehouse_id", "on_hand", "on_order", "snapshot_date"]
 
     with open(out_dir / "inventory_snapshot.csv", "w", newline="") as f:
@@ -173,7 +176,13 @@ def generate_supply(
     skus: list[CsvRow], suppliers: list[CsvRow], rng: random.Random, out_dir: Path
 ) -> None:
     fields = ["sku_id", "supplier_id", "order_date", "expected_arrival", "quantity", "status"]
-    base_order_date = date(2026, 4, 1)
+    # Orders placed roughly 10 weeks ago; arrivals spread over the following 60-90 days
+    # so they span delivered / in_transit / pending relative to today.
+    base_order_date = date.today() - timedelta(days=70)
+    # Status cutoffs relative to today: delivered if arrived >22 days ago,
+    # in_transit if arrived within last 9 days, pending otherwise.
+    _delivered_cutoff = date.today() - timedelta(days=22)
+    _in_transit_cutoff = date.today() - timedelta(days=9)
     supplier_by_type = {s["sku_type"]: s for s in suppliers}
 
     with open(out_dir / "supply_orders.csv", "w", newline="") as f:
@@ -202,9 +211,9 @@ def generate_supply(
                 arrival_date = order_date + timedelta(days=lead_days)
                 quantity = moq * rng.randint(1, 4)
 
-                if arrival_date < date(2026, 5, 19):
+                if arrival_date < _delivered_cutoff:
                     status = "delivered"
-                elif arrival_date < date(2026, 6, 1):
+                elif arrival_date < _in_transit_cutoff:
                     status = "in_transit"
                 else:
                     status = "pending"
@@ -222,8 +231,9 @@ def generate_supply(
 def generate_cost(
     skus: list[CsvRow], rng: random.Random, out_dir: Path, config: SampleDataConfig
 ) -> None:
-    period_start = date(2025, 1, 1).isoformat()
-    period_end = date(2025, 12, 31).isoformat()
+    # Cost period spans the same 365-day window as demand_history.
+    period_start = (date.today() - timedelta(days=365)).isoformat()
+    period_end = (date.today() - timedelta(days=1)).isoformat()
     fields = [
         "sku_id", "period_start", "period_end",
         "cogs", "holding_cost", "ordering_cost", "stockout_cost",
