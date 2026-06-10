@@ -39,15 +39,15 @@ See `docs/archive/v3/STATE.md` for P0–P23 per-phase details.
 
 ## Active Phase
 
-P68 — Frontend Dead Code Cleanup / P69 — Dependency & Config Hygiene (parallel)
+P70 — Test Suite & Documentation Consolidation
 
 ## Active Lease
 
-P68-B-01, P69-B-01 (parallel — disjoint file scopes)
+P70-B-01, P70-B-03 (parallel — tests/ vs docs/ scopes; B-02 archive runs last)
 
 ## Last Completed
 
-P67 — Tool Layer Rationalization (2026-06-10); sign-off PASS (unit 770 passed, integration 16 passed/0 failed, build/lint/typecheck exit 0). All 32 registered tools proved reachable; 14 dead role allowlist entries removed.
+P68 + P69 (2026-06-10); both sign-offs PASS (vitest 60, playwright 32, unit 770, integration 16 passed/0 failed, uv sync clean, build/lint/typecheck exit 0).
 
 ## Blockers
 

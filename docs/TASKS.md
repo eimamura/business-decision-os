@@ -1786,7 +1786,7 @@ Dependencies: B-01
 
 ---
 
-## P68 — Frontend Dead Code Cleanup — Not Started
+## P68 — Frontend Dead Code Cleanup — Done
 
 **Goal:** Remove unused frontend modules and exports accumulated across the P6–P44 UI
 iterations. Parallel-eligible with P66/P67 (no shared files).
@@ -1803,17 +1803,17 @@ Dependencies: P65 Done (parallel-eligible with P66, P67)
 
 Dependencies: none
 
-### Batch B-02 — Quality gate (Test/Review) — Not Started
+### Batch B-02 — Quality gate (Test/Review) — Done
 
 | Task | Description | Status |
 |---|---|---|
-| T-441 | Vitest suite (via Makefile target), `make test-playwright`, and `make build` — all pass. | Not Started |
+| T-441 | Vitest suite (via Makefile target), `make test-playwright`, and `make build` — all pass. | Done |
 
 Dependencies: B-01
 
 ---
 
-## P69 — Dependency & Config Hygiene — Not Started
+## P69 — Dependency & Config Hygiene — Done
 
 **Goal:** Align declared dependencies and config files with what the code actually uses.
 Infra services themselves (Celery, Redis, compose definitions) are preserved per the
@@ -1843,11 +1843,11 @@ Quality gates:
   make typecheck   exit 0  ("Success: no issues found in 159 source files")
 -->
 
-### Batch B-02 — Quality gate (Test/Review) — Not Started
+### Batch B-02 — Quality gate (Test/Review) — Done
 
 | Task | Description | Status |
 |---|---|---|
-| T-445 | `uv sync` succeeds from a clean lock state; `make test-unit && make lint && make typecheck` — all pass. | Not Started |
+| T-445 | `uv sync` succeeds from a clean lock state; `make test-unit && make lint && make typecheck` — all pass. | Done |
 
 Dependencies: B-01
 
