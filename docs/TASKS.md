@@ -79,6 +79,7 @@ Full task history for P0–P23 is archived at `docs/archive/v3/TASKS.md`.
 | P73 — Feedback Learning Loop | T-463–T-469 | 2026-06-10 |
 | P74 — Integration Tier Latent Debt | T-470 | 2026-06-10 |
 | P75 — Tool Layer Full Audit | T-471–T-476 | 2026-06-10 |
+| P76 — Tool Layer Conformance Remediation | T-477–T-487 | 2026-06-10 |
 
 > **Design Realignment Note (2026-06-05):** P29–P36 built Specialist Domain Agents (DemandAgent,
 > InventoryAgent, SupplyPlanningAgent, FinanceImpactAgent, SopAgent) as independent runtime units.
@@ -529,7 +530,7 @@ Dependencies: B-01, B-02, B-03
 
 ---
 
-## P76 — Tool Layer Conformance Remediation — Not Started
+## P76 — Tool Layer Conformance Remediation — Done (2026-06-10)
 
 **Goal:** Fix the non-conformances found by the P75 audit, under the **hybrid** output-contract
 resolution chosen by the user (2026-06-10): the domain-dict return contract is codified as
@@ -566,7 +567,7 @@ Dependencies: B-01. Note: tests are updated by Test/Review in B-04; batch check 
 
 Dependencies: B-01 (parallel-eligible with B-02; runs after B-02 in practice)
 
-### Batch B-04 — Tests + phase sign-off (Test/Review) — Not Started
+### Batch B-04 — Tests + phase sign-off (Test/Review) — Done
 
 | Task | Description | Status |
 |---|---|---|
