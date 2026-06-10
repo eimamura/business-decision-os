@@ -345,7 +345,7 @@ parallel; test batches follow their implementation batches.
 
 ---
 
-## P71 — Goal Evaluation Loop — In Progress
+## P71 — Goal Evaluation Loop — Done (2026-06-10)
 
 **Goal:** Make the goal first-class and close the outer loop: derive GoalSpec, evaluate the
 answer against it, allow exactly one refinement pass with optional intent re-route.
@@ -380,7 +380,7 @@ Dependencies: B-01
 
 #### Defect: D-003
 
-- Status: Open
+- Status: Resolved (2026-06-10 — integration conftest stub made type-aware mirroring unit helpers; 8 target tests pass; canonical gate 16 passed/0 failed; full-DSN run 47 passed)
 - Severity: High
 - Repro: `docker compose -f infra/compose/compose.yaml up -d db && DATABASE_URL=<dev> make test-integration`
 - Observed: 8 integration tests fail (`test_ask_user_hitl_variants.py` ×6, `test_prompts_mock_llm.py` ×2) with `AttributeError: 'AgentRoute' object has no attribute 'needs_input'`. Root cause: P71's `set_goal` node consumes one structured-output response before `prepare_ask_user`; the integration conftest stub (`_StructuredOutputFakeModel`) is positional, so the response sequence shifted off-by-one. Unit helpers were made type-aware in P71-B-03 but the integration conftest equivalent was not updated. Discovered at P73-B-03 programme sign-off — after P71 batch sign-off was given.
@@ -393,7 +393,7 @@ Dependencies: B-02
 
 ---
 
-## P72 — Grounded Runtime Evaluator — Not Started
+## P72 — Grounded Runtime Evaluator — Done (2026-06-10)
 
 **Goal:** Reconnect the dead `add_revision_message → call_model_final` self-correction path
 behind a real LLM groundedness verdict, keeping rule-based checks as pre-filter.
@@ -421,7 +421,7 @@ Dependencies: B-01
 
 ---
 
-## P73 — Feedback Learning Loop — Not Started
+## P73 — Feedback Learning Loop — Done (2026-06-10)
 
 **Goal:** Close decide → observe(feedback) → recall: user feedback lands on the decision
 record and changes how past decisions are injected into future context.
@@ -455,3 +455,21 @@ Dependencies: B-01
 | T-469 | Programme sign-off: `make test-unit && make lint && make typecheck && make test-integration && make build && make test-playwright` — all pass (proof-of-execution). | Done |
 
 Dependencies: B-02, P71 Done, P72 Done
+
+
+---
+
+## P74 — Integration Tier Latent Debt — Not Started
+
+**Goal:** When `DATABASE_URL` is fully exported, 14 integration tests fail that the canonical
+`make test-integration` gate never executes (they are skipped without the env var). All 14
+pre-date P71 (verified during D-003 resolution). Causes reported: asyncpg DSN format issue,
+`model_registry=None` constructions in non-registry tests, scenario coverage failures.
+
+### Batch B-01 — Diagnose + fix latent integration failures (Test/Review) — Not Started
+
+| Task | Description | Status |
+|---|---|---|
+| T-470 | Reproduce with dev `DATABASE_URL` exported (`14 failed, 47 passed, 4 skipped` at 2026-06-10 HEAD); classify each failure (env/DSN vs stale fixture vs genuine bug); fix test-side issues; escalate any production bug as a Defect Task. Acceptance: full-DSN `make test-integration` 0 failed. | Not Started |
+
+Dependencies: none

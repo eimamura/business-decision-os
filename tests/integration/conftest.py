@@ -21,31 +21,61 @@ VCR_CONFIG: dict = {  # type: ignore[type-arg]
 # ---------------------------------------------------------------------------
 
 
-class _FakeStructuredInvoker:
-    """Returned by _StructuredOutputFakeModel.with_structured_output().
+class _TypeAwareFakeStructuredInvoker:
+    """Returned by _StructuredOutputFakeModel.with_structured_output(schema).
 
-    Pops and returns Pydantic model instances from the shared response queue
-    in order, one per ainvoke() call.
+    Searches the shared response list for the first item that is an instance of
+    the requested schema class and pops it (type-aware match).  Falls back to
+    positional (first item) when no typed match is found and the head of the
+    list is not a *different* Pydantic model.  Raises LookupError when nothing
+    usable remains — the orchestrator's fail-open try/except catches this for
+    GoalSpec / GoalEvaluation, so existing tests do not need to supply those
+    objects unless they are asserting goal-loop behaviour.
     """
 
-    def __init__(self, responses: list[Any]) -> None:
+    def __init__(self, schema: Any, responses: list[Any]) -> None:
+        self._schema = schema
         self._responses = responses  # shared list reference
 
     async def ainvoke(self, messages: Any, **kwargs: Any) -> Any:
+        import pydantic
+
+        # 1. Search for a typed match.
+        for i, item in enumerate(self._responses):
+            if self._schema is not None and isinstance(item, self._schema):
+                return self._responses.pop(i)
+
+        # 2. No typed match — if the list is non-empty and the first item is NOT a
+        #    different Pydantic model, return it positionally (backward compat).
         if self._responses:
-            return self._responses.pop(0)
-        return None
+            first = self._responses[0]
+            if self._schema is None or not (
+                isinstance(first, pydantic.BaseModel)
+                and not isinstance(first, self._schema)
+            ):
+                return self._responses.pop(0)
+
+        # 3. Nothing usable — raise so that orchestrator fail-open paths can recover.
+        schema_name = getattr(self._schema, "__name__", str(self._schema))
+        raise LookupError(
+            f"_TypeAwareFakeStructuredInvoker: no response of type {schema_name!r} available"
+        )
 
 
 class _StructuredOutputFakeModel:
     """Minimal LangChain-compatible fake that supports with_structured_output().
 
     Pass `structured_responses` as an ordered list of Pydantic model instances
-    (SessionIntent, AskUserDecision, AgentRoute, …) to be returned sequentially
-    when .with_structured_output(Schema).ainvoke(...) is called.
+    (SessionIntent, AskUserDecision, AgentRoute, …).  Each call to
+    .with_structured_output(Schema).ainvoke(...) uses type-aware matching:
+    it searches the list for the first item that is an instance of Schema before
+    falling back to positional order.  New orchestrator nodes that consume types
+    not present in the list (e.g. GoalSpec / GoalEvaluation added in P71) raise
+    LookupError, which the orchestrator's fail-open try/except catches — so
+    existing tests do not need to be updated unless they assert goal-loop behaviour.
 
-    Replicates the StructuredOutputFakeModel from tests/unit/helpers.py so
-    integration tests do not cross tier boundaries.
+    Mirrors StructuredOutputFakeModel from tests/unit/helpers.py so integration
+    tests do not cross tier boundaries.
     """
 
     model = "fake-structured-model"
@@ -53,8 +83,8 @@ class _StructuredOutputFakeModel:
     def __init__(self, structured_responses: list[Any]) -> None:
         self._structured_responses = list(structured_responses)
 
-    def with_structured_output(self, schema: Any) -> "_FakeStructuredInvoker":
-        return _FakeStructuredInvoker(self._structured_responses)
+    def with_structured_output(self, schema: Any) -> "_TypeAwareFakeStructuredInvoker":
+        return _TypeAwareFakeStructuredInvoker(schema, self._structured_responses)
 
     def bind_tools(self, tools: Any) -> "_StructuredOutputFakeModel":
         return self

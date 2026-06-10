@@ -104,9 +104,9 @@ def _make_chat_registry(on_classify: Any = None) -> Any:
     in complete() (which is bypassed since P52 migrated to model_registry).
     """
     from tests.integration.conftest import (
-        _FakeStructuredInvoker,
         _MultiRoleModelRegistry,
         _StructuredOutputFakeModel,
+        _TypeAwareFakeStructuredInvoker,
     )
 
     intent = SessionIntent(
@@ -120,9 +120,9 @@ def _make_chat_registry(on_classify: Any = None) -> Any:
     class _TrackingStructuredModel(_StructuredOutputFakeModel):
         """Wraps _StructuredOutputFakeModel to fire on_classify when SessionIntent is served."""
 
-        def with_structured_output(self, schema: Any) -> "_FakeStructuredInvoker":
+        def with_structured_output(self, schema: Any) -> "_TypeAwareFakeStructuredInvoker":
             # Wrap the invoker to call on_classify when SessionIntent is about to be returned
-            inner = _FakeStructuredInvoker(self._structured_responses)
+            inner = _TypeAwareFakeStructuredInvoker(schema, self._structured_responses)
 
             if on_classify is None:
                 return inner
