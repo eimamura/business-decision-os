@@ -16,6 +16,8 @@ from langgraph.graph import END, START, StateGraph
 from langgraph.types import interrupt
 from typing_extensions import TypedDict
 
+from packages.tools.audit_tool import AuditLogTool
+
 if TYPE_CHECKING:
     from packages.agent.orchestrator import SpecialistResult, SpecialistTask
     from packages.tools.base import ToolContext
@@ -168,6 +170,14 @@ async def _summarize_messages(
 # ---------------------------------------------------------------------------
 
 
+class ToolPlan(TypedDict):
+    """A single step in the pre-call tool plan for complex intents."""
+
+    tool: str
+    purpose: str
+    depends_on: list[str]
+
+
 class AgentState(TypedDict):
     messages: Annotated[list[Any], operator.add]  # accumulates LLMMessage objects
     response: Any | None  # last LLMResponse; None until first call_model run
@@ -184,6 +194,8 @@ class AgentState(TypedDict):
     # History compression — set by compress_history node; call_model prefers this over messages
     # when not None. Uses None sentinel so operator.add accumulation is bypassed.
     compressed_messages: list[Any] | None
+    # Tool plan — set by plan_tools node for complex intents; empty list means no plan
+    tool_plan: list[ToolPlan]
 
 
 # ---------------------------------------------------------------------------
@@ -217,6 +229,91 @@ class AgentRuntime:
     # ------------------------------------------------------------------
     # Node: call_model
     # ------------------------------------------------------------------
+
+    # Intents that benefit from pre-call tool planning (complex, multi-step analysis).
+    _PLAN_TOOLS_INTENTS: frozenset[str] = frozenset(
+        {"domain_analysis", "cross_domain_analysis", "decision_support"}
+    )
+
+    async def _plan_tools_node(
+        self, state: AgentState, config: RunnableConfig
+    ) -> dict[str, Any]:
+        """Pre-call tool planning node (Gap 1 — P64).
+
+        Fires only for complex intents (domain_analysis, cross_domain_analysis,
+        decision_support). Skips when tool_plan is already populated or when
+        the intent is not in _PLAN_TOOLS_INTENTS.
+
+        Asks the LLM to produce a JSON array of ToolPlan objects and stores the
+        result in state["tool_plan"]. The plan is injected as context in the next
+        _call_model_node invocation.
+        """
+        if state.get("tool_plan"):
+            # Already planned — skip
+            return {}
+
+        configurable = config.get("configurable") or {}
+        task: Any = configurable.get("task")
+        intent_category: str = ""
+        if task is not None:
+            intent_category = (
+                (getattr(task, "context_payload", None) or {}).get("intent") or {}
+            ).get("category") or ""
+
+        if intent_category not in self._PLAN_TOOLS_INTENTS:
+            return {}
+
+        if self._lc_model is None:
+            return {}
+
+        llm_tools: list[Any] = configurable.get("llm_tools", [])
+        tool_names = [t.name for t in llm_tools] if llm_tools else []
+        instruction = getattr(task, "instruction", "") if task is not None else ""
+
+        plan_prompt = (
+            "Given the following user question and the available tools, produce a JSON array "
+            "of tool-plan steps. Each step must have: "
+            '"tool" (tool name), "purpose" (one sentence why), '
+            '"depends_on" (list of tool names whose results are needed first, or empty list).\n\n'
+            f"User question:\n{instruction}\n\n"
+            f"Available tools: {tool_names}\n\n"
+            "Respond with ONLY a JSON array, e.g.: "
+            '[{"tool": "list_stockout_risk", "purpose": "enumerate all at-risk SKUs", '
+            '"depends_on": []}]'
+        )
+
+        try:
+            from langchain_core.messages import HumanMessage
+
+            ai_msg = await self._lc_model.ainvoke([HumanMessage(plan_prompt)])
+            raw_content: str = ai_msg.content if isinstance(ai_msg.content, str) else ""
+            # Extract JSON array from the response
+            match = re.search(r"\[.*\]", raw_content, re.DOTALL)
+            if match:
+                parsed: list[Any] = json.loads(match.group(0))
+                tool_plan: list[ToolPlan] = [
+                    ToolPlan(
+                        tool=str(step.get("tool", "")),
+                        purpose=str(step.get("purpose", "")),
+                        depends_on=[str(d) for d in step.get("depends_on", [])],
+                    )
+                    for step in parsed
+                    if isinstance(step, dict) and step.get("tool")
+                ]
+                _log.info(
+                    "plan_tools node produced tool plan",
+                    agent_role=self.role,
+                    intent=intent_category,
+                    plan_steps=len(tool_plan),
+                )
+                return {"tool_plan": tool_plan}
+        except Exception:
+            _log.warning(
+                "plan_tools node failed — continuing without plan",
+                agent_role=self.role,
+                intent=intent_category,
+            )
+        return {}
 
     async def _call_model_node(self, state: AgentState, config: RunnableConfig) -> dict[str, Any]:
         from packages.agent.llm import LLMMessage, LLMToolSpec
@@ -291,6 +388,25 @@ class AgentRuntime:
                                 tool_call_id=tool_call_id,
                             )
                         )
+
+                # Inject tool plan context if plan_tools node produced one
+                tool_plan = state.get("tool_plan")
+                if tool_plan:
+                    lc_msgs.append(
+                        HumanMessage(
+                            "## Tool Plan\n\n" + json.dumps(
+                                [
+                                    {
+                                        "tool": step["tool"],
+                                        "purpose": step["purpose"],
+                                        "depends_on": step["depends_on"],
+                                    }
+                                    for step in tool_plan
+                                ],
+                                indent=2,
+                            )
+                        )
+                    )
 
                 # Convert LLMToolSpec list to OpenAI function-format dicts for bind_tools
                 tool_dicts = [
@@ -561,6 +677,81 @@ class AgentRuntime:
     # Node: execute_tools
     # ------------------------------------------------------------------
 
+    async def _run_single_read_only_tool(
+        self,
+        call: dict[str, Any],
+        ctx: "ToolContext",
+        sse_queue: Any,
+        agent_run_id: str,
+    ) -> tuple[dict[str, Any], Any]:
+        """Execute one non-HITL tool call and return (tool_result_dict, llm_message).
+
+        Returns (result_entry, message) where result_entry is ``{tool_name: output}``
+        and message is an ``LLMMessage(role="tool", ...)`` ready to feed back to the LLM.
+        Raises on tool failure (caller must handle).
+        """
+        from packages.agent.llm import LLMMessage
+        from packages.agent.orchestrator.parsing import json_safe
+
+        tool = self._tool_registry.get(call["name"])
+        if tool is None:
+            return {}, None  # type: ignore[return-value]
+
+        tool_call_id = call["id"]
+        tool_input = call.get("input", {})
+
+        tool_t0 = time.monotonic()
+        if sse_queue is not None:
+            await sse_queue.put(json_safe({
+                "type": "graph_node", "event": "start",
+                "kind": "tool", "name": call["name"],
+                "run_id": tool_call_id, "parent_run_id": agent_run_id,
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "input_summary": str(tool_input)[:200],
+                "status": "ok", "meta": {},
+            }))
+        try:
+            tool_result = await tool.handle(tool_input, ctx)
+            tool_duration_ms = int((time.monotonic() - tool_t0) * 1000)
+            tool_output = tool_result.output
+            executed_query = (
+                tool_output.get("executed_query")
+                if isinstance(tool_output, dict)
+                else None
+            )
+            if sse_queue is not None:
+                output_with_query: dict[str, Any] = (
+                    {**tool_output, "executed_query": executed_query}
+                    if isinstance(tool_output, dict) and executed_query is not None
+                    else (tool_output if isinstance(tool_output, dict) else {})
+                )
+                await sse_queue.put(json_safe({
+                    "type": "graph_node", "event": "end",
+                    "kind": "tool", "name": call["name"],
+                    "run_id": tool_call_id, "parent_run_id": agent_run_id,
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                    "duration_ms": tool_duration_ms,
+                    "status": "ok", "output": output_with_query, "meta": {},
+                }))
+            msg = LLMMessage(
+                role="tool",
+                content=json.dumps(json_safe(tool_output)),
+                tool_call_id=call["id"],
+            )
+            return {call["name"]: tool_output}, msg
+        except Exception as exc:
+            tool_duration_ms = int((time.monotonic() - tool_t0) * 1000)
+            if sse_queue is not None:
+                await sse_queue.put(json_safe({
+                    "type": "graph_node", "event": "end",
+                    "kind": "tool", "name": call["name"],
+                    "run_id": tool_call_id, "parent_run_id": agent_run_id,
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                    "duration_ms": tool_duration_ms,
+                    "status": "error", "error": str(exc), "meta": {},
+                }))
+            raise
+
     async def _execute_tools_node(
         self, state: AgentState, config: RunnableConfig
     ) -> dict[str, Any]:
@@ -581,7 +772,48 @@ class AgentRuntime:
 
         pending_job_id: str | None = state.get("pending_hitl_job_id")
 
+        # Split tool calls into HITL and parallel (non-HITL) groups.
+        # HITL tools must remain sequential; non-HITL tools can be gathered.
+        hitl_calls: list[dict[str, Any]] = []
+        parallel_calls: list[dict[str, Any]] = []
+
         for call in response.tool_calls:
+            tool = self._tool_registry.get(call["name"])
+            if tool is None:
+                continue
+            is_hitl = (
+                getattr(tool, "safety_level", None) in ("hitl", "write")
+                or call["name"] == "request_approval"
+                or (
+                    pending_job_id is not None
+                    and getattr(tool, "safety_level", None) == "hitl"
+                )
+            )
+            if is_hitl:
+                hitl_calls.append(call)
+            else:
+                parallel_calls.append(call)
+
+        # Execute non-HITL tool calls in parallel
+        if parallel_calls:
+            gather_results = await asyncio.gather(
+                *[
+                    self._run_single_read_only_tool(call, ctx, sse_queue, agent_run_id)
+                    for call in parallel_calls
+                ],
+                return_exceptions=True,
+            )
+            for outcome in gather_results:
+                if isinstance(outcome, BaseException):
+                    raise outcome
+                result_entry, msg = outcome  # type: ignore[misc]
+                if result_entry:
+                    new_tool_results.append(result_entry)
+                if msg is not None:
+                    new_messages.append(msg)
+
+        # Execute HITL tool calls sequentially
+        for call in hitl_calls:
             tool = self._tool_registry.get(call["name"])
             if tool is None:
                 continue
@@ -646,59 +878,14 @@ class AgentRuntime:
                 pending_job_id = None
                 continue
 
-            # Normal (non-HITL) tool execution
-            tool_t0 = time.monotonic()
-            if sse_queue is not None:
-                await sse_queue.put(json_safe({
-                    "type": "graph_node", "event": "start",
-                    "kind": "tool", "name": call["name"],
-                    "run_id": tool_call_id, "parent_run_id": agent_run_id,
-                    "timestamp": datetime.now(timezone.utc).isoformat(),
-                    "input_summary": str(tool_input)[:200],
-                    "status": "ok", "meta": {},
-                }))
-            try:
-                tool_result = await tool.handle(tool_input, ctx)
-                tool_duration_ms = int((time.monotonic() - tool_t0) * 1000)
-                tool_output = tool_result.output
-                executed_query = (
-                    tool_output.get("executed_query")
-                    if isinstance(tool_output, dict)
-                    else None
-                )
-                new_tool_results.append({call["name"]: tool_output})
-                if sse_queue is not None:
-                    output_with_query: dict[str, Any] = (
-                        {**tool_output, "executed_query": executed_query}
-                        if isinstance(tool_output, dict) and executed_query is not None
-                        else (tool_output if isinstance(tool_output, dict) else {})
-                    )
-                    await sse_queue.put(json_safe({
-                        "type": "graph_node", "event": "end",
-                        "kind": "tool", "name": call["name"],
-                        "run_id": tool_call_id, "parent_run_id": agent_run_id,
-                        "timestamp": datetime.now(timezone.utc).isoformat(),
-                        "duration_ms": tool_duration_ms,
-                        "status": "ok", "output": output_with_query, "meta": {},
-                    }))
-            except Exception as exc:
-                tool_duration_ms = int((time.monotonic() - tool_t0) * 1000)
-                if sse_queue is not None:
-                    await sse_queue.put(json_safe({
-                        "type": "graph_node", "event": "end",
-                        "kind": "tool", "name": call["name"],
-                        "run_id": tool_call_id, "parent_run_id": agent_run_id,
-                        "timestamp": datetime.now(timezone.utc).isoformat(),
-                        "duration_ms": tool_duration_ms,
-                        "status": "error", "error": str(exc), "meta": {},
-                    }))
-                raise
-
-            new_messages.append(LLMMessage(
-                role="tool",
-                content=json.dumps(json_safe(tool_output)),
-                tool_call_id=call["id"],
-            ))
+            # Non-job HITL tool (e.g. write safety_level) — execute sequentially
+            result_entry, msg = await self._run_single_read_only_tool(
+                call, ctx, sse_queue, agent_run_id
+            )
+            if result_entry:
+                new_tool_results.append(result_entry)
+            if msg is not None:
+                new_messages.append(msg)
 
         return {
             "messages": new_messages,
@@ -840,6 +1027,7 @@ class AgentRuntime:
         sg: StateGraph = StateGraph(AgentState)  # type: ignore[type-arg]
 
         sg.add_node("compress_history", self._compress_history_node)
+        sg.add_node("plan_tools", self._plan_tools_node)
         sg.add_node("call_model", self._call_model_node)
         sg.add_node("prepare_hitl", self._prepare_hitl_node)
         sg.add_node("wait_for_approval", self._wait_for_approval_node)
@@ -847,7 +1035,8 @@ class AgentRuntime:
         sg.add_node("verify_findings", self._verify_findings_node)
 
         sg.add_edge(START, "compress_history")
-        sg.add_edge("compress_history", "call_model")
+        sg.add_edge("compress_history", "plan_tools")
+        sg.add_edge("plan_tools", "call_model")
         sg.add_conditional_edges(
             "call_model",
             self._should_continue,
@@ -956,6 +1145,7 @@ class AgentRuntime:
             "pending_hitl_approval_id": None,
             "pending_hitl_job_id": None,
             "compressed_messages": None,
+            "tool_plan": [],
         }
 
         final_state: dict[str, Any] = await graph.ainvoke(initial_state, config=run_config)
@@ -1015,6 +1205,28 @@ class AgentRuntime:
             if run_status == "blocked"
             else final_state.get("error")
         )
+
+        # Auto-trigger audit log (non-fatal) — AuditLogTool is no longer LLM-callable (P64-B-02)
+        if specialist_status != "failed":
+            try:
+                await AuditLogTool().handle(
+                    {
+                        "event_type": "agent_run_complete",
+                        "payload": {
+                            "session_id": str(ctx.session_id),
+                            "agent_role": self.role,
+                            "status": specialist_status,
+                            "tool_count": len(final_state.get("tool_results") or []),
+                        },
+                    },
+                    ctx,
+                )
+            except Exception:
+                _log.warning(
+                    "AuditLogTool auto-call failed — non-fatal",
+                    agent_role=self.role,
+                    session_id=str(ctx.session_id),
+                )
 
         return SpecialistResult(
             task_id=task.task_id,

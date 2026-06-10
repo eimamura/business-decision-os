@@ -43,6 +43,15 @@ _SYSTEM_PROMPT = (
     " into a final answer — do NOT call any tool again.\n"
     "For exception/delay questions, call get_delayed_supply_orders() to surface"
     " supply chain delays alongside list_stockout_risk for stockout enumeration.\n"
+    "\n"
+    "## Response Format\n\n"
+    "Structure every response using the following four sections:\n\n"
+    "**Situation:** [summary of what the data shows]\n"
+    "**Root Cause:** [identified cause(s) with data evidence]\n"
+    "**Recommended Actions:**\n"
+    "1. [action] — [data rationale]\n"
+    "2. ...\n"
+    "**Confidence Level:** [High / Medium / Low] — [one sentence justification]\n"
 )
 
 _SKILL_HEADER = "\n\n---\n## Analysis Procedures\n\n"
