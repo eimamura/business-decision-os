@@ -623,7 +623,7 @@ Dependencies: B-01
 
 ---
 
-## P78 — Deterministic Routing Completion — Not Started
+## P78 — Deterministic Routing Completion — In Progress
 
 **Goal:** Resolve D-005 by completing P66's routing collapse: construct `AgentRoute`
 deterministically for ALL intent categories (`_INTENT_MODE_MAP` + `agents=["control"]`
@@ -631,11 +631,11 @@ for single_agent modes) and remove the routing LLM call. Saves one LLM round-tri
 non-supply_chain request and eliminates structured-output flakiness as a request-fatal
 failure source. No public interface signature changes (`select_execution_mode` retained).
 
-### Batch B-01 — Deterministic route construction (App Builder) — Not Started
+### Batch B-01 — Deterministic route construction (App Builder) — Done
 
 | Task | Description | Status |
 |---|---|---|
-| T-492 | `session_orchestrator.py`: `_node_select_mode` builds the route deterministically for every category — mode from `route_after_intent(intent)`; `agents=["control"]` iff mode is `single_agent`, else `[]`; `requires_planning=False`, `requires_dag=False`, static rationale. `select_execution_mode` keeps its signature but delegates to the deterministic builder (no LLM call; keep the `make_step("routing")` trace step). Remove `ROUTER_SYSTEM` from prompts.py and its imports. | Not Started |
+| T-492 | `session_orchestrator.py`: `_node_select_mode` builds the route deterministically for every category — mode from `route_after_intent(intent)`; `agents=["control"]` iff mode is `single_agent`, else `[]`; `requires_planning=False`, `requires_dag=False`, static rationale. `select_execution_mode` keeps its signature but delegates to the deterministic builder (no LLM call; keep the `make_step("routing")` trace step). Remove `ROUTER_SYSTEM` from prompts.py and its imports. | Done |
 
 Dependencies: none
 

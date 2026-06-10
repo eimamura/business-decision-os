@@ -35,10 +35,9 @@ from packages.agent.orchestrator.prompts import (
     ASK_USER_SYSTEM,
     EVALUATE_GOAL_SYSTEM,
     INTENT_SYSTEM,
-    ROUTER_SYSTEM,
     SET_GOAL_SYSTEM,
 )
-from packages.agent.orchestrator.routing import validate_route
+from packages.agent.orchestrator.routing import route_after_intent, validate_route
 from packages.agent.orchestrator.runtime import (
     _run_agents_in_order,
     _synthesize_response,
@@ -189,22 +188,18 @@ class SessionOrchestrator:
     async def select_execution_mode(
         self, query: SessionUserQuery, intent: SessionIntent, session_id: UUID
     ) -> AgentRoute:
-        from langchain_core.messages import HumanMessage, SystemMessage
-
         from packages.persistence.agent_steps_repo import make_step
 
         _ = await make_step(str(session_id), "routing")
-        user_content = _json.dumps(
-            {
-                "query": self._query_text(query),
-                "intent": intent.model_dump(),
-            }
+        mode = route_after_intent(intent)
+        agents: list[str] = ["control"] if mode == "single_agent" else []
+        route = AgentRoute(
+            mode=mode,  # type: ignore[arg-type]
+            agents=agents,
+            requires_planning=False,
+            requires_dag=False,
+            rationale=f"Deterministic route for intent '{intent.category}'",
         )
-        model = self._model_registry.get("orchestrator")  # type: ignore[union-attr]
-        result = await model.with_structured_output(AgentRoute).ainvoke(
-            [SystemMessage(ROUTER_SYSTEM), HumanMessage(user_content)]
-        )
-        route = cast(AgentRoute, result)
         self._validate_route(route)
         return route
 
@@ -328,17 +323,6 @@ class SessionOrchestrator:
                 conversation_context=f"User answered: {state['ask_user_answer']}",
                 weight_override_json=query.weight_override_json,
             )
-
-        # Supply chain intent routes deterministically to ControlAgent — no LLM call needed.
-        if intent.category == "supply_chain":
-            route = AgentRoute(
-                mode="single_agent",
-                agents=["control"],
-                requires_planning=False,
-                requires_dag=False,
-                rationale="Supply chain intent: routed to ControlAgent",
-            )
-            return {"route": route}
 
         route = await self.select_execution_mode(query, intent, session_id)
         return {"route": route}

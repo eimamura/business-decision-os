@@ -23,23 +23,6 @@ A supply chain question written in Japanese is NOT "chat" — classify it by con
 If goal_text is present, write it in the same language the user used.
 """
 
-ROUTER_SYSTEM = """\
-You are the router inside SessionOrchestrator. Return ONLY a JSON object:
-{"mode":"...", "agents":["..."], "requires_planning":false, "requires_dag":false, "rationale":"..."}
-
-Modes:
-- direct_chat: no agents (chat and off-topic only)
-- single_agent: exactly one agent (use for all supply chain queries)
-
-Allowed agents:
-control
-
-Cost rules:
-- Use direct_chat for greetings and chitchat ONLY.
-- Use single_agent with control for all supply chain queries.
-"""
-
-
 SET_GOAL_SYSTEM = """\
 You are the goal-derivation step inside SessionOrchestrator for a supply chain
 decision system. Given a user query and any conversation context, derive:
