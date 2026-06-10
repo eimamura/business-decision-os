@@ -29,7 +29,10 @@ async def test_memory_write_and_search(monkeypatch: pytest.MonkeyPatch) -> None:
 
     monkeypatch.setattr(mem_module, "_get_embedding", _stub_embed)
 
-    database_url = os.environ["DATABASE_URL"]
+    raw_url = os.environ["DATABASE_URL"]
+    # asyncpg does not accept SQLAlchemy's `postgresql+asyncpg://` prefix;
+    # normalize it here the same way packages/persistence/db.py does.
+    database_url = raw_url.replace("postgresql+asyncpg://", "postgresql://")
     store = PgVectorMemoryStore(database_url)
 
     mem = Memory(

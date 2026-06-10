@@ -85,11 +85,15 @@ def _tool_call_response(tool_name: str, tool_input: dict[str, Any]) -> LLMRespon
 
 
 class _ScriptedLLMClient:
-    """Returns LLMResponse objects from a queue in insertion order.
+    """Serves synthesis and stream responses for the orchestrator's astream() path.
 
-    Responses are keyed by a substring that must appear in the system message
-    content so that intent-classifier and router calls can be distinguished.
-    When no match is found the next unmatched response is returned.
+    Since P52, intent classification and routing are handled by model_registry
+    (structured output).  _ScriptedLLMClient is now used only for:
+      - _synthesize_response() (astream of final reply text)
+      - run_direct_chat() (astream of reply text for chat intent)
+    The pre-scripted `responses` list is kept for backward compat but is no
+    longer consumed by complete() in the orchestrator-layer calls; it is used
+    by the control model wrapper below.
     """
 
     def __init__(self, responses: list[LLMResponse]) -> None:
@@ -122,6 +126,61 @@ class _ScriptedLLMClient:
             yield LLMStreamEvent(event="text_delta", data=response.text)
 
         return _gen()
+
+    async def astream(self, input: Any, config: Any = None, **kwargs: Any) -> Any:
+        """LangChain-style astream used by _synthesize_response and run_direct_chat."""
+        from types import SimpleNamespace
+
+        yield SimpleNamespace(content="Done.")
+
+
+# ---------------------------------------------------------------------------
+# _ControlFakeModel — LangChain-compatible model for the ControlAgent's _lc_model.
+#
+# AgentRuntime._call_model_node uses:
+#   ai_msg = await bound_model.ainvoke(lc_msgs)
+#   tool_calls = [{"name": tc["name"], "id": tc["id"], "input": tc.get("args", {})}
+#                 for tc in (ai_msg.tool_calls or [])]
+#
+# Responses are popped from a queue in order; each _LLMResponseAdapter adapts
+# the LLMResponse format to the LangChain AIMessage interface expected by runtime.py.
+# ---------------------------------------------------------------------------
+
+
+class _LLMResponseAdapter:
+    """Adapts an LLMResponse to the LangChain AIMessage interface used by AgentRuntime."""
+
+    def __init__(self, llm_response: LLMResponse) -> None:
+        self.content = llm_response.text
+        # AgentRuntime expects tool_calls as {"name", "id", "args"} (LangChain format)
+        self.tool_calls = [
+            {"name": tc["name"], "id": tc["id"], "args": tc.get("input", {})}
+            for tc in (llm_response.tool_calls or [])
+        ]
+        self.usage_metadata: dict[str, Any] = {}
+
+
+class _ControlFakeModel:
+    """LangChain-compatible fake model for the ControlAgent role.
+
+    Pops responses from a queue via ainvoke().  bind_tools() returns self.
+    """
+
+    model = "fake-control-model"
+
+    def __init__(self, responses: list[LLMResponse]) -> None:
+        self._queue = list(responses)
+
+    def bind_tools(self, tools: Any) -> "_ControlFakeModel":
+        return self
+
+    def with_structured_output(self, schema: Any) -> Any:  # for groundedness verifier
+        return self
+
+    async def ainvoke(self, messages: Any, **kwargs: Any) -> Any:
+        if self._queue:
+            return _LLMResponseAdapter(self._queue.pop(0))
+        return _LLMResponseAdapter(_stop("fallback"))
 
 
 # ---------------------------------------------------------------------------
@@ -172,12 +231,62 @@ def _make_registry_with_tool(tool: Any) -> ToolRegistry:
 # ---------------------------------------------------------------------------
 
 
-def _make_orchestrator(llm_client: Any, tool_registry: Any) -> SessionOrchestrator:
+def _make_orchestrator(
+    llm_client: Any,
+    tool_registry: Any,
+    model_registry: Any = None,
+) -> SessionOrchestrator:
     return SessionOrchestrator(
         llm_client=llm_client,
         tool_registry=tool_registry,
         memory_store=StubMemoryStore(),
+        model_registry=model_registry,
     )
+
+
+_PLAN_TOOLS_INTENTS = frozenset({"domain_analysis", "cross_domain_analysis", "decision_support"})
+
+
+def _make_full_registry(
+    intent: Any,
+    agent_route: Any,
+    control_responses: list[LLMResponse],
+    ask_user_decision: Any = None,
+) -> Any:
+    """Build a _MultiRoleModelRegistry with separate orchestrator and control models.
+
+    The orchestrator model serves structured-output calls (SessionIntent,
+    AskUserDecision, AgentRoute) via type-aware matching.  The control model
+    serves the ControlAgent's LangChain ainvoke() calls (tool calls + stops).
+
+    For analytical intents (domain_analysis, cross_domain_analysis, decision_support),
+    AgentRuntime._plan_tools_node() calls _lc_model.ainvoke() once before the main
+    tool-call loop.  A blank stop response is prepended automatically so the plan node
+    fails gracefully and the rest of the queue is consumed correctly.
+
+    Args:
+        intent: SessionIntent instance for classify_intent node.
+        agent_route: AgentRoute instance for select_mode node.
+        control_responses: LLMResponse list for ControlAgent tool execution.
+        ask_user_decision: AskUserDecision for prepare_ask_user (analytical intents);
+            defaults to AskUserDecision(needs_input=False) when not provided.
+    """
+    from packages.agent.orchestrator.models import AskUserDecision
+    from tests.integration.conftest import _MultiRoleModelRegistry, _StructuredOutputFakeModel
+
+    if ask_user_decision is None:
+        ask_user_decision = AskUserDecision(needs_input=False, question=None, suggestions=[])
+
+    orchestrator_model = _StructuredOutputFakeModel([intent, ask_user_decision, agent_route])
+
+    # Prepend an empty plan response for analytical intents so that
+    # AgentRuntime._plan_tools_node() consumes one call without disrupting the queue.
+    all_control_responses = list(control_responses)
+    if intent.category in _PLAN_TOOLS_INTENTS:
+        all_control_responses = [_stop("")] + all_control_responses
+
+    control_model = _ControlFakeModel(all_control_responses)
+    return _MultiRoleModelRegistry({"orchestrator": orchestrator_model, "control": control_model})
 
 
 def _mock_session_repo() -> Any:
@@ -234,18 +343,26 @@ async def test_forecast_intent_invokes_forecast_tool() -> None:
     recorder = _InvocationRecorder()
     forecast_tool = _make_recording_tool("forecast", "write", recorder)
 
-    # LLM script: classify intent → route to single_agent/demand → call forecast tool
-    llm = _ScriptedLLMClient([
-        _stop(text=_intent_json("domain_analysis", goal_text="forecast demand for SKU-001")),
-        _stop(text=_route_json("single_agent", ["demand"])),
+    # ControlAgent LLM sequence: call forecast tool → stop
+    control_responses = [
         _tool_call_response("forecast", {"sku_id": "SKU-001", "horizon_days": 28}),
-        _stop("verify pass"),  # verifier
-        _stop("Forecast completed."),  # synthesize
-        _stop("verify pass"),  # verifier for synthesize
-    ])
+        _stop("Forecast completed."),
+    ]
+    model_registry = _make_full_registry(
+        intent=SessionIntent(
+            category="domain_analysis", confidence=0.95, rationale="test",
+            goal_text="forecast demand for SKU-001",
+        ),
+        agent_route=AgentRoute(
+            mode="single_agent", agents=["control"],
+            requires_planning=False, requires_dag=False, rationale="mock",
+        ),
+        control_responses=control_responses,
+    )
 
+    llm = _ScriptedLLMClient([])
     registry = _make_registry_with_tool(forecast_tool)
-    orchestrator = _make_orchestrator(llm, registry)
+    orchestrator = _make_orchestrator(llm, registry, model_registry=model_registry)
     session_id = uuid4()
     query = SessionUserQuery(text="Forecast demand for SKU-001 for the next 28 days")
 
@@ -284,17 +401,25 @@ async def test_simulate_intent_invokes_simulation_tool() -> None:
 
     sim_input = {"sku_id": "SKU-002", "order_qty": 500.0, "horizon_days": 90}
 
-    llm = _ScriptedLLMClient([
-        _stop(text=_intent_json("domain_analysis", goal_text="simulate inventory for SKU-002")),
-        _stop(text=_route_json("single_agent", ["inventory"])),
+    control_responses = [
         _tool_call_response("simulate_inventory", sim_input),
-        _stop("verify pass"),
         _stop("Simulation completed."),
-        _stop("verify pass"),
-    ])
+    ]
+    model_registry = _make_full_registry(
+        intent=SessionIntent(
+            category="domain_analysis", confidence=0.95, rationale="test",
+            goal_text="simulate inventory for SKU-002",
+        ),
+        agent_route=AgentRoute(
+            mode="single_agent", agents=["control"],
+            requires_planning=False, requires_dag=False, rationale="mock",
+        ),
+        control_responses=control_responses,
+    )
 
+    llm = _ScriptedLLMClient([])
     registry = _make_registry_with_tool(sim_tool)
-    orchestrator = _make_orchestrator(llm, registry)
+    orchestrator = _make_orchestrator(llm, registry, model_registry=model_registry)
     session_id = uuid4()
     query = SessionUserQuery(text="Simulate inventory for SKU-002 with 500 units order")
 
@@ -332,17 +457,25 @@ async def test_optimize_intent_invokes_optimizer_tool() -> None:
 
     opt_input = {"sku_id": "SKU-003", "moq": 100.0, "horizon_days": 90}
 
-    llm = _ScriptedLLMClient([
-        _stop(text=_intent_json("decision_support", goal_text="optimize replenishment SKU-003")),
-        _stop(text=_route_json("single_agent", ["replenishment"])),
+    control_responses = [
         _tool_call_response("optimize_replenishment", opt_input),
-        _stop("verify pass"),
         _stop("Optimization completed."),
-        _stop("verify pass"),
-    ])
+    ]
+    model_registry = _make_full_registry(
+        intent=SessionIntent(
+            category="decision_support", confidence=0.95, rationale="test",
+            goal_text="optimize replenishment SKU-003",
+        ),
+        agent_route=AgentRoute(
+            mode="single_agent", agents=["control"],
+            requires_planning=False, requires_dag=False, rationale="mock",
+        ),
+        control_responses=control_responses,
+    )
 
+    llm = _ScriptedLLMClient([])
     registry = _make_registry_with_tool(opt_tool)
-    orchestrator = _make_orchestrator(llm, registry)
+    orchestrator = _make_orchestrator(llm, registry, model_registry=model_registry)
     session_id = uuid4()
     query = SessionUserQuery(text="Optimize replenishment order for SKU-003")
 
@@ -380,17 +513,26 @@ async def test_query_intent_invokes_nl_query_tool() -> None:
 
     nl_input = {"question": "What are the top 10 SKUs by demand?"}
 
-    llm = _ScriptedLLMClient([
-        _stop(text=_intent_json("lookup", goal_text="top 10 SKUs by demand")),
-        _stop(text=_route_json("single_agent", ["data_engineer"])),
+    # lookup intent is not analytical — no AskUserDecision call is made.
+    control_responses = [
         _tool_call_response("nl_query", nl_input),
-        _stop("verify pass"),
         _stop("Query results returned."),
-        _stop("verify pass"),
-    ])
+    ]
+    model_registry = _make_full_registry(
+        intent=SessionIntent(
+            category="lookup", confidence=0.95, rationale="test",
+            goal_text="top 10 SKUs by demand",
+        ),
+        agent_route=AgentRoute(
+            mode="single_agent", agents=["control"],
+            requires_planning=False, requires_dag=False, rationale="mock",
+        ),
+        control_responses=control_responses,
+    )
 
+    llm = _ScriptedLLMClient([])
     registry = _make_registry_with_tool(nl_tool)
-    orchestrator = _make_orchestrator(llm, registry)
+    orchestrator = _make_orchestrator(llm, registry, model_registry=model_registry)
     session_id = uuid4()
     query = SessionUserQuery(text="What are the top 10 SKUs by demand?")
 
@@ -421,21 +563,29 @@ async def test_query_intent_invokes_nl_query_tool() -> None:
 
 
 @_SKIP_NO_DB
-async def test_chat_intent_without_goal_emits_clarification_event() -> None:
-    """When intent == 'chat' with no goal_text, a clarification_required event
-    must be placed in the SSE queue."""
-    # LLM returns a chat intent with no goal_text
-    llm = _ScriptedLLMClient([
-        _stop(text=_intent_json("chat", goal_text=None)),
-    ])
+async def test_chat_intent_without_goal_emits_response_ready_event() -> None:
+    """When intent == 'chat', the orchestrator routes to direct_chat and emits
+    a response_ready event via the SSE queue.
+
+    Note: clarification_required was removed in P16 (T-117).  chat intent now
+    routes directly to run_direct_chat which emits text_delta + response_ready.
+    """
+    model_registry = make_stub_registry(
+        SessionIntent(category="chat", confidence=0.95, rationale="greeting", goal_text=None),
+        AgentRoute(
+            mode="direct_chat", agents=[],
+            requires_planning=False, requires_dag=False, rationale="chat",
+        ),
+    )
 
     registry = create_tool_registry()
     sse_queue: asyncio.Queue[dict[str, Any]] = asyncio.Queue()
     orchestrator = SessionOrchestrator(
-        llm_client=llm,
+        llm_client=_ScriptedLLMClient([]),
         tool_registry=registry,
         memory_store=StubMemoryStore(),
         sse_queue=sse_queue,
+        model_registry=model_registry,
     )
     session_id = uuid4()
     query = SessionUserQuery(text="hi there")
@@ -462,7 +612,9 @@ async def test_chat_intent_without_goal_emits_clarification_event() -> None:
         events.append(sse_queue.get_nowait())
 
     event_types = [e.get("type") for e in events]
-    assert "clarification_required" in event_types
+    assert "response_ready" in event_types, (
+        f"response_ready missing from SSE events for chat intent; got: {event_types}"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -471,22 +623,47 @@ async def test_chat_intent_without_goal_emits_clarification_event() -> None:
 
 
 @_SKIP_NO_DB
-async def test_hitl_tool_raises_pause_and_session_set_to_awaiting_approval() -> None:
-    """When the LLM requests a hitl tool, prepare_hitl node sets session status to
-    'awaiting_approval' and the graph pauses at wait_for_approval via interrupt()."""
+async def test_hitl_tool_raises_graph_interrupt_for_approval() -> None:
+    """When the LLM requests a hitl tool, the orchestrator raises GraphInterrupt
+    and an 'awaiting_approval' SSE event is emitted to the SSE queue.
+
+    Since P20 (LangGraph-native SSE pipeline), HITL pauses via interrupt() which
+    surfaces as GraphInterrupt from SessionOrchestrator.run().  The DB status is
+    not written to 'awaiting_approval' in the current implementation — only the
+    SSE event is emitted.
+    """
+    from langgraph.errors import GraphInterrupt
+
     approval_id = str(uuid4())
 
     hitl_tool: Any = _make_recording_tool("request_approval", "hitl", _InvocationRecorder())
 
-    # LLM sequence: classify intent → route to single_agent → request hitl tool
-    llm = _ScriptedLLMClient([
-        _stop(text=_intent_json("decision_support", goal_text="approve reorder")),
-        _stop(text=_route_json("single_agent", ["replenishment"])),
+    # ControlAgent requests hitl tool → triggers approval pause
+    control_responses = [
         _tool_call_response("request_approval", {"action_summary": "Reorder 1000 units"}),
-    ])
+    ]
+    model_registry = _make_full_registry(
+        intent=SessionIntent(
+            category="decision_support", confidence=0.95, rationale="test",
+            goal_text="approve reorder",
+        ),
+        agent_route=AgentRoute(
+            mode="single_agent", agents=["control"],
+            requires_planning=False, requires_dag=False, rationale="mock",
+        ),
+        control_responses=control_responses,
+    )
 
+    llm = _ScriptedLLMClient([])
     registry = _make_registry_with_tool(hitl_tool)
-    orchestrator = _make_orchestrator(llm, registry)
+    sse_queue: asyncio.Queue[dict[str, Any]] = asyncio.Queue()
+    orchestrator = SessionOrchestrator(
+        llm_client=llm,
+        tool_registry=registry,
+        memory_store=StubMemoryStore(),
+        sse_queue=sse_queue,
+        model_registry=model_registry,
+    )
     session_id = uuid4()
     query = SessionUserQuery(text="Approve reorder of 1000 units for SKU-004")
 
@@ -511,12 +688,18 @@ async def test_hitl_tool_raises_pause_and_session_set_to_awaiting_approval() -> 
             return_value=mock_approvals_repo,
         ),
     ):
-        response = await orchestrator.run(session_id, query)
+        with pytest.raises(GraphInterrupt):
+            await orchestrator.run(session_id, query)
         await asyncio.sleep(0)
 
-    assert response.requires_approval is True
-    statuses = [c.args[1] for c in mock_repo.update_status.call_args_list]
-    assert "awaiting_approval" in statuses
+    events: list[dict[str, Any]] = []
+    while not sse_queue.empty():
+        events.append(sse_queue.get_nowait())
+
+    event_types = [e.get("type") for e in events]
+    assert "awaiting_approval" in event_types, (
+        f"awaiting_approval SSE event missing; got: {event_types}"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -945,17 +1128,26 @@ async def test_nl_query_tool_invoked() -> None:
 
     nl_input = {"question": "Show raw inventory rows for SKU-001"}
 
-    llm = _ScriptedLLMClient([
-        _stop(text=_intent_json("lookup", goal_text="raw inventory rows for SKU-001")),
-        _stop(text=_route_json("single_agent", ["data_engineer"])),
+    # lookup intent is not analytical — no AskUserDecision call is made.
+    control_responses = [
         _tool_call_response("nl_query", nl_input),
-        _stop("verify pass"),
         _stop("Query returned 10 rows."),
-        _stop("verify pass"),
-    ])
+    ]
+    model_registry = _make_full_registry(
+        intent=SessionIntent(
+            category="lookup", confidence=0.95, rationale="test",
+            goal_text="raw inventory rows for SKU-001",
+        ),
+        agent_route=AgentRoute(
+            mode="single_agent", agents=["control"],
+            requires_planning=False, requires_dag=False, rationale="mock",
+        ),
+        control_responses=control_responses,
+    )
 
+    llm = _ScriptedLLMClient([])
     registry = _make_registry_with_tool(nl_tool)
-    orchestrator = _make_orchestrator(llm, registry)
+    orchestrator = _make_orchestrator(llm, registry, model_registry=model_registry)
     session_id = uuid4()
     query = SessionUserQuery(text="Show raw inventory rows for SKU-001")
 

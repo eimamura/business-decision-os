@@ -462,17 +462,17 @@ Dependencies: B-02, P71 Done, P72 Done
 
 ---
 
-## P74 — Integration Tier Latent Debt — Not Started
+## P74 — Integration Tier Latent Debt — Done (2026-06-10)
 
 **Goal:** When `DATABASE_URL` is fully exported, 14 integration tests fail that the canonical
 `make test-integration` gate never executes (they are skipped without the env var). All 14
 pre-date P71 (verified during D-003 resolution). Causes reported: asyncpg DSN format issue,
 `model_registry=None` constructions in non-registry tests, scenario coverage failures.
 
-### Batch B-01 — Diagnose + fix latent integration failures (Test/Review) — Not Started
+### Batch B-01 — Diagnose + fix latent integration failures (Test/Review) — Done
 
 | Task | Description | Status |
 |---|---|---|
-| T-470 | Reproduce with dev `DATABASE_URL` exported (`14 failed, 47 passed, 4 skipped` at 2026-06-10 HEAD); classify each failure (env/DSN vs stale fixture vs genuine bug); fix test-side issues; escalate any production bug as a Defect Task. Acceptance: full-DSN `make test-integration` 0 failed. | Not Started |
+| T-470 | Reproduce with dev `DATABASE_URL` exported (`14 failed, 47 passed, 4 skipped` at 2026-06-10 HEAD); classify each failure (env/DSN vs stale fixture vs genuine bug); fix test-side issues; escalate any production bug as a Defect Task. Acceptance: full-DSN `make test-integration` 0 failed. | Done |
 
 Dependencies: none

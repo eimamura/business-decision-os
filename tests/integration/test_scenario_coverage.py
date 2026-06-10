@@ -28,6 +28,7 @@ from packages.agent.orchestrator import (
     SessionResponse,
     SessionUserQuery,
 )
+from packages.agent.orchestrator.models import AgentRoute, SessionIntent
 from packages.memory import StubMemoryStore
 from packages.tools.base import ToolRegistry, ToolResult
 
@@ -107,7 +108,12 @@ def _route_json(
 
 
 class _ScriptedLLMClient:
-    """Returns LLMResponse objects from a queue in insertion order."""
+    """Serves synthesis stream responses for the orchestrator's astream() path.
+
+    Since P52, intent classification and routing are handled by model_registry
+    (structured output).  _ScriptedLLMClient is now used only for astream() calls
+    from _synthesize_response() and run_direct_chat().
+    """
 
     def __init__(self, responses: list[LLMResponse]) -> None:
         self._queue = list(responses)
@@ -139,6 +145,61 @@ class _ScriptedLLMClient:
             yield LLMStreamEvent(event="text_delta", data=response.text)
 
         return _gen()
+
+    async def astream(self, input: Any, config: Any = None, **kwargs: Any) -> Any:
+        """LangChain-style astream used by _synthesize_response and run_direct_chat."""
+        from types import SimpleNamespace
+
+        yield SimpleNamespace(content="Done.")
+
+
+# ---------------------------------------------------------------------------
+# _ControlFakeModel — LangChain-compatible model for the ControlAgent's _lc_model.
+#
+# AgentRuntime._call_model_node uses:
+#   ai_msg = await bound_model.ainvoke(lc_msgs)
+#   tool_calls = [{"name": tc["name"], "id": tc["id"], "input": tc.get("args", {})}
+#                 for tc in (ai_msg.tool_calls or [])]
+#
+# Responses are popped from a queue in order; each _LLMResponseAdapter adapts
+# the LLMResponse format to the LangChain AIMessage interface expected by runtime.py.
+# ---------------------------------------------------------------------------
+
+
+class _LLMResponseAdapter:
+    """Adapts an LLMResponse to the LangChain AIMessage interface used by AgentRuntime."""
+
+    def __init__(self, llm_response: LLMResponse) -> None:
+        self.content = llm_response.text
+        # AgentRuntime expects tool_calls as {"name", "id", "args"} (LangChain format)
+        self.tool_calls = [
+            {"name": tc["name"], "id": tc["id"], "args": tc.get("input", {})}
+            for tc in (llm_response.tool_calls or [])
+        ]
+        self.usage_metadata: dict[str, Any] = {}
+
+
+class _ControlFakeModel:
+    """LangChain-compatible fake model for the ControlAgent role.
+
+    Pops responses from a queue via ainvoke().  bind_tools() returns self.
+    """
+
+    model = "fake-control-model"
+
+    def __init__(self, responses: list[LLMResponse]) -> None:
+        self._queue = list(responses)
+
+    def bind_tools(self, tools: Any) -> "_ControlFakeModel":
+        return self
+
+    def with_structured_output(self, schema: Any) -> Any:  # for groundedness verifier
+        return self
+
+    async def ainvoke(self, messages: Any, **kwargs: Any) -> Any:
+        if self._queue:
+            return _LLMResponseAdapter(self._queue.pop(0))
+        return _LLMResponseAdapter(_stop("fallback"))
 
 
 # ---------------------------------------------------------------------------
@@ -187,12 +248,62 @@ def _make_registry_with_tool(tool: Any) -> ToolRegistry:
 # ---------------------------------------------------------------------------
 
 
-def _make_orchestrator(llm_client: Any, tool_registry: Any) -> SessionOrchestrator:
+def _make_orchestrator(
+    llm_client: Any,
+    tool_registry: Any,
+    model_registry: Any = None,
+) -> SessionOrchestrator:
     return SessionOrchestrator(
         llm_client=llm_client,
         tool_registry=tool_registry,
         memory_store=StubMemoryStore(),
+        model_registry=model_registry,
     )
+
+
+_PLAN_TOOLS_INTENTS = frozenset({"domain_analysis", "cross_domain_analysis", "decision_support"})
+
+
+def _make_full_registry(
+    intent: Any,
+    agent_route: Any,
+    control_responses: list[LLMResponse],
+    ask_user_decision: Any = None,
+) -> Any:
+    """Build a _MultiRoleModelRegistry with separate orchestrator and control models.
+
+    The orchestrator model serves structured-output calls (SessionIntent,
+    AskUserDecision, AgentRoute) via type-aware matching.  The control model
+    serves the ControlAgent's LangChain ainvoke() calls (tool calls + stops).
+
+    For analytical intents (domain_analysis, cross_domain_analysis, decision_support),
+    AgentRuntime._plan_tools_node() calls _lc_model.ainvoke() once before the main
+    tool-call loop.  A blank stop response is prepended automatically so the plan node
+    fails gracefully and the rest of the queue is consumed correctly.
+
+    Args:
+        intent: SessionIntent instance for classify_intent node.
+        agent_route: AgentRoute instance for select_mode node.
+        control_responses: LLMResponse list for ControlAgent tool execution.
+        ask_user_decision: AskUserDecision for prepare_ask_user (analytical intents);
+            defaults to AskUserDecision(needs_input=False) when not provided.
+    """
+    from packages.agent.orchestrator.models import AskUserDecision
+    from tests.integration.conftest import _MultiRoleModelRegistry, _StructuredOutputFakeModel
+
+    if ask_user_decision is None:
+        ask_user_decision = AskUserDecision(needs_input=False, question=None, suggestions=[])
+
+    orchestrator_model = _StructuredOutputFakeModel([intent, ask_user_decision, agent_route])
+
+    # Prepend an empty plan response for analytical intents so that
+    # AgentRuntime._plan_tools_node() consumes one call without disrupting the queue.
+    all_control_responses = list(control_responses)
+    if intent.category in _PLAN_TOOLS_INTENTS:
+        all_control_responses = [_stop("")] + all_control_responses
+
+    control_model = _ControlFakeModel(all_control_responses)
+    return _MultiRoleModelRegistry({"orchestrator": orchestrator_model, "control": control_model})
 
 
 def _mock_session_repo() -> Any:
@@ -215,7 +326,7 @@ def _mock_agent_steps_repo() -> Any:
 
 @_SKIP_NO_DB
 async def test_catalog_intent_invokes_data_catalog_search_tool() -> None:
-    """When intent is 'lookup' routed to data_engineer and LLM requests
+    """When intent is 'lookup' routed to control and LLM requests
     'data_catalog_search', the DataCatalogSearchTool handle() must be called.
 
     Prompt: "利用可能なデータテーブル一覧をカタログから検索して"
@@ -223,17 +334,26 @@ async def test_catalog_intent_invokes_data_catalog_search_tool() -> None:
     recorder = _InvocationRecorder()
     catalog_tool = _make_recording_tool("data_catalog_search", "read_only", recorder)
 
-    llm = _ScriptedLLMClient([
-        _stop(text=_intent_json("lookup", goal_text="list available data tables from catalog")),
-        _stop(text=_route_json("single_agent", ["data_engineer"])),
+    # lookup is not analytical — no AskUserDecision call in prepare_ask_user.
+    control_responses = [
         _tool_call_response("data_catalog_search", {"keyword": ""}),
-        _stop("verify pass"),
         _stop("Catalog search returned available tables."),
-        _stop("verify pass"),
-    ])
+    ]
+    model_registry = _make_full_registry(
+        intent=SessionIntent(
+            category="lookup", confidence=0.95, rationale="test",
+            goal_text="list available data tables from catalog",
+        ),
+        agent_route=AgentRoute(
+            mode="single_agent", agents=["control"],
+            requires_planning=False, requires_dag=False, rationale="mock",
+        ),
+        control_responses=control_responses,
+    )
 
+    llm = _ScriptedLLMClient([])
     registry = _make_registry_with_tool(catalog_tool)
-    orchestrator = _make_orchestrator(llm, registry)
+    orchestrator = _make_orchestrator(llm, registry, model_registry=model_registry)
     session_id = uuid4()
     query = SessionUserQuery(text="利用可能なデータテーブル一覧をカタログから検索して")
 
@@ -266,7 +386,7 @@ async def test_catalog_intent_invokes_data_catalog_search_tool() -> None:
 
 @_SKIP_NO_DB
 async def test_schema_intent_invokes_table_schema_reader_tool() -> None:
-    """When intent is 'lookup' routed to data_engineer and LLM requests
+    """When intent is 'lookup' routed to control and LLM requests
     'table_schema_reader', the TableSchemaReaderTool handle() must be called.
 
     Prompt: "inventoryテーブルのスキーマを確認して"
@@ -274,17 +394,25 @@ async def test_schema_intent_invokes_table_schema_reader_tool() -> None:
     recorder = _InvocationRecorder()
     schema_tool = _make_recording_tool("table_schema_reader", "read_only", recorder)
 
-    llm = _ScriptedLLMClient([
-        _stop(text=_intent_json("lookup", goal_text="check schema of inventory table")),
-        _stop(text=_route_json("single_agent", ["data_engineer"])),
+    control_responses = [
         _tool_call_response("table_schema_reader", {"table_name": "inventory_items"}),
-        _stop("verify pass"),
         _stop("Inventory table has 12 columns."),
-        _stop("verify pass"),
-    ])
+    ]
+    model_registry = _make_full_registry(
+        intent=SessionIntent(
+            category="lookup", confidence=0.95, rationale="test",
+            goal_text="check schema of inventory table",
+        ),
+        agent_route=AgentRoute(
+            mode="single_agent", agents=["control"],
+            requires_planning=False, requires_dag=False, rationale="mock",
+        ),
+        control_responses=control_responses,
+    )
 
+    llm = _ScriptedLLMClient([])
     registry = _make_registry_with_tool(schema_tool)
-    orchestrator = _make_orchestrator(llm, registry)
+    orchestrator = _make_orchestrator(llm, registry, model_registry=model_registry)
     session_id = uuid4()
     query = SessionUserQuery(text="inventoryテーブルのスキーマを確認して")
 
@@ -317,7 +445,7 @@ async def test_schema_intent_invokes_table_schema_reader_tool() -> None:
 
 @_SKIP_NO_DB
 async def test_data_quality_intent_invokes_data_quality_checker_tool() -> None:
-    """When intent is 'lookup' routed to data_engineer and LLM requests
+    """When intent is 'lookup' routed to control and LLM requests
     'data_quality_checker', the DataQualityCheckerTool handle() must be called.
 
     Prompt: "inventoryテーブルのデータ品質をチェックして問題があれば報告して"
@@ -325,17 +453,25 @@ async def test_data_quality_intent_invokes_data_quality_checker_tool() -> None:
     recorder = _InvocationRecorder()
     quality_tool = _make_recording_tool("data_quality_checker", "read_only", recorder)
 
-    llm = _ScriptedLLMClient([
-        _stop(text=_intent_json("lookup", goal_text="check data quality of inventory table")),
-        _stop(text=_route_json("single_agent", ["data_engineer"])),
+    control_responses = [
         _tool_call_response("data_quality_checker", {"table_name": "inventory_items"}),
-        _stop("verify pass"),
         _stop("Data quality check completed; no critical issues found."),
-        _stop("verify pass"),
-    ])
+    ]
+    model_registry = _make_full_registry(
+        intent=SessionIntent(
+            category="lookup", confidence=0.95, rationale="test",
+            goal_text="check data quality of inventory table",
+        ),
+        agent_route=AgentRoute(
+            mode="single_agent", agents=["control"],
+            requires_planning=False, requires_dag=False, rationale="mock",
+        ),
+        control_responses=control_responses,
+    )
 
+    llm = _ScriptedLLMClient([])
     registry = _make_registry_with_tool(quality_tool)
-    orchestrator = _make_orchestrator(llm, registry)
+    orchestrator = _make_orchestrator(llm, registry, model_registry=model_registry)
     session_id = uuid4()
     query = SessionUserQuery(text="inventoryテーブルのデータ品質をチェックして問題があれば報告して")
 
@@ -368,7 +504,7 @@ async def test_data_quality_intent_invokes_data_quality_checker_tool() -> None:
 
 @_SKIP_NO_DB
 async def test_multi_sku_forecast_intent_invokes_forecast_tool_with_broad_params() -> None:
-    """When intent is 'domain_analysis' routed to demand and LLM requests
+    """When intent is 'domain_analysis' routed to control and LLM requests
     'forecast' without a specific SKU and horizon_days=90, the ForecastTool
     handle() must be called.
 
@@ -380,17 +516,25 @@ async def test_multi_sku_forecast_intent_invokes_forecast_tool_with_broad_params
     # No sku_id (all SKUs), horizon_days=90 (3 months)
     forecast_input: dict[str, Any] = {"horizon_days": 90}
 
-    llm = _ScriptedLLMClient([
-        _stop(text=_intent_json("domain_analysis", goal_text="forecast demand for all SKUs for 3 months")),
-        _stop(text=_route_json("single_agent", ["demand"])),
+    control_responses = [
         _tool_call_response("forecast", forecast_input),
-        _stop("verify pass"),
         _stop("Multi-SKU forecast completed for 90-day horizon."),
-        _stop("verify pass"),
-    ])
+    ]
+    model_registry = _make_full_registry(
+        intent=SessionIntent(
+            category="domain_analysis", confidence=0.95, rationale="test",
+            goal_text="forecast demand for all SKUs for 3 months",
+        ),
+        agent_route=AgentRoute(
+            mode="single_agent", agents=["control"],
+            requires_planning=False, requires_dag=False, rationale="mock",
+        ),
+        control_responses=control_responses,
+    )
 
+    llm = _ScriptedLLMClient([])
     registry = _make_registry_with_tool(forecast_tool)
-    orchestrator = _make_orchestrator(llm, registry)
+    orchestrator = _make_orchestrator(llm, registry, model_registry=model_registry)
     session_id = uuid4()
     query = SessionUserQuery(text="全SKUの今後3ヶ月の需要予測を実行してCSVで出力して")
 
@@ -429,7 +573,7 @@ async def test_multi_sku_forecast_intent_invokes_forecast_tool_with_broad_params
 
 @_SKIP_NO_DB
 async def test_scenario_comparison_invokes_simulate_inventory_at_least_once() -> None:
-    """When intent is 'domain_analysis' routed to inventory and LLM requests
+    """When intent is 'domain_analysis' routed to control and LLM requests
     'simulate_inventory' (simulating two patterns for comparison), the
     SimulationTool handle() must be called at least once.
 
@@ -443,29 +587,27 @@ async def test_scenario_comparison_invokes_simulate_inventory_at_least_once() ->
         "order_qty": 200.0,
         "horizon_days": 90,
     }
-    optimized_params: dict[str, Any] = {
-        "sku_id": "SKU-001",
-        "order_qty": 350.0,
-        "horizon_days": 90,
-    }
 
-    # Script the LLM to call simulate_inventory twice (current + optimized)
-    llm = _ScriptedLLMClient([
-        _stop(text=_intent_json(
-            "domain_analysis",
-            goal_text="compare current vs optimized simulation parameters",
-        )),
-        _stop(text=_route_json("single_agent", ["inventory"])),
+    # Script the control model to call simulate_inventory at least once
+    control_responses = [
         _tool_call_response("simulate_inventory", current_params),
-        _stop("verify pass"),
-        _tool_call_response("simulate_inventory", optimized_params),
-        _stop("verify pass"),
         _stop("Scenario comparison complete: current vs optimized parameters."),
-        _stop("verify pass"),
-    ])
+    ]
+    model_registry = _make_full_registry(
+        intent=SessionIntent(
+            category="domain_analysis", confidence=0.95, rationale="test",
+            goal_text="compare current vs optimized simulation parameters",
+        ),
+        agent_route=AgentRoute(
+            mode="single_agent", agents=["control"],
+            requires_planning=False, requires_dag=False, rationale="mock",
+        ),
+        control_responses=control_responses,
+    )
 
+    llm = _ScriptedLLMClient([])
     registry = _make_registry_with_tool(sim_tool)
-    orchestrator = _make_orchestrator(llm, registry)
+    orchestrator = _make_orchestrator(llm, registry, model_registry=model_registry)
     session_id = uuid4()
     query = SessionUserQuery(
         text="現在パラメータと最適化パラメータで2パターンのシミュレーションを比較して"

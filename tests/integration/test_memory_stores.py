@@ -34,11 +34,35 @@ async def test_working_memory_store_write_and_search() -> None:
     session_id = str(uuid.uuid4())
     store = WorkingMemoryStore()
 
-    await store.write({"session_id": session_id, "content": "test tool result"})
-    results = await store.search(f"session:{session_id}", k=5)
+    # agent_steps has a FK to decision_sessions; insert a parent row first,
+    # then clean up both rows at the end regardless of outcome.
+    from packages.persistence.db import get_pool
 
-    assert len(results) >= 1
-    assert results[0]["content"] == "test tool result"
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        await conn.execute(
+            "INSERT INTO decision_sessions (id, goal, status) VALUES ($1, $2, $3)",
+            uuid.UUID(session_id),
+            "test goal",
+            "pending",
+        )
+
+    try:
+        await store.write({"session_id": session_id, "content": "test tool result"})
+        results = await store.search(f"session:{session_id}", k=5)
+
+        assert len(results) >= 1
+        assert results[0]["content"] == "test tool result"
+    finally:
+        async with pool.acquire() as conn:
+            await conn.execute(
+                "DELETE FROM agent_steps WHERE session_id = $1",
+                uuid.UUID(session_id),
+            )
+            await conn.execute(
+                "DELETE FROM decision_sessions WHERE id = $1",
+                uuid.UUID(session_id),
+            )
 
 
 @_SKIP_NO_DB
