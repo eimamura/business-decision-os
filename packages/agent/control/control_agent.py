@@ -52,6 +52,9 @@ _SYSTEM_PROMPT = (
     "1. [action] — [data rationale]\n"
     "2. ...\n"
     "**Confidence Level:** [High / Medium / Low] — [one sentence justification]\n"
+    "\n"
+    "When past decisions are annotated with [user feedback: negative], treat those approaches"
+    " as ineffective and avoid repeating them in your current response.\n"
 )
 
 _SKILL_HEADER = "\n\n---\n## Analysis Procedures\n\n"
@@ -237,7 +240,13 @@ class ControlAgent(AgentBasedSpecialist):
                                 content_repr = raw_content
                         else:
                             content_repr = json.dumps(raw_content)
-                        decision_lines.append(f"Decision {idx}: {content_repr}")
+                        line = f"Decision {idx}: {content_repr}"
+                        outcome = record.get("outcome")
+                        if outcome == 1:
+                            line += " [user feedback: positive]"
+                        elif outcome == -1:
+                            line += " [user feedback: negative]"
+                        decision_lines.append(line)
                     past_block = _PAST_DECISIONS_HEADER + "\n".join(decision_lines)
                     task = task.model_copy(
                         update={"instruction": task.instruction + past_block}

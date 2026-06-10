@@ -82,6 +82,52 @@ class DecisionMemoryStore:
             agent_role,
         )
 
+    async def set_latest_outcome(self, session_id: str, outcome: int) -> bool:
+        """Set the outcome column on the most recent decision record for the session.
+
+        Parameters
+        ----------
+        session_id:
+            UUID string of the owning session.
+        outcome:
+            Must be 1 (positive) or -1 (negative). Raises ValueError otherwise.
+
+        Returns
+        -------
+        True if a row was updated, False if no decision record exists for the session.
+        """
+        if outcome not in (1, -1):
+            raise ValueError(f"outcome must be 1 or -1; got {outcome!r}")
+
+        pool = await self._get_pool()
+        async with pool.acquire() as conn:
+            result = await conn.execute(
+                """
+                UPDATE decision_log
+                SET outcome = $1
+                WHERE id = (
+                    SELECT id
+                    FROM decision_log
+                    WHERE session_id = $2::uuid
+                      AND record_type = 'decision'
+                    ORDER BY created_at DESC
+                    LIMIT 1
+                )
+                """,
+                outcome,
+                session_id,
+            )
+
+        # asyncpg returns a string like "UPDATE 1" or "UPDATE 0"
+        updated: bool = str(result).endswith("1")
+        _log.debug(
+            "DecisionMemoryStore.set_latest_outcome: session_id=%s outcome=%s updated=%s",
+            session_id,
+            outcome,
+            updated,
+        )
+        return updated
+
     async def search(self, query: str, k: int = 5) -> list[dict[str, Any]]:
         """Return the k most recent decision_log rows matching the query.
 
@@ -91,7 +137,7 @@ class DecisionMemoryStore:
         If session_id cannot be parsed from the query, returns [] without error.
 
         Returned dicts contain all column values:
-          id, session_id, record_type, content_json, agent_role, created_at.
+          id, session_id, record_type, content_json, agent_role, created_at, outcome.
         """
         session_id: str | None = None
         record_type_filter: str | None = None
@@ -116,7 +162,8 @@ class DecisionMemoryStore:
             if record_type_filter is not None:
                 rows = await conn.fetch(
                     """
-                    SELECT id, session_id, record_type, content_json, agent_role, created_at
+                    SELECT id, session_id, record_type, content_json, agent_role, created_at,
+                           outcome
                     FROM decision_log
                     WHERE session_id = $1::uuid
                       AND record_type = $2
@@ -130,7 +177,8 @@ class DecisionMemoryStore:
             else:
                 rows = await conn.fetch(
                     """
-                    SELECT id, session_id, record_type, content_json, agent_role, created_at
+                    SELECT id, session_id, record_type, content_json, agent_role, created_at,
+                           outcome
                     FROM decision_log
                     WHERE session_id = $1::uuid
                     ORDER BY created_at DESC

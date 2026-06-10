@@ -26,6 +26,7 @@ from packages.agent.history import compress_history
 from packages.agent.orchestrator import SessionResponse, SessionUserQuery
 from packages.agent.rate_limiter import RateLimitExceeded, check_rate_limit
 from packages.memory import ConversationTurn
+from packages.memory.decision import DecisionMemoryStore
 from packages.persistence.llm_usage_repo import LlmUsageRepository
 from packages.persistence.session_events_repo import SessionEventRepository
 from packages.persistence.sessions_repo import DecisionSessionRepository
@@ -253,6 +254,16 @@ async def set_message_feedback(
         if "DATABASE_URL" in str(e):
             return
         raise HTTPException(status_code=500, detail="Internal error")
+
+    # Best-effort: propagate feedback to the latest decision record for this session.
+    # A failure here must never change the endpoint's 204 response or 404 path.
+    try:
+        await DecisionMemoryStore().set_latest_outcome(session_id, body.feedback)
+    except Exception:
+        _log.warning(
+            "set_latest_outcome failed for session %s (non-fatal)",
+            session_id,
+        )
 
 
 @router.post("/{session_id}/messages")
