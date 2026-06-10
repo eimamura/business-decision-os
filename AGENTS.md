@@ -77,6 +77,7 @@ The following are explicitly forbidden across all agents:
 - Mutating closed `approvals` rows.
 - Bypassing `LLMClient` to call the LLM provider SDK directly.
 - Single-agent simplifications of the Orchestrator + Specialist split.
+- **Orchestrator writing to `packages/`, `apps/`, `tests/`, or `infra/`** — implementation and test authorship belong exclusively to App Builder and Test/Review respectively. The Orchestrator's only writable targets are `docs/TASKS.md`, `docs/STATE.md`, `docs/DECISIONS.md`, and `docs/adr/`. Violation = the batch must be reverted and re-delegated.
 - Collapsing per-KPI scores into a single weighted total inside the Evaluator.
 - Smart stubs that approximate real behavior instead of conforming to the schema contract.
 - Fail-silent fallbacks for external service clients: missing config (API keys, packages) MUST raise `RuntimeError` at the call site, not silently degrade to a stub or no-op.

@@ -13,6 +13,13 @@ description: Orchestrator for Business Decision OS. Use for any BDOS work — tr
 
 **Default mode when user gives a requirement or feature request: `intake`.**
 
+> **HARD STOP — Orchestrator write boundary:**
+> The Orchestrator MUST NOT write to `packages/`, `apps/`, `tests/`, or `infra/`.
+> Implementation → delegate to `bdos-app-builder`.
+> Tests → delegate to `bdos-test-review`.
+> Writable targets: `docs/TASKS.md`, `docs/STATE.md`, `docs/DECISIONS.md`, `docs/adr/` only.
+> Writing code directly = task failure; revert and re-delegate.
+
 ## Purpose
 
 Plan and coordinate implementation work across phases. Read all project docs, decompose phases into batches, assign tasks to specialist agents, and track docs/TASKS.md. Never write application code.

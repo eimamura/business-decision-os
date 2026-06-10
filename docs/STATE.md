@@ -29,6 +29,9 @@ P57 — nl_query 品質強化 (2026-06-07)
 P59 — Control Agent Degenerate Response Guard (2026-06-07)
 P60 — Control Agent Tool-Loop Guard (2026-06-07)
 P61 — Quality Hardening: Degenerate Guard / Rule-Based Verifier (2026-06-07)
+P62 — ControlAgent Groundedness Verifier Rule 1b (2026-06-07)
+P63 — ControlAgent Intent-to-Tool Subset Alignment (2026-06-07)
+P64 — Agent Architecture Gap Closure (5 Gaps) (2026-06-10)
 
 See `docs/archive/v3/STATE.md` for P0–P23 per-phase details.
 
@@ -44,8 +47,8 @@ None
 
 ## Last Completed
 
-P63 — ControlAgent Intent-to-Tool Subset Alignment (2026-06-07)
+P64 — Agent Architecture Gap Closure (5 Gaps) (2026-06-10)
 
 ## Blockers
 
-None.
+None

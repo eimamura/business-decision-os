@@ -65,6 +65,9 @@ Full task history for P0–P23 is archived at `docs/archive/v3/TASKS.md`.
 | P59 — Control Agent Degenerate Response Guard | T-383–T-387 | 2026-06-07 |
 | P60 — Control Agent Tool-Loop Guard | T-388–T-394 | 2026-06-07 |
 | P61 — Quality Hardening: Degenerate Guard / Rule-Based Verifier | T-395–T-400 | 2026-06-07 |
+| P62 — ControlAgent Groundedness Verifier Rule 1b | T-401–T-406 | 2026-06-07 |
+| P63 — ControlAgent Intent-to-Tool Subset Alignment | T-407 (B-01 only) | 2026-06-07 |
+| P64 — Agent Architecture Gap Closure (5 Gaps) | T-407–T-420 | 2026-06-10 |
 
 > **Design Realignment Note (2026-06-05):** P29–P36 built Specialist Domain Agents (DemandAgent,
 > InventoryAgent, SupplyPlanningAgent, FinanceImpactAgent, SopAgent) as independent runtime units.
@@ -1547,4 +1550,97 @@ Dependencies: P62 Done
 | T-406 | `make test-unit && make lint && make typecheck` — all pass | Done |
 
 Dependencies: none
+
+---
+
+## P64 — Agent Architecture Gap Closure (5 Gaps)
+
+**Goal:** Close all 5 gaps documented in `docs/AGENT_ARCHITECTURE.md`:
+(1) add `plan_tools` node for complex intents,
+(2) parallelize independent tool calls with `asyncio.gather()`,
+(3) enforce structured response format in `_SYSTEM_PROMPT`,
+(4) make `_ROLE_TOOL_ALLOWLIST["control"]` auto-derived from `_INTENT_TOOL_SUBSET`,
+(5) remove `write_audit_log`, `job_dispatch`, `train_forecast` from LLM-callable registry.
+
+Dependencies: P63 Done
+
+### Batch B-01 — Gap 3: Response format constraint in _SYSTEM_PROMPT (App Builder) — Done
+
+Highest ROI. Add a structured output format section to `ControlAgent._SYSTEM_PROMPT` that
+constrains responses to: Situation → Root Cause → Recommended Actions (numbered, data-backed)
+→ Confidence Level. This is purely additive to the existing system prompt.
+
+| Task | Description | Status |
+|---|---|---|
+| T-407 | `packages/agent/control/control_agent.py` — append a `## Response Format` section to `_SYSTEM_PROMPT` after the existing tool-use block. Format: `"**Situation:** [summary of what the data shows]\n**Root Cause:** [identified cause(s) with data evidence]\n**Recommended Actions:**\n1. [action] — [data rationale]\n2. ...\n**Confidence Level:** [High / Medium / Low] — [one sentence justification]"`. Section must appear after the tool-use priority block and before any trailing whitespace. | Done |
+
+Dependencies: none
+
+### Batch B-02 — Gap 5: Remove write_audit_log / job_dispatch / train_forecast from registry (App Builder) — Done
+
+Remove three tools from `create_tool_registry()` so they are no longer LLM-callable. Wire
+`AuditLogTool` into `AgentRuntime.run()` as an automatic post-completion step. Keep
+`AuditLogTool`, `JobDispatchTool`, `TrainForecastTool` class files intact — they are still
+used by other paths.
+
+| Task | Description | Status |
+|---|---|---|
+| T-408 | `packages/tools/__init__.py` — remove `AuditLogTool()`, `JobDispatchTool()`, and `TrainForecastTool(runner=runner)` from `create_tool_registry()`; keep all three imports and `__all__` entries intact (classes still usable, just not in the registry) | Done |
+| T-409 | `packages/tools/base.py` — remove `"write_audit_log"` from all `_ROLE_TOOL_ALLOWLIST` entries that contain it (currently `"evaluator"`); remove `"job_dispatch"` from `"orchestrator"` and `"simulation_optimizer"`; remove `"train_forecast"` from `"demand"` | Done |
+| T-410 | `packages/agent/runtime.py` — in `run()`, after the final assembly block (after `specialist_status` and output are set and `run_status != "failed"`), call `await AuditLogTool().handle({"session_id": task.session_id, "agent_role": self.role, "status": specialist_status, "tool_count": len(final_state.get("tool_results") or [])}, tool_ctx)` inside a `try/except Exception` block that logs a warning on failure (non-fatal); import `AuditLogTool` from `packages.tools.audit_tool` at the top of the file | Done |
+
+Dependencies: B-01
+
+### Batch B-03 — Gap 4: Auto-derive _ROLE_TOOL_ALLOWLIST["control"] from _INTENT_TOOL_SUBSET (App Builder) — Done
+
+Replace the hand-maintained `_ROLE_TOOL_ALLOWLIST["control"]` list in `packages/tools/base.py`
+with a computed union of all tools in `_INTENT_TOOL_SUBSET`, making Layer 3 the single source
+of truth. The union is computed at import time to avoid circular imports.
+
+| Task | Description | Status |
+|---|---|---|
+| T-411 | `packages/tools/base.py` — replace the static `"control": [...]` entry in `_ROLE_TOOL_ALLOWLIST` with a sentinel `"control": []` placeholder that is filled at the bottom of the module after `_ROLE_TOOL_ALLOWLIST` is defined, using a dedicated helper: `def _build_control_allowlist() -> list[str]`. The helper imports `_INTENT_TOOL_SUBSET` from `packages.agent.control.control_agent` inside the function body (deferred import to avoid circular dependency), unions all tool lists, and returns the sorted unique list. Call it once: `_ROLE_TOOL_ALLOWLIST["control"] = _build_control_allowlist()`. | Done |
+
+Dependencies: B-02
+
+### Batch B-04 — Gap 2: Parallelize independent tool calls with asyncio.gather() (App Builder) — Done
+
+Replace the sequential `for` loop in `_execute_tools_node` in `packages/agent/runtime.py`
+with `asyncio.gather()`. HITL tools (those with `safety_level != "read_only"` or name ==
+`"request_approval"`) must remain sequential (called one at a time and awaited before
+proceeding). Non-HITL tools in the same LLM response can be gathered.
+
+| Task | Description | Status |
+|---|---|---|
+| T-412 | `packages/agent/runtime.py` — in `_execute_tools_node()`, split `response.tool_calls` into `hitl_calls` (safety_level in ("hitl", "write") or name == "request_approval") and `parallel_calls` (all others); execute `parallel_calls` with `await asyncio.gather(*[_run_single_tool(call) for call in parallel_calls])` where `_run_single_tool` is a local async helper that calls `await tool.handle(args, tool_ctx)` and returns the result dict; execute `hitl_calls` sequentially after `parallel_calls`; preserve existing error handling and result accumulation | Done |
+
+Dependencies: B-01
+
+### Batch B-05 — Gap 1: plan_tools node for complex intents (App Builder) — Done
+
+Add a `plan_tools` node to `AgentRuntime`'s LangGraph graph. The node fires only for
+`domain_analysis`, `cross_domain_analysis`, and `decision_support` intents. It calls the LLM
+with a structured output schema `[{tool, purpose, depends_on}]` and stores the result in
+`AgentState`. The plan is injected as a context block at the start of the next `call_model`
+invocation.
+
+| Task | Description | Status |
+|---|---|---|
+| T-413 | `packages/agent/runtime.py` — add `ToolPlan` TypedDict: `{"tool": str, "purpose": str, "depends_on": list[str]}`; add `"tool_plan"` key to `AgentState` (`list[ToolPlan]`, default empty); add `_plan_tools_node()` async method: builds a message asking the LLM to produce a JSON array of `ToolPlan` objects given the task instruction and available tool names; calls `await self._lc_model.with_structured_output(list[ToolPlan]).ainvoke(messages)` (or fallback to plain `ainvoke` + JSON parse if structured output fails); stores result in `state["tool_plan"]`; skip if intent_category not in `{"domain_analysis", "cross_domain_analysis", "decision_support"}` or tool_plan already populated | Done |
+| T-414 | `packages/agent/runtime.py` — wire `plan_tools` node into the LangGraph graph. Method `_plan_tools_node` already exists. In `_build_graph()` (~line 1010): add `sg.add_node("plan_tools", self._plan_tools_node)` after existing `add_node` calls; change `sg.add_edge("compress_history", "call_model")` to `sg.add_edge("compress_history", "plan_tools")` + `sg.add_edge("plan_tools", "call_model")`. In `_call_model_node()` (~line 349): after `lc_msgs` is built from `effective_messages`, if `state.get("tool_plan")`: append `HumanMessage("## Tool Plan\n\n" + json.dumps(state["tool_plan"], indent=2))` to `lc_msgs` before the `bound_model.ainvoke(lc_msgs)` call. | Done |
+
+Dependencies: B-04
+
+### Batch B-06 — Tests + quality gate (Test/Review) — Done
+
+| Task | Description | Status |
+|---|---|---|
+| T-415 | `tests/unit/agent/test_control_agent_response_format.py` — assert `_SYSTEM_PROMPT` contains `"**Situation:**"`, `"**Root Cause:**"`, `"**Recommended Actions:**"`, `"**Confidence Level:**"` | Done |
+| T-416 | `tests/unit/test_tool_registry_gap5.py` — assert `create_tool_registry()._tools` does NOT contain keys `"write_audit_log"`, `"job_dispatch"`, `"train_forecast"`; assert these tool classes can still be instantiated directly | Done |
+| T-417 | `tests/unit/test_control_allowlist_derived.py` — assert `_ROLE_TOOL_ALLOWLIST["control"]` equals the sorted union of all values in `_INTENT_TOOL_SUBSET`; assert no manual list in `base.py` diverges from this | Done |
+| T-418 | `tests/unit/test_agent_runtime_parallel_tools.py` — mock two read-only tool calls in a single LLM response; assert `asyncio.gather` is called (or that both tools are called without awaiting each other sequentially); assert a HITL tool call is NOT gathered | Done |
+| T-419 | `tests/unit/agent/test_plan_tools_node.py` — mock `_lc_model.with_structured_output().ainvoke()` to return a `[ToolPlan]`; assert `state["tool_plan"]` is populated for `domain_analysis` intent; assert `plan_tools` node is skipped for `supply_chain` and `lookup` intents | Done |
+| T-420 | `make test-unit && make lint && make typecheck` — all pass. Note: `tests/unit/test_tool_allowlists.py` has stale assertions referencing `train_forecast` (demand role) and `write_audit_log` (evaluator role) that were removed by T-409; remove those specific assertions before running. | Done |
+
+Dependencies: B-01, B-02, B-03, B-04, B-05
 
