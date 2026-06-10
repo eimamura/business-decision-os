@@ -1727,11 +1727,11 @@ or the SSE event contract.
 
 Dependencies: P65 Done
 
-### Batch B-01 — ADR: routing collapse (Orchestrator) — Not Started
+### Batch B-01 — ADR: routing collapse (Orchestrator) — Done
 
 | Task | Description | Status |
 |---|---|---|
-| T-427 | ADR `docs/adr/2026-06-XX-orchestrator-routing-collapse.md` — document removal of `sequential_agents`/`planned_execution`/DAG execution modes and `simulation_optimizer`-dependent decision logic; state that the 6 intent categories and SSE `graph_node` event shape are preserved. | Not Started |
+| T-427 | ADR `docs/adr/2026-06-10-orchestrator-routing-collapse.md` — document removal of `sequential_agents`/`planned_execution`/DAG execution modes and `simulation_optimizer`-dependent decision logic; state that the 6 intent categories and SSE `graph_node` event shape are preserved. | Done |
 
 Dependencies: none
 

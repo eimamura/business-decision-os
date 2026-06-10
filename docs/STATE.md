@@ -39,16 +39,16 @@ See `docs/archive/v3/STATE.md` for P0–P23 per-phase details.
 
 ## Active Phase
 
-P65 — Dead Agent Class Removal (Done; D-002 resolution in progress before P66)
+P66 — Orchestration Routing Simplification
 
 ## Active Lease
 
-D-002
+P66-B-01
 
 ## Last Completed
 
-P65 — Dead Agent Class Removal (2026-06-10); sign-off PASS (unit 784 passed, lint/typecheck/build exit 0). 11 pre-existing integration failures registered as D-002.
+P65 — Dead Agent Class Removal (2026-06-10); sign-off PASS. D-001/D-002 Resolved; FP-003 hardened (mypy CI gate + proof-of-execution mandate). Integration baseline: 16 passed / 0 failed.
 
 ## Blockers
 
-D-002 (Open) — pre-existing integration test failures (model_registry None in session_orchestrator); must be Resolved before P66 starts.
+None
