@@ -707,12 +707,12 @@ Dependencies: none
 
 Dependencies: none (parallel-eligible with B-01; B-01 runs first to keep `sessions.py` edits sequential)
 
-### Batch B-03 — Tests + gate (Test/Review) — Not Started
+### Batch B-03 — Tests + gate (Test/Review) — Done
 
 | Task | Description | Status |
 |---|---|---|
-| T-498 | Unit tests for D-006 acceptance: ASGITransport POST `/answer` with no pending interrupt → 409 + no graph invocation; `answer_ask_user` on empty thread raises the typed error; happy-path ask_user resume unaffected (existing tests). | Not Started |
-| T-499 | Unit tests for D-007 acceptance: delete-cancels-run (stub-blocked run task is cancelled; no event persist after); DB-recovery for `update_session_title`/`get_messages`/`submit_ask_user_answer` (dict cleared, DB row present → success; both absent → 404); event persister skip-after-delete. | Not Started |
-| T-500 | Gate: `make test-unit && make lint && make typecheck && make build && make test-playwright` — proof-of-execution (command, exit code, output tail per gate). Mark D-006 and D-007 Resolved on pass. | Not Started |
+| T-498 | Unit tests for D-006 acceptance: ASGITransport POST `/answer` with no pending interrupt → 409 + no graph invocation; `answer_ask_user` on empty thread raises the typed error; happy-path ask_user resume unaffected (existing tests). | Done |
+| T-499 | Unit tests for D-007 acceptance: delete-cancels-run (stub-blocked run task is cancelled; no event persist after); DB-recovery for `update_session_title`/`get_messages`/`submit_ask_user_answer` (dict cleared, DB row present → success; both absent → 404); event persister skip-after-delete. | Done |
+| T-500 | Gate: `make test-unit && make lint && make typecheck && make build && make test-playwright` — proof-of-execution (command, exit code, output tail per gate). Mark D-006 and D-007 Resolved on pass. | Done |
 
 Dependencies: B-01, B-02
