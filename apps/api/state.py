@@ -161,15 +161,40 @@ async def _real_usage_writer(
     model: str,
     usage: LLMUsage,
 ) -> None:
-    if agent_step_id is None:
+    # Resolve the step to write against.  Priority:
+    #   1. Caller already supplied agent_step_id  → use it directly.
+    #   2. session_id present but no agent_step_id → create a fallback step row.
+    #   3. Both are None                           → skip (no session context).
+    effective_step_id: UUID | None = agent_step_id
+
+    if effective_step_id is None:
+        if session_id is None:
+            # No session context — skip the write entirely.
+            return
+        # Create a lightweight "llm_call" step so the usage row joins the session.
+        try:
+            from packages.persistence.agent_steps_repo import make_step
+
+            fallback_id = await make_step(
+                str(session_id),
+                step_type="llm_call",
+                specialist_role=specialist_role or "unknown",
+            )
+            effective_step_id = fallback_id
+        except Exception as exc:
+            logger.warning("LLM usage fallback make_step failed: %s", exc)
+
+    if effective_step_id is None:
+        # make_step returned None (DB failure) — skip the write.
         return
 
     repo = LlmUsageRepository()
+    _step_id = effective_step_id  # captured for the closure below
 
     async def _write() -> None:
         try:
             await repo.create(
-                agent_step_id=str(agent_step_id),
+                agent_step_id=str(_step_id),
                 model=model,
                 input_tokens=usage.input_tokens,
                 output_tokens=usage.output_tokens,
@@ -253,7 +278,7 @@ def make_event_persister(session_id: str) -> Callable[[dict[str, Any]], Any]:
 def get_orchestrator(sse_queue: Any | None = None) -> SessionOrchestrator:
     from packages.agent.model_registry import create_model_registry
 
-    registry = create_model_registry()
+    registry = create_model_registry(usage_writer=_real_usage_writer)
     runner = _build_runner()
     tool_registry = create_tool_registry(runner=runner, model=registry.get("control"))
     memory_store = _build_memory_store()

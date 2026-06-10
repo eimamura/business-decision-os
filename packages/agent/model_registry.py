@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 import os
+from typing import Any
 
 from langchain_core.language_models.chat_models import BaseChatModel
+
+from packages.agent.llm import UsageWriter
 
 
 class ModelRegistry:
@@ -31,7 +34,20 @@ class ModelRegistry:
         return self._models[role]
 
 
-def create_model_registry() -> ModelRegistry:
+def _make_callbacks(usage_writer: UsageWriter | None, provider: str) -> list[Any]:
+    """Build the callbacks list for a ChatModel.
+
+    Returns a list containing one ``UsageRecordingCallbackHandler`` when
+    *usage_writer* is provided, or an empty list otherwise.
+    """
+    if usage_writer is None:
+        return []
+    from packages.agent.llm.usage_recording import UsageRecordingCallbackHandler
+
+    return [UsageRecordingCallbackHandler(writer=usage_writer, provider=provider)]
+
+
+def create_model_registry(usage_writer: UsageWriter | None = None) -> ModelRegistry:
     """Build a ModelRegistry from environment variables.
 
     Required env vars:
@@ -49,8 +65,15 @@ def create_model_registry() -> ModelRegistry:
         OPENAI_API_KEY: API key
         OPENAI_MODEL: model name (default: 'gpt-4o')
         OPENAI_BASE_URL: optional base URL for OpenAI-compatible endpoints
+
+    Args:
+        usage_writer: Optional ``UsageWriter`` callable.  When provided, a
+            ``UsageRecordingCallbackHandler`` is attached to every ChatModel via
+            ``callbacks``.  Defaults to ``None`` (no recording — existing tests
+            and tool-only call sites are unaffected).
     """
     provider = os.environ.get("LLM_PROVIDER", "anthropic").lower()
+    callbacks = _make_callbacks(usage_writer, provider)
 
     if provider == "anthropic":
         from langchain_anthropic import ChatAnthropic
@@ -60,7 +83,12 @@ def create_model_registry() -> ModelRegistry:
             raise RuntimeError("ANTHROPIC_API_KEY is required when LLM_PROVIDER=anthropic")
         model_name = os.environ.get("ANTHROPIC_MODEL", "claude-sonnet-4-6")
         from pydantic import SecretStr
-        base_model = ChatAnthropic(model=model_name, api_key=SecretStr(api_key), temperature=0.0)  # type: ignore[call-arg]
+        base_model = ChatAnthropic(  # type: ignore[call-arg]
+            model=model_name,
+            api_key=SecretStr(api_key),
+            temperature=0.0,
+            callbacks=callbacks or None,
+        )
         return ModelRegistry(
             {
                 "orchestrator": base_model,
@@ -84,6 +112,7 @@ def create_model_registry() -> ModelRegistry:
             temperature=0.1,
             num_predict=512,
             reasoning=False,
+            callbacks=callbacks or None,
         )
         # reasoning=False (→ Ollama API: think=false) required for tool calling accuracy.
         # num_predict=2048: surfaces truncation via output_tokens warning log if thinking leaks.
@@ -93,6 +122,7 @@ def create_model_registry() -> ModelRegistry:
             temperature=0.1,
             num_predict=2048,
             reasoning=False,
+            callbacks=callbacks or None,
         )
         return ModelRegistry(
             {
@@ -117,12 +147,14 @@ def create_model_registry() -> ModelRegistry:
                 api_key=SecretStr(api_key),
                 temperature=0.0,
                 base_url=openai_base_url,
+                callbacks=callbacks or None,
             )
         else:
             openai_model = ChatOpenAI(
                 model=model_name,
                 api_key=SecretStr(api_key),
                 temperature=0.0,
+                callbacks=callbacks or None,
             )
         return ModelRegistry(
             {

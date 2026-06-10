@@ -200,10 +200,17 @@ class SessionOrchestrator:
 
         from packages.persistence.agent_steps_repo import make_step
 
-        _ = await make_step(str(session_id), "intent_classification")
+        step_id = await make_step(str(session_id), "intent_classification")
         model = self._model_registry.get("orchestrator")  # type: ignore[union-attr]
         result = await model.with_structured_output(SessionIntent).ainvoke(
-            [SystemMessage(INTENT_SYSTEM), HumanMessage(self._query_text(query))]
+            [SystemMessage(INTENT_SYSTEM), HumanMessage(self._query_text(query))],
+            config={
+                "metadata": {
+                    "session_id": str(session_id),
+                    "agent_step_id": str(step_id) if step_id else None,
+                    "specialist_role": "orchestrator",
+                }
+            },
         )
         return result  # type: ignore[return-value]
 
@@ -261,12 +268,20 @@ class SessionOrchestrator:
         if intent is None or intent.category == "chat":
             return {"goal": None}
 
+        raw_session_id = state.get("session_id")
         query = SessionUserQuery.model_validate(state["query"])
         user_content = self._query_text(query)
         try:
             model = self._model_registry.get("orchestrator")  # type: ignore[union-attr]
             result = await model.with_structured_output(GoalSpec).ainvoke(
-                [SystemMessage(SET_GOAL_SYSTEM), HumanMessage(user_content)]
+                [SystemMessage(SET_GOAL_SYSTEM), HumanMessage(user_content)],
+                config={
+                    "metadata": {
+                        "session_id": raw_session_id,
+                        "agent_step_id": None,
+                        "specialist_role": "orchestrator",
+                    }
+                },
             )
             goal_spec = cast(GoalSpec, result)
         except Exception as exc:
@@ -299,7 +314,14 @@ class SessionOrchestrator:
 
         model = self._model_registry.get("orchestrator")  # type: ignore[union-attr]
         decision = await model.with_structured_output(AskUserDecision).ainvoke(
-            [SystemMessage(ASK_USER_SYSTEM), HumanMessage(user_content)]
+            [SystemMessage(ASK_USER_SYSTEM), HumanMessage(user_content)],
+            config={
+                "metadata": {
+                    "session_id": str(session_id),
+                    "agent_step_id": None,
+                    "specialist_role": "orchestrator",
+                }
+            },
         )
         needs_input: bool = decision.needs_input  # type: ignore[union-attr]
         question: str | None = decision.question  # type: ignore[union-attr]
@@ -430,10 +452,18 @@ class SessionOrchestrator:
             "reply": result.reply,
         })
 
+        raw_session_id = state.get("session_id")
         try:
             model = self._model_registry.get("orchestrator")  # type: ignore[union-attr]
             verdict = await model.with_structured_output(GoalEvaluation).ainvoke(
-                [SystemMessage(EVALUATE_GOAL_SYSTEM), HumanMessage(user_content)]
+                [SystemMessage(EVALUATE_GOAL_SYSTEM), HumanMessage(user_content)],
+                config={
+                    "metadata": {
+                        "session_id": raw_session_id,
+                        "agent_step_id": None,
+                        "specialist_role": "orchestrator",
+                    }
+                },
             )
             goal_eval_obj = cast(GoalEvaluation, verdict)
         except Exception as exc:
@@ -783,7 +813,14 @@ class SessionOrchestrator:
             "configurable": {
                 "thread_id": str(session_id),
                 "sse_queue": self._sse_queue,
-            }
+            },
+            # Propagate session_id so callback handlers can attribute LLM calls
+            # that fire inside the orchestrator graph to the correct session.
+            "metadata": {
+                "session_id": str(session_id),
+                "agent_step_id": None,
+                "specialist_role": "orchestrator",
+            },
         }
 
         try:
@@ -838,7 +875,12 @@ class SessionOrchestrator:
             "configurable": {
                 "thread_id": str(session_id),
                 "sse_queue": self._sse_queue,
-            }
+            },
+            "metadata": {
+                "session_id": str(session_id),
+                "agent_step_id": None,
+                "specialist_role": "orchestrator",
+            },
         }
 
         try:
@@ -880,7 +922,12 @@ class SessionOrchestrator:
             "configurable": {
                 "thread_id": str(session_id),
                 "sse_queue": self._sse_queue,
-            }
+            },
+            "metadata": {
+                "session_id": str(session_id),
+                "agent_step_id": None,
+                "specialist_role": "orchestrator",
+            },
         }
 
         try:

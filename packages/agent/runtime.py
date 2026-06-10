@@ -1346,7 +1346,14 @@ class AgentRuntime:
                 "llm_tools": llm_tools,
                 "sse_queue": self._sse_queue,
                 "agent_run_id": agent_run_id,
-            }
+            },
+            # Propagate session context so UsageRecordingCallbackHandler can attribute
+            # every LLM call inside the graph to the correct session and step.
+            "metadata": {
+                "session_id": str(ctx.session_id) if ctx.session_id else None,
+                "agent_step_id": str(ctx.agent_step_id) if ctx.agent_step_id else None,
+                "specialist_role": self.role,
+            },
         }
 
         initial_state: AgentState = {
