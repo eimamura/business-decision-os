@@ -5,6 +5,7 @@ from typing import Any, Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query
+from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
@@ -48,7 +49,7 @@ async def list_approvals(status: str = Query(default="pending")) -> JSONResponse
         records = await _approvals_repo.list(status=status)
     except NotImplementedError:
         return JSONResponse(status_code=200, content=[])
-    return JSONResponse(status_code=200, content=records)
+    return JSONResponse(status_code=200, content=jsonable_encoder(records))
 
 
 @router.get("/{approval_id}")
@@ -59,7 +60,7 @@ async def get_approval(approval_id: UUID) -> JSONResponse:
         raise HTTPException(status_code=404, detail="Approval not found")
     if record is None:
         raise HTTPException(status_code=404, detail="Approval not found")
-    return JSONResponse(status_code=200, content=record)
+    return JSONResponse(status_code=200, content=jsonable_encoder(record))
 
 
 @router.post("/{approval_id}/decision")
@@ -145,7 +146,7 @@ async def post_decision(
         except Exception:
             pass  # non-blocking: job cancellation failure must not fail the approval response
 
-    return JSONResponse(status_code=200, content=updated)
+    return JSONResponse(status_code=200, content=jsonable_encoder(updated))
 
 
 @router.post("")
@@ -174,6 +175,6 @@ async def create_approval(
     except NotImplementedError:
         pass
 
-    return JSONResponse(status_code=201, content=created)
+    return JSONResponse(status_code=201, content=jsonable_encoder(created))
 
 

@@ -587,12 +587,12 @@ is running." for ALL failures — including HTTP business errors like 404 "Sessi
 found" — which misled runtime diagnosis on 2026-06-10 (stale browser session after dev
 stack reset surfaced as an apparent connectivity failure).
 
-### Batch B-01 — API + web fixes (App Builder) — Not Started
+### Batch B-01 — API + web fixes (App Builder) — Done
 
 | Task | Description | Status |
 |---|---|---|
-| T-488 | `apps/api/routers/approvals.py` (D-004): `create_approval` and `post_decision` return raw repo rows via `JSONResponse(content=...)` — UUID/datetime objects crash stdlib `json.dumps` with 500. Serialize with `fastapi.encoders.jsonable_encoder` (or equivalent) on both paths. | Not Started |
-| T-489 | `apps/web/lib/api.ts` `postMessage`/`postAskUserAnswer`: on `!res.ok`, parse the response body's `detail` and throw a typed error carrying status + detail. `apps/web/app/chat/ChatStateContext.tsx` (lines ~623, ~855): show the server `detail` for HTTP errors (404 → e.g. "Session not found — it may have been deleted. Start a new session."); reserve "Error contacting the API. Please check the backend is running." for network-level fetch failures only. | Not Started |
+| T-488 | `apps/api/routers/approvals.py` (D-004): `create_approval` and `post_decision` return raw repo rows via `JSONResponse(content=...)` — UUID/datetime objects crash stdlib `json.dumps` with 500. Serialize with `fastapi.encoders.jsonable_encoder` (or equivalent) on both paths. | Done |
+| T-489 | `apps/web/lib/api.ts` `postMessage`/`postAskUserAnswer`: on `!res.ok`, parse the response body's `detail` and throw a typed error carrying status + detail. `apps/web/app/chat/ChatStateContext.tsx` (lines ~623, ~855): show the server `detail` for HTTP errors (404 → e.g. "Session not found — it may have been deleted. Start a new session."); reserve "Error contacting the API. Please check the backend is running." for network-level fetch failures only. | Done |
 
 Dependencies: none
 

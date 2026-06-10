@@ -1,6 +1,16 @@
 import { SseEventSchema } from "@/types/chat";
 import type { ChatMessage, Session, SessionUsage, SseEvent } from "@/types/chat";
 
+export class ApiError extends Error {
+  constructor(
+    public readonly status: number,
+    public readonly detail: string | null,
+  ) {
+    super(`ApiError ${status}: ${detail ?? "(no detail)"}`);
+    this.name = "ApiError";
+  }
+}
+
 export async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
   const res = await fetch(path, {
     ...options,
@@ -117,7 +127,16 @@ export async function postMessage(sessionId: string, content: string): Promise<v
     headers: DEV_HEADERS,
     body: JSON.stringify({ content }),
   });
-  if (!res.ok) throw new Error(`postMessage: ${res.status}`);
+  if (!res.ok) {
+    let detail: string | null = null;
+    try {
+      const body = await res.json() as { detail?: unknown };
+      detail = typeof body.detail === "string" ? body.detail : null;
+    } catch {
+      // response body is not JSON — leave detail null
+    }
+    throw new ApiError(res.status, detail);
+  }
 }
 
 export async function postAskUserAnswer(sessionId: string, answer: string): Promise<void> {
@@ -126,7 +145,16 @@ export async function postAskUserAnswer(sessionId: string, answer: string): Prom
     headers: DEV_HEADERS,
     body: JSON.stringify({ answer }),
   });
-  if (!res.ok) throw new Error(`postAskUserAnswer: ${res.status}`);
+  if (!res.ok) {
+    let detail: string | null = null;
+    try {
+      const body = await res.json() as { detail?: unknown };
+      detail = typeof body.detail === "string" ? body.detail : null;
+    } catch {
+      // response body is not JSON — leave detail null
+    }
+    throw new ApiError(res.status, detail);
+  }
 }
 
 export async function setFeedback(

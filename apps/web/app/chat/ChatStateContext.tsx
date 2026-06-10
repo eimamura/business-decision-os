@@ -4,6 +4,7 @@ import { createContext, useCallback, useContext, useRef, useState } from "react"
 import type { ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
+  ApiError,
   fetchMessages,
   fetchSessionEvents,
   fetchSessionUsage,
@@ -623,7 +624,15 @@ export function ChatStateProvider({ children }: { children: ReactNode }): React.
         let errorMessage = "Error contacting the API. Please check the backend is running.";
         let errorCode: ChatMessage["errorCode"] = "unknown_error";
 
-        if (err instanceof TypeError && err.message.includes("Failed to fetch")) {
+        if (err instanceof ApiError) {
+          if (err.status === 404 && err.detail === "Session not found") {
+            errorMessage =
+              "Session not found — it may have been deleted. Start a new session.";
+          } else {
+            errorMessage = `Request failed (${err.status}): ${err.detail ?? "unknown error"}`;
+          }
+          errorCode = err.status >= 500 ? "server_error" : "unknown_error";
+        } else if (err instanceof TypeError && err.message.includes("Failed to fetch")) {
           errorMessage = "Network error — check your connection.";
           errorCode = "network_error";
         } else if (err instanceof Error && "status" in err) {
@@ -845,17 +854,33 @@ export function ChatStateProvider({ children }: { children: ReactNode }): React.
         }
       } catch (err: unknown) {
         if (err instanceof Error && err.name === "AbortError") return;
+
+        let errorMessage = "Error contacting the API. Please check the backend is running.";
+        let errorCode: ChatMessage["errorCode"] = "unknown_error";
+
+        if (err instanceof ApiError) {
+          if (err.status === 404 && err.detail === "Session not found") {
+            errorMessage =
+              "Session not found — it may have been deleted. Start a new session.";
+          } else {
+            errorMessage = `Request failed (${err.status}): ${err.detail ?? "unknown error"}`;
+          }
+          errorCode = err.status >= 500 ? "server_error" : "unknown_error";
+        } else if (err instanceof TypeError && err.message.includes("Failed to fetch")) {
+          errorMessage = "Network error — check your connection.";
+          errorCode = "network_error";
+        }
+
         updateSession(sessionId, (prev) => ({
           ...prev,
           messages: prev.messages.map((m) =>
             m.id === assistantId
               ? {
                   ...m,
-                  content:
-                    "Error contacting the API. Please check the backend is running.",
+                  content: errorMessage,
                   isError: true,
                   isStreaming: false,
-                  errorCode: "unknown_error" as const,
+                  errorCode,
                 }
               : m,
           ),
