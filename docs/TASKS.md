@@ -477,3 +477,51 @@ pre-date P71 (verified during D-003 resolution). Causes reported: asyncpg DSN fo
 | T-470 | Reproduce with dev `DATABASE_URL` exported (`14 failed, 47 passed, 4 skipped` at 2026-06-10 HEAD); classify each failure (env/DSN vs stale fixture vs genuine bug); fix test-side issues; escalate any production bug as a Defect Task. Acceptance: full-DSN `make test-integration` 0 failed. | Done |
 
 Dependencies: none
+
+---
+
+## P75 — Tool Layer Full Audit — Not Started
+
+**Goal:** Audit all 35 tool files in `packages/tools/` (32 registered + `write_audit_log`,
+`job_dispatch`, `train_forecast` unregistered) on four axes: (1) input→output contract
+conformance (`Tool` base class + Context Pack return: `summary`/`schema`/`key_metrics`/
+`missing_data`/`artifact_id`); (2) implementation quality (parameterized SQL, no hardcoded
+schema strings, `RuntimeError` on missing config, typed exception propagation); (3) role
+overlap — overlap means duplicated responsibility, NOT "currently unused"; tools with
+plausible future use are kept; (4) test coverage and proof of green execution.
+Audit is read-only; any production defect found is registered as a D-NNN Defect Task,
+not fixed ad-hoc.
+
+### Batch B-01 — Static conformance + implementation quality audit (Test/Review) — Done
+
+| Task | Description | Status |
+|---|---|---|
+| T-471 | For each of the 35 tool files: verify `Tool` base-class conformance — declared `name`, input args schema, `run()` accepts structured input and returns a Context Pack (`summary`, `schema`, `key_metrics`, `missing_data`, `artifact_id`); flag any tool returning raw rows, ad-hoc dicts, or having side-effect-only behavior (no meaningful output). Deliver a 35-row conformance matrix. | Done |
+| T-472 | Same sweep for implementation quality: parameterized SQL via `execute_read_query`/repository layer only; no hardcoded table/column literals (must use `get_schema_context()`); `RuntimeError` on missing config; no silently swallowed exceptions; LLM-invoking tools go through the model layer (no direct SDK calls). Flag violations per file. | Done |
+
+Dependencies: none
+
+### Batch B-02 — Role overlap analysis (Test/Review) — Not Started
+
+| Task | Description | Status |
+|---|---|---|
+| T-473 | Pairwise responsibility analysis within each domain group, with verdict keep / merge-candidate / boundary-unclear per pair. Mandatory pairs: `get_open_supply_orders` vs `get_delayed_supply_orders`; `calculate_days_of_supply` vs `calculate_days_of_inventory`; `analyze_supply_risk` vs `calculate_stockout_risk` vs `calculate_supply_gap`; `calculate_stockout_risk` vs `list_stockout_risk`; `compare_cost_scenarios` vs the 3 individual cost tools; `analyze_demand_trend` vs `compare_demand_periods`; `profile_demand_data` vs `data_quality_checker`; `data_catalog_search` vs `table_schema_reader`; `forecast` vs `train_forecast`; `nl_query` vs every thin SQL-wrapper tool (generic-vs-specialized justification per DESIGN.md §Tool Design Philosophy). Unused-but-future-valuable tools are explicitly kept (per 2026-06-10 decision: production infra preserved). | Not Started |
+
+Dependencies: none
+
+### Batch B-03 — Test coverage map + execution verification (Test/Review) — Not Started
+
+| Task | Description | Status |
+|---|---|---|
+| T-474 | Map each of the 35 tools to its unit and integration test files (grep `tests/unit` + `tests/integration`); deliver coverage matrix marking tools with no unit test, no integration test, or assertion-free tests. | Not Started |
+| T-475 | Proof-of-execution: `make test-unit` and full-DSN `make test-integration` — capture command, exit code, pass/fail counts; confirm every tool-related test green. Any failure → register Defect Task. | Not Started |
+
+Dependencies: none
+
+### Batch B-04 — Consolidated audit report + decision log (Orchestrator) — Not Started
+
+| Task | Description | Status |
+|---|---|---|
+| T-476 | Consolidate B-01/B-02/B-03 findings into the final audit report (conversation deliverable); append accepted keep/merge decisions to `docs/DECISIONS.md`; register follow-up phase or Defect Tasks for any non-conformance requiring code change. | Not Started |
+
+Dependencies: B-01, B-02, B-03
