@@ -40,15 +40,15 @@ See `docs/archive/v3/STATE.md` for P0–P23 per-phase details.
 
 ## Active Phase
 
-P71 — Goal Evaluation Loop / P72 — Grounded Runtime Evaluator (B-01 ADR done; implementation batches parallel)
+None
 
 ## Active Lease
 
-P71-B-02, P72-B-01, P73-B-01 (parallel — disjoint files: session_orchestrator+models / runtime.py / alembic)
+None
 
 ## Last Completed
 
-P70 — Test Suite & Documentation Consolidation (2026-06-10). Full refactoring programme P65–P70 complete; final sign-off PASS (unit 769 passed, integration 16 passed/0 failed, build exit 0, playwright 32/32 incl. 1 pre-existing Ollama cold-start flake passing on retry). TASKS.md archived to docs/archive/v4/ (1,888 → 325 lines). D-001/D-002 Resolved; FP-003 hardened.
+P71–P73 — Autonomy Loops programme (2026-06-10). Sign-off PASS: unit 795 passed, canonical integration 16 passed/0 failed (full-DSN 47 passed; 14 latent pre-existing failures tracked as P74/T-470), build exit 0, playwright 32/32. ADR: 2026-06-10-autonomy-loops. D-003 Resolved (FP-004, record-only). Goal loop (set_goal/evaluate_goal + 1 bounded refinement + intent re-route), grounded verification (revision path reconnected), feedback learning (decision_log.outcome → context annotation).
 
 ## Blockers
 

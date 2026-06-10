@@ -74,6 +74,9 @@ Full task history for P0–P23 is archived at `docs/archive/v3/TASKS.md`.
 | P68 — Frontend Dead Code Cleanup | T-438–T-441 | 2026-06-10 |
 | P69 — Dependency & Config Hygiene | T-442–T-445 | 2026-06-10 |
 | P70 — Test Suite & Documentation Consolidation | T-446–T-450 | 2026-06-10 |
+| P71 — Goal Evaluation Loop | T-451–T-457 | 2026-06-10 |
+| P72 — Grounded Runtime Evaluator | T-458–T-462 | 2026-06-10 |
+| P73 — Feedback Learning Loop | T-463–T-469 | 2026-06-10 |
 
 > **Design Realignment Note (2026-06-05):** P29–P36 built Specialist Domain Agents (DemandAgent,
 > InventoryAgent, SupplyPlanningAgent, FinanceImpactAgent, SopAgent) as independent runtime units.
