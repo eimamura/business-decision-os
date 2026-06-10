@@ -7,19 +7,14 @@ execution flow, and improvement directions.
 
 ## Active Product Agents
 
-Only **ControlAgent** is active in production. Domain specialist classes exist as code
-but are not instantiated (`create_domain_agents()` returns only ControlAgent).
+Only **ControlAgent** is active in production. `create_domain_agents()` returns only
+ControlAgent. Domain specialist agent classes were deleted in P65; no inactive class stubs
+remain.
 
 | Agent | Status | Role |
 |---|---|---|
 | `ControlAgent` | **Active** | Cross-domain supply chain judgment; the sole specialist agent |
 | `SessionOrchestrator` | **Active** | Intent classification, routing, execution coordination |
-| `ReplenishmentAgent` | Inactive (class only) | Not wired into `create_domain_agents()` |
-| `LogisticsAgent` | Inactive (class only) | Same |
-| `ProcurementAgent` | Inactive (class only) | Same |
-| `ProductionAgent` | Inactive (class only) | Same |
-| `SupplierAgent` | Inactive (class only) | Same |
-| `ExceptionAgent` | Inactive (class only) | Same |
 
 Valid agent roles: `{"control"}` — defined in `packages/agent/orchestrator/roles.py`.
 
@@ -32,11 +27,11 @@ Tool selection is a sequential filter pipeline:
 ```
 35 registered tools
       │
-      ▼  Layer 1: Agent role allowlist  (packages/tools/base.py:8  _ROLE_TOOL_ALLOWLIST)
- 24 tools  (control role ceiling — excludes write/execution tools)
+      ▼  Layer 1: Agent role allowlist  (packages/tools/base.py  _ROLE_TOOL_ALLOWLIST)
+ ≤35 tools  control role ceiling — auto-derived as union of all Layer 3 subsets (P67)
       │
-      ▼  Layer 2: User role safety filter  (packages/tools/base.py:110  filter_for_user_role)
- ≤24 tools  analyst=read_only only / manager=read_only+hitl / admin=all
+      ▼  Layer 2: User role safety filter  (packages/tools/base.py  filter_for_user_role)
+ ≤35 tools  analyst=read_only only / manager=read_only+hitl / admin=all
       │
       ▼  Layer 3: Intent subset  (packages/agent/control/control_agent.py  _INTENT_TOOL_SUBSET)
  5–28 tools  narrowed to the intent's relevant tool set
@@ -80,8 +75,10 @@ is ever allowed to see. Layer 3 (`_INTENT_TOOL_SUBSET`) is the **intent-level na
 within that ceiling. A tool name in a Layer 3 subset that does not appear in Layer 1 is
 silently excluded (the intersection is empty for that name).
 
-Both lists must be kept in sync manually — there is no automated consistency check
-(regression test added in P63: `tests/unit/test_control_agent_intent_tool_subset.py`).
+Layer 1 is auto-derived as the union of all Layer 3 subsets (P67): adding or removing
+a tool from `_INTENT_TOOL_SUBSET` automatically updates the Layer 1 ceiling.
+A regression test (`tests/unit/test_control_agent_intent_tool_subset.py`, added in P63)
+verifies that every Layer 3 tool name is reachable from Layer 1.
 
 ### Layer 4: System Prompt Priority Rules
 
@@ -171,16 +168,16 @@ select_mode
   │  supply_chain → deterministic route (no LLM call) → single_agent
   │  others       → LLM produces AgentRoute
   │
-  ├─ direct_chat       → run_direct_chat → END   (chat; no tools)
-  ├─ single_agent      → run_sequential  → END   (lookup / supply_chain)
-  ├─ sequential_agents → run_sequential  → END   (cross_domain; multi-agent)
-  └─ planned_execution → run_planned    → END   (decision_support; ExecutionPlan)
+  ├─ direct_chat  → run_direct_chat → END   (chat; no tools)
+  └─ single_agent → run_sequential  → END   (all analytical intents)
 ```
 
-`run_planned` calls `create_execution_plan()` — LLM generates a structured plan with
-ordered steps before execution. This is Plan-then-Execute at the orchestrator level.
+The `sequential_agents`, `planned_execution`, and `dag_execution` execution modes were
+removed in P66 (see `docs/adr/2026-06-10-orchestrator-routing-collapse.md`). All
+analytical intents now route through `single_agent → run_sequential`. Multi-agent
+fan-out and plan-then-execute routing are future work.
 
-### ControlAgent Execution (within run_sequential / run_planned)
+### ControlAgent Execution (within run_sequential)
 
 ```
 ControlAgent.run()
@@ -225,21 +222,22 @@ ControlAgent.run()
 
 ## Orchestrator Roles: Routing vs Planning
 
-The Orchestrator does both, but in the current active paths it acts primarily as a router.
+The Orchestrator acts as a router. Two active execution paths exist (P66 routing collapse):
 
 | Mode | What it does | When used |
 |---|---|---|
 | `direct_chat` | Routes to no-tool response | `chat` |
-| `run_sequential` | Routes to agent(s) in fixed order | `lookup`, `supply_chain` |
-| `run_planned` | Generates ExecutionPlan then executes | `decision_support` (rarely triggered) |
+| `run_sequential` | Routes to ControlAgent | all analytical intents |
 
-Plan-then-Execute exists at two levels:
+The `planned_execution` path (`run_planned` / `create_execution_plan()`) and the
+`dag_execution` path (`run_dag`) were removed in P66. Plan-then-Execute at the
+Orchestrator level is future work; see ADR
+`docs/adr/2026-06-10-orchestrator-routing-collapse.md` for the decision record.
+
+Plan-then-Execute at the ControlAgent level remains a known gap:
 
 ```
-Level 1 — Orchestrator (implemented, rarely active)
-  create_execution_plan() → ExecutionPlan with ordered steps → run agents
-
-Level 2 — ControlAgent (not implemented)
+ControlAgent (not implemented)
   [gap] → currently pure ReAct; no pre-planning of tool call order
 ```
 
@@ -280,13 +278,16 @@ the final response, producing inconsistent output.
 ### Gap 4: Layer 1 and Layer 3 are independent allowlists
 
 `_ROLE_TOOL_ALLOWLIST["control"]` and `_INTENT_TOOL_SUBSET` define overlapping tool sets
-in separate files with no automated sync. P63 added a regression test
-(`test_control_agent_intent_tool_subset.py`) to catch mismatches, but the structural
-redundancy remains.
+in separate files. P63 added a regression test
+(`test_control_agent_intent_tool_subset.py`) to catch mismatches. P67 collapsed
+`_ROLE_TOOL_ALLOWLIST` to two entries — `"orchestrator"` (empty guard) and `"control"`
+(auto-derived from `_INTENT_TOOL_SUBSET`) — eliminating the 14 dead role entries.
+The structural redundancy between Layer 1 and Layer 3 persists; Layer 1 is now the
+union of all Layer 3 subsets, automatically maintained.
 
-**Direction:** If domain specialist agents are never reintroduced, collapse Layer 1 for
-the `control` role so Layer 3 becomes the single source of truth. Revisit when the
-specialist agent activation decision is made.
+**Direction:** When Specialist Agents are introduced as independent runtimes (Post-MVP),
+each will need its own role entry in `_ROLE_TOOL_ALLOWLIST`. Until then, the current
+auto-derived approach keeps Layer 1 and Layer 3 in sync.
 
 ### Gap 5: Three tools should not be LLM-callable
 

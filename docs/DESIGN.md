@@ -1369,9 +1369,11 @@ packages/
     control/        ← Supply Chain Control Agent (investigation orchestrator,
                       cross-domain judgment, user-facing responder)
     domain/         ← Specialist Domain Agents (demand, inventory, replenishment,
-                       procurement, production, logistics, finance)
+                       procurement, production, logistics, finance) — in MVP, Skill
+                       files only (Level 2); runtime classes live here Post-MVP
     cross_domain/   ← Cross-Domain Agents (data_engineer, simulation_optimizer,
-                       evaluator, anomaly_detector)
+                       evaluator, anomaly_detector) — Post-MVP; directory does not
+                       exist yet (deleted in P65; re-created when promoted to Level 3)
     llm/            ← LLM client — only entry point to LLM provider SDK
     runner/         ← Celery job runner infrastructure
     base.py         ← Specialist base protocol (public interface)

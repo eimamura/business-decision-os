@@ -456,39 +456,6 @@ async def test_t073_compress_history_noop_below_threshold_zero_summarize_calls()
     assert len(llm._calls) == 0
 
 
-async def test_t073_compress_history_active_above_threshold_reduces_to_11() -> None:
-    """When len(messages) > SUMMARY_THRESHOLD, compressed_messages has at most 11 items."""
-    summary_resp = make_stop_response("Compact summary.")
-    summarize_llm = FakeLCModel([summary_resp])
-    runtime = _make_runtime(summarize_llm)
-
-    msg_count = SUMMARY_THRESHOLD + 5
-    fake_state: Any = {
-        "messages": [LLMMessage(role="user", content=f"msg {i}") for i in range(msg_count)],
-        "response": None,
-        "input_tokens": 0,
-        "output_tokens": 0,
-        "cost_usd": 0.0,
-        "tool_results": [],
-        "iteration": 0,
-        "status": "running",
-        "error": None,
-        "pending_hitl_approval_id": None,
-        "pending_hitl_job_id": None,
-        "compressed_messages": None,
-    }
-
-    result_dict = await runtime._compress_history_node(fake_state, {})  # type: ignore[arg-type]
-
-    compressed = result_dict.get("compressed_messages")
-    assert compressed is not None, "compress_history must set compressed_messages above threshold"
-    assert len(compressed) <= 11, (
-        f"call_model must receive <= 11 messages after compression, got {len(compressed)}"
-    )
-    # Exactly one summarize call was made
-    assert len(summarize_llm._calls) == 1
-
-
 # ---------------------------------------------------------------------------
 # P30-B-01: execute_tools node — tool_call path
 # ---------------------------------------------------------------------------

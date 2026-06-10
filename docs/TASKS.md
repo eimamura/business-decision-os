@@ -1853,20 +1853,20 @@ Dependencies: B-01
 
 ---
 
-## P70 — Test Suite & Documentation Consolidation — Not Started
+## P70 — Test Suite & Documentation Consolidation — In Progress
 
 **Goal:** Final pass once all deletions land: remove redundant test coverage, then bring the
 documentation set back in sync with the slimmed codebase.
 
 Dependencies: P66 Done, P67 Done, P68 Done, P69 Done
 
-### Batch B-01 — Test suite rationalization (Test/Review) — Not Started
+### Batch B-01 — Test suite rationalization (Test/Review) — Done
 
 | Task | Description | Status |
 |---|---|---|
-| T-446 | Remove any leftover `@pytest.mark.asyncio` decorators (`asyncio_mode = "auto"` is global — `.claude/rules/testing.md`). | Not Started |
-| T-447 | Duplicate-coverage audit across `tests/unit/` (84 files; the control-agent and agent-runtime clusters are the largest). Merge or delete tests whose assertions are fully covered elsewhere; no unique assertion may be lost. | Not Started |
-| T-448 | `make test-unit && make lint && make typecheck` — all pass; record test count before/after in the batch report. | Not Started |
+| T-446 | Remove any leftover `@pytest.mark.asyncio` decorators (`asyncio_mode = "auto"` is global — `.claude/rules/testing.md`). | Done |
+| T-447 | Duplicate-coverage audit across `tests/unit/` (84 files; the control-agent and agent-runtime clusters are the largest). Merge or delete tests whose assertions are fully covered elsewhere; no unique assertion may be lost. | Done |
+| T-448 | `make test-unit && make lint && make typecheck` — all pass; record test count before/after in the batch report. | Done |
 
 Dependencies: none
 
@@ -1878,11 +1878,11 @@ Dependencies: none
 
 Dependencies: none
 
-### Batch B-03 — Doc reference sweep (App Builder) — Not Started
+### Batch B-03 — Doc reference sweep (App Builder) — Done
 
 | Task | Description | Status |
 |---|---|---|
-| T-450 | Sweep `docs/DESIGN.md`, `docs/AGENT_ARCHITECTURE.md`, `docs/TOOLS.md`, `docs/ORCHESTRATOR.md` for references to modules removed in P65–P68 (deprecated/cross-domain agents, `sql_query`, removed routing modes, deleted tools/components) and update them to the post-refactoring state. | Not Started |
+| T-450 | Sweep `docs/DESIGN.md`, `docs/AGENT_ARCHITECTURE.md`, `docs/TOOLS.md`, `docs/ORCHESTRATOR.md` for references to modules removed in P65–P68 (deprecated/cross-domain agents, `sql_query`, removed routing modes, deleted tools/components) and update them to the post-refactoring state. | Done |
 
 Dependencies: P65–P68 Done
 

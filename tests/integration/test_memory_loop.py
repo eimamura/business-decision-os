@@ -20,7 +20,6 @@ skipif_no_db = pytest.mark.skipif(
 
 
 @skipif_no_db
-@pytest.mark.asyncio
 async def test_memory_write_and_search(monkeypatch: pytest.MonkeyPatch) -> None:
     """Write a Memory to the real DB and retrieve it via vector search."""
     import packages.memory as mem_module
