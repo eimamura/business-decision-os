@@ -6,7 +6,7 @@ from uuid import uuid4
 
 from packages.tools.base import ToolContext
 from packages.tools.supply_lead_time_tool import AnalyzeSupplyLeadTimeTool
-from packages.tools.supply_days_tool import CalculateDaysOfSupplyTool
+from packages.tools.inventory_doi_tool import CalculateDaysOfInventoryTool
 from packages.tools.supply_risk_tool import AnalyzeSupplyRiskTool
 
 
@@ -74,7 +74,7 @@ async def test_lead_time_no_orders_returns_none():
 
 
 # ============================================================
-# CalculateDaysOfSupplyTool
+# CalculateDaysOfInventoryTool (migrated from CalculateDaysOfSupplyTool — T-483 DOS→DOI merge)
 # Three sequential conn.fetchrow calls:
 #   1. inventory_snapshot  → on_hand_qty
 #   2. demand_history      → avg_daily
@@ -91,33 +91,69 @@ def _make_fetchrow_pool(side_effects: list) -> MagicMock:
 
 
 async def test_days_of_supply_computes_correctly():
-    # on_hand=300, avg_daily=10 → days_of_supply = 30.0
+    """Migrated from DOS: on_hand=300, avg_daily=10 → days_of_inventory = 30.0.
+
+    DOI uses the same formula (on_hand / avg_daily) as the deleted DOS tool.
+    """
     on_hand_row = {"on_hand_qty": 300}
     demand_row = {"avg_daily": 10.0}
     sku_row = {"lead_time_days_mean": None}
 
     mock_pool = _make_fetchrow_pool([on_hand_row, demand_row, sku_row])
 
-    with patch("packages.tools.supply_days_tool.get_pool", return_value=mock_pool):
-        tool = CalculateDaysOfSupplyTool()
+    with patch("packages.tools.inventory_doi_tool.get_pool", return_value=mock_pool):
+        tool = CalculateDaysOfInventoryTool()
         result = await tool.handle({"sku_id": "SKU-A"}, make_ctx())
 
-    assert result.output["days_of_supply"] == 30.0
+    assert result.output["days_of_inventory"] == 30.0
 
 
 async def test_days_of_supply_reorder_signal_triggered():
-    # on_hand=100, avg_daily=10 → days_of_supply=10 < 14 → reorder_signal=True
+    """Migrated from DOS: on_hand=100, avg_daily=10 → days=10 < 14 → reorder_signal=True."""
     on_hand_row = {"on_hand_qty": 100}
     demand_row = {"avg_daily": 10.0}
     sku_row = {"lead_time_days_mean": None}
 
     mock_pool = _make_fetchrow_pool([on_hand_row, demand_row, sku_row])
 
-    with patch("packages.tools.supply_days_tool.get_pool", return_value=mock_pool):
-        tool = CalculateDaysOfSupplyTool()
+    with patch("packages.tools.inventory_doi_tool.get_pool", return_value=mock_pool):
+        tool = CalculateDaysOfInventoryTool()
         result = await tool.handle({"sku_id": "SKU-A"}, make_ctx())
 
     assert result.output["reorder_signal"] is True
+
+
+async def test_doi_stockout_date_estimate_computed_from_days():
+    """DOI-new: stockout_date_estimate = today + int(days_of_inventory)."""
+    # on_hand=300, avg_daily=10 → days=30 → stockout = today + 30
+    on_hand_row = {"on_hand_qty": 300}
+    demand_row = {"avg_daily": 10.0}
+    sku_row = {"lead_time_days_mean": None}
+
+    mock_pool = _make_fetchrow_pool([on_hand_row, demand_row, sku_row])
+
+    with patch("packages.tools.inventory_doi_tool.get_pool", return_value=mock_pool):
+        tool = CalculateDaysOfInventoryTool()
+        result = await tool.handle({"sku_id": "SKU-A"}, make_ctx())
+
+    expected_date = (datetime.date.today() + datetime.timedelta(days=30)).isoformat()
+    assert result.output["stockout_date_estimate"] == expected_date
+
+
+async def test_doi_stockout_date_estimate_null_when_demand_is_none():
+    """DOI-new: stockout_date_estimate is null when avg_daily_demand is None."""
+    on_hand_row = {"on_hand_qty": 100}
+    demand_row = {"avg_daily": None}
+    sku_row = {"lead_time_days_mean": None}
+
+    mock_pool = _make_fetchrow_pool([on_hand_row, demand_row, sku_row])
+
+    with patch("packages.tools.inventory_doi_tool.get_pool", return_value=mock_pool):
+        tool = CalculateDaysOfInventoryTool()
+        result = await tool.handle({"sku_id": "SKU-B"}, make_ctx())
+
+    assert result.output["stockout_date_estimate"] is None
+    assert result.output["days_of_inventory"] is None
 
 
 # ============================================================

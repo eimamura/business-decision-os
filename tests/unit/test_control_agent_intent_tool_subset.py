@@ -35,7 +35,7 @@ def test_intent_tool_subset_supply_chain_list_is_unchanged() -> None:
         "get_open_supply_orders",
         "calculate_supply_gap",
         "analyze_supply_lead_time",
-        "calculate_days_of_supply",
+        "calculate_days_of_inventory",
         "analyze_supply_risk",
         "calculate_stockout_risk",
         "calculate_stockout_cost_impact",

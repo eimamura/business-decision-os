@@ -570,8 +570,8 @@ Dependencies: B-01 (parallel-eligible with B-02; runs after B-02 in practice)
 
 | Task | Description | Status |
 |---|---|---|
-| T-482 | Add behavioral unit test for `train_forecast` `handle()` (only tool with indirect-only coverage in P75). | Not Started |
-| T-486 | Update/add unit tests for B-02/B-03: evaluator RuntimeError path; LIMIT+truncated; shared helpers; data_catalog_search error key; missing_data population (representative tools); DOS removal (subset test, registry test); DOI `stockout_date_estimate`. | Not Started |
-| T-487 | Phase sign-off: `make test-unit && make lint && make typecheck && make test-integration` (full DSN) `&& make build && make test-playwright` — proof-of-execution. | Not Started |
+| T-482 | Add behavioral unit test for `train_forecast` `handle()` (only tool with indirect-only coverage in P75). | Done |
+| T-486 | Update/add unit tests for B-02/B-03: evaluator RuntimeError path; LIMIT+truncated; shared helpers; data_catalog_search error key; missing_data population (representative tools); DOS removal (subset test, registry test); DOI `stockout_date_estimate`. | Done |
+| T-487 | Phase sign-off: `make test-unit && make lint && make typecheck && make test-integration` (full DSN) `&& make build && make test-playwright` — proof-of-execution. | Done |
 
 Dependencies: B-02, B-03
