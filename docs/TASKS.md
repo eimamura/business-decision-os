@@ -529,24 +529,49 @@ Dependencies: B-01, B-02, B-03
 
 ---
 
-## P76 — Tool Layer Conformance Remediation — Not Started (awaiting user prioritization)
+## P76 — Tool Layer Conformance Remediation — Not Started
 
-**Goal:** Fix the non-conformances found by the P75 audit. No test or gate failed (all gates
-green at P75 sign-off), so these are registered as a planned follow-up phase, not Defect
-Tasks. The Context Pack item is a doc-vs-code divergence and requires an ADR decision
-before any code change (AGENTS.md §When in Doubt: code is runtime truth, docs are design
-truth; file an ADR before changing either).
+**Goal:** Fix the non-conformances found by the P75 audit, under the **hybrid** output-contract
+resolution chosen by the user (2026-06-10): the domain-dict return contract is codified as
+official (DESIGN.md amended); full Context Pack is NOT implemented; the two real holes —
+`missing_data` absence and unbounded row returns — are closed surgically. DOS→DOI merge
+approved (DOI is the warehouse-aware superset; DOS-unique `stockout_date_estimate` is ported).
 
-Proposed tasks (to be batched on user approval):
+### Batch B-01 — ADR: hybrid tool output contract + DOS/DOI merge (Orchestrator) — Done
 
 | Task | Description | Status |
 |---|---|---|
-| T-477 | ADR: resolve Context Pack divergence — DESIGN.md §Tool Design Constraints mandates `summary`/`schema`/`key_metrics`/`missing_data`/`artifact_id` returns, but 0/35 tools implement it (all return domain-specific dicts; `nl_query` returns raw rows). Options: (a) implement Context Pack across the tool layer with artifact storage, (b) amend DESIGN.md to codify the current domain-dict contract + per-tool `output_schema`, (c) hybrid: keep domain dicts, add `missing_data` + row-cap/artifact rule for row-returning tools. | Not Started |
-| T-478 | `evaluator_tool.py`: raise `RuntimeError` when `risk_thresholds.yaml` is missing instead of silently falling back to hardcoded 0.85/0.95 defaults (AGENTS.md fail-silent prohibition). | Not Started |
-| T-479 | `supply_open_orders_tool.py` / `supply_delayed_orders_tool.py`: add LIMIT to unbounded order queries (context flooding risk on large supply_orders). | Not Started |
-| T-480 | Extract shared helpers: `_classify_stockout_risk` (duplicated in `inventory_stockout_risk_tool.py` + `list_stockout_risk_tool.py` — divergence risk on threshold change) and `_db_error_message` (~16 copies) into a shared module. | Not Started |
-| T-481 | `data_catalog_search_tool.py`: surface DB failure via explicit `error`/`note` key instead of silently returning `row_count: None` rows. | Not Started |
-| T-482 | Add behavioral unit test for `train_forecast` `handle()` (only tool with indirect-only coverage). | Not Started |
-| T-483 | Decision + optional merge: `calculate_days_of_supply` → `calculate_days_of_inventory` (identical formula; DOI is warehouse-aware superset; DOS adds `stockout_date_estimate`). Touches `_INTENT_TOOL_SUBSET` (4 subsets), system prompt, `test_control_agent_intent_tool_subset.py`, AGENT_ARCHITECTURE.md Tier 2. | Not Started |
+| T-477 | Author `docs/adr/2026-06-10-tool-output-contract-hybrid.md`: (1) official contract = domain-specific dict conforming to declared `output_schema`; (2) DB tools MUST populate `missing_data: list[str]` when required source data is absent; (3) row-array tools MUST cap rows and set `truncated` (existing caps retained; new `LIMIT 100` for supply-order tools); (4) shared helpers module for `_classify_stockout_risk` / `_db_error_message`; (5) DOS→DOI merge decision; (6) escalation criteria to full Context Pack (multi-agent runtime, artifact store, report tools). Append DECISIONS.md entry. | Done |
 
-Dependencies: P75 Done; T-477 (ADR) blocks any Context-Pack-related code change.
+Dependencies: none
+
+### Batch B-02 — Contract fixes (App Builder) — Not Started
+
+| Task | Description | Status |
+|---|---|---|
+| T-478 | `evaluator_tool.py`: raise `RuntimeError` when `risk_thresholds.yaml` is missing instead of silently falling back to hardcoded 0.85/0.95 defaults. | Not Started |
+| T-479 | `supply_open_orders_tool.py` / `supply_delayed_orders_tool.py`: add `LIMIT 100` + `truncated` output flag. | Not Started |
+| T-480 | Create `packages/tools/_shared.py` (name per App Builder judgment): extract `classify_stockout_risk` (2 copies) and `db_error_message` (~16 copies); update all importing tools. | Not Started |
+| T-481 | `data_catalog_search_tool.py`: surface DB failure via explicit `error` key instead of silently returning `row_count: None` rows. | Not Started |
+| T-484 | Add `missing_data: list[str]` population to the 28 DB-accessing tools per ADR: when a required source (master row, history rows, cost record) is unavailable, append a human-readable entry; field present and empty otherwise. Update each tool's `output_schema`. | Not Started |
+
+Dependencies: B-01. Note: tests are updated by Test/Review in B-04; batch check = `make lint && make typecheck` + no NEW unit failures beyond those enumerated for B-04.
+
+### Batch B-03 — DOS→DOI merge + doc amendments (App Builder) — Not Started
+
+| Task | Description | Status |
+|---|---|---|
+| T-483 | Merge `calculate_days_of_supply` into `calculate_days_of_inventory`: add `stockout_date_estimate` output to DOI; delete `supply_days_tool.py`; remove registry entry; replace DOS with DOI in `_INTENT_TOOL_SUBSET` (`supply_chain`; dedupe in `domain_analysis`/`cross_domain_analysis`/`decision_support`) and in the ControlAgent system prompt. | Not Started |
+| T-485 | Amend `docs/DESIGN.md` §Tool Design Constraints to the hybrid contract per ADR (remove Context Pack 5-field mandate; add missing_data + row-cap rules); update `docs/AGENT_ARCHITECTURE.md` (tool count 35→from-registry, Tier 2 DOS reference, "35 registered tools" figure → actual). | Not Started |
+
+Dependencies: B-01 (parallel-eligible with B-02; runs after B-02 in practice)
+
+### Batch B-04 — Tests + phase sign-off (Test/Review) — Not Started
+
+| Task | Description | Status |
+|---|---|---|
+| T-482 | Add behavioral unit test for `train_forecast` `handle()` (only tool with indirect-only coverage in P75). | Not Started |
+| T-486 | Update/add unit tests for B-02/B-03: evaluator RuntimeError path; LIMIT+truncated; shared helpers; data_catalog_search error key; missing_data population (representative tools); DOS removal (subset test, registry test); DOI `stockout_date_estimate`. | Not Started |
+| T-487 | Phase sign-off: `make test-unit && make lint && make typecheck && make test-integration` (full DSN) `&& make build && make test-playwright` — proof-of-execution. | Not Started |
+
+Dependencies: B-02, B-03
