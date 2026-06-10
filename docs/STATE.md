@@ -32,6 +32,7 @@ P61 — Quality Hardening: Degenerate Guard / Rule-Based Verifier (2026-06-07)
 P62 — ControlAgent Groundedness Verifier Rule 1b (2026-06-07)
 P63 — ControlAgent Intent-to-Tool Subset Alignment (2026-06-07)
 P64 — Agent Architecture Gap Closure (5 Gaps) (2026-06-10)
+P65–P70 — Full Refactoring Programme (2026-06-10): dead agent classes, routing collapse (ADR 2026-06-10-orchestrator-routing-collapse), tool allowlist rationalization, frontend dead code, dependency/config hygiene, test/docs consolidation
 
 See `docs/archive/v3/STATE.md` for P0–P23 per-phase details.
 
@@ -39,15 +40,15 @@ See `docs/archive/v3/STATE.md` for P0–P23 per-phase details.
 
 ## Active Phase
 
-P70 — Test Suite & Documentation Consolidation
+None
 
 ## Active Lease
 
-P70-B-01, P70-B-03 (parallel — tests/ vs docs/ scopes; B-02 archive runs last)
+None
 
 ## Last Completed
 
-P68 + P69 (2026-06-10); both sign-offs PASS (vitest 60, playwright 32, unit 770, integration 16 passed/0 failed, uv sync clean, build/lint/typecheck exit 0).
+P70 — Test Suite & Documentation Consolidation (2026-06-10). Full refactoring programme P65–P70 complete; final sign-off PASS (unit 769 passed, integration 16 passed/0 failed, build exit 0, playwright 32/32 incl. 1 pre-existing Ollama cold-start flake passing on retry). TASKS.md archived to docs/archive/v4/ (1,888 → 325 lines). D-001/D-002 Resolved; FP-003 hardened.
 
 ## Blockers
 
