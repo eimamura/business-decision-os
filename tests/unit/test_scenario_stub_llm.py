@@ -1,13 +1,12 @@
 from __future__ import annotations
 
 import json
-import os
 
 import pytest
 
 from packages.agent.llm import LLMMessage, ScenarioStubClaudeClient
-from packages.agent.orchestrator import AgentRoute, SessionIntent
-from packages.agent.orchestrator.prompts import ASK_USER_SYSTEM, INTENT_SYSTEM, ROUTER_SYSTEM
+from packages.agent.orchestrator import SessionIntent
+from packages.agent.orchestrator.prompts import ASK_USER_SYSTEM, INTENT_SYSTEM
 
 
 def _system_msg(text: str) -> LLMMessage:
@@ -32,32 +31,6 @@ async def test_stub_intent_system_parses_as_session_intent(
     assert intent.category
     assert 0.0 <= intent.confidence <= 1.0
     assert intent.rationale
-
-
-async def test_stub_router_system_parses_as_agent_route(
-    stub: ScenarioStubClaudeClient,
-) -> None:
-    response = await stub.complete([_system_msg(ROUTER_SYSTEM), _user_msg("Route this")])
-    data = json.loads(response.text)
-    route = AgentRoute(**data)
-    assert route.mode in (
-        "direct_chat",
-        "single_agent",
-        "sequential_agents",
-        "planned_execution",
-        "dag_execution",
-    )
-    assert route.rationale
-
-
-async def test_stub_router_single_agent_has_exactly_one_agent(
-    stub: ScenarioStubClaudeClient,
-) -> None:
-    response = await stub.complete([_system_msg(ROUTER_SYSTEM), _user_msg("Route this")])
-    data = json.loads(response.text)
-    route = AgentRoute(**data)
-    if route.mode == "single_agent":
-        assert len(route.agents) == 1, "single_agent mode requires exactly one agent"
 
 
 async def test_stub_ask_user_system_needs_input_false_by_default(

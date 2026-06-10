@@ -10,8 +10,13 @@ import pytest
 from typing import AsyncIterator
 
 from packages.agent.llm import LLMMessage, LLMResponse, LLMStreamEvent, LLMToolSpec, LLMUsage
-from packages.agent.orchestrator.models import AgentRoute, AskUserDecision, SessionIntent
-from tests.unit.helpers import MultiRoleModelRegistry, StructuredOutputFakeModel
+from packages.agent.orchestrator.models import AskUserDecision, SessionIntent
+from tests.unit.helpers import (
+    FakeLCModel,
+    MultiRoleModelRegistry,
+    StructuredOutputFakeModel,
+    make_stop_response,
+)
 
 
 def _make_llm_response(text: str) -> LLMResponse:
@@ -56,11 +61,6 @@ class _AskUserYesLLMClient:
                 '{"category":"domain_analysis","confidence":0.9,'
                 '"rationale":"needs date range","goal_text":"analyze inventory"}'
             )
-        if "router inside SessionOrchestrator" in system:
-            return _make_llm_response(
-                '{"mode":"direct_chat","agents":[],'
-                '"requires_planning":false,"requires_dag":false,"rationale":"resumed"}'
-            )
         return _make_llm_response("Analysis complete for the requested date range.")
 
     async def stream(
@@ -101,7 +101,10 @@ def _make_orchestrator(llm_client: Any, needs_input: bool = True) -> Any:
     from packages.memory import StubMemoryStore
     from packages.tools import create_tool_registry
 
-    # domain_analysis is an analytical intent — _node_prepare_ask_user fires
+    # domain_analysis is an analytical intent — _node_prepare_ask_user fires.
+    # AgentRoute is no longer consumed by select_execution_mode (routing is deterministic).
+    # On resume (needs_input=False path), domain_analysis routes to single_agent →
+    # run_sequential needs a control model available as "default".
     ask_decision = AskUserDecision(
         needs_input=needs_input,
         question="What date range should I analyze?" if needs_input else None,
@@ -113,12 +116,15 @@ def _make_orchestrator(llm_client: Any, needs_input: bool = True) -> Any:
             rationale="needs date range", goal_text="analyze inventory",
         ),
         ask_decision,
-        AgentRoute(
-            mode="direct_chat", agents=[],
-            requires_planning=False, requires_dag=False, rationale="resumed",
-        ),
     ])
-    registry = MultiRoleModelRegistry({"orchestrator": orchestrator_model})
+    control_model = FakeLCModel([
+        make_stop_response("Analysis complete for the requested date range."),
+        make_stop_response("pass"),
+    ])
+    registry = MultiRoleModelRegistry({
+        "orchestrator": orchestrator_model,
+        "default": control_model,
+    })
 
     return SessionOrchestrator(
         llm_client=llm_client,
@@ -139,6 +145,7 @@ async def test_prepare_ask_user_clamps_suggestions_to_three() -> None:
     from packages.tools import create_tool_registry
 
     # AskUserDecision with 5 suggestions — must be clamped to 3 by the node
+    # AgentRoute is no longer consumed by select_execution_mode (routing is deterministic)
     orchestrator_model = StructuredOutputFakeModel([
         SessionIntent(
             category="domain_analysis", confidence=0.9,
@@ -148,10 +155,6 @@ async def test_prepare_ask_user_clamps_suggestions_to_three() -> None:
             needs_input=True,
             question="Which SKU?",
             suggestions=["A", "B", "C", "D", "E"],
-        ),
-        AgentRoute(
-            mode="direct_chat", agents=[],
-            requires_planning=False, requires_dag=False, rationale="resumed",
         ),
     ])
     registry = MultiRoleModelRegistry({"orchestrator": orchestrator_model})
@@ -274,11 +277,6 @@ async def test_ask_user_non_analytical_passes_through() -> None:
                     '{"category":"chat","confidence":0.95,'
                     '"rationale":"greeting","goal_text":null}'
                 )
-            if "router inside SessionOrchestrator" in system:
-                return _make_llm_response(
-                    '{"mode":"direct_chat","agents":[],'
-                    '"requires_planning":false,"requires_dag":false,"rationale":"chat"}'
-                )
             return _make_llm_response("Hello! How can I help?")
 
         async def stream(
@@ -312,15 +310,11 @@ async def test_ask_user_non_analytical_passes_through() -> None:
     from packages.memory import StubMemoryStore
     from packages.tools import create_tool_registry
 
-    # chat intent — ask_user node is skipped
+    # chat intent — ask_user node is skipped; routing is deterministic (no AgentRoute needed)
     chat_orchestrator_model = StructuredOutputFakeModel([
         SessionIntent(
             category="chat", confidence=0.95,
             rationale="greeting", goal_text=None,
-        ),
-        AgentRoute(
-            mode="direct_chat", agents=[],
-            requires_planning=False, requires_dag=False, rationale="chat",
         ),
     ])
     chat_registry = MultiRoleModelRegistry({"orchestrator": chat_orchestrator_model})

@@ -209,7 +209,7 @@ Dependencies: B-02
 - Discovered: 2026-06-10, post-sign-off, live user session (API log 22:15 UTC, session b45d034c)
 - Symptom: lookup-intent query fails with `ValueError: single_agent route requires exactly one agent` → user sees "Processing failed. Please try again."
 - Location: `packages/agent/orchestrator/session_orchestrator.py` `select_execution_mode` — non-supply_chain intents still ask the orchestrator LLM to generate `AgentRoute`; gemma4:12b returned `agents` ≠ exactly 1 and `validate_route` raised. P66's routing collapse added a deterministic shortcut for `supply_chain` only, leaving an LLM call with zero decision content (`VALID_AGENT_ROLES == {"control"}`, `_INTENT_MODE_MAP` is total) as a per-request failure source.
-- Status: Open (fix scheduled in P78-B-01/T-492)
+- Status: Resolved (T-492 deterministic routing + T-493 tests; gates passed 2026-06-10)
 
 ---
 
@@ -623,7 +623,7 @@ Dependencies: B-01
 
 ---
 
-## P78 — Deterministic Routing Completion — In Progress
+## P78 — Deterministic Routing Completion — Done (2026-06-10)
 
 **Goal:** Resolve D-005 by completing P66's routing collapse: construct `AgentRoute`
 deterministically for ALL intent categories (`_INTENT_MODE_MAP` + `agents=["control"]`
@@ -639,11 +639,11 @@ failure source. No public interface signature changes (`select_execution_mode` r
 
 Dependencies: none
 
-### Batch B-02 — Tests + gate (Test/Review) — Not Started
+### Batch B-02 — Tests + gate (Test/Review) — Done
 
 | Task | Description | Status |
 |---|---|---|
-| T-493 | Unit tests: every `_INTENT_MODE_MAP` category (+ unknown category fallback) yields a route that passes `validate_route`; routing performs no LLM call (model registry not invoked for the routing step). Update any test stubbing the router LLM. | Not Started |
-| T-494 | Gate: `make test-unit && make lint && make typecheck && make build && make test-playwright` — proof-of-execution. Mark D-005 Resolved on pass. | Not Started |
+| T-493 | Unit tests: every `_INTENT_MODE_MAP` category (+ unknown category fallback) yields a route that passes `validate_route`; routing performs no LLM call (model registry not invoked for the routing step). Update any test stubbing the router LLM. | Done |
+| T-494 | Gate: `make test-unit && make lint && make typecheck && make build && make test-playwright` — proof-of-execution. Mark D-005 Resolved on pass. | Done |
 
 Dependencies: B-01

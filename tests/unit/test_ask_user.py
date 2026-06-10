@@ -8,8 +8,13 @@ from uuid import UUID, uuid4
 
 from packages.agent.llm import LLMMessage, LLMResponse, LLMStreamEvent, LLMToolSpec, LLMUsage
 from packages.agent.orchestrator.ask_user import build_ask_user_event, is_analytical_intent
-from packages.agent.orchestrator.models import AgentRoute, AskUserDecision, SessionIntent
-from tests.unit.helpers import MultiRoleModelRegistry, StructuredOutputFakeModel
+from packages.agent.orchestrator.models import AskUserDecision, SessionIntent
+from tests.unit.helpers import (
+    FakeLCModel,
+    MultiRoleModelRegistry,
+    StructuredOutputFakeModel,
+    make_stop_response,
+)
 
 _SESSION_ID = UUID("12345678-1234-5678-1234-567812345678")
 
@@ -127,11 +132,6 @@ class _AskUserNoLLMClient:
                 '{"category":"domain_analysis","confidence":0.9,'
                 '"rationale":"sufficient context","goal_text":"analyze inventory"}'
             )
-        if "router inside SessionOrchestrator" in system:
-            return _make_llm_response(
-                '{"mode":"direct_chat","agents":[],'
-                '"requires_planning":false,"requires_dag":false,"rationale":"chat"}'
-            )
         return _make_llm_response("Analysis complete.")
 
     async def stream(
@@ -167,19 +167,21 @@ def _make_orchestrator(llm_client: Any) -> Any:
     from packages.memory import StubMemoryStore
     from packages.tools import create_tool_registry
 
-    # domain_analysis is an analytical intent — requires AskUserDecision before routing
+    # domain_analysis is an analytical intent — requires AskUserDecision before routing.
+    # AgentRoute is no longer consumed by select_execution_mode (routing is deterministic).
+    # domain_analysis routes to single_agent → run_sequential needs a control model.
     orchestrator_model = StructuredOutputFakeModel([
         SessionIntent(
             category="domain_analysis", confidence=0.9,
             rationale="sufficient context", goal_text="analyze inventory",
         ),
         AskUserDecision(needs_input=False, question=None, suggestions=None),
-        AgentRoute(
-            mode="direct_chat", agents=[],
-            requires_planning=False, requires_dag=False, rationale="chat",
-        ),
     ])
-    registry = MultiRoleModelRegistry({"orchestrator": orchestrator_model})
+    control_model = FakeLCModel([make_stop_response("Analysis complete.")])
+    registry = MultiRoleModelRegistry({
+        "orchestrator": orchestrator_model,
+        "default": control_model,
+    })
 
     return SessionOrchestrator(
         llm_client=llm_client,

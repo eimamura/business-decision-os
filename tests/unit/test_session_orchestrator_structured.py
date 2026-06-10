@@ -47,26 +47,18 @@ async def test_classify_intent_uses_structured_output_when_registry_provided():
     assert result is intent
 
 
-async def test_select_execution_mode_uses_structured_output_when_registry_provided():
-    from packages.agent.orchestrator.models import AgentRoute, SessionIntent, SessionUserQuery
+async def test_select_execution_mode_is_deterministic_no_llm_call():
+    """select_execution_mode must not invoke the model registry for routing."""
+    from packages.agent.orchestrator.models import SessionIntent, SessionUserQuery
 
-    route = AgentRoute(mode="direct_chat", rationale="simple query")
-    intent = SessionIntent(category="analysis", confidence=0.9, rationale="test")
+    recording_registry = MagicMock()
+    orchestrator = _make_orchestrator(model_registry=recording_registry)
 
-    model_mock = MagicMock()
-    structured = MagicMock()
-    structured.ainvoke = AsyncMock(return_value=route)
-    model_mock.with_structured_output.return_value = structured
-
-    registry = _make_registry_with_model(model_mock)
-    orchestrator = _make_orchestrator(model_registry=registry)
-
+    intent = SessionIntent(category="chat", confidence=0.9, rationale="test")
     query = SessionUserQuery(text="What is inventory level?")
-    result = await orchestrator.select_execution_mode(query, intent, uuid4())
+    await orchestrator.select_execution_mode(query, intent, uuid4())
 
-    model_mock.with_structured_output.assert_called_once_with(AgentRoute)
-    structured.ainvoke.assert_called_once()
-    assert result.mode == "direct_chat"
+    recording_registry.get.assert_not_called()
 
 
 async def test_classify_intent_raises_when_no_registry():
