@@ -40,11 +40,11 @@ See `docs/archive/v3/STATE.md` for P0–P23 per-phase details.
 
 ## Active Phase
 
-None
+P79 — Session Resume & Lifecycle Robustness
 
 ## Active Lease
 
-None
+P79-B-01
 
 ## Last Completed
 

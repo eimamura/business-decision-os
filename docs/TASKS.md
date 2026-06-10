@@ -648,3 +648,71 @@ Dependencies: none
 | T-494 | Gate: `make test-unit && make lint && make typecheck && make build && make test-playwright` — proof-of-execution. Mark D-005 Resolved on pass. | Done |
 
 Dependencies: B-01
+
+---
+
+## P79 — Session Resume & Lifecycle Robustness — Not Started
+
+**Goal:** Resolve D-006 (ask_user resume crashes with `KeyError: 'session_id'` when no
+LangGraph checkpoint exists for the thread) and D-007 (session deletion does not cancel
+in-flight background runs → orphaned runs spam `session_events` FK violations; session
+endpoints other than `post_message` lack DB recovery after a process restart). Both are
+latent defects from archived phases, surfaced during live runtime diagnosis on 2026-06-10
+(the same session that uncovered D-004/D-005).
+
+#### Defect: D-006
+
+- Discovered: 2026-06-10, live runtime diagnosis post-P77 (compose-api-1 logs 21:45:49, 21:48:05, 22:07:39 UTC — 3 distinct sessions)
+- Symptom: `POST /api/v1/sessions/{id}/answer` returns 202, then the background resume task crashes with `KeyError: 'session_id'`; the user receives SSE error `resume_failed` ("Processing failed. Please try again.")
+- Location: `packages/agent/orchestrator/session_orchestrator.py` — `answer_ask_user` issues `Command(resume={"answer": ...})` unconditionally. When the thread has no LangGraph checkpoint (original run died in a uvicorn reload, or the session never ran a graph), LangGraph starts the graph from `START` with empty input state and `_node_classify_intent`'s `UUID(state["session_id"])` raises KeyError. Verified via `checkpoints` table: the failing thread's only 2 checkpoints (step -1 `input`, step 0 `loop`) were created by the resume call itself, with an `__error__` write at `classify_intent`. Same latent risk in `resume()` (approval path).
+- Originating phase: P13 (ask_user interrupt flow; T-088–T-099) — predates the checkpoint-existence guard ever being needed because in-process MemorySaver state could not outlive the run
+- Repro: `POST /api/v1/sessions` then immediately `POST /api/v1/sessions/{id}/answer` with `{"answer":"x"}` (no prior paused run) → SSE error event, log shows `Resume failed ... KeyError: 'session_id'`
+- Severity: Medium
+- Observed: unhandled KeyError surfaced as generic `resume_failed`; graph executes from empty state, burning an LLM call before crashing
+- Expected: missing checkpoint / no pending `wait_for_answer` interrupt is detected before resuming; router returns HTTP 409 with an actionable detail (e.g. "No pending question for this session — it may have been lost on a server restart. Re-send your message."); no graph execution from empty state
+- Area: `packages/agent/orchestrator/session_orchestrator.py`, `apps/api/routers/sessions.py`
+- Owner: App Builder
+- Acceptance: unit tests — (1) `submit_ask_user_answer` on a session with no pending interrupt → 409, no orchestrator graph invocation; (2) `answer_ask_user` raises a typed error (not KeyError) when the thread has no checkpoint; existing happy-path ask_user tests still pass
+- Status: Open
+
+#### Defect: D-007
+
+- Discovered: 2026-06-10, same diagnosis session (198 × `event persist failed: ... violates foreign key constraint "session_events_session_id_fkey"` warnings; ~25 sessions × 8 events each)
+- Symptom: (1) deleting a session while its background run (`_run_and_signal` / `_run_resume_and_signal`) is in flight leaves the run executing — it keeps calling the LLM and persisting events into a deleted `decision_sessions` row, producing FK-violation warning spam (observed sequence: `POST .../answer` 202 → `DELETE /sessions/{id}` 204 → resume continues → every event INSERT fails FK). (2) After a uvicorn reload wipes the in-memory `sessions` dict, only `post_message` recovers from DB; `update_session_title`, `submit_ask_user_answer`, `get_messages`, `set_message_feedback` 404 on dict miss even when the DB row exists (observed: session eebeff3b POST /messages 404 at 21:54–21:59 UTC after reload + delete-all race)
+- Location: `apps/api/routers/sessions.py` (`delete_session`, `delete_all_sessions`, dict-only lookups), `apps/api/state.py` (`make_event_persister` writes unconditionally; `session_run_ids` tracks run ids but no task handles are kept, so nothing can be cancelled)
+- Originating phase: session event log introduction (commit c9e383f) + P13 background-task pattern
+- Repro: start a message run, `DELETE /api/v1/sessions/{id}` before it completes → observe `event persist failed` FK warnings until the orphaned run finishes
+- Severity: Medium
+- Observed: orphaned background runs survive session deletion (wasted LLM spend, FK warning spam, `done` events broadcast for deleted sessions); session endpoints inconsistently recover after restart
+- Expected: session deletion cancels the session's in-flight asyncio task and tears down its broadcaster/run-id entries; event persistence stops once the session is deleted; all session-scoped endpoints share `post_message`'s DB-recovery fallback
+- Area: `apps/api/routers/sessions.py`, `apps/api/state.py`
+- Owner: App Builder
+- Acceptance: unit tests — (1) deleting a session with an in-flight (stub-blocked) run cancels the task and no event persist is attempted afterwards; (2) `update_session_title` / `get_messages` / `submit_ask_user_answer` succeed after the in-memory dict is cleared when the DB row exists (404 only when both are absent); no FK-violation warnings in a normal create→run→delete unit flow
+- Status: Open
+
+### Batch B-01 — D-006: resume checkpoint guard (App Builder) — Not Started
+
+| Task | Description | Status |
+|---|---|---|
+| T-495 | `session_orchestrator.py`: before resuming, verify the thread has a checkpoint with a pending interrupt — `graph.aget_state(config)` in `answer_ask_user` (and `resume`); if no checkpoint or no pending `wait_for_answer`/approval interrupt, raise a typed exception (e.g. `NoPendingInterruptError` in the orchestrator module). Defensive: `_node_classify_intent` reads `state.get("session_id")` and raises a descriptive `RuntimeError` if absent (never a bare KeyError). `apps/api/routers/sessions.py` `submit_ask_user_answer`: catch the typed error pre-dispatch (or check before creating the background task) and return HTTP 409 with detail "No pending question for this session — it may have been lost on a server restart. Re-send your message."; emit no `resume_failed` SSE for this case. | Not Started |
+
+Dependencies: none
+
+### Batch B-02 — D-007: run cancellation on delete + DB recovery (App Builder) — Not Started
+
+| Task | Description | Status |
+|---|---|---|
+| T-496 | Track background run task handles per session (e.g. `session_tasks: dict[str, asyncio.Task]` in `apps/api/state.py`, registered by `post_message`/`submit_ask_user_answer`). `delete_session` and `delete_all_sessions`: cancel the session's task (await suppression of `CancelledError`), then remove broadcaster, ready-event, and run-id entries before deleting the DB row. `_run_and_signal`/`_run_resume_and_signal` must tolerate cancellation (no `done` broadcast, no persists after cancel). | Not Started |
+| T-497 | DB-recovery consistency: extract `post_message`'s recover-from-DB block into a shared helper (e.g. `get_or_recover_session(session_id)`) and use it in `update_session_title`, `get_messages`, `set_message_feedback`, and `submit_ask_user_answer`; 404 only when the session exists in neither the dict nor the DB. Event persister: skip writes once the session has been deleted (guard in `make_event_persister` against the tracked session set) and downgrade the FK-violation log to debug with a single-line message. | Not Started |
+
+Dependencies: none (parallel-eligible with B-01; B-01 runs first to keep `sessions.py` edits sequential)
+
+### Batch B-03 — Tests + gate (Test/Review) — Not Started
+
+| Task | Description | Status |
+|---|---|---|
+| T-498 | Unit tests for D-006 acceptance: ASGITransport POST `/answer` with no pending interrupt → 409 + no graph invocation; `answer_ask_user` on empty thread raises the typed error; happy-path ask_user resume unaffected (existing tests). | Not Started |
+| T-499 | Unit tests for D-007 acceptance: delete-cancels-run (stub-blocked run task is cancelled; no event persist after); DB-recovery for `update_session_title`/`get_messages`/`submit_ask_user_answer` (dict cleared, DB row present → success; both absent → 404); event persister skip-after-delete. | Not Started |
+| T-500 | Gate: `make test-unit && make lint && make typecheck && make build && make test-playwright` — proof-of-execution (command, exit code, output tail per gate). Mark D-006 and D-007 Resolved on pass. | Not Started |
+
+Dependencies: B-01, B-02
