@@ -44,7 +44,7 @@ P79 — Session Resume & Lifecycle Robustness
 
 ## Active Lease
 
-P79-B-01
+P79-B-02
 
 ## Last Completed
 
