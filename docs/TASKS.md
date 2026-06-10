@@ -1683,7 +1683,7 @@ Dependencies: P64 Done
 
 #### Defect: D-001
 
-- Status: Open
+- Status: Resolved (2026-06-10 — fixed in P65-B-01 commit; Test/Review confirmed `make typecheck` exit 0)
 - Severity: Medium
 - Repro: `make typecheck`
 - Observed: 4 mypy errors pre-dating P65 — `packages/tools/base.py:50` (no-any-return), `packages/tools/base.py:52`, `packages/agent/runtime.py:698`, `packages/agent/runtime.py:809` (unused-ignore). Discovered during P65 B-01 batch check; verified pre-existing via stash/restore.
@@ -1694,12 +1694,12 @@ Dependencies: P64 Done
 
 Dependencies: none
 
-### Batch B-02 — Remove tests of deleted code + quality gate (Test/Review) — Not Started
+### Batch B-02 — Remove tests of deleted code + quality gate (Test/Review) — Done
 
 | Task | Description | Status |
 |---|---|---|
-| T-425 | Delete `tests/unit/agent/test_sop_agent.py` and `tests/unit/test_output_builders.py`; audit `tests/unit/test_sop_roles.py` and any other test importing removed modules — delete or trim to surviving behavior only. | Not Started |
-| T-426 | `make test-unit && make lint && make typecheck` — all pass. | Not Started |
+| T-425 | Delete `tests/unit/agent/test_sop_agent.py` and `tests/unit/test_output_builders.py`; audit `tests/unit/test_sop_roles.py` and any other test importing removed modules — delete or trim to surviving behavior only. | Done |
+| T-426 | `make test-unit && make lint && make typecheck` — all pass. | Done |
 
 Dependencies: B-01
 

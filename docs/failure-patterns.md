@@ -11,6 +11,7 @@ Escalation actions tracked in `docs/prevention-policy.md §Applied Lever Log`.
 |---|---|---|---|---|---|---|
 | FP-001 | 2026-06-07 | ad-hoc (P54後) | `test-gap` | `StubClaudeClient` が旧カスタム API (`stream(messages=...)`) を実装したまま残ったため、P54 で `_llm_client` が `BaseChatModel` に置き換わった後も `decision.py`・`runtime.py` の呼び出し漏れをユニットテストが検出できなかった | 1 | — |
 | FP-002 | 2026-06-07 | ad-hoc (migration 0009後) | `agent-behavior` | `nl_query_tool.py` の `FEW_SHOT_EXAMPLES` にテーブル名をハードコードし AGENTS.md 73-74 の禁止ルールに違反したため、migration 0009 のテーブルリネーム (`inventory`→`inventory_snapshot`, `supply`→`supply_orders`) 後も few-shot 例が更新されず LLM が無効な SQL を生成し続けた | 1 | — |
+| FP-003 | 2026-06-10 | D-001 | `agent-behavior` | The quality-gate task (T-420) for P64 was signed off as Done without running `make typecheck` against the final committed state: the `_RoleToolAllowlist` class added as P64's last code edit introduced two `no-any-return` errors in `base.py`, and two stale `# type: ignore` comments in `runtime.py` (made unused by earlier LangChain migration) were never removed — all four violations were present in the committed tree at P64-Done but were not caught until P65 ran the gate fresh | 1 | — |
 
 ---
 
