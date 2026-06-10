@@ -537,9 +537,10 @@ async def submit_ask_user_answer(
             # resume. Log as a warning (not an exception) and do not emit resume_failed
             # SSE — the 409 contract specifies no SSE error event for this case.
             _log.warning(
-                "answer_ask_user found no pending interrupt despite pre-dispatch guard: %s",
+                "answer_ask_user found no pending interrupt despite pre-dispatch guard"
+                " (session %s): %s",
+                session_id_str,
                 exc,
-                session_id=session_id_str,
             )
             no_pending_interrupt = True
         except Exception as exc:
