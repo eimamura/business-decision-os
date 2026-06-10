@@ -118,14 +118,33 @@ def _has_non_empty_tool_data(tool_results: list[dict[str, Any]]) -> bool:
     return False
 
 
+_FENCED_CODE_RE = re.compile(r"```[^\n]*\n?.*?```", re.DOTALL)
+_INLINE_CODE_RE = re.compile(r"`[^`]+`")
+
+
+def _strip_code_from_conclusion(text: str) -> str:
+    """Remove fenced code blocks (```...```) and inline code spans (`...`) from *text*.
+
+    Used by Rule 1 so that digits or keywords inside code (e.g. SQL responses)
+    do not trigger the fabrication heuristic.  Prose-level digits are unaffected.
+    """
+    text = _FENCED_CODE_RE.sub("", text)
+    text = _INLINE_CODE_RE.sub("", text)
+    return text
+
+
 def _rule_based_verify(
     tool_results: list[dict[str, Any]],
     conclusion: str,
 ) -> str:
     """Rule-based findings verifier — no LLM call.
 
-    Rule 1:  No tool calls made AND conclusion contains a number or "no"/"none"/"なし"
+    Rule 1:  No tool calls made AND conclusion (with fenced/inline code stripped)
+             contains a number or "no"/"none"/"なし"
              → fabricated data → "blocked"
+             Code blocks and inline code spans are excluded from the digit/keyword
+             scan so that legitimate SQL-writing answers are not blocked stochastically.
+             Rules 1b and 2 operate on the original (unstripped) conclusion.
     Rule 1b: Tool calls were made AND any result has count > 0 or non-empty items list
              AND conclusion matches a nil-claim pattern → "blocked"
     Rule 2:  Tool calls were made AND conclusion is shorter than _DEGENERATE_RESPONSE_MIN_LEN
@@ -135,7 +154,9 @@ def _rule_based_verify(
     has_tool_results = bool(tool_results)
     conclusion_stripped = conclusion.strip()
 
-    if not has_tool_results and _FABRICATED_NO_DATA_RE.search(conclusion_stripped):
+    if not has_tool_results and _FABRICATED_NO_DATA_RE.search(
+        _strip_code_from_conclusion(conclusion_stripped)
+    ):
         return "blocked"
 
     if has_tool_results and _has_non_empty_tool_data(tool_results) and _NIL_CLAIM_RE.search(
@@ -231,6 +252,8 @@ class AgentState(TypedDict):
     iteration: int
     status: str  # "running" | "completed" | "error" | "blocked"
     error: str | None
+    # Truthful reason for status="blocked" — set by each blocking site; None otherwise.
+    blocked_reason: str | None
     # HITL state — set by prepare_hitl, consumed by execute_tools
     pending_hitl_approval_id: str | None
     pending_hitl_job_id: str | None
@@ -981,7 +1004,10 @@ class AgentRuntime:
         )
 
         if verify_status == "blocked":
-            return {"status": "blocked"}
+            return {
+                "status": "blocked",
+                "blocked_reason": "findings verifier: response not grounded in tool results",
+            }
 
         # --- Phase 2: LLM groundedness check (gated) ---
 
@@ -1158,6 +1184,7 @@ class AgentRuntime:
                 response_len=len(final_text),
             )
             result["status"] = "blocked"
+            result["blocked_reason"] = "degenerate response after revision"
         else:
             result["status"] = "completed"
         # Mark revised so verify_findings skips the LLM verdict on re-entry
@@ -1332,6 +1359,7 @@ class AgentRuntime:
             "iteration": 0,
             "status": "running",
             "error": None,
+            "blocked_reason": None,
             "pending_hitl_approval_id": None,
             "pending_hitl_job_id": None,
             "compressed_messages": None,
@@ -1351,11 +1379,14 @@ class AgentRuntime:
         run_status = final_state.get("status", "completed")
 
         # Map internal graph status to SpecialistResult status
+        # "blocked" is a soft-fail: verifier declined the answer but the run itself completed.
+        # It maps to "completed" so the prepared fallback text is surfaced rather than a hard
+        # SSE error. Genuine "error" status (LLM/infra failure) still maps to "failed".
         specialist_status: str
         if run_status == "completed":
             specialist_status = "completed"
         elif run_status == "blocked":
-            specialist_status = "failed"
+            specialist_status = "completed"
         elif run_status == "error":
             specialist_status = "failed"
         else:
@@ -1394,18 +1425,31 @@ class AgentRuntime:
                 )
 
         # T-460: surface groundedness verdict in output meta (omitted when no verdict ran)
+        # T-501/T-502: also carry blocked_reason into verification meta when run was blocked.
         groundedness_result: dict[str, Any] | None = final_state.get("groundedness")
         is_revised: bool = bool(final_state.get("revised", False))
-        if groundedness_result is not None and isinstance(output, dict):
-            output["verification"] = {
-                "grounded": bool(groundedness_result.get("grounded", True)),
-                "revised": is_revised,
-            }
-        blocked_error = (
-            final_state.get("error") or "run blocked by tool-loop guard"
-            if run_status == "blocked"
-            else final_state.get("error")
-        )
+        run_blocked_reason: str | None = final_state.get("blocked_reason")
+        if groundedness_result is not None or run_status == "blocked":
+            if isinstance(output, dict):
+                verification: dict[str, Any] = {
+                    "grounded": bool(
+                        groundedness_result.get("grounded", True)
+                        if isinstance(groundedness_result, dict)
+                        else True
+                    ),
+                    "revised": is_revised,
+                }
+                if run_blocked_reason is not None:
+                    verification["blocked_reason"] = run_blocked_reason
+                output["verification"] = verification
+        # blocked_error: use the truthful blocked_reason from graph state (T-501).
+        # For genuine error-status runs, surface the error string.
+        # For blocked runs (now soft-fail/completed), error stays None.
+        blocked_error: str | None
+        if run_status == "error":
+            blocked_error = final_state.get("error")
+        else:
+            blocked_error = None
 
         # Auto-trigger audit log (non-fatal) — AuditLogTool is no longer LLM-callable (P64-B-02)
         if specialist_status != "failed":

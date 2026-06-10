@@ -719,7 +719,7 @@ Dependencies: B-01, B-02
 
 ---
 
-## P80 — Verifier Blocked-Path UX — Not Started
+## P80 — Verifier Blocked-Path UX — In Progress
 
 **Goal:** Resolve D-008. The P61 rule-based findings verifier blocks legitimate
 no-tool answers stochastically (Rule 1 regex `\d|no\b|none\b|なし` fires on any digit —
@@ -735,13 +735,13 @@ error-surface incident on 2026-06-10.
 - Root causes: (1) `_rule_based_verify` Rule 1 matches ANY digit in a no-tool response — legitimate code-writing answers fail stochastically; (2) `blocked_error` fallback at `packages/agent/runtime.py:1405` misattributes every verifier block to the tool-loop guard; (3) `run_status == "blocked"` maps to `specialist_status = "failed"`, so the prepared soft text ("Could not verify findings…") is displaced by a hard SSE error (`orchestrator/runtime.py:128`)
 - Status: Open (fix scheduled in P80-B-01)
 
-### Batch B-01 — Truthful block reason + soft-fail + Rule 1 refinement (App Builder) — Not Started
+### Batch B-01 — Truthful block reason + soft-fail + Rule 1 refinement (App Builder) — Done
 
 | Task | Description | Status |
 |---|---|---|
-| T-501 | `packages/agent/runtime.py`: carry a truthful `blocked_reason` in graph state — set by each blocking site (`verify_findings` rule result → "findings verifier: response not grounded in tool results"; degenerate final response → "degenerate response after revision"; loop-guard-forced path retains "tool-loop guard"). `blocked_error` uses `blocked_reason`; remove the misattributing default string. | Not Started |
-| T-502 | Soft-fail blocked runs: map `run_status == "blocked"` to `specialist_status = "completed"` with the existing fallback text ("Could not verify findings. Please rephrase your question or try again.") as the reply, keeping `blocked_reason` in output meta (e.g. `output["verification"]["blocked_reason"]`) for trace UI; no `agent_failed` SSE error for verifier blocks. Genuine `error` status path unchanged. | Not Started |
-| T-503 | `_rule_based_verify` Rule 1 refinement: strip fenced code blocks (``` … ```) and inline code spans from the conclusion before applying `_FABRICATED_NO_DATA_RE`, so digits/keywords inside code (SQL answers) do not trigger the fabrication heuristic; prose-level digits still do. Rules 1b/2 unchanged. | Not Started |
+| T-501 | `packages/agent/runtime.py`: carry a truthful `blocked_reason` in graph state — set by each blocking site (`verify_findings` rule result → "findings verifier: response not grounded in tool results"; degenerate final response → "degenerate response after revision"; loop-guard-forced path retains "tool-loop guard"). `blocked_error` uses `blocked_reason`; remove the misattributing default string. | Done |
+| T-502 | Soft-fail blocked runs: map `run_status == "blocked"` to `specialist_status = "completed"` with the existing fallback text ("Could not verify findings. Please rephrase your question or try again.") as the reply, keeping `blocked_reason` in output meta (e.g. `output["verification"]["blocked_reason"]`) for trace UI; no `agent_failed` SSE error for verifier blocks. Genuine `error` status path unchanged. | Done |
+| T-503 | `_rule_based_verify` Rule 1 refinement: strip fenced code blocks (``` … ```) and inline code spans from the conclusion before applying `_FABRICATED_NO_DATA_RE`, so digits/keywords inside code (SQL answers) do not trigger the fabrication heuristic; prose-level digits still do. Rules 1b/2 unchanged. | Done |
 
 Dependencies: none
 
