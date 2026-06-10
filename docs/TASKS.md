@@ -1716,7 +1716,7 @@ Dependencies: B-01
 
 ---
 
-## P66 — Orchestration Routing Simplification — Not Started
+## P66 — Orchestration Routing Simplification — Done (2026-06-10)
 
 **Goal:** With ControlAgent as the only runtime agent, the multi-agent execution modes are
 degenerate: `sequential_agents` and `planned_execution` can only ever produce a 1-element

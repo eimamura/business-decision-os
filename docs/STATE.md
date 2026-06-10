@@ -39,15 +39,15 @@ See `docs/archive/v3/STATE.md` for P0–P23 per-phase details.
 
 ## Active Phase
 
-P66 — Orchestration Routing Simplification
+P67 — Tool Layer Rationalization
 
 ## Active Lease
 
-P66-B-03
+P67-B-01
 
 ## Last Completed
 
-P65 — Dead Agent Class Removal (2026-06-10); sign-off PASS. D-001/D-002 Resolved; FP-003 hardened (mypy CI gate + proof-of-execution mandate). Integration baseline: 16 passed / 0 failed.
+P66 — Orchestration Routing Simplification (2026-06-10); sign-off PASS (unit 767 passed, integration 16 passed/0 failed, build/lint/typecheck exit 0, playwright 32 passed at batch level). ADR: 2026-06-10-orchestrator-routing-collapse.
 
 ## Blockers
 
