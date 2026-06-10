@@ -1644,3 +1644,211 @@ Dependencies: B-04
 
 Dependencies: B-01, B-02, B-03, B-04, B-05
 
+---
+
+# Full Refactoring Programme (P65–P70)
+
+**Scope decision (2026-06-10):** production infra code (`infra/terraform/`, `infra/databricks/`,
+`packages/lakehouse/`, `AcaJobsRunner`, Celery worker, `celery`/`redis` dependencies) is
+**explicitly preserved** per user decision — it is out of scope for all phases below.
+Targets are application-code waste only: dead agent classes, unreachable orchestration paths,
+registry/allowlist drift, unused frontend modules, config hygiene, and doc bloat.
+
+**Evidence base (survey 2026-06-10):** `VALID_AGENT_ROLES == {"control"}` and
+`CROSS_DOMAIN_AGENT_CLASSES == {}` since P38/P45 — `_make_agent()` can only ever instantiate
+`ControlAgent`, yet 15 legacy agent class files and the multi-agent execution machinery
+(`sequential_agents` / `planned_execution` / DAG, `decision.py` `simulation_optimizer` gating)
+remain in the tree.
+
+**Phase ordering:** P65 → P66 → P67 (sequential — each removes the context the next audits).
+P68 and P69 are independent and parallel-eligible after P65. P70 runs last.
+
+---
+
+## P65 — Dead Agent Class Removal — Not Started
+
+**Goal:** Delete all agent classes unreachable from any runtime path, and the dead branches
+that reference them. Lowest-risk, highest-volume deletion; establishes a clean base for P66.
+
+Dependencies: P64 Done
+
+### Batch B-01 — Delete dead agent class files (App Builder) — Not Started
+
+| Task | Description | Status |
+|---|---|---|
+| T-421 | Delete `packages/agent/deprecated/` entirely (demand, inventory, supply_planning, finance_impact, sop + `__init__.py`). P38 kept them "until they create problems"; they now carry stale `sql_query` references (tool deleted in P55) and are imported only by a unit test of deprecated code. | Not Started |
+| T-422 | Delete `packages/agent/cross_domain/` entirely (AnomalyDetectorAgent, DataEngineerAgent, EvaluatorAgent, SimulationOptimizerAgent). `CROSS_DOMAIN_AGENT_CLASSES == {}` means none are instantiable at runtime; only `tests/unit/test_output_builders.py` imports the module. | Not Started |
+| T-423 | Delete unused `packages/agent/domain/` agent files: `exception.py`, `logistics.py`, `procurement.py`, `production.py`, `replenishment.py`, `supplier.py` — classes defined but never imported anywhere. Afterward audit `AgentBasedSpecialist` in `packages/agent/base.py`; if `ControlAgent` is its sole remaining subclass, keep the base class but remove any branches that exist only for deleted subclasses. | Not Started |
+| T-424 | Remove the now-dead `CROSS_DOMAIN_AGENT_CLASSES` branch in `packages/agent/orchestrator/runtime.py::_make_agent`; simplify `packages/agent/orchestrator/roles.py` accordingly (keep `VALID_AGENT_ROLES` as the public lookup). | Not Started |
+
+Dependencies: none
+
+### Batch B-02 — Remove tests of deleted code + quality gate (Test/Review) — Not Started
+
+| Task | Description | Status |
+|---|---|---|
+| T-425 | Delete `tests/unit/agent/test_sop_agent.py` and `tests/unit/test_output_builders.py`; audit `tests/unit/test_sop_roles.py` and any other test importing removed modules — delete or trim to surviving behavior only. | Not Started |
+| T-426 | `make test-unit && make lint && make typecheck` — all pass. | Not Started |
+
+Dependencies: B-01
+
+---
+
+## P66 — Orchestration Routing Simplification — Not Started
+
+**Goal:** With ControlAgent as the only runtime agent, the multi-agent execution modes are
+degenerate: `sequential_agents` and `planned_execution` can only ever produce a 1-element
+control-agent sequence, and `decision.py` gates on `simulation_optimizer` results that can
+never exist (`packages/agent/orchestrator/decision.py:97,241`). Collapse routing to the paths
+that actually execute, without changing intent categories (they drive `_INTENT_TOOL_SUBSET`)
+or the SSE event contract.
+
+Dependencies: P65 Done
+
+### Batch B-01 — ADR: routing collapse (Orchestrator) — Not Started
+
+| Task | Description | Status |
+|---|---|---|
+| T-427 | ADR `docs/adr/2026-06-XX-orchestrator-routing-collapse.md` — document removal of `sequential_agents`/`planned_execution`/DAG execution modes and `simulation_optimizer`-dependent decision logic; state that the 6 intent categories and SSE `graph_node` event shape are preserved. | Not Started |
+
+Dependencies: none
+
+### Batch B-02 — Remove unreachable orchestration branches (App Builder) — Not Started
+
+| Task | Description | Status |
+|---|---|---|
+| T-428 | `packages/agent/orchestrator/decision.py` — remove `simulation_optimizer`-gated candidate logic and any code reachable only from it; fold `weights.py` usage: if `resolve_weights` becomes dead, delete `weights.py`; if `decision_support` ranking survives via ControlAgent output, keep the minimal live path. | Not Started |
+| T-429 | Collapse `_INTENT_MODE_MAP` in `routing.py` so every non-chat intent routes through the single-ControlAgent path; remove `run_dag_execution` and sequential multi-agent loops from `planning.py` and the corresponding `_node_run_planned`/`_node_run_dag` nodes in `session_orchestrator.py` (keep `_node_run_sequential` only if it is the surviving single-agent executor). SSE event shape must not change. | Not Started |
+| T-430 | Update `packages/agent/orchestrator/prompts.py` intent-classification text and `validate_route` in `routing.py` to match the surviving modes. Keep all 6 intent categories. | Not Started |
+
+Dependencies: B-01
+
+### Batch B-03 — Test updates + quality gate (Test/Review) — Not Started
+
+| Task | Description | Status |
+|---|---|---|
+| T-431 | Update or delete tests bound to removed paths: `test_dag_parallel_execution.py`, `test_decision_rank_candidates.py`, `test_routing.py`, `test_tool_isolation.py` (imports `orchestrator.weights`), `test_session_orchestrator_*` cases covering planned/DAG nodes. | Not Started |
+| T-432 | `make test-unit && make lint && make typecheck && make test-playwright` — Playwright confirms the execution-trace UI is unaffected. | Not Started |
+
+Dependencies: B-02
+
+---
+
+## P67 — Tool Layer Rationalization — Not Started
+
+**Goal:** ~40 tool modules exist; P64 made the control allowlist derived from
+`_INTENT_TOOL_SUBSET`, but the registry may still register tools no intent can reach
+(candidate: `EvaluatorTool`). Make `create_tool_registry()` ↔ allowlists ↔ `docs/TOOLS.md`
+mutually consistent and delete what nothing can call.
+
+Dependencies: P66 Done
+
+### Batch B-01 — Reachability audit + dead tool removal (App Builder) — Not Started
+
+| Task | Description | Status |
+|---|---|---|
+| T-433 | Reachability audit: for every tool registered in `create_tool_registry()`, verify it appears in at least one `_ROLE_TOOL_ALLOWLIST` entry / `_INTENT_TOOL_SUBSET` list; produce the unreachable list in the batch report. | Not Started |
+| T-434 | Delete unreachable tool modules and their registry entries. Keep classes used by non-LLM paths (`AuditLogTool` post-completion hook, `JobDispatchTool`, `TrainForecastTool` — per P64 B-02). | Not Started |
+| T-435 | Update `docs/TOOLS.md` to exactly match the post-cleanup registry and allowlists. | Not Started |
+
+Dependencies: none
+
+### Batch B-02 — Orphaned tool tests + quality gate (Test/Review) — Not Started
+
+| Task | Description | Status |
+|---|---|---|
+| T-436 | Delete unit tests for removed tools (`tests/unit/tools/`); confirm no cassette files in `tests/cassettes/` reference removed tools. | Not Started |
+| T-437 | `make test-unit && make lint && make typecheck` — all pass. | Not Started |
+
+Dependencies: B-01
+
+---
+
+## P68 — Frontend Dead Code Cleanup — Not Started
+
+**Goal:** Remove unused frontend modules and exports accumulated across the P6–P44 UI
+iterations. Parallel-eligible with P66/P67 (no shared files).
+
+Dependencies: P65 Done (parallel-eligible with P66, P67)
+
+### Batch B-01 — Unused module deletion (App Builder) — Not Started
+
+| Task | Description | Status |
+|---|---|---|
+| T-438 | Delete `apps/web/data/mockInventoryShortageAnalysis.ts` — zero imports (only appears in `tsconfig.tsbuildinfo` cache). | Not Started |
+| T-439 | Run an unused-export audit (`npx knip` or `ts-prune`) across `apps/web/`; manually verify and delete confirmed-unused components, hooks, feature modules, schemas, and types (audit candidates: `schemas/evaluations.ts`, `types/workspace.ts`, unused `features/*` hooks). Dynamic-import and Next.js convention files (`page.tsx`, `layout.tsx`) are exempt from deletion on tool output alone. | Not Started |
+| T-440 | Dedupe overlapping execution-trace components if the audit confirms overlap (`components/ExecutionProgressPanel.tsx` vs `components/agent/ExecutionPanel.tsx`, `AgentNodeCard.tsx`); keep the variant the chat page renders. | Not Started |
+
+Dependencies: none
+
+### Batch B-02 — Quality gate (Test/Review) — Not Started
+
+| Task | Description | Status |
+|---|---|---|
+| T-441 | Vitest suite (via Makefile target), `make test-playwright`, and `make build` — all pass. | Not Started |
+
+Dependencies: B-01
+
+---
+
+## P69 — Dependency & Config Hygiene — Not Started
+
+**Goal:** Align declared dependencies and config files with what the code actually uses.
+Infra services themselves (Celery, Redis, compose definitions) are preserved per the
+2026-06-10 scope decision.
+
+Dependencies: P65 Done (parallel-eligible with P66–P68)
+
+### Batch B-01 — pyproject / .env.example / Makefile audit (Infra) — Not Started
+
+| Task | Description | Status |
+|---|---|---|
+| T-442 | `pyproject.toml`: move `pytest` and `pytest-asyncio` from `[project] dependencies` to `[tool.uv] dev-dependencies`; audit remaining runtime deps against actual imports (`celery`/`redis` stay — preserved infra). | Not Started |
+| T-443 | `.env.example`: verify every variable against an actual `os.environ` read in the codebase; delete entries nothing reads; fix stale comments. | Not Started |
+| T-444 | `Makefile`: remove targets referencing deleted paths; verify every target still runs after P65–P68 deletions. | Not Started |
+
+Dependencies: none
+
+### Batch B-02 — Quality gate (Test/Review) — Not Started
+
+| Task | Description | Status |
+|---|---|---|
+| T-445 | `uv sync` succeeds from a clean lock state; `make test-unit && make lint && make typecheck` — all pass. | Not Started |
+
+Dependencies: B-01
+
+---
+
+## P70 — Test Suite & Documentation Consolidation — Not Started
+
+**Goal:** Final pass once all deletions land: remove redundant test coverage, then bring the
+documentation set back in sync with the slimmed codebase.
+
+Dependencies: P66 Done, P67 Done, P68 Done, P69 Done
+
+### Batch B-01 — Test suite rationalization (Test/Review) — Not Started
+
+| Task | Description | Status |
+|---|---|---|
+| T-446 | Remove any leftover `@pytest.mark.asyncio` decorators (`asyncio_mode = "auto"` is global — `.claude/rules/testing.md`). | Not Started |
+| T-447 | Duplicate-coverage audit across `tests/unit/` (84 files; the control-agent and agent-runtime clusters are the largest). Merge or delete tests whose assertions are fully covered elsewhere; no unique assertion may be lost. | Not Started |
+| T-448 | `make test-unit && make lint && make typecheck` — all pass; record test count before/after in the batch report. | Not Started |
+
+Dependencies: none
+
+### Batch B-02 — TASKS.md archive (Orchestrator) — Not Started
+
+| Task | Description | Status |
+|---|---|---|
+| T-449 | Move P24–P64 phase detail sections from `docs/TASKS.md` to `docs/archive/v4/TASKS.md`, keeping only the Completed Phases summary table (~1,650 → ~200 lines). | Not Started |
+
+Dependencies: none
+
+### Batch B-03 — Doc reference sweep (App Builder) — Not Started
+
+| Task | Description | Status |
+|---|---|---|
+| T-450 | Sweep `docs/DESIGN.md`, `docs/AGENT_ARCHITECTURE.md`, `docs/TOOLS.md`, `docs/ORCHESTRATOR.md` for references to modules removed in P65–P68 (deprecated/cross-domain agents, `sql_query`, removed routing modes, deleted tools/components) and update them to the post-refactoring state. | Not Started |
+
+Dependencies: P65–P68 Done
+
