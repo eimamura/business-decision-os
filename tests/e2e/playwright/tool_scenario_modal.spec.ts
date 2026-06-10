@@ -58,7 +58,7 @@ test.describe("ToolScenarioModal (real API backend)", () => {
     await expect(page.getByText("Tool Scenarios")).toBeVisible();
   });
 
-  test("all 6 category tabs are visible in the open modal", async ({
+  test("all 5 category tabs are visible in the open modal", async ({
     page,
     request,
     createdSessionIds,
@@ -76,7 +76,6 @@ test.describe("ToolScenarioModal (real API backend)", () => {
     await expect(dialog.getByText("Forecasting")).toBeVisible();
     await expect(dialog.getByText("Simulation & Optimization")).toBeVisible();
     await expect(dialog.getByText("Ask User (HITL)")).toBeVisible();
-    await expect(dialog.getByText("Job Dispatch (HITL)")).toBeVisible();
     await expect(dialog.getByText("Supply Chain")).toBeVisible();
 
     // Supply Planning, Finance & Cost, and S&OP were removed in P38-B-02
@@ -100,7 +99,7 @@ test.describe("ToolScenarioModal (real API backend)", () => {
     const dialog = page.getByRole("dialog");
     await dialog.getByRole("button", { name: "Forecasting" }).click();
 
-    // Use .first() — "Demand Forecast" also appears in "Train Forecast Model"'s description text
+    // Use .first() — "Demand Forecast" may appear in description text of other cards
     await expect(dialog.getByText("Demand Forecast").first()).toBeVisible({ timeout: 5_000 });
   });
 
@@ -123,18 +122,20 @@ test.describe("ToolScenarioModal (real API backend)", () => {
     await page.getByTitle("Browse all tool scenarios").click();
     await expect(page.getByRole("dialog")).toBeVisible({ timeout: 5_000 });
 
-    // "SQL Direct Query" is under the default "Data Query" tab — visible immediately.
+    // "Natural Language Query" is under the default "Data Query" tab — visible immediately.
     // Clicking a scenario card calls handleScenarioApply() which sends the message
     // directly (does NOT fill the textarea — it calls sendMessage() directly).
+    // Use .first() because "Natural Language Query" also appears in the prompt text
+    // of the same card (as a truncated monospace preview).
     const dialog = page.getByRole("dialog");
-    await dialog.getByText("SQL Direct Query").click();
+    await dialog.getByText("Natural Language Query").first().click();
 
     // Modal must be gone after clicking.
     await expect(page.getByRole("dialog")).not.toBeVisible({ timeout: 3_000 });
 
-    // A user message bubble should appear with the SQL prompt text.
+    // A user message bubble should appear with the natural language query prompt text.
     await expect(
-      page.locator(".rounded-2xl.bg-indigo-600").filter({ hasText: /在庫テーブル/ }),
+      page.locator(".rounded-2xl.bg-indigo-600").filter({ hasText: /Show me the current inventory/ }),
     ).toBeVisible({ timeout: 8_000 });
 
     // The ExecutionPanel "Completed · total" footer must appear (mock resolves fast).

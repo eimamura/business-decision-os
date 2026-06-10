@@ -40,13 +40,17 @@ See `docs/archive/v3/STATE.md` for P0–P23 per-phase details.
 
 ## Active Phase
 
-P81 — Tool Scenario Modal Content Refresh
+None
 
 ## Active Lease
 
-P81-B-02
+None
 
 ## Last Completed
+
+P81 — Tool Scenario Modal Content Refresh (2026-06-10). Fixed 9 broken + 3 partial scenarios in ToolScenarioModal.tsx: inventory→inventory_snapshot table names; DC West→WH-001/WH-002 real seed locations; forecast tool rewritten for sku_id+horizon_days only (no location param); train-model scenario removed (train_forecast not LLM-callable); sc-order-delay rewritten (#ORD-1042 unresolvable); Job Dispatch (HITL) category removed (job_dispatch not LLM-callable per P64 registry); sql scenario retitled "Natural Language Query" (P55 removed sql_query; nl_query is sole Text2SQL); all prompts standardized to English (AGENTS.md §Language Convention). Playwright spec updated (5 categories, English prompt assertions). Sign-off PASS: unit 874 passed exit 0, lint 0, typecheck 0, build 0, playwright 32/32.
+
+Previously:
 
 P80 — Verifier Blocked-Path UX (2026-06-10). D-008 Resolved: truthful `blocked_reason` per blocking site (the "tool-loop guard" default was always misattributed — that path never sets blocked); verifier blocks soft-fail to the fallback text as a completed reply with `verification.blocked_reason` meta (no agent_failed SSE); Rule 1 strips code fences/inline code before the fabrication regex (SQL answers no longer fail the digit lottery). Sign-off PASS: unit 874 passed exit 0, lint 0, typecheck 0, build 0, playwright 32/32. Live verification: the exact 22:47 UTC failing query now returns a real SQL answer; 0 agent_failed in logs; concurrent user session also answered. FP-009 recorded (record-only).
 

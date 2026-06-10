@@ -84,6 +84,7 @@ Full task history for P0–P23 is archived at `docs/archive/v3/TASKS.md`.
 | P78 — Deterministic Routing Completion | T-492–T-494 | 2026-06-10 |
 | P79 — Session Resume & Lifecycle Robustness | T-495–T-500 | 2026-06-10 |
 | P80 — Verifier Blocked-Path UX | T-501–T-505 | 2026-06-10 |
+| P81 — Tool Scenario Modal Content Refresh | T-506–T-518 | 2026-06-10 |
 
 > **Design Realignment Note (2026-06-05):** P29–P36 built Specialist Domain Agents (DemandAgent,
 > InventoryAgent, SupplyPlanningAgent, FinanceImpactAgent, SopAgent) as independent runtime units.
@@ -758,7 +759,7 @@ Dependencies: B-01
 
 ---
 
-## P81 — Tool Scenario Modal Content Refresh — In Progress
+## P81 — Tool Scenario Modal Content Refresh — Done (2026-06-10)
 
 **Goal:** Fix 9 broken and 3 partially-broken scenarios in `ToolScenarioModal.tsx` so every
 prompt, description, and category reflects the actual schema (post-0009 migration table names),
@@ -787,11 +788,11 @@ Dependencies: P80 Done
 
 Dependencies: none
 
-### Batch B-02 — Playwright spec update + quality gate (Test/Review) — Not Started
+### Batch B-02 — Playwright spec update + quality gate (Test/Review) — Done
 
 | Task | Description | Status |
 |---|---|---|
-| T-517 | `tests/e2e/playwright/tool_scenario_modal.spec.ts`: remove "Job Dispatch (HITL)" assertion from the "all 6 category tabs" test (now 5 categories); update the SQL card click test locator `/在庫テーブル/` to match the new English prompt text; remove any assertion on "Train Forecast Model" if present. | Not Started |
-| T-518 | Gate: `make test-unit && make lint && make typecheck && make test-playwright` — proof-of-execution (command + exit code + output tail). | Not Started |
+| T-517 | `tests/e2e/playwright/tool_scenario_modal.spec.ts`: remove "Job Dispatch (HITL)" assertion from the "all 6 category tabs" test (now 5 categories); update the SQL card click test locator `/在庫テーブル/` to match the new English prompt text; remove any assertion on "Train Forecast Model" if present. | Done |
+| T-518 | Gate: `make test-unit && make lint && make typecheck && make test-playwright` — proof-of-execution (command + exit code + output tail). | Done |
 
 Dependencies: B-01
