@@ -501,11 +501,11 @@ not fixed ad-hoc.
 
 Dependencies: none
 
-### Batch B-02 — Role overlap analysis (Test/Review) — Not Started
+### Batch B-02 — Role overlap analysis (Test/Review) — Done
 
 | Task | Description | Status |
 |---|---|---|
-| T-473 | Pairwise responsibility analysis within each domain group, with verdict keep / merge-candidate / boundary-unclear per pair. Mandatory pairs: `get_open_supply_orders` vs `get_delayed_supply_orders`; `calculate_days_of_supply` vs `calculate_days_of_inventory`; `analyze_supply_risk` vs `calculate_stockout_risk` vs `calculate_supply_gap`; `calculate_stockout_risk` vs `list_stockout_risk`; `compare_cost_scenarios` vs the 3 individual cost tools; `analyze_demand_trend` vs `compare_demand_periods`; `profile_demand_data` vs `data_quality_checker`; `data_catalog_search` vs `table_schema_reader`; `forecast` vs `train_forecast`; `nl_query` vs every thin SQL-wrapper tool (generic-vs-specialized justification per DESIGN.md §Tool Design Philosophy). Unused-but-future-valuable tools are explicitly kept (per 2026-06-10 decision: production infra preserved). | Not Started |
+| T-473 | Pairwise responsibility analysis within each domain group, with verdict keep / merge-candidate / boundary-unclear per pair. Mandatory pairs: `get_open_supply_orders` vs `get_delayed_supply_orders`; `calculate_days_of_supply` vs `calculate_days_of_inventory`; `analyze_supply_risk` vs `calculate_stockout_risk` vs `calculate_supply_gap`; `calculate_stockout_risk` vs `list_stockout_risk`; `compare_cost_scenarios` vs the 3 individual cost tools; `analyze_demand_trend` vs `compare_demand_periods`; `profile_demand_data` vs `data_quality_checker`; `data_catalog_search` vs `table_schema_reader`; `forecast` vs `train_forecast`; `nl_query` vs every thin SQL-wrapper tool (generic-vs-specialized justification per DESIGN.md §Tool Design Philosophy). Unused-but-future-valuable tools are explicitly kept (per 2026-06-10 decision: production infra preserved). | Done |
 
 Dependencies: none
 
