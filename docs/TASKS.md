@@ -690,11 +690,11 @@ latent defects from archived phases, surfaced during live runtime diagnosis on 2
 - Acceptance: unit tests — (1) deleting a session with an in-flight (stub-blocked) run cancels the task and no event persist is attempted afterwards; (2) `update_session_title` / `get_messages` / `submit_ask_user_answer` succeed after the in-memory dict is cleared when the DB row exists (404 only when both are absent); no FK-violation warnings in a normal create→run→delete unit flow
 - Status: Open
 
-### Batch B-01 — D-006: resume checkpoint guard (App Builder) — Not Started
+### Batch B-01 — D-006: resume checkpoint guard (App Builder) — Done
 
 | Task | Description | Status |
 |---|---|---|
-| T-495 | `session_orchestrator.py`: before resuming, verify the thread has a checkpoint with a pending interrupt — `graph.aget_state(config)` in `answer_ask_user` (and `resume`); if no checkpoint or no pending `wait_for_answer`/approval interrupt, raise a typed exception (e.g. `NoPendingInterruptError` in the orchestrator module). Defensive: `_node_classify_intent` reads `state.get("session_id")` and raises a descriptive `RuntimeError` if absent (never a bare KeyError). `apps/api/routers/sessions.py` `submit_ask_user_answer`: catch the typed error pre-dispatch (or check before creating the background task) and return HTTP 409 with detail "No pending question for this session — it may have been lost on a server restart. Re-send your message."; emit no `resume_failed` SSE for this case. | Not Started |
+| T-495 | `session_orchestrator.py`: before resuming, verify the thread has a checkpoint with a pending interrupt — `graph.aget_state(config)` in `answer_ask_user` (and `resume`); if no checkpoint or no pending `wait_for_answer`/approval interrupt, raise a typed exception (e.g. `NoPendingInterruptError` in the orchestrator module). Defensive: `_node_classify_intent` reads `state.get("session_id")` and raises a descriptive `RuntimeError` if absent (never a bare KeyError). `apps/api/routers/sessions.py` `submit_ask_user_answer`: catch the typed error pre-dispatch (or check before creating the background task) and return HTTP 409 with detail "No pending question for this session — it may have been lost on a server restart. Re-send your message."; emit no `resume_failed` SSE for this case. | Done |
 
 Dependencies: none
 

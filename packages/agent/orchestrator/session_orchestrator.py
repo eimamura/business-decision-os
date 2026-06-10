@@ -49,6 +49,28 @@ _log = structlog.get_logger(__name__)
 
 
 # ---------------------------------------------------------------------------
+# Typed exception for missing / non-pending checkpoint
+# ---------------------------------------------------------------------------
+
+
+class NoPendingInterruptError(RuntimeError):
+    """Raised when a resume call targets a thread that has no LangGraph checkpoint
+    or whose most-recent checkpoint has no pending interrupt.
+
+    Callers (routers) should map this to an HTTP 409 response rather than
+    treating it as an internal server error.
+    """
+
+    def __init__(self, session_id: UUID) -> None:
+        super().__init__(
+            f"No pending interrupt found for session {session_id} — "
+            "the graph checkpoint may have been lost on a server restart. "
+            "Re-send your message to start a new run."
+        )
+        self.session_id = session_id
+
+
+# ---------------------------------------------------------------------------
 # OrchestratorState
 # ---------------------------------------------------------------------------
 
@@ -213,7 +235,13 @@ class SessionOrchestrator:
     async def _node_classify_intent(
         self, state: OrchestratorState, config: RunnableConfig
     ) -> dict[str, Any]:
-        session_id = UUID(state["session_id"])
+        raw_session_id = state.get("session_id")
+        if not raw_session_id:
+            raise RuntimeError(
+                "graph state missing session_id — resumed without checkpoint? "
+                "Use has_pending_interrupt() before calling answer_ask_user() or resume()."
+            )
+        session_id = UUID(raw_session_id)
         query = SessionUserQuery.model_validate(state["query"])
         intent = await self.classify_intent(query, session_id)
         return {"intent": intent}
@@ -697,6 +725,35 @@ class SessionOrchestrator:
             route=AgentRoute(mode="direct_chat", rationale="llm_parse_error"),
         )
 
+    # ------------------------------------------------------------------
+    # Resume checkpoint guard
+    # ------------------------------------------------------------------
+
+    async def has_pending_interrupt(self, session_id: UUID) -> bool:
+        """Return True only when the thread has a checkpoint AND a pending interrupt.
+
+        Uses ``graph.aget_state(config)`` to inspect the most-recent checkpoint:
+        - No checkpoint (metadata is None): no interrupt possible → False.
+        - Checkpoint present but ``state_snapshot.interrupts`` is empty: the graph
+          ran to completion or was never paused → False.
+        - Checkpoint present AND ``state_snapshot.interrupts`` is non-empty: a
+          ``wait_for_answer`` (ask_user) or approval interrupt is pending → True.
+
+        Both the ask_user flow (``wait_for_answer`` node) and the approval flow
+        expose their pending interrupt through ``StateSnapshot.interrupts``.
+        """
+        config: dict[str, Any] = {
+            "configurable": {
+                "thread_id": str(session_id),
+            }
+        }
+        graph = await self._get_graph()
+        snapshot = await graph.aget_state(config)
+        if snapshot.metadata is None:
+            # Thread has never been checkpointed.
+            return False
+        return len(snapshot.interrupts) > 0
+
     async def run(self, session_id: UUID, query: SessionUserQuery) -> SessionResponse:
         if isinstance(query, SessionGoal):
             query = SessionUserQuery(
@@ -774,6 +831,9 @@ class SessionOrchestrator:
 
     async def resume(self, session_id: UUID, approval_id: UUID) -> SessionResponse:
         """Resume graph execution from the last LangGraph checkpoint for this session."""
+        if not await self.has_pending_interrupt(session_id):
+            raise NoPendingInterruptError(session_id)
+
         config: dict[str, Any] = {
             "configurable": {
                 "thread_id": str(session_id),
@@ -811,6 +871,9 @@ class SessionOrchestrator:
 
     async def answer_ask_user(self, session_id: UUID, answer: str) -> SessionResponse:
         """Resume a graph paused at wait_for_answer with the user's answer."""
+        if not await self.has_pending_interrupt(session_id):
+            raise NoPendingInterruptError(session_id)
+
         from langgraph.types import Command
 
         config: dict[str, Any] = {

@@ -13,11 +13,15 @@ from packages.agent.orchestrator.models import (
     SpecialistTask,
     TaskNode,
 )
-from packages.agent.orchestrator.session_orchestrator import SessionOrchestrator
+from packages.agent.orchestrator.session_orchestrator import (
+    NoPendingInterruptError,
+    SessionOrchestrator,
+)
 
 __all__ = [
     "AgentRoute",
     "ExecutionPlan",
+    "NoPendingInterruptError",
     "Orchestrator",
     "PlanStep",
     "SessionIntent",

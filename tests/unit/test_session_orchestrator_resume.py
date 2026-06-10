@@ -7,6 +7,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
 import pytest
+from langgraph.types import Interrupt, StateSnapshot
+from langchain_core.runnables import RunnableConfig
 
 from packages.agent.llm import LLMMessage, LLMResponse, LLMUsage
 from packages.agent.orchestrator import SessionOrchestrator, SessionUserQuery
@@ -37,6 +39,21 @@ def _llm_response(text: str) -> LLMResponse:
         model="stub",
         request_id=str(uuid4()),
         latency_ms=0,
+    )
+
+
+def _make_snapshot_with_interrupt() -> StateSnapshot:
+    """Return a StateSnapshot that looks like a thread paused at an interrupt."""
+    fake_interrupt = Interrupt(value={"ask_user_id": "abc", "question": "?"})
+    return StateSnapshot(
+        values={"session_id": "fake-session"},
+        next=("wait_for_answer",),
+        config=RunnableConfig(configurable={"thread_id": "fake-thread"}),
+        metadata={"source": "loop", "step": 0, "parents": {}},
+        created_at="2026-01-01T00:00:00+00:00",
+        parent_config=None,
+        tasks=(),
+        interrupts=(fake_interrupt,),
     )
 
 
@@ -103,6 +120,7 @@ async def test_resume_uses_graph_astream_with_none_input() -> None:
 
     mock_graph = MagicMock()
     mock_graph.astream_events = _fake_astream_events
+    mock_graph.aget_state = AsyncMock(return_value=_make_snapshot_with_interrupt())
     orchestrator._graph = mock_graph
 
     result = await orchestrator.resume(session_id, approval_id)
@@ -144,6 +162,7 @@ async def test_resume_returns_result_from_graph_state() -> None:
 
     mock_graph = MagicMock()
     mock_graph.astream_events = _fake_astream_events
+    mock_graph.aget_state = AsyncMock(return_value=_make_snapshot_with_interrupt())
     orchestrator._graph = mock_graph
 
     result = await orchestrator.resume(session_id, approval_id)
@@ -164,6 +183,7 @@ async def test_resume_raises_on_no_result() -> None:
 
     mock_graph = MagicMock()
     mock_graph.astream = _fake_astream
+    mock_graph.aget_state = AsyncMock(return_value=_make_snapshot_with_interrupt())
     orchestrator._graph = mock_graph
 
     mock_repo = MagicMock()
@@ -191,6 +211,7 @@ async def test_resume_schedules_failed_status_on_graph_exception() -> None:
 
     mock_graph = MagicMock()
     mock_graph.astream_events = _fake_astream_events
+    mock_graph.aget_state = AsyncMock(return_value=_make_snapshot_with_interrupt())
     orchestrator._graph = mock_graph
 
     mock_repo = MagicMock()
@@ -229,6 +250,7 @@ async def test_resume_does_not_call_jobs_repository() -> None:
 
     mock_graph = MagicMock()
     mock_graph.astream_events = _fake_astream_events
+    mock_graph.aget_state = AsyncMock(return_value=_make_snapshot_with_interrupt())
     orchestrator._graph = mock_graph
 
     with patch("packages.persistence.jobs_repo.JobsRepository") as mock_jobs_cls:

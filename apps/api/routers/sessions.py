@@ -24,6 +24,7 @@ from apps.api.state import (
 )
 from packages.agent.history import compress_history
 from packages.agent.orchestrator import SessionResponse, SessionUserQuery
+from packages.agent.orchestrator.session_orchestrator import NoPendingInterruptError
 from packages.agent.rate_limiter import RateLimitExceeded, check_rate_limit
 from packages.memory import ConversationTurn
 from packages.memory.decision import DecisionMemoryStore
@@ -497,13 +498,50 @@ async def submit_ask_user_answer(
     orchestrator = get_orchestrator(queue)
     orchestrator._event_persister = make_event_persister(session_id_str)
 
+    # Guard: verify the LangGraph thread has a checkpoint with a pending interrupt
+    # before dispatching the background task. When the checkpoint is absent (e.g.
+    # the original run died in a uvicorn reload) we return 409 synchronously instead
+    # of letting the background task crash with KeyError deep inside the graph.
+    try:
+        has_interrupt = await orchestrator.has_pending_interrupt(session_id)
+    except Exception as exc:
+        _log.warning(
+            "has_pending_interrupt check failed for session %s: %s",
+            session_id_str,
+            exc,
+        )
+        # If the guard itself fails (e.g. DB is temporarily unavailable), let the
+        # resume attempt proceed — a false negative here is safer than blocking a
+        # valid resume. The orchestrator's own error handling will catch failures.
+        has_interrupt = True
+
+    if not has_interrupt:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                "No pending question for this session — it may have been lost on a "
+                "server restart. Re-send your message."
+            ),
+        )
+
     repo = DecisionSessionRepository()
     answer = body.answer
 
     async def _run_resume_and_signal() -> None:
         response: SessionResponse | None = None
+        no_pending_interrupt = False
         try:
             response = await orchestrator.answer_ask_user(session_id, answer)
+        except NoPendingInterruptError as exc:
+            # Race condition: guard passed but checkpoint was lost between check and
+            # resume. Log as a warning (not an exception) and do not emit resume_failed
+            # SSE — the 409 contract specifies no SSE error event for this case.
+            _log.warning(
+                "answer_ask_user found no pending interrupt despite pre-dispatch guard: %s",
+                exc,
+                session_id=session_id_str,
+            )
+            no_pending_interrupt = True
         except Exception as exc:
             _log.exception("Resume failed for session %s: %s", session_id_str, exc)
             await queue.put({
@@ -514,6 +552,9 @@ async def submit_ask_user_answer(
                 "timestamp": _iso_now(),
             })
         finally:
+            if no_pending_interrupt:
+                # Nothing to broadcast — the pre-dispatch 409 already informed the caller.
+                return
             reply = (
                 response.reply if response is not None else "Processing failed. Please try again."
             )
