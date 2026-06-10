@@ -575,11 +575,11 @@ Dependencies: B-01 (parallel-eligible with B-02; runs after B-02 in practice)
 - Symptom: `POST /api/v1/approvals` returns 500 — `TypeError: Object of type UUID is not JSON serializable`
 - Location: `apps/api/routers/approvals.py` `create_approval` — `JSONResponse(status_code=201, content=created)` serializes the raw repo row (UUID/datetime objects) with stdlib `json.dumps`. Same risk at `post_decision`'s `JSONResponse(content=updated)`.
 - Note: the repeated 500s coincide with the `job_approval` Playwright spec marked "pre-existing flaky" at P76 sign-off — the flakiness likely masks this real bug, not SSE timing. Pre-dates P76 (no P76 change touched approvals).
-- Status: Open (fix scheduled in P77-B-01/T-488)
+- Status: Resolved (T-488 fix + T-490 regression tests; gates passed 2026-06-10)
 
 ---
 
-## P77 — Runtime Error Surfacing Fixes — Not Started
+## P77 — Runtime Error Surfacing Fixes — Done
 
 **Goal:** Resolve D-004 (approvals 500 on UUID serialization) and fix the misleading
 frontend error message that displays "Error contacting the API. Please check the backend
@@ -596,12 +596,12 @@ stack reset surfaced as an apparent connectivity failure).
 
 Dependencies: none
 
-### Batch B-02 — Tests + gate (Test/Review) — Not Started
+### Batch B-02 — Tests + gate (Test/Review) — Done
 
 | Task | Description | Status |
 |---|---|---|
-| T-490 | Unit test: `POST /api/v1/approvals` via ASGITransport with a stubbed repo returning UUID/datetime values → 201 and JSON-serializable body (regression for D-004). Same for the `post_decision` path. | Not Started |
-| T-491 | Gate: `make test-unit && make lint && make typecheck && make build && make test-playwright` — verify the `job_approval` spec passes (was flaky while D-004 was live). Proof-of-execution. Mark D-004 Resolved on pass. | Not Started |
+| T-490 | Unit test: `POST /api/v1/approvals` via ASGITransport with a stubbed repo returning UUID/datetime values → 201 and JSON-serializable body (regression for D-004). Same for the `post_decision` path. | Done |
+| T-491 | Gate: `make test-unit && make lint && make typecheck && make build && make test-playwright` — verify the `job_approval` spec passes (was flaky while D-004 was live). Proof-of-execution. Mark D-004 Resolved on pass. | Done |
 
 Dependencies: B-01
 
