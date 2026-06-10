@@ -162,16 +162,10 @@ async def test_t073_session_orchestrator_compiles_with_memory_saver() -> None:
     [
         ("direct_chat", "run_direct_chat"),
         ("single_agent", "run_sequential"),
-        ("sequential_agents", "run_sequential"),
-        ("planned_execution", "run_planned"),
-        ("dag_execution", "run_dag"),
     ],
     ids=[
         "direct_chat_routes_to_run_direct_chat",
         "single_agent_routes_to_run_sequential",
-        "sequential_agents_routes_to_run_sequential",
-        "planned_execution_routes_to_run_planned",
-        "dag_execution_routes_to_run_dag",
     ],
 )
 def test_t073_edge_after_select_mode_routes_correctly(mode: str, expected_node: str) -> None:
@@ -192,22 +186,18 @@ def test_t073_edge_after_select_mode_routes_correctly(mode: str, expected_node: 
     )
 
     # Build a minimal OrchestratorState with a route that has the given mode.
-    # We need agents to satisfy validate_route:
-    #  - direct_chat: no agents
-    #  - single_agent: exactly one agent
-    #  - sequential_agents: one or more agents
-    #  - planned_execution / dag_execution: agents list is not validated (no constraint)
+    # direct_chat: no agents; single_agent: exactly one agent
     agents: list[str]
     if mode == "direct_chat":
         agents = []
     else:
-        agents = ["demand"]
+        agents = ["control"]
 
     route = AgentRoute(
         mode=mode,  # type: ignore[arg-type]
         agents=agents,
-        requires_planning=mode == "planned_execution",
-        requires_dag=mode == "dag_execution",
+        requires_planning=False,
+        requires_dag=False,
         rationale="test",
     )
 
@@ -334,8 +324,12 @@ def test_t073_session_orchestrator_graph_node_names() -> None:
         "select_mode",
         "run_direct_chat",
         "run_sequential",
-        "run_planned",
-        "run_dag",
     }
     missing = expected - node_names
     assert not missing, f"SessionOrchestrator graph missing nodes: {missing}"
+
+    removed = {"run_planned", "run_dag"}
+    present_removed = removed & node_names
+    assert not present_removed, (
+        f"Graph still contains removed nodes: {present_removed}"
+    )

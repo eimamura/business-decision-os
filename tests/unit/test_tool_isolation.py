@@ -14,14 +14,9 @@ from packages.agent.llm import (
     LLMUsage,
     StubClaudeClient,
 )
-from packages.agent.orchestrator import SessionGoal, SessionOrchestrator, SessionUserQuery
+from packages.agent.orchestrator import SessionOrchestrator, SessionUserQuery
 from packages.agent.orchestrator.models import AgentRoute, AskUserDecision, SessionIntent
 from tests.unit.helpers import FakeLCModel, MultiRoleModelRegistry, StructuredOutputFakeModel, make_stop_response
-from packages.agent.orchestrator.weights import (
-    load_global_weights,
-    load_sku_overrides,
-    resolve_weights,
-)
 from packages.memory import StubMemoryStore
 from packages.tools import create_tool_registry
 from packages.tools.approval_tool import ApprovalTool
@@ -166,36 +161,6 @@ async def test_usage_writer_called_on_complete():
     assert calls[0][3] == "anthropic"
 
 
-# ===== T-1006: Weight resolution =====
-
-def test_load_global_weights_returns_dict():
-    weights = load_global_weights()
-    assert isinstance(weights, dict)
-    assert "service_level" in weights
-    total = sum(weights.values())
-    assert abs(total - 1.0) < 0.01
-
-
-def test_load_sku_overrides_returns_dict():
-    overrides = load_sku_overrides()
-    assert isinstance(overrides, dict)
-
-
-def test_resolve_weights_default():
-    goal = SessionGoal(text="minimize cost")
-    weights, source = resolve_weights(goal)
-    assert source == "default"
-    assert "service_level" in weights
-
-
-def test_resolve_weights_session_goal_override():
-    goal = SessionGoal(
-        text="test",
-        weight_override_json={"service_level": 0.8, "fill_rate": 0.2},
-    )
-    weights, source = resolve_weights(goal)
-    assert source == "session_goal"
-    assert weights["service_level"] == 0.8
 
 
 # ===== T-1007: DataCatalogSearchTool =====

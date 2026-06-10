@@ -1735,22 +1735,22 @@ Dependencies: P65 Done
 
 Dependencies: none
 
-### Batch B-02 — Remove unreachable orchestration branches (App Builder) — Not Started
+### Batch B-02 — Remove unreachable orchestration branches (App Builder) — Done
 
 | Task | Description | Status |
 |---|---|---|
-| T-428 | `packages/agent/orchestrator/decision.py` — remove `simulation_optimizer`-gated candidate logic and any code reachable only from it; fold `weights.py` usage: if `resolve_weights` becomes dead, delete `weights.py`; if `decision_support` ranking survives via ControlAgent output, keep the minimal live path. | Not Started |
-| T-429 | Collapse `_INTENT_MODE_MAP` in `routing.py` so every non-chat intent routes through the single-ControlAgent path; remove `run_dag_execution` and sequential multi-agent loops from `planning.py` and the corresponding `_node_run_planned`/`_node_run_dag` nodes in `session_orchestrator.py` (keep `_node_run_sequential` only if it is the surviving single-agent executor). SSE event shape must not change. | Not Started |
-| T-430 | Update `packages/agent/orchestrator/prompts.py` intent-classification text and `validate_route` in `routing.py` to match the surviving modes. Keep all 6 intent categories. | Not Started |
+| T-428 | `packages/agent/orchestrator/decision.py` — remove `simulation_optimizer`-gated candidate logic and any code reachable only from it; fold `weights.py` usage: if `resolve_weights` becomes dead, delete `weights.py`; if `decision_support` ranking survives via ControlAgent output, keep the minimal live path. | Done |
+| T-429 | Collapse `_INTENT_MODE_MAP` in `routing.py` so every non-chat intent routes through the single-ControlAgent path; remove `run_dag_execution` and sequential multi-agent loops from `planning.py` and the corresponding `_node_run_planned`/`_node_run_dag` nodes in `session_orchestrator.py` (keep `_node_run_sequential` only if it is the surviving single-agent executor). SSE event shape must not change. | Done |
+| T-430 | Update `packages/agent/orchestrator/prompts.py` intent-classification text and `validate_route` in `routing.py` to match the surviving modes. Keep all 6 intent categories. | Done |
 
 Dependencies: B-01
 
-### Batch B-03 — Test updates + quality gate (Test/Review) — Not Started
+### Batch B-03 — Test updates + quality gate (Test/Review) — Done
 
 | Task | Description | Status |
 |---|---|---|
-| T-431 | Update or delete tests bound to removed paths: `test_dag_parallel_execution.py`, `test_decision_rank_candidates.py`, `test_routing.py`, `test_tool_isolation.py` (imports `orchestrator.weights`), `test_session_orchestrator_*` cases covering planned/DAG nodes. | Not Started |
-| T-432 | `make test-unit && make lint && make typecheck && make test-playwright` — Playwright confirms the execution-trace UI is unaffected. | Not Started |
+| T-431 | Update or delete tests bound to removed paths: `test_dag_parallel_execution.py`, `test_decision_rank_candidates.py`, `test_routing.py`, `test_tool_isolation.py` (imports `orchestrator.weights`), `test_session_orchestrator_*` cases covering planned/DAG nodes. Also update `test_agent_reclassification.py` (3 cases expecting `run_planned`/`run_dag` nodes) and `test_tool_layer_integration.py` (2 cases using `planned_execution`/`dag_execution` modes) — both discovered in B-02. | Done |
+| T-432 | `make test-unit && make lint && make typecheck && make test-playwright` — Playwright confirms the execution-trace UI is unaffected. | Done |
 
 Dependencies: B-02
 

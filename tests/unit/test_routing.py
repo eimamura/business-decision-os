@@ -25,11 +25,11 @@ def test_route_after_intent_domain_analysis() -> None:
 
 
 def test_route_after_intent_cross_domain_analysis() -> None:
-    assert route_after_intent(_intent("cross_domain_analysis")) == "sequential_agents"
+    assert route_after_intent(_intent("cross_domain_analysis")) == "single_agent"
 
 
 def test_route_after_intent_decision_support() -> None:
-    assert route_after_intent(_intent("decision_support")) == "planned_execution"
+    assert route_after_intent(_intent("decision_support")) == "single_agent"
 
 
 def test_route_after_intent_unknown_falls_back_to_direct_chat() -> None:

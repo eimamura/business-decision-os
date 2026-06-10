@@ -309,34 +309,13 @@ async def test_single_agent_runs_only_selected_agent(stub_orchestrator):
     assert "response_ready" in event_types
 
 
-async def test_sequential_agents_pass_previous_results(stub_orchestrator):
+async def test_single_agent_pass_previous_results(stub_orchestrator):
     orchestrator, _ = stub_orchestrator
-    response = await orchestrator.run(uuid4(), SessionUserQuery(text="optimize replenishment"))
+    response = await orchestrator.run(uuid4(), SessionUserQuery(text="single optimize replenishment"))
 
-    assert response.mode == "sequential_agents"
+    assert response.mode == "single_agent"
     assert list(response.agent_results) == ["control"]
     assert isinstance(response.reply, str)
-
-
-async def test_planned_execution_uses_serial_plan(stub_orchestrator):
-    orchestrator, queue = stub_orchestrator
-    response = await orchestrator.run(uuid4(), SessionUserQuery(text="planned replenishment"))
-
-    assert response.mode == "planned_execution"
-    assert list(response.agent_results) == ["ctrl"]
-    events = await _events(queue)
-    # P20: plan_created event removed; plan structure visible via graph_node agent events
-    event_types = [e["type"] for e in events]
-    assert "graph_node" in event_types
-    assert "response_ready" in event_types
-
-
-async def test_dag_execution_respects_dependencies(stub_orchestrator):
-    orchestrator, _ = stub_orchestrator
-    response = await orchestrator.run(uuid4(), SessionUserQuery(text="dag replenishment"))
-
-    assert response.mode == "dag_execution"
-    assert list(response.agent_results) == ["ctrl"]
 
 
 async def test_router_bad_json_returns_raw_text():
