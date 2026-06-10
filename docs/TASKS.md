@@ -1665,7 +1665,7 @@ P68 and P69 are independent and parallel-eligible after P65. P70 runs last.
 
 ---
 
-## P65 — Dead Agent Class Removal — Not Started
+## P65 — Dead Agent Class Removal — Done (2026-06-10)
 
 **Goal:** Delete all agent classes unreachable from any runtime path, and the dead branches
 that reference them. Lowest-risk, highest-volume deletion; establishes a clean base for P66.
@@ -1700,6 +1700,17 @@ Dependencies: none
 |---|---|---|
 | T-425 | Delete `tests/unit/agent/test_sop_agent.py` and `tests/unit/test_output_builders.py`; audit `tests/unit/test_sop_roles.py` and any other test importing removed modules — delete or trim to surviving behavior only. | Done |
 | T-426 | `make test-unit && make lint && make typecheck` — all pass. | Done |
+
+#### Defect: D-002
+
+- Status: Open
+- Severity: High
+- Repro: `docker compose -f infra/compose/compose.yaml up -d db && make test-integration`
+- Observed: 11 integration tests fail (`test_ask_user_hitl_variants.py`, `test_prompts_mock_llm.py`, `test_session_persistence.py`) with `AttributeError: 'NoneType' object has no attribute 'get'` on `self._model_registry` in `session_orchestrator.py`. Verified pre-existing at P64 HEAD (29127ae) — identical failures. Inherited debt from the P52–P53 ModelRegistry migration; integration gate was not run at those sign-offs.
+- Expected: `make test-integration` exits 0 (5 passed, 47 skipped baseline preserved).
+- Area: tests/integration (fixtures) and/or packages/agent/orchestrator/session_orchestrator.py
+- Owner: App Builder (diagnose: if orchestrator requires model_registry by design, fix test fixtures via Test/Review handoff; if None should be tolerated, add the guard in session_orchestrator)
+- Acceptance: `make test-integration` exits 0 with no newly skipped tests.
 
 Dependencies: B-01
 
