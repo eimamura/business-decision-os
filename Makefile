@@ -1,4 +1,4 @@
-.PHONY: migrate seed generate-data codegen build test test-unit test-integration test-e2e test-playwright lint typecheck dev dev-api dev-web dev-up dev-down dev-logs dev-ps dev-smoke
+.PHONY: migrate seed seed-all generate-data codegen build test test-unit test-integration test-e2e test-playwright lint typecheck dev dev-api dev-web dev-up dev-down dev-logs dev-ps dev-smoke check-llm
 
 WEB_PORT ?= 3002
 API_PORT ?= 8002
@@ -39,6 +39,10 @@ generate-data:
 
 seed: migrate generate-data
 	uv run python scripts/seed_db.py
+
+seed-all: seed
+	uv run python scripts/seed_users.py
+	uv run python scripts/seed_llm_pricing.py
 
 build:
 	cd apps/api && uv sync

@@ -1793,13 +1793,13 @@ iterations. Parallel-eligible with P66/P67 (no shared files).
 
 Dependencies: P65 Done (parallel-eligible with P66, P67)
 
-### Batch B-01 — Unused module deletion (App Builder) — Not Started
+### Batch B-01 — Unused module deletion (App Builder) — Done
 
 | Task | Description | Status |
 |---|---|---|
-| T-438 | Delete `apps/web/data/mockInventoryShortageAnalysis.ts` — zero imports (only appears in `tsconfig.tsbuildinfo` cache). | Not Started |
-| T-439 | Run an unused-export audit (`npx knip` or `ts-prune`) across `apps/web/`; manually verify and delete confirmed-unused components, hooks, feature modules, schemas, and types (audit candidates: `schemas/evaluations.ts`, `types/workspace.ts`, unused `features/*` hooks). Dynamic-import and Next.js convention files (`page.tsx`, `layout.tsx`) are exempt from deletion on tool output alone. | Not Started |
-| T-440 | Dedupe overlapping execution-trace components if the audit confirms overlap (`components/ExecutionProgressPanel.tsx` vs `components/agent/ExecutionPanel.tsx`, `AgentNodeCard.tsx`); keep the variant the chat page renders. | Not Started |
+| T-438 | Delete `apps/web/data/mockInventoryShortageAnalysis.ts` — zero imports (only appears in `tsconfig.tsbuildinfo` cache). | Done |
+| T-439 | Run an unused-export audit (`npx knip` or `ts-prune`) across `apps/web/`; manually verify and delete confirmed-unused components, hooks, feature modules, schemas, and types (audit candidates: `schemas/evaluations.ts`, `types/workspace.ts`, unused `features/*` hooks). Dynamic-import and Next.js convention files (`page.tsx`, `layout.tsx`) are exempt from deletion on tool output alone. | Done |
+| T-440 | Dedupe overlapping execution-trace components if the audit confirms overlap (`components/ExecutionProgressPanel.tsx` vs `components/agent/ExecutionPanel.tsx`, `AgentNodeCard.tsx`); keep the variant the chat page renders. | Done |
 
 Dependencies: none
 
@@ -1821,15 +1821,27 @@ Infra services themselves (Celery, Redis, compose definitions) are preserved per
 
 Dependencies: P65 Done (parallel-eligible with P66–P68)
 
-### Batch B-01 — pyproject / .env.example / Makefile audit (Infra) — Not Started
+### Batch B-01 — pyproject / .env.example / Makefile audit (Infra) — Done
 
 | Task | Description | Status |
 |---|---|---|
-| T-442 | `pyproject.toml`: move `pytest` and `pytest-asyncio` from `[project] dependencies` to `[tool.uv] dev-dependencies`; audit remaining runtime deps against actual imports (`celery`/`redis` stay — preserved infra). | Not Started |
-| T-443 | `.env.example`: verify every variable against an actual `os.environ` read in the codebase; delete entries nothing reads; fix stale comments. | Not Started |
-| T-444 | `Makefile`: remove targets referencing deleted paths; verify every target still runs after P65–P68 deletions. | Not Started |
+| T-442 | `pyproject.toml`: move `pytest` and `pytest-asyncio` from `[project] dependencies` to `[tool.uv] dev-dependencies`; audit remaining runtime deps against actual imports (`celery`/`redis` stay — preserved infra). | Done |
+| T-443 | `.env.example`: verify every variable against an actual `os.environ` read in the codebase; delete entries nothing reads; fix stale comments. | Done |
+| T-444 | `Makefile`: remove targets referencing deleted paths; verify every target still runs after P65–P68 deletions. | Done |
 
 Dependencies: none
+
+<!--
+## Infra Handoff — P69 B-01
+Changed files: pyproject.toml, .env.example, Makefile, uv.lock, docs/TASKS.md
+Smoke checks: SKIPPED (stack not running — pure file-edit task; no service changes)
+New env vars: none
+Quality gates:
+  uv sync          exit 0  ("Resolved 181 packages in 2ms; Audited 49 packages in 0.12ms")
+  make test-unit   exit 0  (770 passed, 11 skipped, 61 warnings in 7.22s)
+  make lint        exit 0  ("All checks passed!")
+  make typecheck   exit 0  ("Success: no issues found in 159 source files")
+-->
 
 ### Batch B-02 — Quality gate (Test/Review) — Not Started
 
