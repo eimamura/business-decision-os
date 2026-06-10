@@ -698,12 +698,12 @@ latent defects from archived phases, surfaced during live runtime diagnosis on 2
 
 Dependencies: none
 
-### Batch B-02 — D-007: run cancellation on delete + DB recovery (App Builder) — Not Started
+### Batch B-02 — D-007: run cancellation on delete + DB recovery (App Builder) — Done
 
 | Task | Description | Status |
 |---|---|---|
-| T-496 | Track background run task handles per session (e.g. `session_tasks: dict[str, asyncio.Task]` in `apps/api/state.py`, registered by `post_message`/`submit_ask_user_answer`). `delete_session` and `delete_all_sessions`: cancel the session's task (await suppression of `CancelledError`), then remove broadcaster, ready-event, and run-id entries before deleting the DB row. `_run_and_signal`/`_run_resume_and_signal` must tolerate cancellation (no `done` broadcast, no persists after cancel). | Not Started |
-| T-497 | DB-recovery consistency: extract `post_message`'s recover-from-DB block into a shared helper (e.g. `get_or_recover_session(session_id)`) and use it in `update_session_title`, `get_messages`, `set_message_feedback`, and `submit_ask_user_answer`; 404 only when the session exists in neither the dict nor the DB. Event persister: skip writes once the session has been deleted (guard in `make_event_persister` against the tracked session set) and downgrade the FK-violation log to debug with a single-line message. | Not Started |
+| T-496 | Track background run task handles per session (e.g. `session_tasks: dict[str, asyncio.Task]` in `apps/api/state.py`, registered by `post_message`/`submit_ask_user_answer`). `delete_session` and `delete_all_sessions`: cancel the session's task (await suppression of `CancelledError`), then remove broadcaster, ready-event, and run-id entries before deleting the DB row. `_run_and_signal`/`_run_resume_and_signal` must tolerate cancellation (no `done` broadcast, no persists after cancel). | Done |
+| T-497 | DB-recovery consistency: extract `post_message`'s recover-from-DB block into a shared helper (e.g. `get_or_recover_session(session_id)`) and use it in `update_session_title`, `get_messages`, `set_message_feedback`, and `submit_ask_user_answer`; 404 only when the session exists in neither the dict nor the DB. Event persister: skip writes once the session has been deleted (guard in `make_event_persister` against the tracked session set) and downgrade the FK-violation log to debug with a single-line message. | Done |
 
 Dependencies: none (parallel-eligible with B-01; B-01 runs first to keep `sessions.py` edits sequential)
 

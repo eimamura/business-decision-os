@@ -20,6 +20,19 @@ logger = logging.getLogger(__name__)
 
 sessions: dict[str, dict[str, Any]] = {}
 
+# Registry of in-flight background asyncio tasks, keyed by session_id string.
+# Populated by post_message / submit_ask_user_answer; cleaned up on task
+# completion (via done-callback) and on session deletion.
+session_tasks: dict[str, asyncio.Task[None]] = {}
+
+# Tombstone set: session IDs that have been deleted during this process lifetime.
+# Used by make_event_persister to skip writes after a session is deleted, avoiding
+# FK-violation spam from orphaned background tasks.  A session in this set may or
+# may not be present in the DB — the tombstone only tracks the deletion intent
+# issued in this process.  Sessions recovered from DB (via get_or_recover_session)
+# are NOT removed from the tombstone; recovery is an explicit opt-in by the router.
+_deleted_session_ids: set[str] = set()
+
 _shared_pool: Any = None
 
 
@@ -176,7 +189,24 @@ async def _real_usage_writer(
 
 
 def make_event_persister(session_id: str) -> Callable[[dict[str, Any]], Any]:
+    """Return a fire-and-forget persister for SSE events of *session_id*.
+
+    Deleted-session semantics: if *session_id* appears in ``_deleted_session_ids``
+    the write is skipped entirely and no task is created.  This prevents the
+    FK-violation spam that occurs when an orphaned background run (not yet
+    cancelled) tries to persist events after its session row was deleted.
+
+    FK-violation handling: asyncpg raises ``ForeignKeyViolationError`` when the
+    ``decision_sessions`` parent row has already been removed.  We catch it at
+    ``debug`` level (single line) rather than ``warning`` to avoid log spam from
+    the narrow window between deletion and task cancellation.
+    """
+
     async def _persister(event: dict[str, Any]) -> None:
+        # Guard: skip write if this session has been marked deleted in this process.
+        if session_id in _deleted_session_ids:
+            return
+
         repo = SessionEventRepository()
 
         async def _write() -> None:
@@ -189,6 +219,30 @@ def make_event_persister(session_id: str) -> Callable[[dict[str, Any]], Any]:
             except RuntimeError as exc:
                 logger.warning("event persist skipped: %s", exc)
             except Exception as exc:
+                # Attempt to detect FK violation (asyncpg path) and downgrade to
+                # debug to avoid noisy warning spam during the brief window
+                # between session deletion and background-task cancellation.
+                try:
+                    import asyncpg  # noqa: PLC0415 — conditional import; asyncpg optional
+
+                    if isinstance(exc, asyncpg.exceptions.ForeignKeyViolationError):
+                        logger.debug(
+                            "event persist skipped (session deleted): session=%s type=%s",
+                            session_id,
+                            event.get("type"),
+                        )
+                        return
+                except ImportError:
+                    pass
+                # FK violation surfaced as a string message (non-asyncpg path)
+                exc_str = str(exc)
+                if "foreign key constraint" in exc_str or "ForeignKeyViolation" in exc_str:
+                    logger.debug(
+                        "event persist skipped (session deleted): session=%s type=%s",
+                        session_id,
+                        event.get("type"),
+                    )
+                    return
                 logger.warning("event persist failed: %s", exc)
 
         asyncio.create_task(_write())

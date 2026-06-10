@@ -13,6 +13,7 @@ from pydantic import BaseModel
 
 from apps.api.state import (
     Broadcaster,
+    _deleted_session_ids,
     broadcaster_ready,
     broadcasters,
     get_or_create_broadcaster_event,
@@ -20,6 +21,7 @@ from apps.api.state import (
     make_event_persister,
     notify_broadcaster_ready,
     session_run_ids,
+    session_tasks,
     sessions,
 )
 from packages.agent.history import compress_history
@@ -39,6 +41,40 @@ router = APIRouter(prefix="/api/v1/sessions", tags=["sessions"])
 
 def _iso_now() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+async def get_or_recover_session(session_id: str) -> dict[str, Any] | None:
+    """Return the in-memory session dict, recovering from DB if necessary.
+
+    On a process restart the in-memory ``sessions`` dict is empty.  Rather than
+    returning ``None`` immediately (causing a spurious 404), we attempt a DB
+    lookup and, on success, re-hydrate the dict entry so subsequent calls within
+    the same request context also benefit from the recovery.
+
+    Returns ``None`` only when the session exists in neither the dict nor the DB.
+    Does *not* remove session_id from ``_deleted_session_ids`` — recovery is an
+    explicit read-path operation, not an un-delete.
+    """
+    session = sessions.get(session_id)
+    if session is not None:
+        return session
+    try:
+        repo = DecisionSessionRepository()
+        db_session = await repo.get(session_id)
+        if db_session is None:
+            return None
+        recovered: dict[str, Any] = {
+            "session_id": session_id,
+            "status": db_session.get("status", "pending"),
+            "goal": db_session.get("goal", ""),
+            "title": db_session.get("title"),
+            "created_at": str(db_session.get("created_at", _iso_now())),
+            "messages": [],
+        }
+        sessions[session_id] = recovered
+        return recovered
+    except Exception:
+        return None
 
 
 class CreateSessionRequest(BaseModel):
@@ -124,16 +160,43 @@ async def list_sessions() -> list[dict[str, Any]]:
 
 @router.delete("", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_all_sessions() -> None:
+    # Mark all current sessions as deleted before cancellation so the event
+    # persister stops immediately even if the task has not yet been cancelled.
+    _deleted_session_ids.update(sessions.keys())
+
+    # Cancel every in-flight background task before clearing state.
+    for sid, task in list(session_tasks.items()):
+        if not task.done():
+            task.cancel()
+            try:
+                await task
+            except (asyncio.CancelledError, Exception):
+                pass
+
     sessions.clear()
     broadcasters.clear()
     broadcaster_ready.clear()
     session_run_ids.clear()
+    session_tasks.clear()
     repo = DecisionSessionRepository()
     await repo.delete_all_sessions()
 
 
 @router.delete("/{session_id}", status_code=204)
 async def delete_session(session_id: str) -> None:
+    # Mark as deleted immediately so the event persister stops as soon as possible,
+    # before the background task is actually cancelled.
+    _deleted_session_ids.add(session_id)
+
+    # Cancel the in-flight background task for this session, if any.
+    task = session_tasks.pop(session_id, None)
+    if task is not None and not task.done():
+        task.cancel()
+        try:
+            await task
+        except (asyncio.CancelledError, Exception):
+            pass
+
     sessions.pop(session_id, None)
     broadcasters.pop(session_id, None)
     broadcaster_ready.pop(session_id, None)
@@ -159,8 +222,10 @@ async def update_session_title(session_id: str, body: UpdateTitleRequest) -> Non
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="title must not be empty",
         )
-    if session_id in sessions:
-        sessions[session_id]["title"] = title
+    session = await get_or_recover_session(session_id)
+    if session is None:
+        raise HTTPException(status_code=404, detail="Session not found")
+    session["title"] = title
     try:
         repo = DecisionSessionRepository()
         await repo.set_title(session_id, title)
@@ -216,7 +281,7 @@ async def get_messages(session_id: str) -> list[dict[str, Any]]:
         if "DATABASE_URL" not in str(e):
             raise HTTPException(status_code=500, detail="Internal error")
 
-    session = sessions.get(session_id)
+    session = await get_or_recover_session(session_id)
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
     return [
@@ -239,6 +304,10 @@ async def set_message_feedback(
 ) -> None:
     if body.feedback not in (1, -1):
         raise HTTPException(status_code=422, detail="feedback must be 1 or -1")
+
+    session = await get_or_recover_session(session_id)
+    if session is None:
+        raise HTTPException(status_code=404, detail="Session not found")
 
     try:
         repo = DecisionSessionRepository()
@@ -280,27 +349,9 @@ async def post_message(
             detail="Rate limit exceeded. Please wait before sending another message.",
         )
 
-    session = sessions.get(session_id)
+    session = await get_or_recover_session(session_id)
     if not session:
-        # Server may have restarted — attempt DB recovery before returning 404
-        try:
-            repo_check = DecisionSessionRepository()
-            db_session = await repo_check.get(session_id)
-            if db_session is None:
-                raise HTTPException(status_code=404, detail="Session not found")
-            sessions[session_id] = {
-                "session_id": session_id,
-                "status": db_session.get("status", "pending"),
-                "goal": db_session.get("goal", ""),
-                "title": db_session.get("title"),
-                "created_at": str(db_session.get("created_at", _iso_now())),
-                "messages": [],
-            }
-            session = sessions[session_id]
-        except HTTPException:
-            raise
-        except Exception:
-            raise HTTPException(status_code=404, detail="Session not found")
+        raise HTTPException(status_code=404, detail="Session not found")
 
     session.setdefault("messages", []).append({
         "role": "user",
@@ -344,8 +395,14 @@ async def post_message(
         response: SessionResponse | None = None
         ask_user_id: str | None = None
         interrupted = False
+        cancelled = False
         try:
             response = await orchestrator.run(UUID(session_id), query)
+        except asyncio.CancelledError:
+            # Task was cancelled (e.g. by delete_session). Do not broadcast done
+            # or persist messages; re-raise so the task ends in a cancelled state.
+            cancelled = True
+            raise
         except GraphInterrupt as exc:
             # Graph paused at wait_for_answer — ask_user_required SSE already sent.
             interrupted = True
@@ -373,6 +430,9 @@ async def post_message(
                 "timestamp": _iso_now(),
             })
         finally:
+            if cancelled:
+                # Cancellation path: skip all broadcasts and persists.
+                return
             if session_run_ids.get(session_id) != run_id:
                 return  # Superseded by a newer run — drop this event
             if interrupted:
@@ -405,7 +465,13 @@ async def post_message(
                         "DB unavailable; skipping assistant message persist for %s", session_id
                     )
 
-    asyncio.create_task(_run_and_signal())
+    task = asyncio.create_task(_run_and_signal())
+    session_tasks[session_id] = task
+
+    def _remove_task(t: asyncio.Future[None]) -> None:  # noqa: ARG001
+        session_tasks.pop(session_id, None)
+
+    task.add_done_callback(_remove_task)
 
     message_id = str(uuid4())
     return {"message_id": message_id, "session_id": session_id, "status": "processing"}
@@ -485,7 +551,7 @@ async def submit_ask_user_answer(
     body: AskUserAnswerRequest,
 ) -> dict[str, Any]:
     session_id_str = str(session_id)
-    session = sessions.get(session_id_str)
+    session = await get_or_recover_session(session_id_str)
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
 
@@ -530,8 +596,14 @@ async def submit_ask_user_answer(
     async def _run_resume_and_signal() -> None:
         response: SessionResponse | None = None
         no_pending_interrupt = False
+        cancelled = False
         try:
             response = await orchestrator.answer_ask_user(session_id, answer)
+        except asyncio.CancelledError:
+            # Task was cancelled (e.g. by delete_session). Do not broadcast done
+            # or persist messages; re-raise so the task ends in a cancelled state.
+            cancelled = True
+            raise
         except NoPendingInterruptError as exc:
             # Race condition: guard passed but checkpoint was lost between check and
             # resume. Log as a warning (not an exception) and do not emit resume_failed
@@ -553,6 +625,9 @@ async def submit_ask_user_answer(
                 "timestamp": _iso_now(),
             })
         finally:
+            if cancelled:
+                # Cancellation path: skip all broadcasts and persists.
+                return
             if no_pending_interrupt:
                 # Nothing to broadcast — the pre-dispatch 409 already informed the caller.
                 return
@@ -579,5 +654,12 @@ async def submit_ask_user_answer(
                         "DB unavailable; skipping assistant message persist for %s", session_id_str
                     )
 
-    asyncio.create_task(_run_resume_and_signal())
+    resume_task = asyncio.create_task(_run_resume_and_signal())
+    session_tasks[session_id_str] = resume_task
+
+    def _remove_resume_task(t: asyncio.Future[None]) -> None:  # noqa: ARG001
+        session_tasks.pop(session_id_str, None)
+
+    resume_task.add_done_callback(_remove_resume_task)
+
     return {"status": "processing", "session_id": session_id_str}
