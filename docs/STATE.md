@@ -40,11 +40,11 @@ See `docs/archive/v3/STATE.md` for P0–P23 per-phase details.
 
 ## Active Phase
 
-None
+P77 — Runtime Error Surfacing Fixes
 
 ## Active Lease
 
-None
+P77-B-01
 
 ## Last Completed
 
