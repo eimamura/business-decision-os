@@ -733,7 +733,7 @@ error-surface incident on 2026-06-10.
 - Discovered: 2026-06-10, live user session 22:47 UTC (same query that passed at 22:30 — content lottery)
 - Symptom: lookup query answered without tool calls → `verify_findings rule-based result: blocked` ×2 (initial + goal-loop refinement) → UI shows "Agent control failed: run blocked by tool-loop guard"
 - Root causes: (1) `_rule_based_verify` Rule 1 matches ANY digit in a no-tool response — legitimate code-writing answers fail stochastically; (2) `blocked_error` fallback at `packages/agent/runtime.py:1405` misattributes every verifier block to the tool-loop guard; (3) `run_status == "blocked"` maps to `specialist_status = "failed"`, so the prepared soft text ("Could not verify findings…") is displaced by a hard SSE error (`orchestrator/runtime.py:128`)
-- Status: Open (fix scheduled in P80-B-01)
+- Status: Resolved (T-501–T-503 fixes + T-504 tests; gates passed 2026-06-10)
 
 ### Batch B-01 — Truthful block reason + soft-fail + Rule 1 refinement (App Builder) — Done
 
@@ -745,11 +745,11 @@ error-surface incident on 2026-06-10.
 
 Dependencies: none
 
-### Batch B-02 — Tests + gate (Test/Review) — Not Started
+### Batch B-02 — Tests + gate (Test/Review) — Done
 
 | Task | Description | Status |
 |---|---|---|
-| T-504 | Unit tests: Rule 1 passes a no-tool SQL-fenced answer containing digits, still blocks prose digit claims without tools; blocked run returns completed SpecialistResult with fallback text + blocked_reason meta, no agent_failed SSE; blocked_reason strings per blocking site. Update existing tests asserting blocked→failed mapping or the old default error string. | Not Started |
-| T-505 | Gate: `make test-unit && make lint && make typecheck && make build && make test-playwright` — proof-of-execution. Mark D-008 Resolved on pass. | Not Started |
+| T-504 | Unit tests: Rule 1 passes a no-tool SQL-fenced answer containing digits, still blocks prose digit claims without tools; blocked run returns completed SpecialistResult with fallback text + blocked_reason meta, no agent_failed SSE; blocked_reason strings per blocking site. Update existing tests asserting blocked→failed mapping or the old default error string. | Done |
+| T-505 | Gate: `make test-unit && make lint && make typecheck && make build && make test-playwright` — proof-of-execution. Mark D-008 Resolved on pass. | Done |
 
 Dependencies: B-01

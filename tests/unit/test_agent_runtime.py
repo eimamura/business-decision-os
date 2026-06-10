@@ -161,8 +161,9 @@ async def test_t007_pass_does_not_retry() -> None:
 
 async def test_t007_blocked_on_fabricated_no_data_response() -> None:
     """Rule-based verifier: no tool calls + conclusion with 'no' keyword → blocked.
-    Since P60-B-04 the runtime maps blocked → status='failed' so that the
-    orchestrator surfaces a safe fallback message."""
+    Since P80-B-01 blocked maps to status='completed' (soft-fail) with the fallback
+    text and blocked_reason in output meta — no agent_failed SSE.  The block still
+    happens; it is just surfaced softly."""
     # "no stockouts" with no tool calls triggers Rule 1 — fabricated data
     main_response = make_stop_response("There are no stockouts in the warehouse currently.")
 
@@ -173,7 +174,14 @@ async def test_t007_blocked_on_fabricated_no_data_response() -> None:
 
     result = await runtime.run(task, ctx)
 
-    assert result.status == "failed"
+    assert result.status == "completed"
+    assert result.output.get("text") == (
+        "Could not verify findings. Please rephrase your question or try again."
+    )
+    assert result.output.get("verification", {}).get("blocked_reason") == (
+        "findings verifier: response not grounded in tool results"
+    )
+    assert result.error is None
     # Only 1 call: main loop. Rule-based verifier makes zero LLM calls.
     assert len(llm._calls) == 1, (
         f"Expected 1 LLM call (no verifier call), got {len(llm._calls)}"
@@ -397,10 +405,10 @@ async def test_t073_specialist_result_shape_after_run() -> None:
     [
         # Normal long conclusion with no tool calls and no fabrication markers → pass
         ("The demand pattern appears to be within expected seasonal range.", "completed"),
-        # No tool calls + "no" keyword → rule-based verifier blocks (fabricated data)
-        ("There are no anomalies detected in supply chain.", "failed"),
-        # No tool calls + digit in conclusion → rule-based verifier blocks
-        ("There are 3 critical SKUs with stockout risk.", "failed"),
+        # No tool calls + "no" keyword → rule-based verifier blocks (soft-fail: completed)
+        ("There are no anomalies detected in supply chain.", "completed"),
+        # No tool calls + digit in conclusion → rule-based verifier blocks (soft-fail: completed)
+        ("There are 3 critical SKUs with stockout risk.", "completed"),
     ],
     ids=["pass_normal_conclusion", "blocked_no_keyword", "blocked_digit_fabricated"],
 )
@@ -408,7 +416,9 @@ async def test_t073_verify_findings_rule_based_outcomes(
     conclusion: str, expected_status: str
 ) -> None:
     """P61: rule-based verifier — no LLM calls. Outcomes depend only on
-    conclusion content + presence/absence of tool results."""
+    conclusion content + presence/absence of tool results.
+    P80-B-01: blocked runs surface as status='completed' (soft-fail) with fallback
+    text and blocked_reason meta; error is None."""
     main_resp = make_stop_response(conclusion)
 
     llm = FakeLCModel([main_resp])
@@ -555,3 +565,153 @@ async def test_execute_tools_failing_tool_propagates_exception() -> None:
 
     with pytest.raises(RuntimeError, match="tool failed"):
         await runtime.run(task, ctx)
+
+
+# ---------------------------------------------------------------------------
+# T-504: P80-B-02 — rule_based_verify direct tests + blocked-run surface
+# ---------------------------------------------------------------------------
+
+
+def test_t504_rule_based_verify_sql_fenced_digits_pass() -> None:
+    """Rule 1 (T-503): digits inside a ```sql fenced block``` with no tool calls → pass.
+    The fenced code is stripped before applying _FABRICATED_NO_DATA_RE."""
+    from packages.agent.runtime import _rule_based_verify
+
+    conclusion = (
+        "Here is the SQL query you requested:\n"
+        "```sql\n"
+        "SELECT sku, COUNT(*) AS qty FROM inventory WHERE qty > 100;\n"
+        "```\n"
+        "Run this query to retrieve the relevant data."
+    )
+    result = _rule_based_verify(tool_results=[], conclusion=conclusion)
+
+    assert result == "pass"
+
+
+def test_t504_rule_based_verify_prose_digits_blocked() -> None:
+    """Rule 1: digits in plain prose with no tool calls → blocked.
+    Stripping code does not remove prose-level digit claims."""
+    from packages.agent.runtime import _rule_based_verify
+
+    conclusion = "There are 5 critical SKUs that have exceeded safety stock levels."
+    result = _rule_based_verify(tool_results=[], conclusion=conclusion)
+
+    assert result == "blocked"
+
+
+def test_t504_rule_based_verify_inline_code_digits_pass() -> None:
+    """Rule 1 (T-503): digits inside an inline `code span` with no tool calls → pass.
+    Inline code is stripped before the fabrication-heuristic regex runs.
+    The surrounding prose must be free of digits/no/none keywords to isolate the behavior."""
+    from packages.agent.runtime import _rule_based_verify
+
+    # Prose has zero digits/keywords; only digit is inside the inline code span.
+    conclusion = (
+        "Set the threshold using `max_items=50` in the configuration file. "
+        "This change is purely structural and requires only the parameter update."
+    )
+    result = _rule_based_verify(tool_results=[], conclusion=conclusion)
+
+    assert result == "pass"
+
+
+def test_t504_rule_based_verify_rule1b_nil_claim_with_tool_data_blocked() -> None:
+    """Rule 1b (unchanged): tool returned non-empty results but conclusion claims 'no' items.
+    Verifier blocks to prevent misleading nil-claim when data exists."""
+    from packages.agent.runtime import _rule_based_verify
+
+    tool_results = [{"nl_query": {"count": 3, "items": ["A", "B", "C"]}}]
+    conclusion = "There are no stockouts in the current inventory data."
+    result = _rule_based_verify(tool_results=tool_results, conclusion=conclusion)
+
+    assert result == "blocked"
+
+
+def test_t504_rule_based_verify_rule2_short_conclusion_blocked() -> None:
+    """Rule 2 (unchanged): tool calls made but conclusion is shorter than
+    _DEGENERATE_RESPONSE_MIN_LEN → blocked."""
+    from packages.agent.runtime import _rule_based_verify
+
+    tool_results = [{"nl_query": {"count": 1, "items": ["X"]}}]
+    conclusion = "Done."  # 5 chars — below the 10-char threshold
+    result = _rule_based_verify(tool_results=tool_results, conclusion=conclusion)
+
+    assert result == "blocked"
+
+
+async def test_t504_blocked_run_returns_completed_with_fallback_text() -> None:
+    """Blocked run (Rule 1 fires): SpecialistResult.status == 'completed',
+    output text is the soft fallback, blocked_reason is set in output meta,
+    and result.error is None (no agent_failed SSE)."""
+    # No tool calls + digit in prose → Rule 1 triggers
+    main_response = make_stop_response(
+        "There are 7 high-risk suppliers in the current dataset."
+    )
+
+    llm = FakeLCModel([main_response])
+    runtime = _make_runtime(llm)
+    task = _make_task()
+    ctx = _FakeToolContext()
+
+    result = await runtime.run(task, ctx)
+
+    assert result.status == "completed"
+    assert result.output.get("text") == (
+        "Could not verify findings. Please rephrase your question or try again."
+    )
+    assert result.output.get("verification", {}).get("blocked_reason") == (
+        "findings verifier: response not grounded in tool results"
+    )
+    assert result.error is None
+
+
+async def test_t504_degenerate_after_revision_sets_blocked_reason() -> None:
+    """call_model_final produces a degenerate (too-short) response → blocked_reason is
+    'degenerate response after revision' and surfaces in output["verification"]["blocked_reason"].
+
+    Path: tool call → conclusion → groundedness check (grounded=False) → revision message
+    → call_model_final returns "ok" (len=2 < _DEGENERATE_RESPONSE_MIN_LEN).
+
+    Uses "supply_chain" intent so that plan_tools (domain_analysis/decision_support only)
+    does not consume the first FakeLCModel response.  Groundedness check fires because
+    "supply_chain" ∈ _GROUNDED_VERIFY_INTENTS and tool_results are non-empty."""
+    from packages.agent.runtime import GroundednessVerdict
+
+    tool = _RecordingFakeTool()
+    registry = _FakeToolRegistry([tool])
+
+    # Response sequence shared by FakeLCModel (including with_structured_output):
+    # 1. Tool call — initial _call_model_node, routes to execute_tools
+    # 2. Long conclusion — second _call_model_node after tool execution, routes to verify
+    # 3. GroundednessVerdict(grounded=False) — consumed by with_structured_output
+    # 4. "ok" (2 chars) — call_model_final; degenerate check fires in _call_model_final_node
+    llm = FakeLCModel([
+        make_tool_call_response("nl_query", {"query": "SELECT 1"}),
+        make_stop_response(
+            "Based on the tool data, demand appears stable across all SKUs surveyed."
+        ),
+        GroundednessVerdict(
+            grounded=False, unsupported_claims=["Claim not in tool results"]
+        ),
+        make_stop_response("ok"),  # len("ok") == 2 < _DEGENERATE_RESPONSE_MIN_LEN (10)
+    ])
+    runtime = _make_runtime(llm, tool_registry=registry)
+    # "supply_chain" ∈ _GROUNDED_VERIFY_INTENTS but NOT in _PLAN_TOOLS_INTENTS.
+    task = SpecialistTask(
+        task_id=uuid4(),
+        instruction="Analyse supply chain risk.",
+        context_payload={"intent": {"category": "supply_chain"}},
+        allowed_tools=[],
+    )
+    ctx = _FakeToolContext()
+
+    result = await runtime.run(task, ctx)
+
+    # blocked_reason must be propagated through to output verification meta.
+    # Note: run() also detects the short "ok" response as is_degenerate, which overrides
+    # specialist_status to "failed".  blocked_reason is still present because run_status
+    # remains "blocked" (from _call_model_final_node) and the verification block fires.
+    assert result.output.get("verification", {}).get("blocked_reason") == (
+        "degenerate response after revision"
+    )
