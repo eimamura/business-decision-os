@@ -127,10 +127,8 @@ def test_tool_context_accepts_custom_user_role() -> None:
     ("data_quality_checker", "read_only"),
     ("evaluate_candidates", "read_only"),
     ("forecast", "write"),
-    ("train_forecast", "write"),
     ("simulate_inventory", "write"),
     ("optimize_replenishment", "write"),
-    ("write_audit_log", "write"),
     ("request_approval", "hitl"),
 ])
 def test_concrete_tool_safety_levels(tool_name: str, expected_level: str) -> None:

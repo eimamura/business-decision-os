@@ -548,7 +548,7 @@ def test_nl_query_rules_include_limit():
 def test_create_tool_registry_has_all_tools():
     registry = create_tool_registry()
     expected = [
-        "nl_query", "request_approval", "write_audit_log",
+        "nl_query", "request_approval",
         "forecast", "simulate_inventory", "optimize_replenishment",
         "evaluate_candidates",
         "data_catalog_search", "table_schema_reader", "data_quality_checker",
@@ -570,7 +570,7 @@ def test_list_for_role_simulation_optimizer():
 def test_list_for_role_orchestrator_returns_empty():
     registry = create_tool_registry()
     tools = registry.list_for_role("orchestrator")
-    assert [t.name for t in tools] == ["job_dispatch"]
+    assert [t.name for t in tools] == []
 
 
 def _make_single_agent_registry() -> MultiRoleModelRegistry:

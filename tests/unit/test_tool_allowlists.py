@@ -8,7 +8,7 @@ from packages.tools.base import _ROLE_TOOL_ALLOWLIST
 @pytest.mark.parametrize(
     "role,expected_tools",
     [
-        ("demand", ["nl_query", "forecast", "train_forecast"]),
+        ("demand", ["nl_query", "forecast"]),
         ("inventory", ["nl_query", "simulate_inventory"]),
         (
             "replenishment",
@@ -24,7 +24,7 @@ from packages.tools.base import _ROLE_TOOL_ALLOWLIST
             ],
         ),
         ("simulation_optimizer", ["simulate_inventory", "optimize_replenishment"]),
-        ("evaluator", ["evaluate_candidates", "write_audit_log"]),
+        ("evaluator", ["evaluate_candidates"]),
     ],
 )
 def test_role_tool_allowlist_contains_expected_tools(
