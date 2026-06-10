@@ -509,12 +509,12 @@ Dependencies: none
 
 Dependencies: none
 
-### Batch B-03 — Test coverage map + execution verification (Test/Review) — Not Started
+### Batch B-03 — Test coverage map + execution verification (Test/Review) — Done
 
 | Task | Description | Status |
 |---|---|---|
-| T-474 | Map each of the 35 tools to its unit and integration test files (grep `tests/unit` + `tests/integration`); deliver coverage matrix marking tools with no unit test, no integration test, or assertion-free tests. | Not Started |
-| T-475 | Proof-of-execution: `make test-unit` and full-DSN `make test-integration` — capture command, exit code, pass/fail counts; confirm every tool-related test green. Any failure → register Defect Task. | Not Started |
+| T-474 | Map each of the 35 tools to its unit and integration test files (grep `tests/unit` + `tests/integration`); deliver coverage matrix marking tools with no unit test, no integration test, or assertion-free tests. | Done |
+| T-475 | Proof-of-execution: `make test-unit` and full-DSN `make test-integration` — capture command, exit code, pass/fail counts; confirm every tool-related test green. Any failure → register Defect Task. | Done |
 
 Dependencies: none
 
