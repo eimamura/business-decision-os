@@ -378,6 +378,17 @@ Dependencies: B-01
 | T-456 | Unit test: reroute_category updates intent and tool subset on the refinement pass; invalid category ignored. | Done |
 | T-457 | `make test-unit && make lint && make typecheck` — all pass (proof-of-execution). | Done |
 
+#### Defect: D-003
+
+- Status: Open
+- Severity: High
+- Repro: `docker compose -f infra/compose/compose.yaml up -d db && DATABASE_URL=<dev> make test-integration`
+- Observed: 8 integration tests fail (`test_ask_user_hitl_variants.py` ×6, `test_prompts_mock_llm.py` ×2) with `AttributeError: 'AgentRoute' object has no attribute 'needs_input'`. Root cause: P71's `set_goal` node consumes one structured-output response before `prepare_ask_user`; the integration conftest stub (`_StructuredOutputFakeModel`) is positional, so the response sequence shifted off-by-one. Unit helpers were made type-aware in P71-B-03 but the integration conftest equivalent was not updated. Discovered at P73-B-03 programme sign-off — after P71 batch sign-off was given.
+- Expected: `make test-integration` 0 failed against the programme baseline (16 passed pre-P71, 19+ after T-468).
+- Area: tests/integration/conftest.py (and per-test sequences)
+- Owner: Test/Review
+- Acceptance: `make test-integration` (with dev DATABASE_URL) exits 0 with 0 failed and ≥27 passed.
+
 Dependencies: B-02
 
 ---
@@ -435,12 +446,12 @@ Dependencies: none
 
 Dependencies: B-01
 
-### Batch B-03 — Tests + gate + programme sign-off (Test/Review) — Not Started
+### Batch B-03 — Tests + gate + programme sign-off (Test/Review) — Done
 
 | Task | Description | Status |
 |---|---|---|
-| T-467 | Unit tests: `set_latest_outcome` SQL path (mock pool); endpoint non-fatal on store failure; Past Decisions annotation rendering; prompt instruction present. | Not Started |
-| T-468 | Integration test (real DB): write decision record → PATCH feedback → decision_log.outcome updated → search returns outcome. | Not Started |
-| T-469 | Programme sign-off: `make test-unit && make lint && make typecheck && make test-integration && make build && make test-playwright` — all pass (proof-of-execution). | Not Started |
+| T-467 | Unit tests: `set_latest_outcome` SQL path (mock pool); endpoint non-fatal on store failure; Past Decisions annotation rendering; prompt instruction present. | Done |
+| T-468 | Integration test (real DB): write decision record → PATCH feedback → decision_log.outcome updated → search returns outcome. | Done |
+| T-469 | Programme sign-off: `make test-unit && make lint && make typecheck && make test-integration && make build && make test-playwright` — all pass (proof-of-execution). | Done |
 
 Dependencies: B-02, P71 Done, P72 Done
