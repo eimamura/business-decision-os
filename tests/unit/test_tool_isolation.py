@@ -523,13 +523,18 @@ def test_create_tool_registry_has_all_tools():
 
 
 
-def test_list_for_role_simulation_optimizer():
+def test_list_for_role_control_includes_simulation_tools():
+    """list_for_role("control") must include simulate_inventory and optimize_replenishment.
+
+    "simulation_optimizer" was removed from _ROLE_TOOL_ALLOWLIST in B-01.
+    Both tools are reachable via the "domain_analysis" / "cross_domain_analysis" intents
+    in _INTENT_TOOL_SUBSET, so the auto-derived "control" allowlist must contain them.
+    """
     registry = create_tool_registry()
-    tools = registry.list_for_role("simulation_optimizer")
+    tools = registry.list_for_role("control")
     names = {t.name for t in tools}
     assert "simulate_inventory" in names
     assert "optimize_replenishment" in names
-    assert "sql_query" not in names
 
 
 def test_list_for_role_orchestrator_returns_empty():

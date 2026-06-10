@@ -35,10 +35,15 @@ def test_list_for_role_orchestrator_returns_empty():
     assert tools == []
 
 
-def test_list_for_role_data_engineer_filters_to_allowlist():
+def test_list_for_role_control_excludes_unregistered_fake_tool():
+    """A fake tool absent from _INTENT_TOOL_SUBSET must not appear in the control allowlist.
+
+    "control" is auto-derived from _INTENT_TOOL_SUBSET; fake_tool is not in that
+    subset, so list_for_role("control") must exclude it.
+    """
     registry = ToolRegistry()
     registry.register(_FakeTool())
-    tools = registry.list_for_role("data_engineer")
+    tools = registry.list_for_role("control")
     names = {t.name for t in tools}
     assert "fake_tool" not in names
 

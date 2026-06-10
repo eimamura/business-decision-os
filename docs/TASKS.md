@@ -1756,7 +1756,7 @@ Dependencies: B-02
 
 ---
 
-## P67 — Tool Layer Rationalization — Not Started
+## P67 — Tool Layer Rationalization — In Progress
 
 **Goal:** ~40 tool modules exist; P64 made the control allowlist derived from
 `_INTENT_TOOL_SUBSET`, but the registry may still register tools no intent can reach
@@ -1765,22 +1765,22 @@ mutually consistent and delete what nothing can call.
 
 Dependencies: P66 Done
 
-### Batch B-01 — Reachability audit + dead tool removal (App Builder) — Not Started
+### Batch B-01 — Reachability audit + dead tool removal (App Builder) — Done
 
 | Task | Description | Status |
 |---|---|---|
-| T-433 | Reachability audit: for every tool registered in `create_tool_registry()`, verify it appears in at least one `_ROLE_TOOL_ALLOWLIST` entry / `_INTENT_TOOL_SUBSET` list; produce the unreachable list in the batch report. | Not Started |
-| T-434 | Delete unreachable tool modules and their registry entries. Keep classes used by non-LLM paths (`AuditLogTool` post-completion hook, `JobDispatchTool`, `TrainForecastTool` — per P64 B-02). | Not Started |
-| T-435 | Update `docs/TOOLS.md` to exactly match the post-cleanup registry and allowlists. | Not Started |
+| T-433 | Reachability audit: for every tool registered in `create_tool_registry()`, verify it appears in at least one `_ROLE_TOOL_ALLOWLIST` entry / `_INTENT_TOOL_SUBSET` list; produce the unreachable list in the batch report. | Done |
+| T-434 | Delete unreachable tool modules and their registry entries. Keep classes used by non-LLM paths (`AuditLogTool` post-completion hook, `JobDispatchTool`, `TrainForecastTool` — per P64 B-02). | Done |
+| T-435 | Update `docs/TOOLS.md` to exactly match the post-cleanup registry and allowlists. | Done |
 
 Dependencies: none
 
-### Batch B-02 — Orphaned tool tests + quality gate (Test/Review) — Not Started
+### Batch B-02 — Orphaned tool tests + quality gate (Test/Review) — Done
 
 | Task | Description | Status |
 |---|---|---|
-| T-436 | Delete unit tests for removed tools (`tests/unit/tools/`); confirm no cassette files in `tests/cassettes/` reference removed tools. | Not Started |
-| T-437 | `make test-unit && make lint && make typecheck` — all pass. | Not Started |
+| T-436 | Delete unit tests for removed tools (`tests/unit/tools/`); confirm no cassette files in `tests/cassettes/` reference removed tools. | Done |
+| T-437 | `make test-unit && make lint && make typecheck` — all pass. | Done |
 
 Dependencies: B-01
 
