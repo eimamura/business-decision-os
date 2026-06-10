@@ -345,7 +345,7 @@ parallel; test batches follow their implementation batches.
 
 ---
 
-## P71 — Goal Evaluation Loop — Not Started
+## P71 — Goal Evaluation Loop — In Progress
 
 **Goal:** Make the goal first-class and close the outer loop: derive GoalSpec, evaluate the
 answer against it, allow exactly one refinement pass with optional intent re-route.
@@ -360,13 +360,13 @@ Dependencies: P70 Done
 
 Dependencies: none
 
-### Batch B-02 — GoalSpec + evaluate_goal node + refinement loop (App Builder) — Not Started
+### Batch B-02 — GoalSpec + evaluate_goal node + refinement loop (App Builder) — Done
 
 | Task | Description | Status |
 |---|---|---|
-| T-452 | `packages/agent/orchestrator/models.py` — add `GoalSpec {goal_text: str, success_criteria: list[str] (≤3)}` and `GoalEvaluation {satisfied: bool, missing: str|None, reroute_category: str|None}` Pydantic models; add additive-optional `goal_evaluation: dict | None = None` to `SessionResponse`. `OrchestratorState` gains `goal`, `goal_eval`, `refine_count` keys. | Not Started |
-| T-453 | `session_orchestrator.py` — new node `set_goal` (after classify_intent, non-chat only: one structured-output call, orchestrator role, fail-open to `GoalSpec(goal_text=query, success_criteria=[])`); new node `evaluate_goal` (after run_sequential: structured GoalEvaluation verdict; fail-open to satisfied=True); conditional edge: satisfied or refine_count≥1 → END, else refine path → re-enter run_sequential with `missing` appended to instruction and intent updated when `reroute_category` is a valid different category. direct_chat bypasses entirely. | Not Started |
-| T-454 | SSE: `set_goal`/`evaluate_goal` emit standard `graph_node` events (kind="orchestrator", meta includes satisfied/missing for evaluate_goal); populate `SessionResponse.goal_evaluation`. Event schema unchanged. | Not Started |
+| T-452 | `packages/agent/orchestrator/models.py` — add `GoalSpec {goal_text: str, success_criteria: list[str] (≤3)}` and `GoalEvaluation {satisfied: bool, missing: str|None, reroute_category: str|None}` Pydantic models; add additive-optional `goal_evaluation: dict | None = None` to `SessionResponse`. `OrchestratorState` gains `goal`, `goal_eval`, `refine_count` keys. | Done |
+| T-453 | `session_orchestrator.py` — new node `set_goal` (after classify_intent, non-chat only: one structured-output call, orchestrator role, fail-open to `GoalSpec(goal_text=query, success_criteria=[])`); new node `evaluate_goal` (after run_sequential: structured GoalEvaluation verdict; fail-open to satisfied=True); conditional edge: satisfied or refine_count≥1 → END, else refine path → re-enter run_sequential with `missing` appended to instruction and intent updated when `reroute_category` is a valid different category. direct_chat bypasses entirely. | Done |
+| T-454 | SSE: `set_goal`/`evaluate_goal` emit standard `graph_node` events (kind="orchestrator", meta includes satisfied/missing for evaluate_goal); populate `SessionResponse.goal_evaluation`. Event schema unchanged. | Done |
 
 Dependencies: B-01
 
@@ -389,13 +389,13 @@ behind a real LLM groundedness verdict, keeping rule-based checks as pre-filter.
 
 Dependencies: P71 B-01 (ADR); parallel-eligible with P71 B-02 (disjoint files)
 
-### Batch B-01 — Groundedness verdict + revision rewire (App Builder) — Not Started
+### Batch B-01 — Groundedness verdict + revision rewire (App Builder) — Done
 
 | Task | Description | Status |
 |---|---|---|
-| T-458 | `packages/agent/runtime.py` — add `GroundednessVerdict {grounded: bool, unsupported_claims: list[str]}`; in `_verify_findings_node`, after rule-based pre-filter passes, run one structured-output groundedness call (control role via model_registry) gated by: intent ∈ {domain_analysis, cross_domain_analysis, decision_support, supply_chain} AND tool_results non-empty AND model_registry present; fail-open to rule-based result on any verifier error. | Not Started |
-| T-459 | Wire `needs_revision`: `_after_verify` returns "add_revision_message" when verdict is ungrounded; revision message embeds the specific `unsupported_claims`; existing one-retry `call_model_final` path preserved (no second verify). | Not Started |
-| T-460 | Verdict surfaced in run output meta (e.g., `verification: {grounded, revised}`) for observability; no SSE schema change. | Not Started |
+| T-458 | `packages/agent/runtime.py` — add `GroundednessVerdict {grounded: bool, unsupported_claims: list[str]}`; in `_verify_findings_node`, after rule-based pre-filter passes, run one structured-output groundedness call (control role via model_registry) gated by: intent ∈ {domain_analysis, cross_domain_analysis, decision_support, supply_chain} AND tool_results non-empty AND model_registry present; fail-open to rule-based result on any verifier error. | Done |
+| T-459 | Wire `needs_revision`: `_after_verify` returns "add_revision_message" when verdict is ungrounded; revision message embeds the specific `unsupported_claims`; existing one-retry `call_model_final` path preserved (no second verify). | Done |
+| T-460 | Verdict surfaced in run output meta (e.g., `verification: {grounded, revised}`) for observability; no SSE schema change. | Done |
 
 Dependencies: P71 B-01
 
@@ -425,13 +425,13 @@ Dependencies: P71 B-01 (ADR)
 
 Dependencies: none
 
-### Batch B-02 — Outcome write path + context annotation (App Builder) — Not Started
+### Batch B-02 — Outcome write path + context annotation (App Builder) — Done
 
 | Task | Description | Status |
 |---|---|---|
-| T-464 | `packages/memory/decision.py` — add `set_latest_outcome(session_id: str, outcome: int) -> bool` (updates latest `record_type='decision'` row of the session); `search()` includes `outcome` in returned rows. | Not Started |
-| T-465 | `apps/api/routers/sessions.py` feedback endpoint — after successful `set_message_feedback`, best-effort call `DecisionMemoryStore.set_latest_outcome` (try/except log-warning; never fails the request). | Not Started |
-| T-466 | `packages/agent/control/control_agent.py` — Past Decisions block annotates entries with `[user feedback: positive|negative]` when outcome present; `_SYSTEM_PROMPT` gains one instruction to avoid approaches that previously received negative feedback. | Not Started |
+| T-464 | `packages/memory/decision.py` — add `set_latest_outcome(session_id: str, outcome: int) -> bool` (updates latest `record_type='decision'` row of the session); `search()` includes `outcome` in returned rows. | Done |
+| T-465 | `apps/api/routers/sessions.py` feedback endpoint — after successful `set_message_feedback`, best-effort call `DecisionMemoryStore.set_latest_outcome` (try/except log-warning; never fails the request). | Done |
+| T-466 | `packages/agent/control/control_agent.py` — Past Decisions block annotates entries with `[user feedback: positive|negative]` when outcome present; `_SYSTEM_PROMPT` gains one instruction to avoid approaches that previously received negative feedback. | Done |
 
 Dependencies: B-01
 

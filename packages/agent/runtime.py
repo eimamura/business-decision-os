@@ -14,6 +14,7 @@ from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import END, START, StateGraph
 from langgraph.types import interrupt
+from pydantic import BaseModel
 from typing_extensions import TypedDict
 
 from packages.tools.audit_tool import AuditLogTool
@@ -25,6 +26,23 @@ if TYPE_CHECKING:
 _log = structlog.get_logger(__name__)
 
 _MAX_ITERATIONS = 10
+
+# Intents eligible for the LLM groundedness check (ADR 2026-06-10 §2).
+_GROUNDED_VERIFY_INTENTS: frozenset[str] = frozenset(
+    {"domain_analysis", "cross_domain_analysis", "decision_support", "supply_chain"}
+)
+
+# Maximum length (characters) of a serialized tool result value before truncation.
+_TOOL_RESULT_VALUE_TRUNCATE = 500
+
+
+class GroundednessVerdict(BaseModel):
+    """Structured output schema for the LLM groundedness check."""
+
+    grounded: bool
+    unsupported_claims: list[str] = []
+
+
 SUMMARY_THRESHOLD = 30
 _MAX_TOKENS_WARN_THRESHOLD = 4000
 _DEGENERATE_RESPONSE_MIN_LEN = 10
@@ -131,6 +149,31 @@ def _rule_based_verify(
     return "pass"
 
 
+def _truncate_tool_results_for_prompt(
+    tool_results: list[dict[str, Any]],
+    max_value_len: int = _TOOL_RESULT_VALUE_TRUNCATE,
+) -> list[dict[str, Any]]:
+    """Return a copy of tool_results with large string values truncated.
+
+    Each entry is ``{tool_name: result_dict}``.  Walks one level of nesting
+    and truncates any string value longer than *max_value_len*.
+    """
+    from packages.agent.orchestrator.parsing import json_safe
+
+    def _trim(val: Any) -> Any:
+        if isinstance(val, str) and len(val) > max_value_len:
+            return val[:max_value_len] + "…"
+        if isinstance(val, dict):
+            return {k: _trim(v) for k, v in val.items()}
+        if isinstance(val, list):
+            # Keep up to 20 items to avoid prompt bloat
+            return [_trim(v) for v in val[:20]]
+        return val
+
+    safe = json_safe(tool_results)
+    return [_trim(entry) for entry in safe]
+
+
 def _default_output_builder(name: str) -> OutputBuilder:
     def _build(tool_results: dict[str, Any], response: Any) -> dict[str, Any]:
         text = response.text if response else ""
@@ -196,6 +239,10 @@ class AgentState(TypedDict):
     compressed_messages: list[Any] | None
     # Tool plan — set by plan_tools node for complex intents; empty list means no plan
     tool_plan: list[ToolPlan]
+    # Groundedness verdict — set by verify_findings node when LLM check runs; None otherwise.
+    groundedness: dict[str, Any] | None
+    # Revised flag — set by call_model_final to prevent a second revision cycle.
+    revised: bool
 
 
 # ---------------------------------------------------------------------------
@@ -900,22 +947,35 @@ class AgentRuntime:
     # ------------------------------------------------------------------
 
     async def _verify_findings_node(
-        self, state: AgentState, config: RunnableConfig  # noqa: ARG002
+        self, state: AgentState, config: RunnableConfig
     ) -> dict[str, Any]:
-        """Rule-based findings verifier — no LLM call.
+        """Rule-based pre-filter followed by optional LLM groundedness check (P72).
 
-        Applies four deterministic rules (see _rule_based_verify) and transitions:
-          "pass"    -> END (status = "completed")
-          "blocked" -> END (status = "blocked")
+        Phase 1 — Rule-based pre-filter (always runs, no LLM):
+          "blocked" → status="blocked" (short-circuits; no LLM check)
+          "pass"    → continue to Phase 2
+
+        Phase 2 — LLM groundedness check (gated):
+          Runs ONLY when ALL of the following hold:
+            - intent_category ∈ _GROUNDED_VERIFY_INTENTS
+            - tool_results is non-empty
+            - _lc_model is available (model_registry was supplied)
+            - state["revised"] is False (one revision max)
+          On any exception the check is silently skipped (fail-open).
+
+          GroundednessVerdict.grounded is False → status="needs_revision",
+            groundedness dict stored in state.
+          GroundednessVerdict.grounded is True  → status="completed".
         """
         response = state.get("response")
         conclusion = response.text if response is not None else ""
         tool_results: list[dict[str, Any]] = state.get("tool_results") or []
 
+        # --- Phase 1: rule-based pre-filter ---
         verify_status = _rule_based_verify(tool_results, conclusion)
 
         _log.info(
-            "verify_findings complete",
+            "verify_findings rule-based result",
             agent_role=self.role,
             verify_status=verify_status,
         )
@@ -923,14 +983,108 @@ class AgentRuntime:
         if verify_status == "blocked":
             return {"status": "blocked"}
 
-        return {"status": "completed"}
+        # --- Phase 2: LLM groundedness check (gated) ---
+
+        # Gate: one revision max — if already revised, skip the LLM check
+        if state.get("revised"):
+            return {"status": "completed"}
+
+        # Gate: need a usable model
+        if self._lc_model is None:
+            return {"status": "completed"}
+
+        # Gate: intent must be in eligible set
+        configurable = config.get("configurable") or {}
+        task: Any = configurable.get("task")
+        intent_category: str = ""
+        if task is not None:
+            intent_category = (
+                (getattr(task, "context_payload", None) or {}).get("intent") or {}
+            ).get("category") or ""
+
+        if intent_category not in _GROUNDED_VERIFY_INTENTS:
+            return {"status": "completed"}
+
+        # Gate: tool_results must be non-empty
+        if not tool_results:
+            return {"status": "completed"}
+
+        # Run the LLM groundedness check (fail-open)
+        try:
+            compact_results = _truncate_tool_results_for_prompt(tool_results)
+            tool_results_json = json.dumps(compact_results, default=str)
+
+            from langchain_core.messages import HumanMessage, SystemMessage
+
+            groundedness_prompt = [
+                SystemMessage(
+                    "You are a factual grounding verifier. "
+                    "Given tool results (JSON) and a draft answer, decide whether "
+                    "EVERY factual claim in the answer is supported by the tool results. "
+                    "Return grounded=true if all claims are supported. "
+                    "Return grounded=false and list the specific unsupported claims "
+                    "in unsupported_claims if any claim lacks evidence."
+                ),
+                HumanMessage(
+                    f"## Tool results (compact JSON)\n{tool_results_json}\n\n"
+                    f"## Draft answer\n{conclusion}"
+                ),
+            ]
+
+            verdict: GroundednessVerdict = await (
+                self._lc_model.with_structured_output(GroundednessVerdict).ainvoke(
+                    groundedness_prompt
+                )
+            )
+
+            _log.info(
+                "verify_findings groundedness verdict",
+                agent_role=self.role,
+                grounded=verdict.grounded,
+                unsupported_count=len(verdict.unsupported_claims),
+                intent=intent_category,
+            )
+
+            if not verdict.grounded:
+                return {
+                    "status": "needs_revision",
+                    "groundedness": {
+                        "grounded": verdict.grounded,
+                        "unsupported_claims": verdict.unsupported_claims,
+                    },
+                }
+
+            return {
+                "status": "completed",
+                "groundedness": {
+                    "grounded": verdict.grounded,
+                    "unsupported_claims": [],
+                },
+            }
+
+        except Exception as exc:
+            _log.warning(
+                "verify_findings groundedness check failed — falling back to rule-based pass",
+                agent_role=self.role,
+                intent=intent_category,
+                error=str(exc),
+            )
+            return {"status": "completed"}
 
     # ------------------------------------------------------------------
     # Conditional edge after verify_findings
     # ------------------------------------------------------------------
 
-    def _after_verify(self, state: AgentState) -> str:  # noqa: ARG002
-        # Rule-based verifier only emits "pass" (completed) or "blocked" — always END.
+    def _after_verify(self, state: AgentState) -> str:
+        """Conditional edge after verify_findings.
+
+        "blocked"        → END  (rule-based block)
+        "needs_revision" → "add_revision_message"  (LLM verdict: ungrounded)
+        "completed"      → END  (grounded or gated-skip)
+        """
+        status = state.get("status", "completed")
+        if status == "needs_revision":
+            return "add_revision_message"
         return END
 
     # ------------------------------------------------------------------
@@ -938,18 +1092,37 @@ class AgentRuntime:
     # ------------------------------------------------------------------
 
     async def _add_revision_message_node(
-        self, state: AgentState, config: RunnableConfig
+        self, state: AgentState, config: RunnableConfig  # noqa: ARG002
     ) -> dict[str, Any]:
         from packages.agent.llm import LLMMessage
 
-        revision_msg = LLMMessage(
-            role="user",
-            content=(
+        groundedness: dict[str, Any] | None = state.get("groundedness")
+        unsupported_claims: list[str] = (
+            groundedness.get("unsupported_claims") or []
+            if isinstance(groundedness, dict)
+            else []
+        )
+
+        if unsupported_claims:
+            claims_block = "\n".join(
+                f"{i + 1}. {claim}" for i, claim in enumerate(unsupported_claims)
+            )
+            content = (
+                "A groundedness check identified the following claims in your previous "
+                "response that are NOT supported by the tool results:\n\n"
+                f"{claims_block}\n\n"
+                "Please revise your answer so that every factual claim is directly "
+                "supported by what the tools actually returned. "
+                "Do not assert facts that are absent from the tool results."
+            )
+        else:
+            content = (
                 "Your previous response may not be fully grounded in the tool results. "
                 "Please review the tool results above and revise your answer, "
                 "ensuring every claim is supported by what the tools actually returned."
-            ),
-        )
+            )
+
+        revision_msg = LLMMessage(role="user", content=content)
         return {
             "messages": [revision_msg],
             "status": "running",
@@ -970,7 +1143,11 @@ class AgentRuntime:
     async def _call_model_final_node(
         self, state: AgentState, config: RunnableConfig
     ) -> dict[str, Any]:
-        """Retry LLM call after needs_revision. Lightweight degenerate check before returning."""
+        """Retry LLM call after needs_revision. Lightweight degenerate check before returning.
+
+        Sets revised=True in state so that a second pass through verify_findings
+        skips the LLM verdict (one revision max per turn).
+        """
         result = await self._call_model_node(state, config)
         response = result.get("response")
         final_text = (response.text or "").strip() if response is not None else ""
@@ -983,6 +1160,8 @@ class AgentRuntime:
             result["status"] = "blocked"
         else:
             result["status"] = "completed"
+        # Mark revised so verify_findings skips the LLM verdict on re-entry
+        result["revised"] = True
         return result
 
     # ------------------------------------------------------------------
@@ -1033,6 +1212,8 @@ class AgentRuntime:
         sg.add_node("wait_for_approval", self._wait_for_approval_node)
         sg.add_node("execute_tools", self._execute_tools_node)
         sg.add_node("verify_findings", self._verify_findings_node)
+        sg.add_node("add_revision_message", self._add_revision_message_node)
+        sg.add_node("call_model_final", self._call_model_final_node)
 
         sg.add_edge(START, "compress_history")
         sg.add_edge("compress_history", "plan_tools")
@@ -1049,7 +1230,16 @@ class AgentRuntime:
         sg.add_edge("prepare_hitl", "wait_for_approval")
         sg.add_edge("wait_for_approval", "execute_tools")
         sg.add_edge("execute_tools", "call_model")
-        sg.add_edge("verify_findings", END)
+        sg.add_conditional_edges(
+            "verify_findings",
+            self._after_verify,
+            {
+                END: END,
+                "add_revision_message": "add_revision_message",
+            },
+        )
+        sg.add_edge("add_revision_message", "call_model_final")
+        sg.add_edge("call_model_final", END)
 
         return sg.compile(checkpointer=checkpointer)
 
@@ -1146,6 +1336,8 @@ class AgentRuntime:
             "pending_hitl_job_id": None,
             "compressed_messages": None,
             "tool_plan": [],
+            "groundedness": None,
+            "revised": False,
         }
 
         final_state: dict[str, Any] = await graph.ainvoke(initial_state, config=run_config)
@@ -1200,6 +1392,15 @@ class AgentRuntime:
                 output["text"] = (
                     "Could not verify findings. Please rephrase your question or try again."
                 )
+
+        # T-460: surface groundedness verdict in output meta (omitted when no verdict ran)
+        groundedness_result: dict[str, Any] | None = final_state.get("groundedness")
+        is_revised: bool = bool(final_state.get("revised", False))
+        if groundedness_result is not None and isinstance(output, dict):
+            output["verification"] = {
+                "grounded": bool(groundedness_result.get("grounded", True)),
+                "revised": is_revised,
+            }
         blocked_error = (
             final_state.get("error") or "run blocked by tool-loop guard"
             if run_status == "blocked"
