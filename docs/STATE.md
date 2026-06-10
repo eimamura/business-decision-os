@@ -40,11 +40,11 @@ See `docs/archive/v3/STATE.md` for P0–P23 per-phase details.
 
 ## Active Phase
 
-None
+P71 — Goal Evaluation Loop / P72 — Grounded Runtime Evaluator (B-01 ADR done; implementation batches parallel)
 
 ## Active Lease
 
-None
+P71-B-02, P72-B-01, P73-B-01 (parallel — disjoint files: session_orchestrator+models / runtime.py / alembic)
 
 ## Last Completed
 

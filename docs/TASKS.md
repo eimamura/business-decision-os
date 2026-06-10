@@ -329,3 +329,118 @@ Dependencies: none
 
 Dependencies: P65–P68 Done
 
+
+---
+
+# Autonomy Loops Programme (P71–P73)
+
+**Goal:** Close the three core autonomy gaps identified 2026-06-10 (see ADR
+`docs/adr/2026-06-10-autonomy-loops.md`, normative for all three phases): no goal loop,
+no grounded verification, no feedback learning loop. Deferred deliberately: persistent
+cross-turn agenda, prediction-vs-actuals learning (future ADRs).
+
+**Ordering:** P71-B-01 (ADR) first; then P71-B-02 (session_orchestrator/models) and
+P72-B-01 (runtime.py) are parallel-eligible (disjoint files); P73 migration can run in
+parallel; test batches follow their implementation batches.
+
+---
+
+## P71 — Goal Evaluation Loop — Not Started
+
+**Goal:** Make the goal first-class and close the outer loop: derive GoalSpec, evaluate the
+answer against it, allow exactly one refinement pass with optional intent re-route.
+
+Dependencies: P70 Done
+
+### Batch B-01 — ADR (Orchestrator) — Done
+
+| Task | Description | Status |
+|---|---|---|
+| T-451 | ADR `docs/adr/2026-06-10-autonomy-loops.md` — goal loop, grounded verification, feedback learning; invariants (SSE schema, protocols, additive-only changes); bounded LLM budget. | Done |
+
+Dependencies: none
+
+### Batch B-02 — GoalSpec + evaluate_goal node + refinement loop (App Builder) — Not Started
+
+| Task | Description | Status |
+|---|---|---|
+| T-452 | `packages/agent/orchestrator/models.py` — add `GoalSpec {goal_text: str, success_criteria: list[str] (≤3)}` and `GoalEvaluation {satisfied: bool, missing: str|None, reroute_category: str|None}` Pydantic models; add additive-optional `goal_evaluation: dict | None = None` to `SessionResponse`. `OrchestratorState` gains `goal`, `goal_eval`, `refine_count` keys. | Not Started |
+| T-453 | `session_orchestrator.py` — new node `set_goal` (after classify_intent, non-chat only: one structured-output call, orchestrator role, fail-open to `GoalSpec(goal_text=query, success_criteria=[])`); new node `evaluate_goal` (after run_sequential: structured GoalEvaluation verdict; fail-open to satisfied=True); conditional edge: satisfied or refine_count≥1 → END, else refine path → re-enter run_sequential with `missing` appended to instruction and intent updated when `reroute_category` is a valid different category. direct_chat bypasses entirely. | Not Started |
+| T-454 | SSE: `set_goal`/`evaluate_goal` emit standard `graph_node` events (kind="orchestrator", meta includes satisfied/missing for evaluate_goal); populate `SessionResponse.goal_evaluation`. Event schema unchanged. | Not Started |
+
+Dependencies: B-01
+
+### Batch B-03 — Tests + gate (Test/Review) — Not Started
+
+| Task | Description | Status |
+|---|---|---|
+| T-455 | Unit tests: satisfied verdict → single run; unsatisfied → exactly one refinement then END (cap enforced); chat intent bypasses set_goal/evaluate_goal; fail-open on verdict parse failure. | Not Started |
+| T-456 | Unit test: reroute_category updates intent and tool subset on the refinement pass; invalid category ignored. | Not Started |
+| T-457 | `make test-unit && make lint && make typecheck` — all pass (proof-of-execution). | Not Started |
+
+Dependencies: B-02
+
+---
+
+## P72 — Grounded Runtime Evaluator — Not Started
+
+**Goal:** Reconnect the dead `add_revision_message → call_model_final` self-correction path
+behind a real LLM groundedness verdict, keeping rule-based checks as pre-filter.
+
+Dependencies: P71 B-01 (ADR); parallel-eligible with P71 B-02 (disjoint files)
+
+### Batch B-01 — Groundedness verdict + revision rewire (App Builder) — Not Started
+
+| Task | Description | Status |
+|---|---|---|
+| T-458 | `packages/agent/runtime.py` — add `GroundednessVerdict {grounded: bool, unsupported_claims: list[str]}`; in `_verify_findings_node`, after rule-based pre-filter passes, run one structured-output groundedness call (control role via model_registry) gated by: intent ∈ {domain_analysis, cross_domain_analysis, decision_support, supply_chain} AND tool_results non-empty AND model_registry present; fail-open to rule-based result on any verifier error. | Not Started |
+| T-459 | Wire `needs_revision`: `_after_verify` returns "add_revision_message" when verdict is ungrounded; revision message embeds the specific `unsupported_claims`; existing one-retry `call_model_final` path preserved (no second verify). | Not Started |
+| T-460 | Verdict surfaced in run output meta (e.g., `verification: {grounded, revised}`) for observability; no SSE schema change. | Not Started |
+
+Dependencies: P71 B-01
+
+### Batch B-02 — Tests + gate (Test/Review) — Not Started
+
+| Task | Description | Status |
+|---|---|---|
+| T-461 | Unit tests: grounded verdict → END no revision; ungrounded → exactly one revision retry with claims in message; verifier exception → falls back to rule-based; gating (chat/lookup intents and empty tool_results skip the LLM verdict). | Not Started |
+| T-462 | `make test-unit && make lint && make typecheck` — all pass (proof-of-execution). | Not Started |
+
+Dependencies: B-01
+
+---
+
+## P73 — Feedback Learning Loop — Not Started
+
+**Goal:** Close decide → observe(feedback) → recall: user feedback lands on the decision
+record and changes how past decisions are injected into future context.
+
+Dependencies: P71 B-01 (ADR)
+
+### Batch B-01 — Migration (Infra) — Not Started
+
+| Task | Description | Status |
+|---|---|---|
+| T-463 | Alembic migration `0018_decision_log_outcome.py` — add `outcome SMALLINT NULL` to `decision_log` (additive; +1/−1/NULL). | Not Started |
+
+Dependencies: none
+
+### Batch B-02 — Outcome write path + context annotation (App Builder) — Not Started
+
+| Task | Description | Status |
+|---|---|---|
+| T-464 | `packages/memory/decision.py` — add `set_latest_outcome(session_id: str, outcome: int) -> bool` (updates latest `record_type='decision'` row of the session); `search()` includes `outcome` in returned rows. | Not Started |
+| T-465 | `apps/api/routers/sessions.py` feedback endpoint — after successful `set_message_feedback`, best-effort call `DecisionMemoryStore.set_latest_outcome` (try/except log-warning; never fails the request). | Not Started |
+| T-466 | `packages/agent/control/control_agent.py` — Past Decisions block annotates entries with `[user feedback: positive|negative]` when outcome present; `_SYSTEM_PROMPT` gains one instruction to avoid approaches that previously received negative feedback. | Not Started |
+
+Dependencies: B-01
+
+### Batch B-03 — Tests + gate + programme sign-off (Test/Review) — Not Started
+
+| Task | Description | Status |
+|---|---|---|
+| T-467 | Unit tests: `set_latest_outcome` SQL path (mock pool); endpoint non-fatal on store failure; Past Decisions annotation rendering; prompt instruction present. | Not Started |
+| T-468 | Integration test (real DB): write decision record → PATCH feedback → decision_log.outcome updated → search returns outcome. | Not Started |
+| T-469 | Programme sign-off: `make test-unit && make lint && make typecheck && make test-integration && make build && make test-playwright` — all pass (proof-of-execution). | Not Started |
+
+Dependencies: B-02, P71 Done, P72 Done
