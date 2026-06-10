@@ -40,11 +40,11 @@ See `docs/archive/v3/STATE.md` for P0–P23 per-phase details.
 
 ## Active Phase
 
-None
+P81 — Tool Scenario Modal Content Refresh
 
 ## Active Lease
 
-None
+P81-B-02
 
 ## Last Completed
 

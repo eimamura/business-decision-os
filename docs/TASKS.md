@@ -755,3 +755,43 @@ Dependencies: none
 | T-505 | Gate: `make test-unit && make lint && make typecheck && make build && make test-playwright` — proof-of-execution. Mark D-008 Resolved on pass. | Done |
 
 Dependencies: B-01
+
+---
+
+## P81 — Tool Scenario Modal Content Refresh — In Progress
+
+**Goal:** Fix 9 broken and 3 partially-broken scenarios in `ToolScenarioModal.tsx` so every
+prompt, description, and category reflects the actual schema (post-0009 migration table names),
+seed data (WH-001/WH-002 only), and tool registry (train_forecast not LLM-callable; job_dispatch
+not user-facing; nl_query is the sole Text2SQL tool). Remove the "Job Dispatch (HITL)" category.
+Standardize all user-visible prompts to English (AGENTS.md §Language Convention).
+Update the Playwright spec that asserts category names and prompt text.
+
+Dependencies: P80 Done
+
+### Batch B-01 — Modal content fixes (App Builder) — Done
+
+| Task | Description | Status |
+|---|---|---|
+| T-506 | Data Query / "schema": fix prompt from `inventoryテーブルのスキーマを確認して` → English, using `inventory_snapshot`. Update title/description to English. | Done |
+| T-507 | Data Query / "quality": fix prompt from `inventoryテーブルのデータ品質をチェック…` → English, using `inventory_snapshot`. | Done |
+| T-508 | Data Query / "sql": update title to "Natural Language Query", description to reflect `nl_query` (not raw SQL since P55). Prompt rewritten to English. | Done |
+| T-509 | Forecasting / "demand-forecast": remove invalid "DC West" location and location param (forecast tool takes sku_id + horizon_days only). Rewrite to SKU-001, 30-day horizon, English. | Done |
+| T-510 | Forecasting / "multi-sku": rewrite to realistic scope — a few named SKUs, expect a tabular answer in chat (no CSV file output). English. | Done |
+| T-511 | Forecasting / "train-model": remove scenario entirely (train_forecast not LLM-callable since P64 registry cleanup). | Done |
+| T-512 | Ask User / "au-fully-specified": replace "DC West" with WH-001 or WH-002 so the fully-specified premise holds with real data. | Done |
+| T-513 | Ask User / "au-mostly-specified": replace past "Q3 2025" with "next quarter". | Done |
+| T-514 | Ask User / "au-warehouse-given": replace "DC West" with WH-001 for consistency with real seed data. | Done |
+| T-515 | Supply Chain / "sc-order-delay": replace unresolvable "#ORD-1042" prompt with a question answerable by real tools (e.g. delayed supply orders for a SKU or supplier, using get_delayed_supply_orders / analyze_supply_risk). | Done |
+| T-516 | Remove "Job Dispatch (HITL)" category (all 3 scenarios: job-simulate, job-optimize, job-forecast). Standardize all remaining scenario prompts to English throughout the CATEGORIES array. | Done |
+
+Dependencies: none
+
+### Batch B-02 — Playwright spec update + quality gate (Test/Review) — Not Started
+
+| Task | Description | Status |
+|---|---|---|
+| T-517 | `tests/e2e/playwright/tool_scenario_modal.spec.ts`: remove "Job Dispatch (HITL)" assertion from the "all 6 category tabs" test (now 5 categories); update the SQL card click test locator `/在庫テーブル/` to match the new English prompt text; remove any assertion on "Train Forecast Model" if present. | Not Started |
+| T-518 | Gate: `make test-unit && make lint && make typecheck && make test-playwright` — proof-of-execution (command + exit code + output tail). | Not Started |
+
+Dependencies: B-01

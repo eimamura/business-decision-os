@@ -25,27 +25,30 @@ const CATEGORIES: Category[] = [
     scenarios: [
       {
         id: "sql",
-        title: "SQL Direct Query",
-        description: "Run a raw SQL query against the inventory tables",
-        prompt: "在庫テーブルから全SKUの現在庫数をSQLで直接取得して",
+        title: "Natural Language Query",
+        description:
+          "Query inventory data using natural language — the agent converts it to SQL via nl_query",
+        prompt:
+          "Show me the current inventory levels for all SKUs using a natural language query",
       },
       {
         id: "catalog",
         title: "Data Catalog Search",
         description: "Browse available tables and datasets in the catalog",
-        prompt: "利用可能なデータテーブル一覧をカタログから検索して",
+        prompt: "Search the data catalog for all available tables and datasets",
       },
       {
         id: "schema",
         title: "Table Schema Reader",
         description: "Inspect column definitions for a specific table",
-        prompt: "inventoryテーブルのスキーマを確認して",
+        prompt: "Show me the schema for the inventory_snapshot table",
       },
       {
         id: "quality",
         title: "Data Quality Check",
         description: "Run completeness and consistency checks on a table",
-        prompt: "inventoryテーブルのデータ品質をチェックして問題があれば報告して",
+        prompt:
+          "Run a data quality check on the inventory_snapshot table and report any issues",
       },
     ],
   },
@@ -57,20 +60,16 @@ const CATEGORIES: Category[] = [
       {
         id: "demand-forecast",
         title: "Demand Forecast",
-        description: "Forecast demand for a DC over the next month",
-        prompt: "来月のDC Westの需要予測をforecastツールで実行して数値を見せて",
+        description: "Forecast demand for a specific SKU over the next 30 days",
+        prompt: "Forecast demand for SKU-001 over the next 30 days",
       },
       {
         id: "multi-sku",
         title: "Multi-SKU Forecast",
-        description: "Forecast all SKUs for the next 3 months",
-        prompt: "全SKUの今後3ヶ月の需要予測を実行してCSVで出力して",
-      },
-      {
-        id: "train-model",
-        title: "Train Forecast Model",
-        description: "Retrain the demand forecast model on latest data",
-        prompt: "需要予測モデルを最新データでトレーニングして",
+        description:
+          "Forecast demand for a set of SKUs and summarize results in chat",
+        prompt:
+          "Forecast demand for SKU-001, SKU-002, and SKU-003 over the next 30 days and summarize the results",
       },
     ],
   },
@@ -83,19 +82,22 @@ const CATEGORIES: Category[] = [
         id: "simulate",
         title: "Inventory Simulation",
         description: "Simulate inventory levels with current order parameters",
-        prompt: "現在の発注パラメータで在庫シミュレーションを実行して結果を見せて",
+        prompt:
+          "Run an inventory simulation with the current order parameters and show the results",
       },
       {
         id: "optimize",
         title: "Replenishment Optimization",
         description: "Calculate optimal replenishment quantities",
-        prompt: "発注量の最適化を実行して推奨値を計算して",
+        prompt:
+          "Run replenishment optimization and calculate the recommended order quantities",
       },
       {
         id: "compare",
         title: "Scenario Comparison",
         description: "Compare current vs optimized parameters side-by-side",
-        prompt: "現在パラメータと最適化パラメータで2パターンのシミュレーションを比較して",
+        prompt:
+          "Run two simulations — current parameters vs optimized parameters — and compare the results side by side",
       },
     ],
   },
@@ -123,7 +125,7 @@ const CATEGORIES: Category[] = [
         title: "Warehouse Specified, SKU Missing",
         description:
           "Location is provided but the target product is absent — one focused question expected",
-        prompt: "Forecast demand for DC West next quarter",
+        prompt: "Forecast demand for WH-001 next quarter",
       },
       {
         id: "au-sku-no-period",
@@ -137,7 +139,7 @@ const CATEGORIES: Category[] = [
         title: "Mostly Specified",
         description:
           "SKU and quarter are provided — agent may proceed or ask for a service-level threshold",
-        prompt: "Optimize replenishment for SKU-001 for Q3 2025",
+        prompt: "Optimize replenishment for SKU-001 for next quarter",
       },
       {
         id: "au-fully-specified",
@@ -145,7 +147,7 @@ const CATEGORIES: Category[] = [
         description:
           "All critical parameters included — agent should skip AskUser and run the analysis directly",
         prompt:
-          "Analyze inventory for SKU-001 at DC West for the past 30 days and compare with the previous month",
+          "Analyze inventory for SKU-001 at WH-001 for the past 30 days and compare with the previous month",
       },
     ],
   },
@@ -170,38 +172,11 @@ const CATEGORIES: Category[] = [
       },
       {
         id: "sc-order-delay",
-        title: "Order Delay Root Cause",
+        title: "Supply Order Delays",
         description:
-          "Diagnose root cause of a specific order delay through logistics data",
-        prompt: "Why is order #ORD-1042 delayed?",
-      },
-    ],
-  },
-  {
-    id: "jobs",
-    label: "Job Dispatch (HITL)",
-    icon: "◎",
-    scenarios: [
-      {
-        id: "job-simulate",
-        title: "Run Simulation Job",
-        description: "Dispatch a background simulation job — requires approval",
+          "Identify delayed supply orders for a specific SKU and analyze risk",
         prompt:
-          "Run an inventory simulation for Q3 with current stock levels",
-      },
-      {
-        id: "job-optimize",
-        title: "Run Optimization Job",
-        description: "Dispatch an optimization job and generate a results report",
-        prompt:
-          "Optimize replenishment parameters for Q3 and generate a report",
-      },
-      {
-        id: "job-forecast",
-        title: "Run Demand Forecast Job",
-        description: "Dispatch a forecast job for all SKUs — results saved as file",
-        prompt:
-          "Run a demand forecast for all SKUs and generate a results file",
+          "Are there any delayed supply orders for SKU-001? Analyze the supply risk.",
       },
     ],
   },
