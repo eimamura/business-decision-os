@@ -160,6 +160,15 @@ A phase is ready for sign-off when:
 
 If any `make` target is unavailable, report as "not configured" — not "passed".
 
+**Proof-of-execution requirement (mandatory):** For every gate above, the sign-off report delivered to the Orchestrator MUST include:
+```
+gate: <command>
+exit_code: <integer>
+output_tail: |
+  <last 10–20 lines of stdout/stderr>
+```
+A gate listed as "passed" without a recorded exit code and output tail is NOT a valid sign-off. The Orchestrator MUST reject sign-offs that omit this evidence and re-request execution.
+
 ## Done Criteria
 
 A phase is done when:

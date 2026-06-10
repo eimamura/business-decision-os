@@ -103,6 +103,7 @@ Each Orchestrator turn follows this sequence:
 8. **Run Test/Review** (two modes):
    - **Batch check** (every batch): Spawn `bdos-test-review` for lightweight validation — `uv run pytest tests/unit -q && make lint && make typecheck`. Must pass before marking batch `Done`.
    - **Phase sign-off** (once, when all batches are `Done`): Spawn `bdos-test-review` for full Quality Gates — integration tests, E2E, `make build`. Phase does not advance until sign-off received.
+   - **Sign-off acceptance rule**: The Orchestrator MUST NOT accept a sign-off unless the Test/Review report includes `gate`, `exit_code`, and `output_tail` fields for every Quality Gate. A report that says a gate "passed" without an exit code is incomplete — reject it and re-request execution with proof-of-execution output.
 9. **Update state**:
    - If checks pass: mark batch `Done` in `docs/TASKS.md`; update `docs/STATE.md` Last Completed; clear Active Lease
    - If blocked: mark batch `Blocked` in `docs/TASKS.md`; increment `Blocked Count`; record blocker in `docs/STATE.md`; clear Active Lease

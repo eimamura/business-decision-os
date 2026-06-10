@@ -85,6 +85,7 @@ The following are explicitly forbidden across all agents:
 - Fixing a test or quality gate failure that was discovered in a completed phase, or that persists after a specialist's first fix attempt, without first registering it as a D-NNN Defect Task in `docs/TASKS.md`. Ad-hoc `fix(...)` commits are not a substitute for the Defect Task workflow.
 - Marking a D-NNN Defect Task `Resolved` without immediately invoking `/analyze-failure D-NNN` to record the root cause in `docs/failure-patterns.md`.
 - Advancing to the next phase while any Defect Task in the current phase has `Status: Open`.
+- Signing off a quality gate as passed without capturing and reporting the command, exit code, and tail output in the Proof Output block — a claim of "passes" with no exit-code evidence is not a sign-off.
 - Force-pushing to `main`; direct pushes to `main`; non-linear history.
 - Using `--no-verify` or skipping commit hooks without explicit ADR justification.
 - Using a plain HTTP stub for the web container; `compose web.build.context` must be the monorepo root.

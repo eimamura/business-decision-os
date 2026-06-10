@@ -39,3 +39,4 @@ Actions taken by `/harden-system`. Append-only.
 
 | FP-ID | Date | Lever | Change Made |
 |---|---|---|---|
+| FP-003 | 2026-06-10 | `new-test` + `prohibition` | Added `uv run mypy` step to `.github/workflows/lint-test.yml` (CI now blocks on typecheck); added proof-of-execution requirement (gate + exit_code + output_tail) to `bdos-test-review` SKILL.md §Quality Gates and `bdos-orchestrator` SKILL.md §Run Mode step 8; added prohibition to `AGENTS.md §Prohibitions` banning sign-offs without exit-code evidence |
