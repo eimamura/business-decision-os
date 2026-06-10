@@ -39,15 +39,15 @@ See `docs/archive/v3/STATE.md` for P0–P23 per-phase details.
 
 ## Active Phase
 
-P67 — Tool Layer Rationalization
+P68 — Frontend Dead Code Cleanup / P69 — Dependency & Config Hygiene (parallel)
 
 ## Active Lease
 
-P67-B-01
+P68-B-01, P69-B-01 (parallel — disjoint file scopes)
 
 ## Last Completed
 
-P66 — Orchestration Routing Simplification (2026-06-10); sign-off PASS (unit 767 passed, integration 16 passed/0 failed, build/lint/typecheck exit 0, playwright 32 passed at batch level). ADR: 2026-06-10-orchestrator-routing-collapse.
+P67 — Tool Layer Rationalization (2026-06-10); sign-off PASS (unit 770 passed, integration 16 passed/0 failed, build/lint/typecheck exit 0). All 32 registered tools proved reachable; 14 dead role allowlist entries removed.
 
 ## Blockers
 
