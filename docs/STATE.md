@@ -40,13 +40,17 @@ See `docs/archive/v3/STATE.md` for P0–P23 per-phase details.
 
 ## Active Phase
 
-P79 — Session Resume & Lifecycle Robustness
+None
 
 ## Active Lease
 
-P79-B-02
+None
 
 ## Last Completed
+
+P79 — Session Resume & Lifecycle Robustness (2026-06-10). D-006 Resolved: `answer_ask_user`/`resume` guarded by `has_pending_interrupt()` (`graph.aget_state`); missing checkpoint or no pending interrupt → typed `NoPendingInterruptError`, router returns 409 (no graph start from empty state, no LLM burn); `_node_classify_intent` hardened against bare KeyError. D-007 Resolved: session deletion cancels in-flight background runs via `session_tasks` handle registry + tombstone set (`_deleted_session_ids`) stops event persistence; `get_or_recover_session` shared helper gives `update_session_title`/`get_messages`/`set_message_feedback`/`submit_ask_user_answer` the same DB recovery as `post_message`; FK-violation event-persist logs downgraded to debug. Sign-off PASS (proof-of-execution): unit 867 passed exit 0, lint 0, typecheck 0, build 0, playwright 32/32. FP-007/FP-008 recorded (both record-only; no pattern at Count >= 2). Defects originated from live runtime diagnosis of the 2026-06-10 19:01 JST-3 user session error (root cause of THAT error was a uvicorn --reload restart during an in-flight run, triggered by P77 fix edits to bind-mounted apps/api — D-006/D-007 were the latent defects it exposed).
+
+Previously:
 
 P78 — Deterministic Routing Completion (2026-06-10). D-005 Resolved: `select_execution_mode` builds `AgentRoute` deterministically for all intents (no LLM call; `ROUTER_SYSTEM` deleted); one LLM round-trip saved per non-supply_chain request. Sign-off PASS: unit 848 passed exit 0, lint 0, typecheck 0, build 0, playwright 32/32. Live verification: the exact failing query (lookup intent) now completes — steps intent_classification → routing → specialist_execution, assistant reply produced, 0 routing errors. FP-006 recorded (record-only).
 

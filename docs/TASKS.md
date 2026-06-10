@@ -673,7 +673,7 @@ latent defects from archived phases, surfaced during live runtime diagnosis on 2
 - Area: `packages/agent/orchestrator/session_orchestrator.py`, `apps/api/routers/sessions.py`
 - Owner: App Builder
 - Acceptance: unit tests — (1) `submit_ask_user_answer` on a session with no pending interrupt → 409, no orchestrator graph invocation; (2) `answer_ask_user` raises a typed error (not KeyError) when the thread has no checkpoint; existing happy-path ask_user tests still pass
-- Status: Open
+- Status: Resolved (T-495 guard via `graph.aget_state` + `NoPendingInterruptError` + router 409; T-498 acceptance tests; gates passed 2026-06-10)
 
 #### Defect: D-007
 
@@ -688,7 +688,7 @@ latent defects from archived phases, surfaced during live runtime diagnosis on 2
 - Area: `apps/api/routers/sessions.py`, `apps/api/state.py`
 - Owner: App Builder
 - Acceptance: unit tests — (1) deleting a session with an in-flight (stub-blocked) run cancels the task and no event persist is attempted afterwards; (2) `update_session_title` / `get_messages` / `submit_ask_user_answer` succeed after the in-memory dict is cleared when the DB row exists (404 only when both are absent); no FK-violation warnings in a normal create→run→delete unit flow
-- Status: Open
+- Status: Resolved (T-496 task-handle cancellation + tombstone guard; T-497 shared DB-recovery helper + FK debug downgrade; T-499 acceptance tests; gates passed 2026-06-10)
 
 ### Batch B-01 — D-006: resume checkpoint guard (App Builder) — Done
 
