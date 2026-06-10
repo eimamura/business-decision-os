@@ -29,11 +29,12 @@ from packages.agent.orchestrator import (
     SessionResponse,
     SessionUserQuery,
 )
-from packages.agent.orchestrator.models import AgentRoute
+from packages.agent.orchestrator.models import AgentRoute, AskUserDecision, SessionIntent
 from packages.agent.orchestrator.routing import validate_route
 from packages.memory import StubMemoryStore
 from packages.tools import create_tool_registry
 from packages.tools.base import ToolContext, ToolRegistry, ToolResult
+from tests.integration.conftest import make_stub_registry
 
 _HAS_DB = bool(os.environ.get("DATABASE_URL"))
 _SKIP_NO_DB = pytest.mark.skipif(not _HAS_DB, reason="DATABASE_URL not set")
@@ -727,6 +728,12 @@ class _AskUserLLMClient:
 
         return _gen()
 
+    async def astream(self, input: Any, config: Any = None, **kwargs: Any) -> Any:  # type: ignore[override]
+        """LangChain-style astream used by run_direct_chat in runtime.py."""
+        from types import SimpleNamespace
+
+        yield SimpleNamespace(content="Analysis complete for the requested period.")
+
 
 # ---------------------------------------------------------------------------
 # Scenario 11: AskUser — analytical intent pauses graph (HITL section)
@@ -744,12 +751,27 @@ async def test_ask_user_analytical_intent_emits_event_and_raises_graph_interrupt
 
     from langgraph.errors import GraphInterrupt
 
+    _ask_registry = make_stub_registry(
+        SessionIntent(
+            category="domain_analysis",
+            confidence=0.95,
+            rationale="test",
+            goal_text="analyze inventory",
+        ),
+        AskUserDecision(
+            needs_input=True,
+            question="What date range should I analyze?",
+            suggestions=["Last 30 days", "Q1 2025", "Last 12 months"],
+        ),
+    )
+
     sse_queue: asyncio.Queue[dict[str, Any]] = asyncio.Queue()
     orchestrator = SessionOrchestrator(
         llm_client=_AskUserLLMClient(),
         tool_registry=create_tool_registry(),
         memory_store=StubMemoryStore(),
         sse_queue=sse_queue,
+        model_registry=_ask_registry,
     )
     session_id = uuid4()
     query = SessionUserQuery(text="Analyze inventory levels for the past month")
@@ -804,10 +826,36 @@ async def test_ask_user_resume_via_answer_returns_session_response() -> None:
 
     from langgraph.errors import GraphInterrupt
 
+    # Structured-output sequence for run() + answer_ask_user():
+    #   1. SessionIntent        (classify_intent — first run)
+    #   2. AskUserDecision(True) (prepare_ask_user — first run → interrupt)
+    #   3. AgentRoute            (select_mode — after resume via answer_ask_user)
+    _resume_registry = make_stub_registry(
+        SessionIntent(
+            category="domain_analysis",
+            confidence=0.95,
+            rationale="test",
+            goal_text="analyze inventory",
+        ),
+        AskUserDecision(
+            needs_input=True,
+            question="What date range should I analyze?",
+            suggestions=["Last 30 days", "Q1 2025", "Last 12 months"],
+        ),
+        AgentRoute(
+            mode="direct_chat",
+            agents=[],
+            requires_planning=False,
+            requires_dag=False,
+            rationale="resumed",
+        ),
+    )
+
     orchestrator = SessionOrchestrator(
         llm_client=_AskUserLLMClient(),
         tool_registry=create_tool_registry(),
         memory_store=StubMemoryStore(),
+        model_registry=_resume_registry,
     )
     session_id = uuid4()
     query = SessionUserQuery(text="Analyze inventory levels for the past month")

@@ -1703,7 +1703,7 @@ Dependencies: none
 
 #### Defect: D-002
 
-- Status: Open
+- Status: Resolved (2026-06-10 — integration fixtures now inject a structured-output stub ModelRegistry; `make test-integration` 16 passed / 0 failed)
 - Severity: High
 - Repro: `docker compose -f infra/compose/compose.yaml up -d db && make test-integration`
 - Observed: 11 integration tests fail (`test_ask_user_hitl_variants.py`, `test_prompts_mock_llm.py`, `test_session_persistence.py`) with `AttributeError: 'NoneType' object has no attribute 'get'` on `self._model_registry` in `session_orchestrator.py`. Verified pre-existing at P64 HEAD (29127ae) — identical failures. Inherited debt from the P52–P53 ModelRegistry migration; integration gate was not run at those sign-offs.

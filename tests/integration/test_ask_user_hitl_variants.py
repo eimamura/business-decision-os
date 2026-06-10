@@ -28,8 +28,10 @@ from packages.agent.orchestrator import (
     SessionResponse,
     SessionUserQuery,
 )
+from packages.agent.orchestrator.models import AgentRoute, AskUserDecision, SessionIntent
 from packages.memory import StubMemoryStore
 from packages.tools import create_tool_registry
+from tests.integration.conftest import make_stub_registry
 
 
 # ---------------------------------------------------------------------------
@@ -166,21 +168,86 @@ class _DirectLLMClient:
 
         return _gen()
 
+    async def astream(self, input: Any, config: Any = None, **kwargs: Any) -> Any:  # type: ignore[override]
+        """LangChain-style astream used by run_direct_chat in runtime.py.
+
+        Must be an async generator so that `async for chunk in client.astream(...)` works.
+        """
+        from types import SimpleNamespace
+
+        yield SimpleNamespace(
+            content=(
+                "Inventory analysis for SKU-001 at DC West: stock levels are healthy. "
+                "Comparison with previous month shows a 5% increase in demand."
+            )
+        )
+
 
 # ---------------------------------------------------------------------------
 # Helper to build a no-DB orchestrator + mock session repo
 # ---------------------------------------------------------------------------
 
 
+def _ask_user_registry() -> Any:
+    """ModelRegistry for tests that expect AskUser (GraphInterrupt) path.
+
+    Structured-output call order for domain_analysis + needs_input=True:
+      1. SessionIntent  (classify_intent node)
+      2. AskUserDecision(needs_input=True)  (prepare_ask_user node)
+    The graph pauses at wait_for_answer before select_mode is reached.
+    """
+    return make_stub_registry(
+        SessionIntent(
+            category="domain_analysis",
+            confidence=0.95,
+            rationale="test",
+            goal_text="analyze inventory",
+        ),
+        AskUserDecision(
+            needs_input=True,
+            question="What date range and SKU should I analyze?",
+            suggestions=["Last 30 days", "Q1 2025", "Last 12 months"],
+        ),
+    )
+
+
+def _direct_registry() -> Any:
+    """ModelRegistry for tests that expect direct execution (no AskUser interrupt).
+
+    Structured-output call order for domain_analysis + needs_input=False:
+      1. SessionIntent  (classify_intent node)
+      2. AskUserDecision(needs_input=False)  (prepare_ask_user node)
+      3. AgentRoute(direct_chat)  (select_mode node)
+    """
+    return make_stub_registry(
+        SessionIntent(
+            category="domain_analysis",
+            confidence=0.95,
+            rationale="test",
+            goal_text="analyze inventory for SKU-001",
+        ),
+        AskUserDecision(needs_input=False, question=None, suggestions=[]),
+        AgentRoute(
+            mode="direct_chat",
+            agents=[],
+            requires_planning=False,
+            requires_dag=False,
+            rationale="mock",
+        ),
+    )
+
+
 def _make_ask_user_orchestrator(
     llm_client: Any,
     sse_queue: asyncio.Queue[dict[str, Any]] | None = None,
+    model_registry: Any = None,
 ) -> SessionOrchestrator:
     return SessionOrchestrator(
         llm_client=llm_client,
         tool_registry=create_tool_registry(),
         memory_store=StubMemoryStore(),
         sse_queue=sse_queue,
+        model_registry=model_registry,
     )
 
 
@@ -202,7 +269,9 @@ async def test_vague_inventory_request_triggers_ask_user_interrupt() -> None:
     Expected: GraphInterrupt is raised and ask_user_required SSE event is emitted.
     """
     sse_queue: asyncio.Queue[dict[str, Any]] = asyncio.Queue()
-    orchestrator = _make_ask_user_orchestrator(_AskUserLLMClient(), sse_queue)
+    orchestrator = _make_ask_user_orchestrator(
+        _AskUserLLMClient(), sse_queue, model_registry=_ask_user_registry()
+    )
     session_id = uuid4()
     query = SessionUserQuery(text="Analyze inventory")
 
@@ -238,7 +307,9 @@ async def test_forecast_without_target_triggers_ask_user_interrupt() -> None:
     Expected: GraphInterrupt raised, ask_user_required event in SSE queue.
     """
     sse_queue: asyncio.Queue[dict[str, Any]] = asyncio.Queue()
-    orchestrator = _make_ask_user_orchestrator(_AskUserLLMClient(), sse_queue)
+    orchestrator = _make_ask_user_orchestrator(
+        _AskUserLLMClient(), sse_queue, model_registry=_ask_user_registry()
+    )
     session_id = uuid4()
     query = SessionUserQuery(text="Run a demand forecast")
 
@@ -274,7 +345,9 @@ async def test_warehouse_specified_sku_missing_triggers_ask_user_interrupt() -> 
     Expected: GraphInterrupt raised, ask_user_required event in SSE queue.
     """
     sse_queue: asyncio.Queue[dict[str, Any]] = asyncio.Queue()
-    orchestrator = _make_ask_user_orchestrator(_AskUserLLMClient(), sse_queue)
+    orchestrator = _make_ask_user_orchestrator(
+        _AskUserLLMClient(), sse_queue, model_registry=_ask_user_registry()
+    )
     session_id = uuid4()
     query = SessionUserQuery(text="Forecast demand for DC West next quarter")
 
@@ -314,7 +387,9 @@ async def test_sku_known_period_missing_triggers_ask_user_interrupt() -> None:
     Expected: GraphInterrupt raised, ask_user_required event in SSE queue.
     """
     sse_queue: asyncio.Queue[dict[str, Any]] = asyncio.Queue()
-    orchestrator = _make_ask_user_orchestrator(_AskUserLLMClient(), sse_queue)
+    orchestrator = _make_ask_user_orchestrator(
+        _AskUserLLMClient(), sse_queue, model_registry=_ask_user_registry()
+    )
     session_id = uuid4()
     query = SessionUserQuery(text="Check stockout risk for SKU-001")
 
@@ -354,7 +429,9 @@ async def test_mostly_specified_request_does_not_crash_orchestrator() -> None:
     Expected: orchestrator returns a SessionResponse OR raises GraphInterrupt —
               either outcome is acceptable; the key invariant is no unhandled exception.
     """
-    orchestrator = _make_ask_user_orchestrator(_AskUserLLMClient())
+    orchestrator = _make_ask_user_orchestrator(
+        _AskUserLLMClient(), model_registry=_ask_user_registry()
+    )
     session_id = uuid4()
     query = SessionUserQuery(text="Optimize replenishment for SKU-001 for Q3 2025")
 
@@ -392,7 +469,9 @@ async def test_fully_specified_request_does_not_raise_graph_interrupt() -> None:
              and compare with the previous month"
     Expected: NO GraphInterrupt; response.reply is non-empty.
     """
-    orchestrator = _make_ask_user_orchestrator(_DirectLLMClient())
+    orchestrator = _make_ask_user_orchestrator(
+        _DirectLLMClient(), model_registry=_direct_registry()
+    )
     session_id = uuid4()
     query = SessionUserQuery(
         text=(

@@ -19,8 +19,10 @@ from uuid import uuid4
 
 from packages.agent.llm import LLMMessage, LLMResponse, LLMUsage, ScenarioStubClaudeClient
 from packages.agent.orchestrator import SessionOrchestrator, SessionUserQuery
+from packages.agent.orchestrator.models import AgentRoute, SessionIntent
 from packages.memory import StubMemoryStore
 from packages.tools import create_tool_registry
+from tests.integration.conftest import make_stub_registry
 
 # ---------------------------------------------------------------------------
 # Helpers / fakes
@@ -48,7 +50,12 @@ def _llm_response(text: str) -> LLMResponse:
 
 
 class _TrackingDirectChatClient:
-    """LLM stub that routes directly to direct_chat and records classify_intent calls."""
+    """LLM stub that routes directly to direct_chat and records classify_intent calls.
+
+    classify_intent_call_count is incremented by the model_registry's structured
+    model (via on_classify callback) rather than through complete(), because P52
+    migrated intent classification to model_registry.get().with_structured_output().
+    """
 
     def __init__(self) -> None:
         self._model = "stub"
@@ -64,33 +71,7 @@ class _TrackingDirectChatClient:
         agent_step_id: Any = None,
         specialist_role: Any = None,
     ) -> LLMResponse:
-        # Identify the call type by inspecting the system message content
-        system_text = ""
-        for msg in messages:
-            if msg.role == "system":
-                if msg.content_blocks:
-                    system_text = " ".join(
-                        b.get("text", "") for b in msg.content_blocks
-                        if isinstance(b, dict) and b.get("type") == "text"
-                    )
-                else:
-                    system_text = msg.content or ""
-                break
-
-        if "intent classifier" in system_text or "category" in system_text:
-            self.classify_intent_call_count += 1
-            return _llm_response(
-                '{"category":"chat","confidence":0.95,'
-                '"rationale":"Greeting","goal_text":null}'
-            )
-
-        if "router" in system_text or "mode" in system_text:
-            return _llm_response(
-                '{"mode":"direct_chat","agents":[],'
-                '"requires_planning":false,"requires_dag":false,"rationale":"chat"}'
-            )
-
-        # direct_chat response
+        # direct_chat fallback — structured calls go through model_registry
         return _llm_response("Hello! How can I assist you today?")
 
     async def stream(
@@ -104,15 +85,81 @@ class _TrackingDirectChatClient:
             yield {"event": "done", "data": ""}
         return _gen()
 
+    async def astream(self, input: Any, config: Any = None, **kwargs: Any) -> Any:  # type: ignore[override]
+        """LangChain-style astream used by run_direct_chat in runtime.py."""
+        from types import SimpleNamespace
+
+        yield SimpleNamespace(content="Hello! How can I assist you today?")
+
+
+def _make_chat_registry(on_classify: Any = None) -> Any:
+    """Build a model_registry for the chat→direct_chat execution path.
+
+    Structured-output call order for chat intent (not analytical, not supply_chain):
+      1. SessionIntent(chat)    (classify_intent node)
+      2. AgentRoute(direct_chat) (select_mode node — no prepare_ask_user for chat)
+
+    `on_classify` is an optional zero-argument callable invoked when SessionIntent
+    is produced, so callers can increment tracking counters that previously lived
+    in complete() (which is bypassed since P52 migrated to model_registry).
+    """
+    from tests.integration.conftest import (
+        _FakeStructuredInvoker,
+        _MultiRoleModelRegistry,
+        _StructuredOutputFakeModel,
+    )
+
+    intent = SessionIntent(
+        category="chat", confidence=0.95, rationale="Greeting", goal_text=None
+    )
+    route = AgentRoute(
+        mode="direct_chat", agents=[], requires_planning=False, requires_dag=False,
+        rationale="chat",
+    )
+
+    class _TrackingStructuredModel(_StructuredOutputFakeModel):
+        """Wraps _StructuredOutputFakeModel to fire on_classify when SessionIntent is served."""
+
+        def with_structured_output(self, schema: Any) -> "_FakeStructuredInvoker":
+            # Wrap the invoker to call on_classify when SessionIntent is about to be returned
+            inner = _FakeStructuredInvoker(self._structured_responses)
+
+            if on_classify is None:
+                return inner
+
+            class _TrackingInvoker:
+                async def ainvoke(self_inner: Any, messages: Any, **kwargs: Any) -> Any:
+                    result = await inner.ainvoke(messages, **kwargs)
+                    if isinstance(result, SessionIntent) and on_classify is not None:
+                        on_classify()
+                    return result
+
+            return _TrackingInvoker()  # type: ignore[return-value]
+
+    model = _TrackingStructuredModel([intent, route])
+    return _MultiRoleModelRegistry({"orchestrator": model})
+
 
 def _make_orchestrator(
     llm_client: Any,
     checkpointer: Any = None,
+    model_registry: Any = None,
 ) -> SessionOrchestrator:
+    if model_registry is None:
+        # Thread the tracking callback so classify_intent_call_count is incremented
+        # when SessionIntent is served from the model_registry (P52 migration: classify_intent
+        # now uses model_registry.get().with_structured_output(), not llm_client.complete()).
+        on_classify: Any = None
+        if hasattr(llm_client, "classify_intent_call_count"):
+            def _increment_classify() -> None:
+                llm_client.classify_intent_call_count += 1
+            on_classify = _increment_classify
+        model_registry = _make_chat_registry(on_classify=on_classify)
     orch = SessionOrchestrator(
         llm_client=llm_client,
         tool_registry=create_tool_registry(),
         memory_store=StubMemoryStore(),
+        model_registry=model_registry,
     )
     if checkpointer is not None:
         # Pre-build the graph with the given checkpointer so the same
@@ -169,53 +216,8 @@ async def test_session_persistence_checkpoint_survives_orchestrator_disposal() -
             agent_step_id: Any = None,
             specialist_role: Any = None,
         ) -> LLMResponse:
-            # Detect call type from system message
-            system_text = ""
-            for msg in messages:
-                if msg.role == "system":
-                    if msg.content_blocks:
-                        system_text = " ".join(
-                            b.get("text", "") for b in msg.content_blocks
-                            if isinstance(b, dict) and b.get("type") == "text"
-                        )
-                    else:
-                        system_text = msg.content or ""
-                    break
-
-            if "intent classifier" in system_text or "category" in system_text:
-                classify_calls.append("classify_intent")
-                import json
-                return LLMResponse(
-                    text=json.dumps({
-                        "category": "chat",
-                        "confidence": 0.9,
-                        "rationale": "direct chat",
-                        "goal_text": None,
-                    }),
-                    tool_calls=[],
-                    finish_reason="stop",
-                    usage=LLMUsage(input_tokens=0, output_tokens=0, total_cost_usd=Decimal("0")),
-                    model="stub",
-                    request_id=str(uuid4()),
-                    latency_ms=0,
-                )
-            if "router" in system_text or "mode" in system_text:
-                import json
-                return LLMResponse(
-                    text=json.dumps({
-                        "mode": "direct_chat",
-                        "agents": [],
-                        "requires_planning": False,
-                        "requires_dag": False,
-                        "rationale": "chat",
-                    }),
-                    tool_calls=[],
-                    finish_reason="stop",
-                    usage=LLMUsage(input_tokens=0, output_tokens=0, total_cost_usd=Decimal("0")),
-                    model="stub",
-                    request_id=str(uuid4()),
-                    latency_ms=0,
-                )
+            # Fallback — structured calls (classify_intent, routing) go through
+            # model_registry; only run_direct_chat astream path is used now.
             return LLMResponse(
                 text="Hello!",
                 tool_calls=[],
@@ -237,7 +239,20 @@ async def test_session_persistence_checkpoint_survives_orchestrator_disposal() -
                 yield {"event": "done", "data": ""}
             return _gen()
 
+        async def astream(self, input: Any, config: Any = None, **kwargs: Any) -> Any:  # type: ignore[override]
+            """LangChain-style astream used by run_direct_chat in runtime.py."""
+            from types import SimpleNamespace
+
+            yield SimpleNamespace(content="Hello!")
+
     llm_client = _TrackingClient()
+
+    # model_registry with a callback that appends to classify_calls when SessionIntent
+    # is served — replaces the old complete()-based tracking after P52 migration.
+    def _on_classify() -> None:
+        classify_calls.append("classify_intent")
+
+    tracking_registry = _make_chat_registry(on_classify=_on_classify)
 
     mock_repo = MagicMock()
     mock_repo.update_status = AsyncMock()
@@ -251,6 +266,7 @@ async def test_session_persistence_checkpoint_survives_orchestrator_disposal() -
             llm_client=llm_client,
             tool_registry=create_tool_registry(),
             memory_store=StubMemoryStore(),
+            model_registry=tracking_registry,
         )
         # Inject the shared checkpointer directly
         orchestrator_1._graph = orchestrator_1._build_graph(checkpointer=shared_checkpointer)
@@ -277,6 +293,7 @@ async def test_session_persistence_checkpoint_survives_orchestrator_disposal() -
         llm_client=llm_client,
         tool_registry=create_tool_registry(),
         memory_store=StubMemoryStore(),
+        model_registry=_make_chat_registry(),
     )
     orchestrator_2._graph = orchestrator_2._build_graph(checkpointer=shared_checkpointer)
 
