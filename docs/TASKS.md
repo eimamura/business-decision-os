@@ -80,6 +80,7 @@ Full task history for P0–P23 is archived at `docs/archive/v3/TASKS.md`.
 | P74 — Integration Tier Latent Debt | T-470 | 2026-06-10 |
 | P75 — Tool Layer Full Audit | T-471–T-476 | 2026-06-10 |
 | P76 — Tool Layer Conformance Remediation | T-477–T-487 | 2026-06-10 |
+| P77 — Runtime Error Surfacing Fixes | T-488–T-491 | 2026-06-10 |
 
 > **Design Realignment Note (2026-06-05):** P29–P36 built Specialist Domain Agents (DemandAgent,
 > InventoryAgent, SupplyPlanningAgent, FinanceImpactAgent, SopAgent) as independent runtime units.

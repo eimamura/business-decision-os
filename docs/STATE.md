@@ -40,13 +40,17 @@ See `docs/archive/v3/STATE.md` for P0–P23 per-phase details.
 
 ## Active Phase
 
-P77 — Runtime Error Surfacing Fixes
+None
 
 ## Active Lease
 
-P77-B-01
+None
 
 ## Last Completed
+
+P77 — Runtime Error Surfacing Fixes (2026-06-10). D-004 Resolved: approvals router responses wrapped in `jsonable_encoder` (4 sites); regression tests added; web `ApiError` class distinguishes HTTP business errors (404 session-not-found message) from network failures. Sign-off PASS: unit 828 passed exit 0, lint 0, typecheck 0, build 0, playwright 32/32 (job_approval deterministic — P76's "flaky" was D-004, not SSE timing). FP-005 recorded (record-only).
+
+Previously:
 
 P76 — Tool Layer Conformance Remediation (2026-06-10). Hybrid tool output contract implemented per ADR 2026-06-10-tool-output-contract-hybrid: `missing_data` on all DB tools; LIMIT+truncated on supply order tools; shared helpers `_shared.py`; evaluator fail-loud; data_catalog_search error key; DOS→DOI merge (registry 32→31, DOI gains stockout_date_estimate); DESIGN.md/AGENT_ARCHITECTURE.md/TOOLS.md amended. Sign-off PASS (proof-of-execution): unit 826 passed exit 0; lint exit 0; typecheck exit 0 (160 files); full-DSN integration 61 passed exit 0; build exit 0; playwright 31 passed + 1 pre-existing flaky exit 0. No defects.
 
