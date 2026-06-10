@@ -39,11 +39,11 @@ See `docs/archive/v3/STATE.md` for P0–P23 per-phase details.
 
 ## Active Phase
 
-None
+P65 — Dead Agent Class Removal
 
 ## Active Lease
 
-None
+P65-B-01
 
 ## Last Completed
 

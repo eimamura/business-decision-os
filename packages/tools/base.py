@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Any, Literal, Protocol
+from typing import Any, Literal, Protocol, cast
 from uuid import UUID
 
 from pydantic import BaseModel
@@ -47,9 +47,9 @@ class _RoleToolAllowlist(dict):  # type: ignore[type-arg]
     def __getitem__(self, key: str) -> list[str]:
         if key == "control":
             _get_control_allowlist()
-        return super().__getitem__(key)
+        return cast(list[str], super().__getitem__(key))
 
-    def get(self, key: str, default: Any = None) -> Any:  # type: ignore[override]
+    def get(self, key: str, default: Any = None) -> Any:
         if key == "control":
             _get_control_allowlist()
         return super().get(key, default)

@@ -695,7 +695,7 @@ class AgentRuntime:
 
         tool = self._tool_registry.get(call["name"])
         if tool is None:
-            return {}, None  # type: ignore[return-value]
+            return {}, None
 
         tool_call_id = call["id"]
         tool_input = call.get("input", {})
@@ -806,7 +806,7 @@ class AgentRuntime:
             for outcome in gather_results:
                 if isinstance(outcome, BaseException):
                     raise outcome
-                result_entry, msg = outcome  # type: ignore[misc]
+                result_entry, msg = outcome
                 if result_entry:
                     new_tool_results.append(result_entry)
                 if msg is not None:

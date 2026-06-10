@@ -1672,14 +1672,25 @@ that reference them. Lowest-risk, highest-volume deletion; establishes a clean b
 
 Dependencies: P64 Done
 
-### Batch B-01 — Delete dead agent class files (App Builder) — Not Started
+### Batch B-01 — Delete dead agent class files (App Builder) — Done
 
 | Task | Description | Status |
 |---|---|---|
-| T-421 | Delete `packages/agent/deprecated/` entirely (demand, inventory, supply_planning, finance_impact, sop + `__init__.py`). P38 kept them "until they create problems"; they now carry stale `sql_query` references (tool deleted in P55) and are imported only by a unit test of deprecated code. | Not Started |
-| T-422 | Delete `packages/agent/cross_domain/` entirely (AnomalyDetectorAgent, DataEngineerAgent, EvaluatorAgent, SimulationOptimizerAgent). `CROSS_DOMAIN_AGENT_CLASSES == {}` means none are instantiable at runtime; only `tests/unit/test_output_builders.py` imports the module. | Not Started |
-| T-423 | Delete unused `packages/agent/domain/` agent files: `exception.py`, `logistics.py`, `procurement.py`, `production.py`, `replenishment.py`, `supplier.py` — classes defined but never imported anywhere. Afterward audit `AgentBasedSpecialist` in `packages/agent/base.py`; if `ControlAgent` is its sole remaining subclass, keep the base class but remove any branches that exist only for deleted subclasses. | Not Started |
-| T-424 | Remove the now-dead `CROSS_DOMAIN_AGENT_CLASSES` branch in `packages/agent/orchestrator/runtime.py::_make_agent`; simplify `packages/agent/orchestrator/roles.py` accordingly (keep `VALID_AGENT_ROLES` as the public lookup). | Not Started |
+| T-421 | Delete `packages/agent/deprecated/` entirely (demand, inventory, supply_planning, finance_impact, sop + `__init__.py`). P38 kept them "until they create problems"; they now carry stale `sql_query` references (tool deleted in P55) and are imported only by a unit test of deprecated code. | Done |
+| T-422 | Delete `packages/agent/cross_domain/` entirely (AnomalyDetectorAgent, DataEngineerAgent, EvaluatorAgent, SimulationOptimizerAgent). `CROSS_DOMAIN_AGENT_CLASSES == {}` means none are instantiable at runtime; only `tests/unit/test_output_builders.py` imports the module. | Done |
+| T-423 | Delete unused `packages/agent/domain/` agent files: `exception.py`, `logistics.py`, `procurement.py`, `production.py`, `replenishment.py`, `supplier.py` — classes defined but never imported anywhere. Afterward audit `AgentBasedSpecialist` in `packages/agent/base.py`; if `ControlAgent` is its sole remaining subclass, keep the base class but remove any branches that exist only for deleted subclasses. | Done |
+| T-424 | Remove the now-dead `CROSS_DOMAIN_AGENT_CLASSES` branch in `packages/agent/orchestrator/runtime.py::_make_agent`; simplify `packages/agent/orchestrator/roles.py` accordingly (keep `VALID_AGENT_ROLES` as the public lookup). | Done |
+
+#### Defect: D-001
+
+- Status: Open
+- Severity: Medium
+- Repro: `make typecheck`
+- Observed: 4 mypy errors pre-dating P65 — `packages/tools/base.py:50` (no-any-return), `packages/tools/base.py:52`, `packages/agent/runtime.py:698`, `packages/agent/runtime.py:809` (unused-ignore). Discovered during P65 B-01 batch check; verified pre-existing via stash/restore.
+- Expected: `make typecheck` exits 0 (P64 T-420 sign-off claimed all gates pass).
+- Area: packages/tools, packages/agent
+- Owner: App Builder
+- Acceptance: `make typecheck` exits 0.
 
 Dependencies: none
 
