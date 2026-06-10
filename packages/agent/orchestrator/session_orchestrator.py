@@ -34,9 +34,7 @@ from packages.agent.orchestrator.routing import validate_route
 from packages.agent.orchestrator.runtime import (
     _run_agents_in_order,
     _synthesize_response,
-    run_dag_execution,
     run_direct_chat,
-    run_planned_execution,
 )
 from packages.persistence.sessions_repo import DecisionSessionRepository
 
@@ -67,7 +65,7 @@ class OrchestratorState(TypedDict):
 
 _ORCHESTRATOR_NODES = frozenset({
     "classify_intent", "prepare_ask_user", "wait_for_answer",
-    "select_mode", "run_direct_chat", "run_sequential", "run_planned", "run_dag",
+    "select_mode", "run_direct_chat", "run_sequential",
 })
 
 
@@ -322,37 +320,6 @@ class SessionOrchestrator:
         self._schedule_status_update(session_id, "completed")
         return {"result": result}
 
-    async def _node_run_planned(
-        self, state: OrchestratorState, config: RunnableConfig
-    ) -> dict[str, Any]:
-        session_id = UUID(state["session_id"])
-        intent = state["intent"]
-        route = state["route"]
-        assert intent is not None
-        assert route is not None
-
-        _query = SessionUserQuery.model_validate(state["query"])
-        result = await run_planned_execution(self, session_id, _query, intent, route)
-        await self._push({"type": "response_ready", "mode": route.mode, "timestamp": _iso_now()})
-        self._schedule_status_update(session_id, "completed")
-        return {"result": result}
-
-    async def _node_run_dag(
-        self, state: OrchestratorState, config: RunnableConfig
-    ) -> dict[str, Any]:
-        """Bridge node — calls run_dag_execution unchanged."""
-        session_id = UUID(state["session_id"])
-        intent = state["intent"]
-        route = state["route"]
-        assert intent is not None
-        assert route is not None
-
-        _query = SessionUserQuery.model_validate(state["query"])
-        result = await run_dag_execution(self, session_id, _query, intent, route)
-        await self._push({"type": "response_ready", "mode": route.mode, "timestamp": _iso_now()})
-        self._schedule_status_update(session_id, "completed")
-        return {"result": result}
-
     # ------------------------------------------------------------------
     # Conditional edges
     # ------------------------------------------------------------------
@@ -364,12 +331,8 @@ class SessionOrchestrator:
         mode = route.mode
         if mode == "direct_chat":
             return "run_direct_chat"
-        if mode in ("single_agent", "sequential_agents"):
+        if mode == "single_agent":
             return "run_sequential"
-        if mode == "planned_execution":
-            return "run_planned"
-        if mode == "dag_execution":
-            return "run_dag"
         return END
 
     # ------------------------------------------------------------------
@@ -385,8 +348,6 @@ class SessionOrchestrator:
         sg.add_node("select_mode", self._node_select_mode)
         sg.add_node("run_direct_chat", self._node_run_direct_chat)
         sg.add_node("run_sequential", self._node_run_sequential)
-        sg.add_node("run_planned", self._node_run_planned)
-        sg.add_node("run_dag", self._node_run_dag)
 
         sg.add_edge(START, "classify_intent")
         sg.add_edge("classify_intent", "prepare_ask_user")
@@ -398,15 +359,11 @@ class SessionOrchestrator:
             {
                 "run_direct_chat": "run_direct_chat",
                 "run_sequential": "run_sequential",
-                "run_planned": "run_planned",
-                "run_dag": "run_dag",
                 END: END,
             },
         )
         sg.add_edge("run_direct_chat", END)
         sg.add_edge("run_sequential", END)
-        sg.add_edge("run_planned", END)
-        sg.add_edge("run_dag", END)
 
         return sg.compile(checkpointer=checkpointer)
 

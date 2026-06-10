@@ -7,8 +7,9 @@ _INTENT_MODE_MAP: dict[str, str] = {
     "chat": "direct_chat",
     "lookup": "single_agent",
     "domain_analysis": "single_agent",
-    "cross_domain_analysis": "sequential_agents",
-    "decision_support": "planned_execution",
+    "cross_domain_analysis": "single_agent",
+    "supply_chain": "single_agent",
+    "decision_support": "single_agent",
 }
 
 
@@ -21,8 +22,6 @@ def validate_route(route: AgentRoute) -> None:
         raise ValueError("direct_chat route must not include agents")
     if route.mode == "single_agent" and len(route.agents) != 1:
         raise ValueError("single_agent route requires exactly one agent")
-    if route.mode == "sequential_agents" and len(route.agents) < 1:
-        raise ValueError("sequential_agents route requires at least one agent")
     unknown = [agent for agent in route.agents if agent not in VALID_AGENT_ROLES]
     if unknown:
         raise ValueError(f"unknown agent role(s): {', '.join(unknown)}")

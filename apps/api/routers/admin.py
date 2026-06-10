@@ -97,7 +97,6 @@ class RegistryResponse(BaseModel):
 @router.get("/registry", response_model=RegistryResponse, status_code=status.HTTP_200_OK)
 async def get_registry() -> RegistryResponse:
     """All agents and tools with execution counts and last-run timestamps."""
-    from packages.agent.orchestrator.roles import CROSS_DOMAIN_AGENT_CLASSES
     from packages.tools.base import _ROLE_TOOL_ALLOWLIST
 
     try:
@@ -156,8 +155,6 @@ async def get_registry() -> RegistryResponse:
     def _category(role: str) -> Literal["domain", "cross_domain", "orchestrator"]:
         if role == "orchestrator":
             return "orchestrator"
-        if role in CROSS_DOMAIN_AGENT_CLASSES:
-            return "cross_domain"
         return "domain"
 
     agents: list[AgentRegistryEntry] = []
