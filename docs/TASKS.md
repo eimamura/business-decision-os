@@ -82,6 +82,8 @@ Full task history for P0–P23 is archived at `docs/archive/v3/TASKS.md`.
 | P76 — Tool Layer Conformance Remediation | T-477–T-487 | 2026-06-10 |
 | P77 — Runtime Error Surfacing Fixes | T-488–T-491 | 2026-06-10 |
 | P78 — Deterministic Routing Completion | T-492–T-494 | 2026-06-10 |
+| P79 — Session Resume & Lifecycle Robustness | T-495–T-500 | 2026-06-10 |
+| P80 — Verifier Blocked-Path UX | T-501–T-505 | 2026-06-10 |
 
 > **Design Realignment Note (2026-06-05):** P29–P36 built Specialist Domain Agents (DemandAgent,
 > InventoryAgent, SupplyPlanningAgent, FinanceImpactAgent, SopAgent) as independent runtime units.
