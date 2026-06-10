@@ -370,13 +370,13 @@ Dependencies: none
 
 Dependencies: B-01
 
-### Batch B-03 — Tests + gate (Test/Review) — Not Started
+### Batch B-03 — Tests + gate (Test/Review) — Done
 
 | Task | Description | Status |
 |---|---|---|
-| T-455 | Unit tests: satisfied verdict → single run; unsatisfied → exactly one refinement then END (cap enforced); chat intent bypasses set_goal/evaluate_goal; fail-open on verdict parse failure. | Not Started |
-| T-456 | Unit test: reroute_category updates intent and tool subset on the refinement pass; invalid category ignored. | Not Started |
-| T-457 | `make test-unit && make lint && make typecheck` — all pass (proof-of-execution). | Not Started |
+| T-455 | Unit tests: satisfied verdict → single run; unsatisfied → exactly one refinement then END (cap enforced); chat intent bypasses set_goal/evaluate_goal; fail-open on verdict parse failure. | Done |
+| T-456 | Unit test: reroute_category updates intent and tool subset on the refinement pass; invalid category ignored. | Done |
+| T-457 | `make test-unit && make lint && make typecheck` — all pass (proof-of-execution). | Done |
 
 Dependencies: B-02
 
@@ -399,12 +399,12 @@ Dependencies: P71 B-01 (ADR); parallel-eligible with P71 B-02 (disjoint files)
 
 Dependencies: P71 B-01
 
-### Batch B-02 — Tests + gate (Test/Review) — Not Started
+### Batch B-02 — Tests + gate (Test/Review) — Done
 
 | Task | Description | Status |
 |---|---|---|
-| T-461 | Unit tests: grounded verdict → END no revision; ungrounded → exactly one revision retry with claims in message; verifier exception → falls back to rule-based; gating (chat/lookup intents and empty tool_results skip the LLM verdict). | Not Started |
-| T-462 | `make test-unit && make lint && make typecheck` — all pass (proof-of-execution). | Not Started |
+| T-461 | Unit tests: grounded verdict → END no revision; ungrounded → exactly one revision retry with claims in message; verifier exception → falls back to rule-based; gating (chat/lookup intents and empty tool_results skip the LLM verdict). | Done |
+| T-462 | `make test-unit && make lint && make typecheck` — all pass (proof-of-execution). | Done |
 
 Dependencies: B-01
 

@@ -17,6 +17,8 @@ from packages.agent.orchestrator.models import (
     AskUserDecision,
     DagPlan,
     ExecutionPlan,
+    GoalEvaluation,
+    GoalSpec,
     PlanStep,
     SessionIntent,
     TaskNode,
@@ -91,6 +93,12 @@ class QueryFlowOrchestratorModel:
                     category="decision_support", confidence=0.9,
                     rationale="Needs supply-chain work", goal_text="Optimize replenishment",
                 )
+
+            if schema_name == "GoalSpec":
+                return GoalSpec(goal_text=text_content[:80] or "query", success_criteria=[])
+
+            if schema_name == "GoalEvaluation":
+                return GoalEvaluation(satisfied=True, missing=None, reroute_category=None)
 
             if schema_name == "AskUserDecision":
                 return AskUserDecision(needs_input=False, question=None, suggestions=None)

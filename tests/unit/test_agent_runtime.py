@@ -350,8 +350,10 @@ def test_t073_graph_has_expected_nodes() -> None:
 
 
 def test_t073_graph_does_not_have_removed_revision_nodes() -> None:
-    """P61: add_revision_message and call_model_final were removed from the graph
-    when needs_revision was eliminated. Verify the graph is clean."""
+    """P72 (ADR 2026-06-10): add_revision_message and call_model_final are present in the graph
+    — the dead self-correction path was reconnected behind the LLM groundedness verdict.
+    Also assert plan_tools is present (P64 gap closure).
+    """
     from langgraph.checkpoint.memory import MemorySaver
 
     llm = FakeLCModel([])
@@ -359,9 +361,10 @@ def test_t073_graph_does_not_have_removed_revision_nodes() -> None:
     graph = runtime._build_graph(checkpointer=MemorySaver())
 
     node_names = set(graph.nodes.keys())
-    for name in ("add_revision_message", "call_model_final"):
-        assert name not in node_names, (
-            f"Node '{name}' should have been removed from graph in P61, found in: {node_names}"
+    for name in ("add_revision_message", "call_model_final", "plan_tools"):
+        assert name in node_names, (
+            f"Node '{name}' must be present in graph (P72 reconnected revision path; "
+            f"P64 added plan_tools). Found nodes: {node_names}"
         )
 
 

@@ -148,11 +148,63 @@ class _FakeStructured:
         return None
 
 
+class _TypeAwareFakeStructured:
+    """Type-aware variant returned by StructuredOutputFakeModel.with_structured_output().
+
+    Scans the shared responses list for the first item that is an instance of the
+    requested schema class and pops it.  If no typed match is found it falls back to
+    positional (first item) — unless the first item is a *different* Pydantic model
+    (indicating a programming error in the test), in which case a schema-default is
+    returned so that fail-open paths in the orchestrator can recover gracefully.
+
+    This makes tests resilient to new orchestrator nodes that consume extra structured
+    responses (e.g. set_goal / evaluate_goal added in P71) without requiring every
+    existing test to be updated with the new responses.
+    """
+
+    def __init__(self, schema: Any, responses: list[Any]) -> None:
+        self._schema = schema
+        self._responses = responses  # shared reference
+
+    async def ainvoke(self, messages: Any, **kwargs: Any) -> Any:
+        import pydantic
+
+        # 1. Search for a typed match.
+        for i, item in enumerate(self._responses):
+            if self._schema is not None and isinstance(item, self._schema):
+                return self._responses.pop(i)
+
+        # 2. No typed match — if the list is non-empty and the first item is NOT a
+        #    different Pydantic model, return it positionally (backward compat).
+        if self._responses:
+            first = self._responses[0]
+            if self._schema is None or not (
+                isinstance(first, pydantic.BaseModel)
+                and not isinstance(first, self._schema)
+            ):
+                return self._responses.pop(0)
+
+        # 3. Nothing usable — raise so that orchestrator fail-open (try/except) paths can
+        #    recover gracefully.  A bare Exception is used (not AssertionError) so that
+        #    broad `except Exception` clauses in the orchestrator catch it.
+        schema_name = getattr(self._schema, "__name__", str(self._schema))
+        raise LookupError(
+            f"_TypeAwareFakeStructured: no response of type {schema_name!r} available"
+        )
+
+
 class StructuredOutputFakeModel:
     """Fake LC model for orchestrator roles where with_structured_output is called.
 
     `structured_responses` is a list of Pydantic model instances that will be
     returned in order when .with_structured_output(...).ainvoke(...) is called.
+
+    Uses type-aware response matching: each .with_structured_output(Schema) call
+    searches the list for the first item that is an instance of Schema before
+    falling back to positional order.  This means tests do not need to be updated
+    when new orchestrator nodes (e.g. set_goal, evaluate_goal) consume responses
+    that were not in the original test sequence — those new nodes will receive None
+    and trigger the fail-open path in the implementation.
     """
 
     model = "fake-structured-model"
@@ -160,8 +212,8 @@ class StructuredOutputFakeModel:
     def __init__(self, structured_responses: list[Any]) -> None:
         self._structured_responses = list(structured_responses)
 
-    def with_structured_output(self, schema: Any) -> "_FakeStructured":
-        return _FakeStructured(self._structured_responses)
+    def with_structured_output(self, schema: Any) -> "_TypeAwareFakeStructured":
+        return _TypeAwareFakeStructured(schema, self._structured_responses)
 
     def bind_tools(self, tools: Any) -> "StructuredOutputFakeModel":
         return self
