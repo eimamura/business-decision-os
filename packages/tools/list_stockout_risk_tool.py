@@ -103,12 +103,20 @@ class ListStockoutRiskTool:
 
         min_order = _RISK_LEVEL_ORDER[min_risk_level]
         items: list[dict[str, Any]] = []
+        missing_data: list[str] = []
         today = datetime.date.today()
 
         for row in raw_rows:
             on_hand_qty = float(row["on_hand_qty"])
             avg_daily = float(row["avg_daily"])
             incoming_supply = float(row["incoming_supply"])
+
+            # Track SKUs with no demand history in the rolling 30-day window so the
+            # agent can distinguish "no risk" from "evaluation impossible".
+            if avg_daily == 0:
+                missing_data.append(
+                    f"no demand history in last 30 days: {row['sku_id']}"
+                )
 
             demand_forecast = avg_daily * horizon_days
             projected_ending_stock = on_hand_qty + incoming_supply - demand_forecast
@@ -151,7 +159,7 @@ class ListStockoutRiskTool:
         )
 
         return ToolResult(
-            output={"items": items, "count": len(items), "missing_data": []},
+            output={"items": items, "count": len(items), "missing_data": missing_data},
             audit_payload={
                 "horizon_days": horizon_days,
                 "min_risk_level": min_risk_level,
