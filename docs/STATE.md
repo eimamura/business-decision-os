@@ -40,11 +40,11 @@ See `docs/archive/v3/STATE.md` for P0–P23 per-phase details.
 
 ## Active Phase
 
-None
+P80 — Verifier Blocked-Path UX
 
 ## Active Lease
 
-None
+P80-B-01
 
 ## Last Completed
 
