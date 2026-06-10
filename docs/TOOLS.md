@@ -90,20 +90,24 @@ Tool access is enforced at two layers, both of which must pass for a tool to be 
 
 Defined in `packages/tools/base.py` as `_ROLE_TOOL_ALLOWLIST`. Each agent role has a static set of permitted tool names. A tool not in a role's allowlist is never exposed to that agent, regardless of the task.
 
+`ControlAgent` is the only runtime product agent (`VALID_AGENT_ROLES = {"control"}`). Its allowlist is **auto-derived** at first access from the union of all `_INTENT_TOOL_SUBSET` values in `packages/agent/control/control_agent.py`.
+
 | Role | Permitted Tools |
 |---|---|
-| `orchestrator` | *(none — orchestrator delegates; does not call tools directly)* |
-| `data_engineer` | `nl_query`, `data_catalog_search`, `table_schema_reader`, `data_quality_checker` |
-| `anomaly_detector` | `nl_query`, `data_catalog_search`, `table_schema_reader`, `data_quality_checker` |
-| `simulation_optimizer` | `simulate_inventory`, `optimize_replenishment` |
-| `evaluator` | `evaluate_candidates`, `write_audit_log` |
-| `demand` | `nl_query`, `forecast`, `train_forecast`, `profile_demand_data`, `analyze_demand_trend`, `evaluate_forecast_accuracy`, `detect_demand_anomalies`, `analyze_seasonality`, `analyze_demand_drivers`, `segment_demand`, `compare_demand_periods` |
-| `inventory` | `nl_query` |
-| `replenishment` | `nl_query` |
-| `procurement` | `nl_query` |
-| `supplier` | `nl_query` |
-| `production` | `nl_query` |
-| `logistics` | `nl_query` |
+| `orchestrator` | *(empty — safety guard; the SessionOrchestrator calls the LLM directly and never calls tools)* |
+| `control` | *(auto-derived from `_INTENT_TOOL_SUBSET` — see below)* |
+
+#### `control` role tool allowlist (derived from `_INTENT_TOOL_SUBSET`)
+
+The full set of tools reachable by the ControlAgent is the union of all intent-subset lists. By intent category:
+
+| Intent | Tools available to ControlAgent |
+|---|---|
+| `supply_chain` | `nl_query`, `list_stockout_risk`, `get_delayed_supply_orders`, `get_open_supply_orders`, `calculate_supply_gap`, `analyze_supply_lead_time`, `calculate_days_of_supply`, `analyze_supply_risk`, `calculate_stockout_risk`, `calculate_stockout_cost_impact`, `calculate_expedite_cost` |
+| `lookup` | `nl_query`, `table_schema_reader`, `data_catalog_search`, `list_stockout_risk`, `get_open_supply_orders`, `get_available_to_promise`, `profile_demand_data` |
+| `domain_analysis` | `nl_query`, `profile_demand_data`, `analyze_demand_trend`, `evaluate_forecast_accuracy`, `detect_demand_anomalies`, `analyze_seasonality`, `analyze_demand_drivers`, `segment_demand`, `compare_demand_periods`, `calculate_days_of_inventory`, `calculate_stockout_risk`, `list_stockout_risk`, `calculate_excess_inventory_risk`, `get_available_to_promise`, `get_open_supply_orders`, `get_delayed_supply_orders`, `calculate_supply_gap`, `analyze_supply_lead_time`, `calculate_days_of_supply`, `analyze_supply_risk`, `calculate_holding_cost_impact`, `calculate_stockout_cost_impact`, `calculate_expedite_cost`, `compare_cost_scenarios` |
+| `cross_domain_analysis` | everything in `domain_analysis` plus `data_quality_checker`, `table_schema_reader`, `data_catalog_search` |
+| `decision_support` | `nl_query`, `list_stockout_risk`, `calculate_stockout_risk`, `calculate_excess_inventory_risk`, `get_available_to_promise`, `calculate_days_of_inventory`, `get_open_supply_orders`, `get_delayed_supply_orders`, `calculate_supply_gap`, `analyze_supply_lead_time`, `calculate_days_of_supply`, `analyze_supply_risk`, `calculate_holding_cost_impact`, `calculate_stockout_cost_impact`, `calculate_expedite_cost`, `compare_cost_scenarios`, `optimize_replenishment`, `simulate_inventory`, `evaluate_candidates`, `request_approval`, `forecast`, `evaluate_forecast_accuracy` |
 
 ### Layer 2: Task-Level Tool List
 
@@ -154,7 +158,7 @@ The following tools are required first to achieve the minimum viable agent capab
 | 7 | `calculator` | Deferred | Perform basic numeric calculations |
 | 8 | `scenario_builder` | Deferred | Enable what-if analysis |
 | 9 | `summary_generator` | Deferred | Produce human-readable explanations |
-| 10 | `audit_log_writer` | ✅ Implemented (`write_audit_log`) | Record decision history and accountability |
+| 10 | `audit_log_writer` | ✅ Implemented (`write_audit_log`) | Record decision history and accountability — auto-triggered post-completion by `AgentRuntime`; not LLM-callable |
 
 ---
 
@@ -433,6 +437,7 @@ Enumerate MOQ multiples and return the top 3 replenishment candidates ranked by 
 Write a tamper-evident audit log entry. Each entry is chained to the previous via SHA-256 hash.
 
 **Class:** `AuditLogTool` (`packages/tools/audit_tool.py`)
+**Not registered in `create_tool_registry()`** — auto-triggered by `AgentRuntime.run()` post-completion; not LLM-callable and not gated by any role allowlist.
 **Requires approval:** No
 
 **Input**
@@ -488,6 +493,31 @@ Request human approval for a proposed action. Creates a pending approval record 
 This tool never fails — it always returns a pending record.
 
 **Audit payload:** `{approval_id, action_summary}`
+
+---
+
+### Non-LLM-Callable Tools (Job Pipeline)
+
+These tool classes exist in `packages/tools/` and are exported from `packages/tools/__init__.py`
+but are **not registered** in `create_tool_registry()`. They are invoked by non-LLM paths only.
+
+---
+
+#### `job_dispatch`
+
+Dispatch a long-running job for execution with human approval.
+
+**Class:** `JobDispatchTool` (`packages/tools/job_dispatch_tool.py`)
+**Not registered in `create_tool_registry()`** — intercepted by `AgentRuntime` at the `hitl` safety level; not exposed to the LLM tool list.
+
+---
+
+#### `train_forecast`
+
+Train the demand forecasting model for a SKU.
+
+**Class:** `TrainForecastTool` (`packages/tools/train_forecast_tool.py`)
+**Not registered in `create_tool_registry()`** — invoked directly by `packages/agent/job_executor.py` as a job execution target (job_type=`"train_forecast"`).
 
 ---
 

@@ -56,47 +56,10 @@ class _RoleToolAllowlist(dict):  # type: ignore[type-arg]
 
 
 _ROLE_TOOL_ALLOWLIST: _RoleToolAllowlist = _RoleToolAllowlist({
+    # orchestrator: safety guard — prevents any code calling list_for_role("orchestrator")
+    # from receiving the full tool set.  The SessionOrchestrator does not call tools
+    # directly; this entry exists as a defensive empty list.
     "orchestrator": [],
-    "data_engineer": [
-        "nl_query", "data_catalog_search",
-        "table_schema_reader", "data_quality_checker",
-    ],
-    "simulation_optimizer": ["simulate_inventory", "optimize_replenishment"],
-    "evaluator": ["evaluate_candidates"],
-    "anomaly_detector": [
-        "nl_query", "data_catalog_search",
-        "table_schema_reader", "data_quality_checker",
-    ],
-    "demand": [
-        "nl_query", "forecast",
-        "profile_demand_data", "analyze_demand_trend",
-        "evaluate_forecast_accuracy", "detect_demand_anomalies",
-        "analyze_seasonality", "analyze_demand_drivers",
-        "segment_demand", "compare_demand_periods",
-    ],
-    "supply_planning": [
-        "nl_query",
-        "get_open_supply_orders", "calculate_supply_gap",
-        "analyze_supply_lead_time", "calculate_days_of_supply",
-        "analyze_supply_risk",
-    ],
-    "finance_impact": [
-        "nl_query",
-        "calculate_holding_cost_impact", "calculate_stockout_cost_impact",
-        "calculate_expedite_cost", "compare_cost_scenarios",
-    ],
-    "inventory": [
-        "nl_query", "simulate_inventory",
-        "calculate_days_of_inventory", "calculate_stockout_risk",
-        "list_stockout_risk",
-        "calculate_excess_inventory_risk", "get_available_to_promise",
-    ],
-    "replenishment": ["nl_query", "simulate_inventory", "optimize_replenishment"],
-    "procurement": ["nl_query"],
-    "supplier": ["nl_query"],
-    "production": ["nl_query"],
-    "logistics": ["nl_query"],
-    "sop": ["nl_query"],
     # "control" starts empty; _get_control_allowlist() populates it on first access
     # via the _RoleToolAllowlist.__getitem__ / .get overrides above.
     "control": [],
