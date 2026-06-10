@@ -78,6 +78,7 @@ Full task history for P0–P23 is archived at `docs/archive/v3/TASKS.md`.
 | P72 — Grounded Runtime Evaluator | T-458–T-462 | 2026-06-10 |
 | P73 — Feedback Learning Loop | T-463–T-469 | 2026-06-10 |
 | P74 — Integration Tier Latent Debt | T-470 | 2026-06-10 |
+| P75 — Tool Layer Full Audit | T-471–T-476 | 2026-06-10 |
 
 > **Design Realignment Note (2026-06-05):** P29–P36 built Specialist Domain Agents (DemandAgent,
 > InventoryAgent, SupplyPlanningAgent, FinanceImpactAgent, SopAgent) as independent runtime units.
@@ -480,7 +481,7 @@ Dependencies: none
 
 ---
 
-## P75 — Tool Layer Full Audit — Not Started
+## P75 — Tool Layer Full Audit — Done (2026-06-10)
 
 **Goal:** Audit all 35 tool files in `packages/tools/` (32 registered + `write_audit_log`,
 `job_dispatch`, `train_forecast` unregistered) on four axes: (1) input→output contract
@@ -518,10 +519,34 @@ Dependencies: none
 
 Dependencies: none
 
-### Batch B-04 — Consolidated audit report + decision log (Orchestrator) — Not Started
+### Batch B-04 — Consolidated audit report + decision log (Orchestrator) — Done
 
 | Task | Description | Status |
 |---|---|---|
-| T-476 | Consolidate B-01/B-02/B-03 findings into the final audit report (conversation deliverable); append accepted keep/merge decisions to `docs/DECISIONS.md`; register follow-up phase or Defect Tasks for any non-conformance requiring code change. | Not Started |
+| T-476 | Consolidate B-01/B-02/B-03 findings into the final audit report (conversation deliverable); append accepted keep/merge decisions to `docs/DECISIONS.md`; register follow-up phase or Defect Tasks for any non-conformance requiring code change. | Done |
 
 Dependencies: B-01, B-02, B-03
+
+---
+
+## P76 — Tool Layer Conformance Remediation — Not Started (awaiting user prioritization)
+
+**Goal:** Fix the non-conformances found by the P75 audit. No test or gate failed (all gates
+green at P75 sign-off), so these are registered as a planned follow-up phase, not Defect
+Tasks. The Context Pack item is a doc-vs-code divergence and requires an ADR decision
+before any code change (AGENTS.md §When in Doubt: code is runtime truth, docs are design
+truth; file an ADR before changing either).
+
+Proposed tasks (to be batched on user approval):
+
+| Task | Description | Status |
+|---|---|---|
+| T-477 | ADR: resolve Context Pack divergence — DESIGN.md §Tool Design Constraints mandates `summary`/`schema`/`key_metrics`/`missing_data`/`artifact_id` returns, but 0/35 tools implement it (all return domain-specific dicts; `nl_query` returns raw rows). Options: (a) implement Context Pack across the tool layer with artifact storage, (b) amend DESIGN.md to codify the current domain-dict contract + per-tool `output_schema`, (c) hybrid: keep domain dicts, add `missing_data` + row-cap/artifact rule for row-returning tools. | Not Started |
+| T-478 | `evaluator_tool.py`: raise `RuntimeError` when `risk_thresholds.yaml` is missing instead of silently falling back to hardcoded 0.85/0.95 defaults (AGENTS.md fail-silent prohibition). | Not Started |
+| T-479 | `supply_open_orders_tool.py` / `supply_delayed_orders_tool.py`: add LIMIT to unbounded order queries (context flooding risk on large supply_orders). | Not Started |
+| T-480 | Extract shared helpers: `_classify_stockout_risk` (duplicated in `inventory_stockout_risk_tool.py` + `list_stockout_risk_tool.py` — divergence risk on threshold change) and `_db_error_message` (~16 copies) into a shared module. | Not Started |
+| T-481 | `data_catalog_search_tool.py`: surface DB failure via explicit `error`/`note` key instead of silently returning `row_count: None` rows. | Not Started |
+| T-482 | Add behavioral unit test for `train_forecast` `handle()` (only tool with indirect-only coverage). | Not Started |
+| T-483 | Decision + optional merge: `calculate_days_of_supply` → `calculate_days_of_inventory` (identical formula; DOI is warehouse-aware superset; DOS adds `stockout_date_estimate`). Touches `_INTENT_TOOL_SUBSET` (4 subsets), system prompt, `test_control_agent_intent_tool_subset.py`, AGENT_ARCHITECTURE.md Tier 2. | Not Started |
+
+Dependencies: P75 Done; T-477 (ADR) blocks any Context-Pack-related code change.
