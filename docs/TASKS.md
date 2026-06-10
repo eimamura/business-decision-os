@@ -85,6 +85,7 @@ Full task history for P0–P23 is archived at `docs/archive/v3/TASKS.md`.
 | P79 — Session Resume & Lifecycle Robustness | T-495–T-500 | 2026-06-10 |
 | P80 — Verifier Blocked-Path UX | T-501–T-505 | 2026-06-10 |
 | P81 — Tool Scenario Modal Content Refresh | T-506–T-518 | 2026-06-10 |
+| P82 — Seed Data Staleness & list_stockout_risk missing_data Fix | T-519–T-522 | 2026-06-10 |
 
 > **Design Realignment Note (2026-06-05):** P29–P36 built Specialist Domain Agents (DemandAgent,
 > InventoryAgent, SupplyPlanningAgent, FinanceImpactAgent, SopAgent) as independent runtime units.
@@ -796,3 +797,44 @@ Dependencies: none
 | T-518 | Gate: `make test-unit && make lint && make typecheck && make test-playwright` — proof-of-execution (command + exit code + output tail). | Done |
 
 Dependencies: B-01
+
+---
+
+## P82 — Seed Data Staleness & list_stockout_risk missing_data Fix — Done (2026-06-10)
+
+**Goal:** Resolve the Judge-reported FAIL (aggregate 0.72, completeness 0.4) caused by
+two separate defects: (1) demand_history seed data is anchored to 2025 — every re-seed
+after 2026-01-01 generates demand rows outside the tool's 30-day rolling window, making
+`avg_daily=0` for all 30 SKUs and `list_stockout_risk` always returning `count=0`; (2)
+`list_stockout_risk` returns `missing_data: []` even when demand history is absent, so the
+agent cannot distinguish "no stockout risk" from "evaluation impossible due to missing data".
+The verifier blocking (pre-P80 symptom) is already resolved; this phase fixes the root
+causes so the question "Which products are at stockout risk this week?" returns a truthful,
+data-grounded answer.
+
+Dependencies: P81 Done
+
+### Batch B-01 — Relative-date seed script (Infra) — Done
+
+| Task | Description | Status |
+|---|---|---|
+| T-519 | `scripts/generate_sample_data.py`: replace all fixed calendar dates with expressions relative to `date.today()`. Specific changes: `START_DATE = date(2025, 1, 1)` → `date.today() - timedelta(days=365)`; `snapshot_date = date(2026, 5, 19)` → `date.today() - timedelta(days=22)` ("today minus ~3 weeks"); `base_order_date = date(2026, 4, 1)` → `date.today() - timedelta(days=70)` ("today minus ~10 weeks"); supply-order status cutoffs `date(2026, 5, 19)` (delivered threshold) → `date.today() - timedelta(days=22)` and `date(2026, 6, 1)` (in_transit threshold) → `date.today() - timedelta(days=9)`; `period_start = date(2025, 1, 1)` → `date.today() - timedelta(days=365)` and `period_end = date(2025, 12, 31)` → `date.today() - timedelta(days=1)`. All `START_DATE` references in `generate_forecast_history` must also use the relative value. Confirm re-seed procedure: `uv run python scripts/generate_sample_data.py && make seed` (or equivalent). | Done |
+
+Dependencies: none
+
+### Batch B-02 — list_stockout_risk missing_data population (App Builder) — Done
+
+| Task | Description | Status |
+|---|---|---|
+| T-520 | `packages/tools/list_stockout_risk_tool.py`: in `handle()`, after the per-SKU loop, collect all SKU IDs where `avg_daily == 0` into a `no_demand_skus` list. If non-empty, append one `missing_data` entry per SKU: `"no demand history in last 30 days: {sku_id}"` (matching the format already used by `calculate_stockout_risk`). Return `missing_data` populated in the `ToolResult` output instead of always `[]`. Update `output_schema` if needed (already has `missing_data: array` — confirm type is `array of string`). | Done |
+
+Dependencies: none
+
+### Batch B-03 — Tests + gate (Test/Review) — Done
+
+| Task | Description | Status |
+|---|---|---|
+| T-521 | Unit test for `list_stockout_risk` (new): when `_fetch_all_stockout_risk` returns rows with `avg_daily=0` for all SKUs (no demand history), `missing_data` in the output is non-empty with one entry per SKU; `items` is `[]` and `count` is 0. Add a second parametrized case: when some SKUs have `avg_daily > 0` and some have `avg_daily == 0`, only the zero-demand SKUs appear in `missing_data`, and only the positive-demand SKUs appear in `items` (if their risk level meets the threshold). | Done |
+| T-522 | Gate: `make test-unit && make lint && make typecheck` — proof-of-execution (command, exit code, output tail). | Done |
+
+Dependencies: B-01, B-02
