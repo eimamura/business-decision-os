@@ -417,11 +417,11 @@ record and changes how past decisions are injected into future context.
 
 Dependencies: P71 B-01 (ADR)
 
-### Batch B-01 — Migration (Infra) — Not Started
+### Batch B-01 — Migration (Infra) — Done
 
 | Task | Description | Status |
 |---|---|---|
-| T-463 | Alembic migration `0018_decision_log_outcome.py` — add `outcome SMALLINT NULL` to `decision_log` (additive; +1/−1/NULL). | Not Started |
+| T-463 | Alembic migration `0018_decision_log_outcome.py` — add `outcome SMALLINT NULL` to `decision_log` (additive; +1/−1/NULL). | Done |
 
 Dependencies: none
 
