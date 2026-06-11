@@ -1,7 +1,12 @@
 """Unit tests for generate_sample_data.py (B04)."""
+from __future__ import annotations
+
 import csv
+import datetime
 import sys
 from pathlib import Path
+
+import pytest
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "scripts"))
 import generate_sample_data as gen
@@ -194,3 +199,98 @@ def _load_gt_sku_params() -> list[dict]:
 def _load_gt_customer_params() -> list[dict]:
     with open(GT_DIR / "customer_parameters.csv", newline="") as f:
         return list(csv.DictReader(f))
+
+
+# ---------------------------------------------------------------------------
+# Risk band distribution (T-529): deterministic inventory overrides ensure
+# the demo query "Which products are at stockout risk this week?" returns
+# the expected risk distribution after re-seeding.
+# ---------------------------------------------------------------------------
+
+def _inv_on_hand(inventory_rows: list[dict], sku_id: str) -> float:
+    """Sum on_hand across all warehouses for the given SKU."""
+    return sum(float(r["on_hand"]) for r in inventory_rows if r["sku_id"] == sku_id)
+
+
+def _actual_recent_avg(sku_id: str) -> float:
+    """Return the actual 30-day rolling average daily demand for *sku_id*.
+
+    Reads from the already-generated demand_history.csv and applies the same
+    logic as ``gen.compute_recent_avg`` (and the tool's SQL query) so the test
+    assertion uses the same demand figure that ``list_stockout_risk`` will use
+    at runtime.
+    """
+    with open(OUT_DIR / "demand_history.csv", newline="") as f:
+        rows = list(csv.DictReader(f))
+    return gen.compute_recent_avg(rows, sku_id)
+
+
+@pytest.mark.parametrize("sku_id", ["SKU-001", "SKU-002"])
+def test_risk_band_critical_projected_negative(sku_id: str) -> None:
+    """Critical-band SKUs must have on_hand_qty < 7-day demand (projected < 0).
+
+    Uses the actual recent demand average (mirrors the tool's SQL) rather than
+    the nominal base_demand_mean so the assertion is valid even when seasonality
+    or noise shifts the rolling average away from the CSV parameter value.
+    """
+    # _run_and_read calls gen.main internally, regenerating all files consistently.
+    inv_rows = _run_and_read(42, "inventory_snapshot.csv")
+    on_hand = _inv_on_hand(inv_rows, sku_id)
+    avg_daily = _actual_recent_avg(sku_id)
+    demand_7 = avg_daily * 7
+    projected = on_hand - demand_7  # incoming=0 for risk SKUs
+    assert projected < 0, (
+        f"{sku_id}: on_hand={on_hand}, avg_daily={avg_daily:.3f}, "
+        f"demand_7={demand_7:.3f}, projected={projected:.3f} should be < 0"
+    )
+
+
+@pytest.mark.parametrize("sku_id", ["SKU-003", "SKU-004"])
+def test_risk_band_high_ratio_below_0_1(sku_id: str) -> None:
+    """High-band SKUs must have 0 <= projected_ending_stock / demand_forecast < 0.1."""
+    inv_rows = _run_and_read(42, "inventory_snapshot.csv")
+    on_hand = _inv_on_hand(inv_rows, sku_id)
+    avg_daily = _actual_recent_avg(sku_id)
+    demand_7 = avg_daily * 7
+    projected = on_hand - demand_7
+    ratio = projected / demand_7
+    assert 0.0 <= projected, (
+        f"{sku_id}: projected={projected:.3f} must be non-negative for 'high' (not 'critical')"
+    )
+    assert ratio < 0.1, (
+        f"{sku_id}: ratio={ratio:.4f} must be < 0.1 for 'high' band"
+    )
+
+
+@pytest.mark.parametrize("sku_id", ["SKU-005", "SKU-006", "SKU-007"])
+def test_risk_band_medium_ratio_in_range(sku_id: str) -> None:
+    """Medium-band SKUs must have 0.1 <= projected_ending_stock / demand_forecast < 0.5."""
+    inv_rows = _run_and_read(42, "inventory_snapshot.csv")
+    on_hand = _inv_on_hand(inv_rows, sku_id)
+    avg_daily = _actual_recent_avg(sku_id)
+    demand_7 = avg_daily * 7
+    projected = on_hand - demand_7
+    ratio = projected / demand_7
+    assert 0.1 <= ratio < 0.5, (
+        f"{sku_id}: ratio={ratio:.4f} must be in [0.1, 0.5) for 'medium' band; "
+        f"on_hand={on_hand}, avg_daily={avg_daily:.3f}"
+    )
+
+
+@pytest.mark.parametrize("sku_id", gen.SKU_RISK_BANDS.keys())
+def test_risk_band_no_supply_arriving_within_7_days(sku_id: str) -> None:
+    """Risk-band SKU supply orders must not have non-delivered arrivals within 7 days."""
+    rows = _run_and_read(42, "supply_orders.csv")
+    today = datetime.date.today()
+    cutoff = today + datetime.timedelta(days=7)
+    delivered_cutoff = today - datetime.timedelta(days=22)
+    for row in rows:
+        if row["sku_id"] != sku_id:
+            continue
+        arrival = datetime.date.fromisoformat(row["expected_arrival"])
+        status = row["status"]
+        if arrival >= delivered_cutoff and arrival <= cutoff:
+            assert status == "delivered", (
+                f"{sku_id}: non-delivered order (status={status}) arriving {arrival} "
+                f"is within the 7-day tool horizon — would rescue the risk classification"
+            )

@@ -6,6 +6,8 @@ Usage:
 
 Outputs written to data/sample/ (NOT ground_truth/).
 """
+from __future__ import annotations
+
 import argparse
 import csv
 import math
@@ -24,6 +26,32 @@ DETERMINISTIC_NULL_SKUS = {"SKU-003", "SKU-005", "SKU-007"}
 CONTIGUOUS_GAP_SKU = "SKU-001"
 CONTIGUOUS_GAP_START_DAY = 60
 CONTIGUOUS_GAP_LENGTH = 7
+
+# Deterministic risk-band overrides for the demo query
+# "Which products are at stockout risk this week?" (horizon_days=7, min_risk_level="medium").
+#
+# Days-of-cover (DOC) values chosen so that projected_ending_stock = on_hand - demand_7day
+# lands squarely inside each band for all base_demand_mean values in sku_parameters.csv:
+#   critical: DOC=2  → projected = daily*(2-7) = -daily*5 < 0               → critical
+#   high:     DOC=7.4 → projected = daily*0.4,  ratio=0.4/7≈0.057 ∈ [0, 0.1) → high
+#   medium:   DOC=9.0 → projected = daily*2.0,  ratio=2/7≈0.286  ∈ [0.1,0.5) → medium
+# Supply orders for risk SKUs are pushed to today+10 (outside 7-day horizon) so incoming
+# supply does not rescue the classification.
+SKU_RISK_BANDS: dict[str, str] = {
+    "SKU-001": "critical",
+    "SKU-002": "critical",
+    "SKU-003": "high",
+    "SKU-004": "high",
+    "SKU-005": "medium",
+    "SKU-006": "medium",
+    "SKU-007": "medium",
+}
+
+_RISK_DOC: dict[str, float] = {
+    "critical": 2.0,
+    "high": 7.4,
+    "medium": 9.0,
+}
 
 
 @dataclass(frozen=True)
@@ -91,11 +119,41 @@ def generate_customers(customers: list[CsvRow], out_dir: Path) -> None:
             writer.writerow({k: row[k] for k in fields})
 
 
+def compute_recent_avg(demand_rows: list[CsvRow], sku_id: str, window_days: int = 30) -> float:
+    """Return the mean daily quantity over the last *window_days* non-missing rows for *sku_id*.
+
+    Mirrors the SQL expression used by ``list_stockout_risk``:
+        AVG(quantity) WHERE date >= CURRENT_DATE - 30 days AND is_missing IS NOT TRUE
+
+    Returns 0.0 when no qualifying rows are found (matches the COALESCE(avg_daily, 0) in SQL).
+    """
+    cutoff = date.today() - timedelta(days=window_days)
+    quantities = [
+        int(r["quantity"])
+        for r in demand_rows
+        if r["sku_id"] == sku_id
+        and r["is_missing"] not in ("True", "true", True)
+        and r["quantity"] not in ("", None)
+        and date.fromisoformat(r["date"]) >= cutoff
+    ]
+    return sum(quantities) / len(quantities) if quantities else 0.0
+
+
 def generate_demand_history(
     skus: list[CsvRow], rng: random.Random, out_dir: Path, config: SampleDataConfig
-) -> None:
+) -> dict[str, float]:
+    """Write demand_history.csv and return a {sku_id: recent_avg_daily} mapping.
+
+    The returned mapping contains the actual 30-day rolling average for each SKU,
+    computed the same way as ``list_stockout_risk``'s SQL query.  ``generate_inventory``
+    uses these values to set ``on_hand`` for risk-band SKUs so the tool's risk
+    classification is exact regardless of seasonal noise in the generated demand.
+    """
     gap_end = CONTIGUOUS_GAP_START_DAY + CONTIGUOUS_GAP_LENGTH
     gap_days = set(range(CONTIGUOUS_GAP_START_DAY, gap_end))
+
+    # Accumulate all rows in memory so we can compute per-SKU recent averages after writing.
+    all_rows: list[CsvRow] = []
 
     fields = ["sku_id", "date", "quantity", "is_missing"]
     with open(out_dir / "demand_history.csv", "w", newline="") as f:
@@ -124,17 +182,36 @@ def generate_demand_history(
                     if rng.random() < config.missing_rate:
                         is_missing = True
 
-                writer.writerow({
+                row: CsvRow = {
                     "sku_id": sku_id,
                     "date": current_date.isoformat(),
-                    "quantity": "" if is_missing else qty,
-                    "is_missing": is_missing,
-                })
+                    "quantity": "" if is_missing else str(qty),
+                    "is_missing": str(is_missing),
+                }
+                writer.writerow(row)
+                all_rows.append(row)
+
+    # Build per-SKU recent average from the just-generated rows.
+    sku_ids = [sku["sku_id"] for sku in skus]
+    return {sid: compute_recent_avg(all_rows, sid) for sid in sku_ids}
 
 
 def generate_inventory(
-    skus: list[CsvRow], rng: random.Random, out_dir: Path, config: SampleDataConfig
+    skus: list[CsvRow],
+    rng: random.Random,
+    out_dir: Path,
+    config: SampleDataConfig,
+    recent_avg_by_sku: dict[str, float] | None = None,
 ) -> None:
+    """Write inventory_snapshot.csv.
+
+    For risk-band SKUs the ``on_hand`` is back-calculated from the actual recent
+    demand average (``recent_avg_by_sku``) so the tool's projected ending stock
+    ratio falls exactly within the intended risk band regardless of seasonal
+    noise in the generated demand history.  When ``recent_avg_by_sku`` is ``None``
+    or a SKU is absent from it, ``base_demand_mean`` is used as the fallback
+    (preserving the old behaviour for callers that do not pass demand data).
+    """
     # Snapshot is ~3 weeks before today to simulate a recent but not same-day snapshot.
     snapshot_date = (date.today() - timedelta(days=22)).isoformat()
     fields = ["sku_id", "warehouse_id", "on_hand", "on_order", "snapshot_date"]
@@ -151,25 +228,50 @@ def generate_inventory(
 
             normal_on_hand = int(daily_demand * (lt_mean + 14))
 
-            for wh in config.warehouses:
-                roll = rng.random()
-                if roll < 0.15 and unit_cost > 100:
-                    on_hand = int(daily_demand * 150)
-                    on_order = 0
-                elif roll < 0.10:
-                    on_hand = 0
-                    on_order = max(1, int(daily_demand * lt_mean))
-                else:
-                    on_hand = max(0, int(rng.gauss(normal_on_hand, normal_on_hand * 0.15)))
-                    on_order = max(0, int(rng.gauss(daily_demand * 7, daily_demand * 2)))
+            if sku_id in SKU_RISK_BANDS:
+                # Deterministic risk-band override: back-calculate on_hand from the
+                # *actual* recent daily average so the tool's formula
+                #   demand_forecast = avg_daily * horizon_days
+                #   projected = on_hand - demand_forecast  (incoming=0 for risk SKUs)
+                # lands exactly within the intended band for every DOC value.
+                doc = _RISK_DOC[SKU_RISK_BANDS[sku_id]]
+                actual_avg = (
+                    (recent_avg_by_sku or {}).get(sku_id) or daily_demand
+                )
+                # round() instead of int() avoids truncation pushing the high band
+                # (DOC=7.4, margin ratio≈0.057) down into critical.
+                total_on_hand = round(actual_avg * doc)
+                wh_on_hand = [total_on_hand // config.warehouse_count] * config.warehouse_count
+                # Assign any rounding remainder to the first warehouse.
+                wh_on_hand[0] += total_on_hand - sum(wh_on_hand)
+                for idx, wh in enumerate(config.warehouses):
+                    writer.writerow({
+                        "sku_id": sku_id,
+                        "warehouse_id": wh,
+                        "on_hand": wh_on_hand[idx],
+                        "on_order": 0,
+                        "snapshot_date": snapshot_date,
+                    })
+            else:
+                for wh in config.warehouses:
+                    roll = rng.random()
+                    if roll < 0.15 and unit_cost > 100:
+                        on_hand = int(daily_demand * 150)
+                        on_order = 0
+                    elif roll < 0.10:
+                        on_hand = 0
+                        on_order = max(1, int(daily_demand * lt_mean))
+                    else:
+                        on_hand = max(0, int(rng.gauss(normal_on_hand, normal_on_hand * 0.15)))
+                        on_order = max(0, int(rng.gauss(daily_demand * 7, daily_demand * 2)))
 
-                writer.writerow({
-                    "sku_id": sku_id,
-                    "warehouse_id": wh,
-                    "on_hand": on_hand,
-                    "on_order": on_order,
-                    "snapshot_date": snapshot_date,
-                })
+                    writer.writerow({
+                        "sku_id": sku_id,
+                        "warehouse_id": wh,
+                        "on_hand": on_hand,
+                        "on_order": on_order,
+                        "snapshot_date": snapshot_date,
+                    })
 
 
 def generate_supply(
@@ -216,6 +318,13 @@ def generate_supply(
                 elif arrival_date < _in_transit_cutoff:
                     status = "in_transit"
                 else:
+                    status = "pending"
+
+                # For risk-band SKUs, push any non-delivered order to today+10 so the
+                # tool's incoming_supply window (horizon_days=7) never includes it,
+                # preserving the intended risk classification.
+                if sku_id in SKU_RISK_BANDS and status != "delivered":
+                    arrival_date = date.today() + timedelta(days=10)
                     status = "pending"
 
                 writer.writerow({
@@ -330,8 +439,8 @@ def generate(config: SampleDataConfig, out_dir: Path = Path("data/sample")) -> N
     generate_sku_master(skus, out_dir)
     generate_location_master(locations, out_dir)
     generate_customers(customers, out_dir)
-    generate_demand_history(skus, rng, out_dir, config)
-    generate_inventory(skus, rng, out_dir, config)
+    recent_avg_by_sku = generate_demand_history(skus, rng, out_dir, config)
+    generate_inventory(skus, rng, out_dir, config, recent_avg_by_sku)
     generate_supply(skus, suppliers, rng, out_dir)
     generate_cost(skus, rng, out_dir, config)
     generate_forecast_history(skus, rng, out_dir, config)
