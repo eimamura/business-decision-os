@@ -880,7 +880,7 @@ Dependencies: B-01
 
 ---
 
-## P84 — Demo Data Risk Distribution Fix — In Progress
+## P84 — Demo Data Risk Distribution Fix — Done (2026-06-10)
 
 **Goal:** Modify `scripts/generate_sample_data.py` so that re-seeding the database causes
 the demo query "Which products are at stockout risk this week?" to return a realistic risk
@@ -891,7 +891,7 @@ so it does not inadvertently rescue the risk classification.
 
 Dependencies: P82 Done
 
-### Batch B-01 — Seed script risk distribution (App Builder) — In Progress
+### Batch B-01 — Seed script risk distribution (App Builder) — Done
 
 | Task | Description | Status |
 |---|---|---|
@@ -899,11 +899,11 @@ Dependencies: P82 Done
 
 Dependencies: none
 
-### Batch B-02 — Tests + gate (Test/Review) — In Progress
+### Batch B-02 — Tests + gate (Test/Review) — Done
 
 | Task | Description | Status |
 |---|---|---|
 | T-529 | Unit tests: add a parametrized test in `tests/unit/` (new file or append to `test_generate_sample_data.py` if it exists) covering: (a) `generate_inventory` for a critical-band SKU produces `on_hand_qty` < `daily_demand * 7` (net of incoming=0 → projected < 0 → critical); (b) `generate_inventory` for a high-band SKU produces `0 ≤ projected_ending_stock < 0.1 * demand_forecast`; (c) `generate_inventory` for a medium-band SKU produces `0.1 * demand_forecast ≤ projected_ending_stock < 0.5 * demand_forecast`; (d) `generate_supply` for a risk-band SKU has no non-delivered orders with `expected_arrival ≤ date.today() + timedelta(days=7)`. Existing unit tests for `list_stockout_risk` use mocked DB rows — confirm they are unaffected. Tests appended to `tests/unit/test_sample_data.py`. **Fix iteration (2026-06-10):** tests updated to use `_actual_recent_avg` (calls `gen.compute_recent_avg` on generated demand_history.csv) instead of nominal `_sku_demand`; assertions now use the same demand figure the tool uses at runtime; `_sku_demand` helper removed. | Done |
-| T-530 | Gate: `make test-unit && make lint && make typecheck` — proof-of-execution (command, exit code, output tail). Confirm no existing tests reference concrete on_hand values from the seed data (they use mocked rows). | Not Started |
+| T-530 | Gate: `make test-unit && make lint && make typecheck` — proof-of-execution (command, exit code, output tail). Confirm no existing tests reference concrete on_hand values from the seed data (they use mocked rows). **Executed 2026-06-10:** unit 921 passed / 11 skipped exit 0, ruff clean, mypy 161 files clean. DB reseeded; live `list_stockout_risk(horizon_days=7, min_risk_level="medium")` returned count=7: SKU-001/002 critical (ratio −0.72), SKU-003/004 high (0.057/0.078), SKU-005/006/007 medium (0.287–0.293). | Done |
 
 Dependencies: B-01
