@@ -40,13 +40,42 @@ See `docs/archive/v3/STATE.md` for P0–P23 per-phase details.
 
 ## Active Phase
 
-None
+P84 — Demo Data Risk Distribution Fix (P83 completed concurrently in separate session — see Last Completed)
 
 ## Active Lease
 
-None
+P84-B-02 — Tests + gate (awaiting human quality-gate run: make test-unit && make lint && make typecheck)
+
+### P84-B-01 fix iteration (2026-06-10)
+
+Root cause confirmed by real-DB verification: `generate_inventory` used `base_demand_mean` (nominal)
+to set `on_hand = int(daily * DOC)` but `list_stockout_risk` computes `demand_forecast = avg_daily * 7`
+where `avg_daily` is the actual 30-day rolling average from `demand_history`. Seasonal noise makes
+the actual average lower than nominal for SKU-005/006 → effective DOC inflates → ratio ≥ 0.5 → "low".
+
+Fix applied to `scripts/generate_sample_data.py`:
+- New public helper `compute_recent_avg(demand_rows, sku_id, window_days=30)` mirrors the SQL in
+  `list_stockout_risk` (last 30 days, `is_missing` false, `COALESCE → 0.0`).
+- `generate_demand_history` now returns `dict[str, float]` (per-SKU recent average) in addition to
+  writing the CSV; all rows buffered in memory to compute averages without re-reading the file.
+- `generate_inventory` gains optional `recent_avg_by_sku: dict[str, float] | None` parameter; when
+  provided, risk-band `on_hand = round(actual_avg * DOC)` (round vs int avoids truncation pushing the
+  high band margin below critical); falls back to `base_demand_mean` if absent (backward-compatible).
+- `generate` threads the return value: `recent_avg_by_sku = generate_demand_history(...);
+  generate_inventory(..., recent_avg_by_sku)`.
+
+Fix applied to `tests/unit/test_sample_data.py`:
+- Removed `_sku_demand` (nominal base_demand_mean helper) — no longer used by risk-band tests.
+- Added `_actual_recent_avg(sku_id)` — reads demand_history.csv and calls `gen.compute_recent_avg`
+  so test assertions use the identical demand figure the tool uses at runtime.
+- All three parametrized risk-band tests (critical/high/medium) updated to use `_actual_recent_avg`
+  instead of nominal demand; error messages now include `avg_daily` for diagnostics.
 
 ## Last Completed
+
+P83 — LLM Usage Recording Restoration (2026-06-10). The P54 LangChain migration (commit ccfdb54) orphaned `_real_usage_writer` (`apps/api/state.py`) — no LLM call wrote `llm_usage` since 2026-06-07, leaving `GET /sessions/{id}/usage`, admin `list_llm_usage`, and the web `/llm-calls` and `/usage` pages without new data. Restored via `UsageRecordingCallbackHandler` (LangChain `AsyncCallbackHandler`, new `packages/agent/llm/usage_recording.py`) attached to every ChatModel in `create_model_registry(usage_writer=...)`; captures model, token counts (incl. cache details), prompt/response/tool-calls JSON, latency (logged); call context (session_id / agent_step_id / specialist_role) flows via invoke `config.metadata`; `_real_usage_writer` creates a fallback `agent_steps` row (`make_step(step_type="llm_call")`) when no step id is provided so session totals keep joining; `classify_intent` no longer discards its step id. `UsageWriter` signature unchanged — no ADR. Anthropic cost computation deferred (tokens recorded; cost 0.0). 30 new unit tests. Sign-off PASS (proof-of-execution): unit 921 passed exit 0, lint 0, typecheck 0, build 0, playwright 32/32.
+
+Previously:
 
 P82 — Seed Data Staleness & list_stockout_risk missing_data Fix (2026-06-10). ROOT CAUSE FIX: `START_DATE = date(2025, 1, 1)` in `scripts/generate_sample_data.py` made all demand_history rows fall outside the tools' 30-day rolling window after 2026-01-01 → `avg_daily=0` for all 30 SKUs → `list_stockout_risk` always returned `count=0`. Fixed: `START_DATE` and all supply/inventory/cost fixed dates are now relative to `date.today()`. `list_stockout_risk` now populates `missing_data` per SKU when `avg_daily == 0` (matching `calculate_stockout_risk` convention). 3 new unit tests added: all-zero-demand (count=0 + all SKUs in missing_data), mixed-demand (zero-demand SKUs in missing_data only), and parametrized mixed case.
 

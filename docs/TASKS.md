@@ -86,6 +86,8 @@ Full task history for P0–P23 is archived at `docs/archive/v3/TASKS.md`.
 | P80 — Verifier Blocked-Path UX | T-501–T-505 | 2026-06-10 |
 | P81 — Tool Scenario Modal Content Refresh | T-506–T-518 | 2026-06-10 |
 | P82 — Seed Data Staleness & list_stockout_risk missing_data Fix | T-519–T-522 | 2026-06-10 |
+| P83 — LLM Usage Recording Restoration | T-523–T-527 | 2026-06-10 |
+| P84 — Demo Data Risk Distribution Fix | T-528–T-530 | — |
 
 > **Design Realignment Note (2026-06-05):** P29–P36 built Specialist Domain Agents (DemandAgent,
 > InventoryAgent, SupplyPlanningAgent, FinanceImpactAgent, SopAgent) as independent runtime units.
@@ -838,3 +840,70 @@ Dependencies: none
 | T-522 | Gate: `make test-unit && make lint && make typecheck` — proof-of-execution (command, exit code, output tail). | Done |
 
 Dependencies: B-01, B-02
+
+---
+
+## P83 — LLM Usage Recording Restoration — Done (2026-06-10)
+
+**Goal:** Restore `llm_usage` row writes for every real LLM call. The P54 LangChain migration
+(commit ccfdb54) replaced `create_llm_client(usage_writer=_real_usage_writer)` with
+`create_model_registry()`, which has no usage hook — since 2026-06-07 no LLM call writes to
+`llm_usage`, so `GET /sessions/{id}/usage`, admin `list_llm_usage`, and the web `/llm-calls`
+and `/usage` pages show no new data. Done when: every ChatModel invocation (intent
+classification, planner, ReAct loop, final response, groundedness verifier, nl_query, history
+summarization) produces an `llm_usage` row with model, token counts, latency, and
+prompt/response capture (per the 2026-06-04 decision), attributable to its session via
+`agent_step_id`, for all three providers (anthropic/ollama/openai); recording failures must
+never break the agent run (fire-and-forget, log-on-error, matching `_real_usage_writer`
+semantics).
+
+Dependencies: P82 Done
+
+### Batch B-01 — Usage recording callback handler + registry wiring (App Builder) — Done
+
+| Task | Description | Status |
+|---|---|---|
+| T-523 | New module `packages/agent/llm/usage_recording.py`: `UsageRecordingCallbackHandler(AsyncCallbackHandler)` accepting a `UsageWriter` (reuse the existing type in `packages/agent/llm/__init__.py`; signature unchanged). `on_chat_model_start` records start time and serialized prompt messages keyed by `run_id`; `on_llm_end` extracts model name, `usage_metadata` (input/output/cache tokens when present), response text, and tool calls from the `LLMResult` generation, computes `latency_ms`, and invokes the writer with `session_id` / `agent_step_id` / `specialist_role` read from the run's metadata (LangChain invoke `config={"metadata": ...}` propagates to callbacks; LangGraph `astream_events` propagates graph config metadata to child model calls). Writer invocation must be non-blocking for the caller and exception-safe (log warning, never raise). `total_cost_usd`: 0.0 for ollama/openai; anthropic may be 0.0 in this phase (cost computation deferred — record tokens; no pricing table required). | Done |
+| T-524 | Wiring: `create_model_registry()` gains an optional `usage_writer: UsageWriter \| None = None` parameter; when provided, attach a `UsageRecordingCallbackHandler` to every constructed ChatModel via the `callbacks` constructor field (all providers). Default `None` keeps current behavior (no handler) for tools/tests. `apps/api/state.py get_orchestrator`: pass `usage_writer=_real_usage_writer` (already defined at `state.py:156`, currently orphaned). `_real_usage_writer` must create an `agent_steps` row via `make_step(session_id, step_type="llm_call", specialist_role=...)` when `agent_step_id` is None but `session_id` is available, so rows from sites without an existing step (nl_query, history summarization, verifier) still join to the session in `get_session_totals`; skip the write only when both are None. Call sites that already create steps (`classify_intent`, `select_execution_mode` in `session_orchestrator.py`) must stop discarding the `make_step` return value and pass it via invoke config metadata; `AgentRuntime` nodes pass `ctx.agent_step_id` / `ctx.session_id` / role through graph config metadata. | Done |
+
+Dependencies: none
+
+### Batch B-02 — Tests + gate (Test/Review) — Done
+
+| Task | Description | Status |
+|---|---|---|
+| T-525 | Unit tests for `UsageRecordingCallbackHandler`: (1) `on_chat_model_start` + `on_llm_end` with a fake `LLMResult` carrying `usage_metadata` → writer called once with correct model, token counts, non-None latency, serialized prompt and response; (2) metadata propagation — `session_id`/`agent_step_id`/`specialist_role` from run metadata reach the writer; (3) writer raising an exception does not propagate to the caller; (4) `on_llm_end` without a prior start event does not crash. Zero-network rule applies — fake `LLMResult`/metadata objects only, no real model calls. | Done |
+| T-526 | Unit tests for wiring: `create_model_registry(usage_writer=...)` attaches the handler to each model's `callbacks`; default call without `usage_writer` attaches nothing; `_real_usage_writer` step-fallback — `agent_step_id=None` + `session_id` present → `make_step` called and row created with the returned id (mock `LlmUsageRepository`/`make_step`); both None → no write. Update any existing tests broken by the `classify_intent`/`select_execution_mode` step-id propagation. | Done |
+| T-527 | Gate: `make test-unit && make lint && make typecheck && make build && make test-playwright` — proof-of-execution (command, exit code, output tail per gate). | Done |
+
+Dependencies: B-01
+
+---
+
+## P84 — Demo Data Risk Distribution Fix — In Progress
+
+**Goal:** Modify `scripts/generate_sample_data.py` so that re-seeding the database causes
+the demo query "Which products are at stockout risk this week?" to return a realistic risk
+distribution (2 critical + 2 high + 3 medium SKUs) instead of zero matches. The fix uses
+deterministic days-of-cover overrides for a fixed set of SKU IDs; all other SKUs remain
+ample (current behaviour). Incoming supply for risk SKUs is pushed beyond the 7-day horizon
+so it does not inadvertently rescue the risk classification.
+
+Dependencies: P82 Done
+
+### Batch B-01 — Seed script risk distribution (App Builder) — In Progress
+
+| Task | Description | Status |
+|---|---|---|
+| T-528 | `scripts/generate_sample_data.py`: add a `SKU_RISK_BANDS` mapping at module level — `{"SKU-001": "critical", "SKU-002": "critical", "SKU-003": "high", "SKU-004": "high", "SKU-005": "medium", "SKU-006": "medium", "SKU-007": "medium"}`. In `generate_inventory`, when `sku_id` is in `SKU_RISK_BANDS`, bypass the random `normal_on_hand` / stochastic branches and set `on_hand` deterministically: critical → `int(daily_demand * 2)` total across both warehouses (split evenly); high → `int(daily_demand * 7.4)` total; medium → `int(daily_demand * 9.0)` total. For single-warehouse splits, assign `on_hand = total // 2` to WH-001 and `total - total // 2` to WH-002; `on_order = 0` for all risk SKUs. In `generate_supply`, when `sku_id` is in `SKU_RISK_BANDS`, force all non-delivered order arrivals to `date.today() + timedelta(days=10)` (outside the 7-day tool horizon) so incoming supply cannot rescue the classification; orders with `arrival_date < _delivered_cutoff` are kept as delivered (already arrived, not counted). Seed value 42 is preserved; all other SKUs are generated by the existing random path unchanged. **Fix iteration (2026-06-10):** real-DB verification showed SKU-005/006 classified as "low" (nominal demand used for on_hand, but tool uses actual 30-day rolling average → effective DOC > 9 → ratio ≥ 0.5). Corrected: new `compute_recent_avg` helper mirrors the tool SQL; `generate_demand_history` returns per-SKU recent averages; `generate_inventory` uses `round(actual_avg * DOC)` for risk-band on_hand. | Done |
+
+Dependencies: none
+
+### Batch B-02 — Tests + gate (Test/Review) — In Progress
+
+| Task | Description | Status |
+|---|---|---|
+| T-529 | Unit tests: add a parametrized test in `tests/unit/` (new file or append to `test_generate_sample_data.py` if it exists) covering: (a) `generate_inventory` for a critical-band SKU produces `on_hand_qty` < `daily_demand * 7` (net of incoming=0 → projected < 0 → critical); (b) `generate_inventory` for a high-band SKU produces `0 ≤ projected_ending_stock < 0.1 * demand_forecast`; (c) `generate_inventory` for a medium-band SKU produces `0.1 * demand_forecast ≤ projected_ending_stock < 0.5 * demand_forecast`; (d) `generate_supply` for a risk-band SKU has no non-delivered orders with `expected_arrival ≤ date.today() + timedelta(days=7)`. Existing unit tests for `list_stockout_risk` use mocked DB rows — confirm they are unaffected. Tests appended to `tests/unit/test_sample_data.py`. **Fix iteration (2026-06-10):** tests updated to use `_actual_recent_avg` (calls `gen.compute_recent_avg` on generated demand_history.csv) instead of nominal `_sku_demand`; assertions now use the same demand figure the tool uses at runtime; `_sku_demand` helper removed. | Done |
+| T-530 | Gate: `make test-unit && make lint && make typecheck` — proof-of-execution (command, exit code, output tail). Confirm no existing tests reference concrete on_hand values from the seed data (they use mocked rows). | Not Started |
+
+Dependencies: B-01
