@@ -31,7 +31,11 @@ from packages.agent.orchestrator import (
 from packages.agent.orchestrator.models import AgentRoute, AskUserDecision, SessionIntent
 from packages.memory import StubMemoryStore
 from packages.tools import create_tool_registry
-from tests.integration.conftest import make_stub_registry
+from tests.integration.conftest import (
+    _MultiRoleModelRegistry,
+    _StructuredOutputFakeModel,
+    make_stub_registry,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -59,6 +63,48 @@ def _stop(text: str = "Done.") -> LLMResponse:
         request_id=str(uuid4()),
         latency_ms=0,
     )
+
+
+# ---------------------------------------------------------------------------
+# _LLMResponseAdapter and _ControlFakeModel — LangChain-compatible fakes for
+# the ControlAgent role.  Defined locally per project rule (no cross-file imports).
+# Mirrors the versions in test_prompts_mock_llm.py.
+# ---------------------------------------------------------------------------
+
+
+class _LLMResponseAdapter:
+    """Adapts an LLMResponse to the LangChain AIMessage interface used by AgentRuntime."""
+
+    def __init__(self, llm_response: LLMResponse) -> None:
+        self.content = llm_response.text
+        self.tool_calls = [
+            {"name": tc["name"], "id": tc["id"], "args": tc.get("input", {})}
+            for tc in (llm_response.tool_calls or [])
+        ]
+        self.usage_metadata: dict[str, Any] = {}
+
+
+class _ControlFakeModel:
+    """LangChain-compatible fake model for the ControlAgent role.
+
+    Pops responses from a queue via ainvoke().  bind_tools() returns self.
+    """
+
+    model = "fake-control-model"
+
+    def __init__(self, responses: list[LLMResponse]) -> None:
+        self._queue = list(responses)
+
+    def bind_tools(self, tools: Any) -> "_ControlFakeModel":
+        return self
+
+    def with_structured_output(self, schema: Any) -> Any:
+        return self
+
+    async def ainvoke(self, messages: Any, **kwargs: Any) -> Any:
+        if self._queue:
+            return _LLMResponseAdapter(self._queue.pop(0))
+        return _LLMResponseAdapter(_stop("fallback"))
 
 
 def _intent_json(
@@ -214,12 +260,20 @@ def _ask_user_registry() -> Any:
 def _direct_registry() -> Any:
     """ModelRegistry for tests that expect direct execution (no AskUser interrupt).
 
+    Since P78 (deterministic routing), domain_analysis always routes to
+    single_agent with agents=["control"] — select_mode no longer consults the LLM.
+    The previously-stubbed AgentRoute(direct_chat) was never consumed and has
+    been removed.  A "control"-role model is required so AgentRuntime._lc_model
+    is set when run_sequential → ControlAgent executes.
+
     Structured-output call order for domain_analysis + needs_input=False:
-      1. SessionIntent  (classify_intent node)
-      2. AskUserDecision(needs_input=False)  (prepare_ask_user node)
-      3. AgentRoute(direct_chat)  (select_mode node)
+      1. SessionIntent          (classify_intent node)
+      2. AskUserDecision(False) (prepare_ask_user node — skips interrupt)
+    Then deterministic: select_mode → run_sequential → ControlAgent:
+      3. plan_tools ainvoke (empty plan — prepended blank stop)
+      4. call_model ainvoke (final reply)
     """
-    return make_stub_registry(
+    orchestrator_model = _StructuredOutputFakeModel([
         SessionIntent(
             category="domain_analysis",
             confidence=0.95,
@@ -227,14 +281,16 @@ def _direct_registry() -> Any:
             goal_text="analyze inventory for SKU-001",
         ),
         AskUserDecision(needs_input=False, question=None, suggestions=[]),
-        AgentRoute(
-            mode="direct_chat",
-            agents=[],
-            requires_planning=False,
-            requires_dag=False,
-            rationale="mock",
+    ])
+    # Prepend blank stop for plan_tools node (domain_analysis is an analytical intent)
+    control_model = _ControlFakeModel([
+        _stop(""),
+        _stop(
+            "Inventory analysis for SKU-001 at DC West: stock levels are healthy. "
+            "Comparison with previous month shows a 5% increase in demand."
         ),
-    )
+    ])
+    return _MultiRoleModelRegistry({"orchestrator": orchestrator_model, "control": control_model})
 
 
 def _make_ask_user_orchestrator(

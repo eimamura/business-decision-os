@@ -1004,33 +1004,44 @@ async def test_ask_user_resume_via_answer_returns_session_response() -> None:
     and returns a complete SessionResponse with rationale != 'ask_user'.
 
     No real DB needed — uses MemorySaver.
+
+    Since P78 (deterministic routing), domain_analysis always routes to
+    single_agent with agents=["control"]. After resume, select_mode deterministically
+    routes to run_sequential → ControlAgent. The registry must therefore include a
+    "control"-role model. The AgentRoute stub previously included here was never
+    consumed by select_mode (routing is now deterministic) and has been removed.
     """
     from unittest.mock import AsyncMock, MagicMock, patch
 
     from langgraph.errors import GraphInterrupt
 
     # Structured-output sequence for run() + answer_ask_user():
-    #   1. SessionIntent        (classify_intent — first run)
+    #   1. SessionIntent         (classify_intent — first run)
     #   2. AskUserDecision(True) (prepare_ask_user — first run → interrupt)
-    #   3. AgentRoute            (select_mode — after resume via answer_ask_user)
-    _resume_registry = make_stub_registry(
-        SessionIntent(
+    # After resume via answer_ask_user():
+    #   3. select_mode deterministically routes domain_analysis → single_agent/control
+    #   4. ControlAgent: plan_tools (one ainvoke) + call_model (stop response)
+    _resume_registry = _make_full_registry(
+        intent=SessionIntent(
             category="domain_analysis",
             confidence=0.95,
             rationale="test",
             goal_text="analyze inventory",
         ),
-        AskUserDecision(
+        agent_route=AgentRoute(
+            mode="single_agent",
+            agents=["control"],
+            requires_planning=False,
+            requires_dag=False,
+            rationale="Deterministic route for intent 'domain_analysis'",
+        ),
+        control_responses=[
+            _stop("Analysis complete for the requested period."),
+        ],
+        ask_user_decision=AskUserDecision(
             needs_input=True,
             question="What date range should I analyze?",
             suggestions=["Last 30 days", "Q1 2025", "Last 12 months"],
-        ),
-        AgentRoute(
-            mode="direct_chat",
-            agents=[],
-            requires_planning=False,
-            requires_dag=False,
-            rationale="resumed",
         ),
     )
 
@@ -1059,7 +1070,7 @@ async def test_ask_user_resume_via_answer_returns_session_response() -> None:
 
     assert isinstance(response, SessionResponse)
     assert response.route.rationale != "ask_user"
-    assert response.reply  # non-empty reply from run_direct_chat
+    assert response.reply  # non-empty reply from ControlAgent
 
 
 # ---------------------------------------------------------------------------

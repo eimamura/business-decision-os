@@ -943,4 +943,15 @@ Dependencies: none
 | T-533 | Unit tests for the persistence wiring: (1) an `AgentRuntime` tool execution with both an SSE queue and a persister wired through graph config produces persisted tool `graph_node` start+end events (assert event_type/kind/name/event fields); (2) persister absent (None) → queue still receives events, no crash; (3) persister raising → run completes, queue events unaffected. Build on existing patterns in `tests/unit/test_session_orchestrator_persistence.py` and `tests/unit/test_sse_queue_injection.py`; zero-network rule applies (stub LLM / fake tools). Also cover `get_registry` aggregation if an existing unit/integration test exercises it (mocked pool rows: tool end events counted, start events excluded). | Done |
 | T-534 | Gate: `make test-unit && make lint && make typecheck && make build` — proof-of-execution (command, exit code, output tail per gate). | Done |
 
+#### Defect: D-009
+
+- Status: Resolved (2026-06-11 — test-side fix: stub registries aligned with P78 deterministic routing; `make test-integration` 16 passed exit 0)
+- Severity: Medium
+- Repro: `make test-integration` (fails: `tests/integration/test_ask_user_hitl_variants.py::test_fully_specified_request_does_not_raise_graph_interrupt`, `tests/integration/test_prompts_mock_llm.py::test_ask_user_resume_via_answer_returns_session_response`)
+- Observed: Both tests fail with `RuntimeError: AgentRuntime requires model_registry — _lc_model is not set` (raised in node `call_model`). Pre-existing, NOT introduced by P85 — reproduced identically at baseline commit d05b122 (pre-P85) via worktree.
+- Expected: Both tests pass. Latent since P78 (Deterministic Routing Completion, 2026-06-10): `select_execution_mode` now maps `domain_analysis` → `single_agent`/`["control"]` deterministically (`packages/agent/orchestrator/routing.py _INTENT_MODE_MAP`); the tests still assume LLM-driven routing can return their stubbed `AgentRoute(mode="direct_chat")`, so execution reaches `ControlAgent`'s `AgentRuntime`, whose `make_stub_registry`/`_direct_registry` stub provides only an `"orchestrator"`-role model → no `"control"` model → `_lc_model is None`. P78's gate did not include `make test-integration`, so the break went undetected.
+- Area: tests/integration (test-side; production routing behavior is correct per P78 design)
+- Owner: Test/Review
+- Acceptance: `make test-integration` exit 0 with both tests passing, preserving their original behavioral intent (no-interrupt for fully-specified request; ask_user resume returns a complete SessionResponse).
+
 Dependencies: B-01
