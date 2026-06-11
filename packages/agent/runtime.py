@@ -118,6 +118,26 @@ def _has_non_empty_tool_data(tool_results: list[dict[str, Any]]) -> bool:
     return False
 
 
+async def _emit(event: dict[str, Any], sse_queue: Any, persister: Any) -> None:
+    """Put *event* on the SSE queue and fire-and-forget the persister.
+
+    Both operations are best-effort:
+    - ``sse_queue`` may be None (tests, CLI entry points) — skipped silently.
+    - ``persister`` may be None or may raise — never propagates an exception so
+      that persister failures can never interrupt an agent run.
+    """
+    from packages.agent.orchestrator.parsing import json_safe as _json_safe
+
+    safe = _json_safe(event)
+    if sse_queue is not None:
+        await sse_queue.put(safe)
+    if persister is not None:
+        try:
+            await persister(safe)
+        except Exception:
+            pass  # persister failures must never break the run
+
+
 _FENCED_CODE_RE = re.compile(r"```[^\n]*\n?.*?```", re.DOTALL)
 _INLINE_CODE_RE = re.compile(r"`[^`]+`")
 
@@ -624,8 +644,10 @@ class AgentRuntime:
 
         from packages.persistence.approvals_repo import ApprovalsRepository
 
-        sse_queue = (config.get("configurable") or {}).get("sse_queue")
-        ctx: ToolContext = (config.get("configurable") or {})["ctx"]
+        _configurable = config.get("configurable") or {}
+        sse_queue = _configurable.get("sse_queue")
+        persister = _configurable.get("event_persister")
+        ctx: ToolContext = _configurable["ctx"]
 
         response = state.get("response")
         if response is None or not response.tool_calls:
@@ -675,18 +697,16 @@ class AgentRuntime:
             _job_description = tool_input.get("description", "")
 
         # Emit awaiting_approval SSE event (informs session_orchestrator catch block is gone)
-        if sse_queue is not None:
-            from packages.agent.orchestrator.parsing import json_safe
-            await sse_queue.put(json_safe({
-                "type": "awaiting_approval",
-                "session_id": str(ctx.session_id),
-                "approval_id": _approval_id,
-                "tool_name": hitl_call["name"],
-                "tool_input": tool_input,
-                "job_id": _job_id,
-                "description": _job_description,
-                "timestamp": datetime.now(timezone.utc).isoformat(),
-            }))
+        await _emit({
+            "type": "awaiting_approval",
+            "session_id": str(ctx.session_id),
+            "approval_id": _approval_id,
+            "tool_name": hitl_call["name"],
+            "tool_input": tool_input,
+            "job_id": _job_id,
+            "description": _job_description,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        }, sse_queue, persister)
 
         return {
             "pending_hitl_approval_id": _approval_id,
@@ -706,8 +726,10 @@ class AgentRuntime:
         from its beginning when the graph resumes after interrupt().  Any DB write
         inside this node would execute twice.
         """
-        sse_queue = (config.get("configurable") or {}).get("sse_queue")
-        ctx: ToolContext = (config.get("configurable") or {})["ctx"]
+        _configurable = config.get("configurable") or {}
+        sse_queue = _configurable.get("sse_queue")
+        persister = _configurable.get("event_persister")
+        ctx: ToolContext = _configurable["ctx"]
 
         approval_id = state.get("pending_hitl_approval_id")
         response = state.get("response")
@@ -723,15 +745,13 @@ class AgentRuntime:
                     break
 
         # Emit session_paused SSE and update session status before interrupting
-        if sse_queue is not None:
-            from packages.agent.orchestrator.parsing import json_safe
-            await sse_queue.put(json_safe({
-                "type": "session_paused",
-                "session_id": str(ctx.session_id),
-                "approval_id": approval_id,
-                "tool_name": tool_name,
-                "timestamp": datetime.now(timezone.utc).isoformat(),
-            }))
+        await _emit({
+            "type": "session_paused",
+            "session_id": str(ctx.session_id),
+            "approval_id": approval_id,
+            "tool_name": tool_name,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        }, sse_queue, persister)
 
         # interrupt() suspends execution here; resumes when Command(resume=...) is sent
         interrupt({
@@ -753,6 +773,7 @@ class AgentRuntime:
         ctx: "ToolContext",
         sse_queue: Any,
         agent_run_id: str,
+        persister: Any = None,
     ) -> tuple[dict[str, Any], Any]:
         """Execute one non-HITL tool call and return (tool_result_dict, llm_message).
 
@@ -771,15 +792,14 @@ class AgentRuntime:
         tool_input = call.get("input", {})
 
         tool_t0 = time.monotonic()
-        if sse_queue is not None:
-            await sse_queue.put(json_safe({
-                "type": "graph_node", "event": "start",
-                "kind": "tool", "name": call["name"],
-                "run_id": tool_call_id, "parent_run_id": agent_run_id,
-                "timestamp": datetime.now(timezone.utc).isoformat(),
-                "input_summary": str(tool_input)[:200],
-                "status": "ok", "meta": {},
-            }))
+        await _emit({
+            "type": "graph_node", "event": "start",
+            "kind": "tool", "name": call["name"],
+            "run_id": tool_call_id, "parent_run_id": agent_run_id,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "input_summary": str(tool_input)[:200],
+            "status": "ok", "meta": {},
+        }, sse_queue, persister)
         try:
             tool_result = await tool.handle(tool_input, ctx)
             tool_duration_ms = int((time.monotonic() - tool_t0) * 1000)
@@ -789,20 +809,19 @@ class AgentRuntime:
                 if isinstance(tool_output, dict)
                 else None
             )
-            if sse_queue is not None:
-                output_with_query: dict[str, Any] = (
-                    {**tool_output, "executed_query": executed_query}
-                    if isinstance(tool_output, dict) and executed_query is not None
-                    else (tool_output if isinstance(tool_output, dict) else {})
-                )
-                await sse_queue.put(json_safe({
-                    "type": "graph_node", "event": "end",
-                    "kind": "tool", "name": call["name"],
-                    "run_id": tool_call_id, "parent_run_id": agent_run_id,
-                    "timestamp": datetime.now(timezone.utc).isoformat(),
-                    "duration_ms": tool_duration_ms,
-                    "status": "ok", "output": output_with_query, "meta": {},
-                }))
+            output_with_query: dict[str, Any] = (
+                {**tool_output, "executed_query": executed_query}
+                if isinstance(tool_output, dict) and executed_query is not None
+                else (tool_output if isinstance(tool_output, dict) else {})
+            )
+            await _emit({
+                "type": "graph_node", "event": "end",
+                "kind": "tool", "name": call["name"],
+                "run_id": tool_call_id, "parent_run_id": agent_run_id,
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "duration_ms": tool_duration_ms,
+                "status": "ok", "output": output_with_query, "meta": {},
+            }, sse_queue, persister)
             msg = LLMMessage(
                 role="tool",
                 content=json.dumps(json_safe(tool_output)),
@@ -811,15 +830,14 @@ class AgentRuntime:
             return {call["name"]: tool_output}, msg
         except Exception as exc:
             tool_duration_ms = int((time.monotonic() - tool_t0) * 1000)
-            if sse_queue is not None:
-                await sse_queue.put(json_safe({
-                    "type": "graph_node", "event": "end",
-                    "kind": "tool", "name": call["name"],
-                    "run_id": tool_call_id, "parent_run_id": agent_run_id,
-                    "timestamp": datetime.now(timezone.utc).isoformat(),
-                    "duration_ms": tool_duration_ms,
-                    "status": "error", "error": str(exc), "meta": {},
-                }))
+            await _emit({
+                "type": "graph_node", "event": "end",
+                "kind": "tool", "name": call["name"],
+                "run_id": tool_call_id, "parent_run_id": agent_run_id,
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "duration_ms": tool_duration_ms,
+                "status": "error", "error": str(exc), "meta": {},
+            }, sse_queue, persister)
             raise
 
     async def _execute_tools_node(
@@ -830,6 +848,7 @@ class AgentRuntime:
 
         configurable = config.get("configurable") or {}
         sse_queue = configurable.get("sse_queue")
+        persister = configurable.get("event_persister")
         ctx: ToolContext = configurable["ctx"]
         agent_run_id: str = configurable.get("agent_run_id", "")
 
@@ -868,7 +887,7 @@ class AgentRuntime:
         if parallel_calls:
             gather_results = await asyncio.gather(
                 *[
-                    self._run_single_read_only_tool(call, ctx, sse_queue, agent_run_id)
+                    self._run_single_read_only_tool(call, ctx, sse_queue, agent_run_id, persister)
                     for call in parallel_calls
                 ],
                 return_exceptions=True,
@@ -901,15 +920,14 @@ class AgentRuntime:
                 from packages.agent.job_executor import execute_job
 
                 tool_t0 = time.monotonic()
-                if sse_queue is not None:
-                    await sse_queue.put(json_safe({
-                        "type": "graph_node", "event": "start",
-                        "kind": "tool", "name": call["name"],
-                        "run_id": tool_call_id, "parent_run_id": agent_run_id,
-                        "timestamp": datetime.now(timezone.utc).isoformat(),
-                        "input_summary": str(tool_input)[:200],
-                        "status": "ok", "meta": {},
-                    }))
+                await _emit({
+                    "type": "graph_node", "event": "start",
+                    "kind": "tool", "name": call["name"],
+                    "run_id": tool_call_id, "parent_run_id": agent_run_id,
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                    "input_summary": str(tool_input)[:200],
+                    "status": "ok", "meta": {},
+                }, sse_queue, persister)
                 try:
                     job_result = await execute_job(_UUID(pending_job_id), sse_queue=sse_queue)
                     tool_duration_ms = int((time.monotonic() - tool_t0) * 1000)
@@ -918,15 +936,14 @@ class AgentRuntime:
                         import json as _json
                         result_output = _json.loads(result_output)
                     new_tool_results.append({call["name"]: result_output})
-                    if sse_queue is not None:
-                        await sse_queue.put(json_safe({
-                            "type": "graph_node", "event": "end",
-                            "kind": "tool", "name": call["name"],
-                            "run_id": tool_call_id, "parent_run_id": agent_run_id,
-                            "timestamp": datetime.now(timezone.utc).isoformat(),
-                            "duration_ms": tool_duration_ms,
-                            "status": "ok", "output": result_output, "meta": {},
-                        }))
+                    await _emit({
+                        "type": "graph_node", "event": "end",
+                        "kind": "tool", "name": call["name"],
+                        "run_id": tool_call_id, "parent_run_id": agent_run_id,
+                        "timestamp": datetime.now(timezone.utc).isoformat(),
+                        "duration_ms": tool_duration_ms,
+                        "status": "ok", "output": result_output, "meta": {},
+                    }, sse_queue, persister)
                     new_messages.append(LLMMessage(
                         role="tool",
                         content=json.dumps(json_safe(result_output)),
@@ -934,15 +951,14 @@ class AgentRuntime:
                     ))
                 except Exception as exc:
                     tool_duration_ms = int((time.monotonic() - tool_t0) * 1000)
-                    if sse_queue is not None:
-                        await sse_queue.put(json_safe({
-                            "type": "graph_node", "event": "end",
-                            "kind": "tool", "name": call["name"],
-                            "run_id": tool_call_id, "parent_run_id": agent_run_id,
-                            "timestamp": datetime.now(timezone.utc).isoformat(),
-                            "duration_ms": tool_duration_ms,
-                            "status": "error", "error": str(exc), "meta": {},
-                        }))
+                    await _emit({
+                        "type": "graph_node", "event": "end",
+                        "kind": "tool", "name": call["name"],
+                        "run_id": tool_call_id, "parent_run_id": agent_run_id,
+                        "timestamp": datetime.now(timezone.utc).isoformat(),
+                        "duration_ms": tool_duration_ms,
+                        "status": "error", "error": str(exc), "meta": {},
+                    }, sse_queue, persister)
                     raise
                 # Clear HITL job id after use
                 pending_job_id = None
@@ -950,7 +966,7 @@ class AgentRuntime:
 
             # Non-job HITL tool (e.g. write safety_level) — execute sequentially
             result_entry, msg = await self._run_single_read_only_tool(
-                call, ctx, sse_queue, agent_run_id
+                call, ctx, sse_queue, agent_run_id, persister
             )
             if result_entry:
                 new_tool_results.append(result_entry)

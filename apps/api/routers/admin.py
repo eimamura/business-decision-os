@@ -114,13 +114,15 @@ async def get_registry() -> RegistryResponse:
             )
             tool_rows = await conn.fetch(
                 """
-                SELECT payload->>'tool_name'           AS tool_name,
+                SELECT payload->>'name'                AS tool_name,
                        COUNT(*)::int                   AS execution_count,
                        MAX(created_at)                 AS last_executed_at
                 FROM session_events
-                WHERE event_type = 'tool_completed'
-                  AND payload->>'tool_name' IS NOT NULL
-                GROUP BY payload->>'tool_name'
+                WHERE event_type = 'graph_node'
+                  AND payload->>'kind' = 'tool'
+                  AND payload->>'event' = 'end'
+                  AND payload->>'name' IS NOT NULL
+                GROUP BY payload->>'name'
                 """
             )
     except RuntimeError as e:

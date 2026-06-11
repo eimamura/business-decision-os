@@ -907,3 +907,40 @@ Dependencies: none
 | T-530 | Gate: `make test-unit && make lint && make typecheck` — proof-of-execution (command, exit code, output tail). Confirm no existing tests reference concrete on_hand values from the seed data (they use mocked rows). **Executed 2026-06-10:** unit 921 passed / 11 skipped exit 0, ruff clean, mypy 161 files clean. DB reseeded; live `list_stockout_risk(horizon_days=7, min_risk_level="medium")` returned count=7: SKU-001/002 critical (ratio −0.72), SKU-003/004 high (0.057/0.078), SKU-005/006/007 medium (0.287–0.293). | Done |
 
 Dependencies: B-01
+
+---
+
+## P85 — Agents & Tools Registry: Tool Execution Stats Restoration — In Progress
+
+**Goal:** The Tools tab on `/agents` shows live execution counts and last-call timestamps again.
+Root cause (two-part): (1) commit d0977b8 (P20, 2026-06-03) replaced the legacy `tool_completed`
+SSE event with `graph_node` events, but `get_registry` in `apps/api/routers/admin.py` still
+aggregates `session_events WHERE event_type = 'tool_completed'` — 0 rows ever since; (2) the
+replacement tool `graph_node` events are put directly on the raw SSE queue by `AgentRuntime`
+(`packages/agent/runtime.py:775/798/815`), bypassing `SessionOrchestrator._push` and its
+`_event_persister`, so they are streamed to the client but never written to `session_events`
+(DB confirmed 2026-06-11: 90 graph_node rows, all kind=orchestrator/agent, 0 kind=tool, while
+`llm_usage` shows 89 calls with tool_calls). Done when: an agent run that executes tools
+produces `session_events` rows with `event_type='graph_node'`, `payload->>'kind'='tool'`, and
+`payload->>'name'` = tool name; and `GET /api/v1/admin/registry` returns non-zero
+`execution_count` / non-null `last_executed_at` for those tools.
+
+Dependencies: P84 Done
+
+### Batch B-01 — Tool event persistence + registry query fix (App Builder) — Done
+
+| Task | Description | Status |
+|---|---|---|
+| T-531 | Persist tool `graph_node` events to `session_events`. `SessionOrchestrator._push` persists via `self._event_persister`, but `AgentRuntime`'s tool-event emission sites (`packages/agent/runtime.py` `_run_single_read_only_tool` and `_execute_tools_node`, plus `awaiting_approval`/`session_paused` sites) `await sse_queue.put(...)` on the raw queue obtained from graph `configurable["sse_queue"]` — events reach the live SSE stream but never the persister. Fix by making the persister reachable from the runtime event path: recommended approach is to pass the persister through graph `configurable` alongside `sse_queue` (all three config-build sites in `session_orchestrator.py` ~L815/877/924) and emit via a small shared helper that both puts to the queue and fire-and-forgets the persister; an equivalent queue-wrapper approach is acceptable. Constraints: persister failures must never break the run (existing `make_event_persister` in `apps/api/state.py` is already exception-safe and fire-and-forget — do not double-wrap with new error handling that raises); no change to `SessionOrchestrator.__init__` or any public interface; events must keep the exact payload shape currently streamed (frontend depends on it). | Done |
+| T-532 | `apps/api/routers/admin.py get_registry`: replace the dead `tool_completed` aggregation with `SELECT payload->>'name' AS tool_name, COUNT(*)::int AS execution_count, MAX(created_at) AS last_executed_at FROM session_events WHERE event_type = 'graph_node' AND payload->>'kind' = 'tool' AND payload->>'event' = 'end' AND payload->>'name' IS NOT NULL GROUP BY payload->>'name'`. Count `end` events only (one per completed tool call; error-status ends count as executions). Response models and frontend contract unchanged. | Done |
+
+Dependencies: none
+
+### Batch B-02 — Tests + gate (Test/Review) — Not Started
+
+| Task | Description | Status |
+|---|---|---|
+| T-533 | Unit tests for the persistence wiring: (1) an `AgentRuntime` tool execution with both an SSE queue and a persister wired through graph config produces persisted tool `graph_node` start+end events (assert event_type/kind/name/event fields); (2) persister absent (None) → queue still receives events, no crash; (3) persister raising → run completes, queue events unaffected. Build on existing patterns in `tests/unit/test_session_orchestrator_persistence.py` and `tests/unit/test_sse_queue_injection.py`; zero-network rule applies (stub LLM / fake tools). Also cover `get_registry` aggregation if an existing unit/integration test exercises it (mocked pool rows: tool end events counted, start events excluded). | Not Started |
+| T-534 | Gate: `make test-unit && make lint && make typecheck && make build` — proof-of-execution (command, exit code, output tail per gate). | Not Started |
+
+Dependencies: B-01

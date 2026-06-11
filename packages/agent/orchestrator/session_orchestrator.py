@@ -813,6 +813,7 @@ class SessionOrchestrator:
             "configurable": {
                 "thread_id": str(session_id),
                 "sse_queue": self._sse_queue,
+                "event_persister": self._event_persister,
             },
             # Propagate session_id so callback handlers can attribute LLM calls
             # that fire inside the orchestrator graph to the correct session.
@@ -875,6 +876,7 @@ class SessionOrchestrator:
             "configurable": {
                 "thread_id": str(session_id),
                 "sse_queue": self._sse_queue,
+                "event_persister": self._event_persister,
             },
             "metadata": {
                 "session_id": str(session_id),
@@ -922,6 +924,7 @@ class SessionOrchestrator:
             "configurable": {
                 "thread_id": str(session_id),
                 "sse_queue": self._sse_queue,
+                "event_persister": self._event_persister,
             },
             "metadata": {
                 "session_id": str(session_id),

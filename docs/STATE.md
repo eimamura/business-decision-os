@@ -40,11 +40,11 @@ See `docs/archive/v3/STATE.md` for P0–P23 per-phase details.
 
 ## Active Phase
 
-None
+P85 — Agents & Tools Registry: Tool Execution Stats Restoration
 
 ## Active Lease
 
-None
+None (last: P85-B-01 completed)
 
 ## Last Completed
 
