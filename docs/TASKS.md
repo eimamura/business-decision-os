@@ -910,7 +910,7 @@ Dependencies: B-01
 
 ---
 
-## P85 — Agents & Tools Registry: Tool Execution Stats Restoration — In Progress
+## P85 — Agents & Tools Registry: Tool Execution Stats Restoration — Done (2026-06-11)
 
 **Goal:** The Tools tab on `/agents` shows live execution counts and last-call timestamps again.
 Root cause (two-part): (1) commit d0977b8 (P20, 2026-06-03) replaced the legacy `tool_completed`

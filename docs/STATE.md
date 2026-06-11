@@ -40,13 +40,17 @@ See `docs/archive/v3/STATE.md` for P0–P23 per-phase details.
 
 ## Active Phase
 
-P85 — Agents & Tools Registry: Tool Execution Stats Restoration
+None
 
 ## Active Lease
 
-None (last: P85-B-02 completed)
+None
 
 ## Last Completed
+
+P85 — Agents & Tools Registry: Tool Execution Stats Restoration (2026-06-11). Tools tab on `/agents` was frozen since P20 (commit d0977b8, 2026-06-03) removed the `tool_completed` SSE event: the admin registry query still aggregated the dead event type, AND the replacement tool `graph_node` events were put directly on the raw SSE queue by `AgentRuntime`, bypassing `SessionOrchestrator._push`/`_event_persister` — streamed live, never written to `session_events`. Fixed: new `_emit(event, sse_queue, persister)` helper in `runtime.py` routes tool start/end, `awaiting_approval`, and `session_paused` events to both the queue and the persister (passed via graph `configurable["event_persister"]` at all three config-build sites); `get_registry` tool stats now aggregate `graph_node` kind=tool event=end rows by `payload->>'name'`. D-009 registered+Resolved during sign-off (pre-existing, NOT P85: two ask_user integration tests latent-broken since P78 deterministic routing — stub registries lacked a control-role model; reproduced at baseline d05b122; test-side fix). FP-003 Count → 3 (D-001, D-002, D-009): /harden-system FP-003 required before next phase. Sign-off PASS (proof-of-execution): unit 930 passed exit 0, lint 0, typecheck 0, integration 16 passed exit 0, build 0, playwright 32/32 exit 0. Live verification deferred to user (curl POST denied): run any tool-calling query in the UI, then check /agents Tools tab.
+
+Previously:
 
 P84 — Demo Data Risk Distribution Fix (2026-06-10). `SKU_RISK_BANDS` in `scripts/generate_sample_data.py` assigns deterministic days-of-cover to SKU-001..007 so the demo query "Which products are at stockout risk this week?" returns 2 critical + 2 high + 3 medium SKUs; supply orders for risk SKUs pushed to today+10 so incoming supply cannot rescue the classification. Fix iteration (same day): initial implementation used nominal `base_demand_mean` for on_hand, but `list_stockout_risk` uses the actual 30-day rolling average — seasonal noise pushed SKU-005/006 into "low". Corrected with `compute_recent_avg` helper (mirrors the tool SQL); `generate_demand_history` returns per-SKU recent averages; `generate_inventory` uses `round(actual_avg * DOC)`. Sign-off PASS (proof-of-execution): unit 921 passed exit 0, lint 0, typecheck 0; DB reseeded and live tool verified `count=7` with ratios critical −0.72, high 0.057/0.078, medium 0.287–0.293.
 
