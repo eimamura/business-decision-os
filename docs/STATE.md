@@ -44,7 +44,7 @@ P85 — Agents & Tools Registry: Tool Execution Stats Restoration
 
 ## Active Lease
 
-None (last: P85-B-01 completed)
+None (last: P85-B-02 completed)
 
 ## Last Completed
 

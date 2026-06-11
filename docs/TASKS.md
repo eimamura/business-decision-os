@@ -936,11 +936,11 @@ Dependencies: P84 Done
 
 Dependencies: none
 
-### Batch B-02 — Tests + gate (Test/Review) — Not Started
+### Batch B-02 — Tests + gate (Test/Review) — Done
 
 | Task | Description | Status |
 |---|---|---|
-| T-533 | Unit tests for the persistence wiring: (1) an `AgentRuntime` tool execution with both an SSE queue and a persister wired through graph config produces persisted tool `graph_node` start+end events (assert event_type/kind/name/event fields); (2) persister absent (None) → queue still receives events, no crash; (3) persister raising → run completes, queue events unaffected. Build on existing patterns in `tests/unit/test_session_orchestrator_persistence.py` and `tests/unit/test_sse_queue_injection.py`; zero-network rule applies (stub LLM / fake tools). Also cover `get_registry` aggregation if an existing unit/integration test exercises it (mocked pool rows: tool end events counted, start events excluded). | Not Started |
-| T-534 | Gate: `make test-unit && make lint && make typecheck && make build` — proof-of-execution (command, exit code, output tail per gate). | Not Started |
+| T-533 | Unit tests for the persistence wiring: (1) an `AgentRuntime` tool execution with both an SSE queue and a persister wired through graph config produces persisted tool `graph_node` start+end events (assert event_type/kind/name/event fields); (2) persister absent (None) → queue still receives events, no crash; (3) persister raising → run completes, queue events unaffected. Build on existing patterns in `tests/unit/test_session_orchestrator_persistence.py` and `tests/unit/test_sse_queue_injection.py`; zero-network rule applies (stub LLM / fake tools). Also cover `get_registry` aggregation if an existing unit/integration test exercises it (mocked pool rows: tool end events counted, start events excluded). | Done |
+| T-534 | Gate: `make test-unit && make lint && make typecheck && make build` — proof-of-execution (command, exit code, output tail per gate). | Done |
 
 Dependencies: B-01
