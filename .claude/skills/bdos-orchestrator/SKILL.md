@@ -102,8 +102,22 @@ Each Orchestrator turn follows this sequence:
 7. **Await specialist result**: Receive completion report or structured blocker
 8. **Run Test/Review** (two modes):
    - **Batch check** (every batch): Spawn `bdos-test-review` for lightweight validation — `uv run pytest tests/unit -q && make lint && make typecheck`. Must pass before marking batch `Done`.
-   - **Phase sign-off** (once, when all batches are `Done`): Spawn `bdos-test-review` for full Quality Gates — integration tests, E2E, `make build`. Phase does not advance until sign-off received.
-   - **Sign-off acceptance rule**: The Orchestrator MUST NOT accept a sign-off unless the Test/Review report includes `gate`, `exit_code`, and `output_tail` fields for every Quality Gate. A report that says a gate "passed" without an exit code is incomplete — reject it and re-request execution with proof-of-execution output.
+   - **Phase sign-off** (once, when all batches are `Done`): Spawn `bdos-test-review` for full Quality Gates. Phase does not advance until sign-off received.
+   - **Mandatory gate set (non-negotiable — applies to every phase sign-off without exception):**
+     ```
+     make test-unit
+     make test-integration
+     make test-e2e        (or make test-playwright for Playwright-only phases)
+     make build
+     make lint
+     make typecheck
+     ```
+     These six commands (or their equivalents) MUST appear as named gate rows in the sign-off report. A sign-off that omits `make test-integration` is structurally incomplete regardless of what other gates passed.
+   - **Sign-off acceptance rule**: The Orchestrator MUST NOT accept a sign-off unless ALL of the following are true:
+     1. The report contains a gate row for `make test-integration` (exact command name required).
+     2. Every gate row includes `gate`, `exit_code`, and `output_tail` fields.
+     3. Every gate has `exit_code: 0`.
+     A report that omits `make test-integration` entirely, or that lists it as "skipped", "not applicable", or "N/A", is NOT a valid sign-off — reject it and re-request execution with the full mandatory gate set.
 9. **Update state**:
    - If checks pass: mark batch `Done` in `docs/TASKS.md`; update `docs/STATE.md` Last Completed; clear Active Lease
    - If blocked: mark batch `Blocked` in `docs/TASKS.md`; increment `Blocked Count`; record blocker in `docs/STATE.md`; clear Active Lease

@@ -86,6 +86,7 @@ The following are explicitly forbidden across all agents:
 - Marking a D-NNN Defect Task `Resolved` without immediately invoking `/analyze-failure D-NNN` to record the root cause in `docs/failure-patterns.md`.
 - Advancing to the next phase while any Defect Task in the current phase has `Status: Open`.
 - Signing off a quality gate as passed without capturing and reporting the command, exit code, and tail output in the Proof Output block — a claim of "passes" with no exit-code evidence is not a sign-off.
+- Omitting `make test-integration` from a phase sign-off gate list because no integration test was explicitly listed as a task in the phase — integration tests must run at every phase sign-off without exception, because any behavior-changing phase can silently break existing integration tests. A sign-off report that lacks a `make test-integration` gate row is invalid.
 - Force-pushing to `main`; direct pushes to `main`; non-linear history.
 - Using `--no-verify` or skipping commit hooks without explicit ADR justification.
 - Using a plain HTTP stub for the web container; `compose web.build.context` must be the monorepo root.
