@@ -45,7 +45,7 @@ control prompt truncated at Ollama default num_ctx=4096 → "Agent control faile
 
 ## Active Lease
 
-P92 B-01 (App Builder) — acquired 2026-06-12
+P92 B-02 (Test/Review) — acquired 2026-06-12
 
 ## Last Completed
 

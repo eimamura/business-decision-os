@@ -1190,12 +1190,12 @@ Dependencies: P91 Done
 
 Dependencies: none
 
-### Batch B-02 — Tests + live verification + gate (Test/Review) — Not Started
+### Batch B-02 — Tests + live verification + gate (Test/Review) — Done (2026-06-12)
 
 | Task | Description | Status |
 |---|---|---|
-| T-567 | Unit tests: (a) degenerate response (<80 chars, non-tool finish) → SpecialistResult status completed, text == fallback, reason present in meta, no agent_failed push; (b) error-status run with `final_state["error"]=None` → error string is non-None/non-"None"; (c) model_registry ollama provider: both models carry `num_ctx=16384`. | Not Started |
-| T-568 | Live verification (dev stack, gemma4:12b): restart api, send the exact failing query "Which products are at stockout risk this week?" through the runtime, confirm (i) control LLM input_tokens < 90% of num_ctx and no truncation pattern (no 4095/1 rows), (ii) `list_stockout_risk` tool event present, (iii) reply contains the seeded risk SKUs (2 critical + 2 high + 3 medium per P84). Report evidence (llm_usage rows + session_events + reply excerpt). | Not Started |
-| T-569 | Batch gate: `make test-unit && make lint && make typecheck && make test-integration` — proof-of-execution per gate. | Not Started |
+| T-567 | Unit tests: (a) degenerate response (<80 chars, non-tool finish) → SpecialistResult status completed, text == fallback, reason present in meta, no agent_failed push; (b) error-status run with `final_state["error"]=None` → error string is non-None/non-"None"; (c) model_registry ollama provider: both models carry `num_ctx=16384`. | Done |
+| T-568 | Live verification (dev stack, gemma4:12b): restart api, send the exact failing query "Which products are at stockout risk this week?" through the runtime, confirm (i) control LLM input_tokens < 90% of num_ctx and no truncation pattern (no 4095/1 rows), (ii) `list_stockout_risk` tool event present, (iii) reply contains the seeded risk SKUs (2 critical + 2 high + 3 medium per P84). Report evidence (llm_usage rows + session_events + reply excerpt). | Done |
+| T-569 | Batch gate: `make test-unit && make lint && make typecheck && make test-integration` — proof-of-execution per gate. | Done |
 
 Dependencies: B-01

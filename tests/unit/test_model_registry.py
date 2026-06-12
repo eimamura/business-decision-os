@@ -53,6 +53,32 @@ def test_create_model_registry_ollama_orchestrator_has_num_predict():
 
 
 @pytest.mark.parametrize("role", ["orchestrator", "planner", "control"])
+def test_create_model_registry_ollama_all_roles_have_num_ctx_16384(role: str):
+    """T-567c: Both orchestrator/planner (structured) and control models must have
+    num_ctx == 16384 (_OLLAMA_NUM_CTX). This is the P92 fix to prevent silent prompt
+    truncation when the control prompt exceeds the default 4096-token context window."""
+    env = {
+        "LLM_PROVIDER": "ollama",
+        "OLLAMA_BASE_URL": "http://localhost:11434",
+        "OLLAMA_MODEL": "gemma4:12b",
+    }
+    with patch.dict(os.environ, env, clear=False):
+        from packages.agent.model_registry import _OLLAMA_NUM_CTX, create_model_registry
+
+        registry = create_model_registry()
+        model = registry.get(role)
+        # Verify the model carries the expected num_ctx value.
+        # Zero-network: ChatOllama construction makes no HTTP calls.
+        assert model.num_ctx == _OLLAMA_NUM_CTX, (  # type: ignore[union-attr]
+            f"Role '{role}' model num_ctx={model.num_ctx!r} != {_OLLAMA_NUM_CTX!r} "  # type: ignore[union-attr]
+            "(P92 fix: context window must be 16384 to avoid silent prompt truncation)"
+        )
+        assert _OLLAMA_NUM_CTX == 16384, (
+            f"_OLLAMA_NUM_CTX must be 16384, got {_OLLAMA_NUM_CTX!r}"
+        )
+
+
+@pytest.mark.parametrize("role", ["orchestrator", "planner", "control"])
 def test_create_model_registry_ollama_all_roles_have_think_false(role: str):
     env = {
         "LLM_PROVIDER": "ollama",
