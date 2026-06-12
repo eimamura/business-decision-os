@@ -87,7 +87,18 @@ Full task history for P0–P23 is archived at `docs/archive/v3/TASKS.md`.
 | P81 — Tool Scenario Modal Content Refresh | T-506–T-518 | 2026-06-10 |
 | P82 — Seed Data Staleness & list_stockout_risk missing_data Fix | T-519–T-522 | 2026-06-10 |
 | P83 — LLM Usage Recording Restoration | T-523–T-527 | 2026-06-10 |
-| P84 — Demo Data Risk Distribution Fix | T-528–T-530 | — |
+| P84 — Demo Data Risk Distribution Fix | T-528–T-530 | 2026-06-10 |
+| P85 — Agents & Tools Registry: Tool Execution Stats Restoration | T-531–T-534 | 2026-06-11 |
+| P86 — Today's Exceptions Screening Tool (SPEC Q3) | T-535–T-539 | 2026-06-11 |
+| P87 — Order-to-Ship Data Domain: Shipment Delay Root Causes (SPEC Q4) | T-540–T-548 | 2026-06-11 |
+| P88 — Demand Shift Detection by Customer / Region (SPEC Q9) | T-549–T-553 | 2026-06-11 |
+| P89 — Production Plan & Constraint Analysis (SPEC Q7 / Q10) | T-554–T-562 | 2026-06-11 |
+| P90 — Tool Scenario Modal: Q10 Constraint Analysis Scenario | T-563 | 2026-06-12 |
+| P91 — Tool Scenario Modal: Q7 + Q9 Scenarios | T-564 | 2026-06-12 |
+| P92 — Ollama Context Window Fix + Degenerate Guard Surfacing | T-565–T-569 | 2026-06-12 |
+| P93 — Daily Screening Job + Exceptions Surface | T-570–T-576 | 2026-06-12 |
+| P94 — Forecast Deviation Decomposition (SPEC Q5) | T-577–T-582 | 2026-06-12 |
+| P95 — Supply Order Timing Analysis (SPEC Q8) | T-583–T-588 | 2026-06-12 |
 
 > **Design Realignment Note (2026-06-05):** P29–P36 built Specialist Domain Agents (DemandAgent,
 > InventoryAgent, SupplyPlanningAgent, FinanceImpactAgent, SopAgent) as independent runtime units.
@@ -1304,7 +1315,7 @@ Dependencies: B-01
 
 ---
 
-## P95 — Supply Order Timing Analysis (SPEC Q8) — Not Started
+## P95 — Supply Order Timing Analysis (SPEC Q8) — Done (2026-06-12)
 
 **Goal:** The system answers SPEC Q8 "Which materials or items should be purchased earlier
 or later?" with order-level timing analysis. Supersedes the 2026-06-11 "Q8 partial coverage
@@ -1317,7 +1328,7 @@ candidates and evidence; the Control Agent (and ultimately the human) concludes 
 
 Dependencies: P92 Done (P93/P94 not required)
 
-### Batch B-01 — Tool + wiring + seed + scenario (App Builder) — Not Started
+### Batch B-01 — Tool + wiring + seed + scenario (App Builder) — Done
 
 | Task | Description | Status |
 |---|---|---|
@@ -1328,11 +1339,11 @@ Dependencies: P92 Done (P93/P94 not required)
 
 Dependencies: none
 
-### Batch B-02 — Tests + live verification + phase sign-off (Test/Review) — Not Started
+### Batch B-02 — Tests + live verification + phase sign-off (Test/Review) — Done
 
 | Task | Description | Status |
 |---|---|---|
-| T-587 | Unit tests: classification thresholds (pull-forward / push-out / on-track boundaries), days_misaligned math, ranking/caps + `truncated`, `missing_data` (no snapshot / zero demand / null arrival), empty-DB shape. Integration tests (full DSN): seeded pull-forward and push-out orders classified as expected. | Not Started |
-| T-588 | Live verification (dev stack, gemma4:12b): the modal prompt end-to-end — `analyze_supply_order_timing` tool events present, reply names the seeded candidates. Phase sign-off: `make test-unit && make test-integration && make test-playwright && make build && make lint && make typecheck` — proof-of-execution per gate. | Not Started |
+| T-587 | Unit tests: classification thresholds (pull-forward / push-out / on-track boundaries), days_misaligned math, ranking/caps + `truncated`, `missing_data` (no snapshot / zero demand / null arrival), empty-DB shape. Integration tests (full DSN): seeded pull-forward and push-out orders classified as expected. | Done |
+| T-588 | Live verification (dev stack, gemma4:12b): the modal prompt end-to-end — `analyze_supply_order_timing` tool events present, reply names the seeded candidates. Phase sign-off: `make test-unit && make test-integration && make test-playwright && make build && make lint && make typecheck` — proof-of-execution per gate. | Done |
 
 Dependencies: B-01

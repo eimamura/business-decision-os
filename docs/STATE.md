@@ -40,14 +40,42 @@ See `docs/archive/v3/STATE.md` for P0–P23 per-phase details.
 
 ## Active Phase
 
-P95 — Supply Order Timing Analysis (SPEC Q8) (last of the P93–P95 MVP gap closure
-programme approved 2026-06-12).
+None
 
 ## Active Lease
 
-P95-B-01 (App Builder — tool + wiring + seed + scenario)
+None
 
 ## Last Completed
+
+P95 — Supply Order Timing Analysis (SPEC Q8) (2026-06-12). Final phase of the P93–P95 MVP
+gap closure programme (user-approved 2026-06-12; supersedes the 2026-06-11 "Q8 partial
+coverage accepted" decision). New tool `analyze_supply_order_timing` (registry 38→39): per
+open supply order, projected_stockout_date from on_hand + 30d run-rate vs expected_arrival
+→ pull_forward_candidate (arrival after projected stockout; precedence) /
+push_out_candidate (days_of_cover_at_arrival ≥ PUSH_OUT_COVER_DAYS=30) / on_track, signed
+days_misaligned, summary counts pre-cap, composite order_id sku:supplier:order_date,
+hybrid contract. Wired 4 intent subsets + 3-line system prompt rule (context budget
+respected — control calls measured 4208/16384 = 25.7%, no saturation; the P94 86% WATCH
+applied to the orchestrator-side final call, not control). Seed: SKU-027 push_out
+(today+5 arrival, ~198d cover); P84 risk-SKU orders yield 8 pull_forward (SKU-001 +9d).
+All prior narratives re-verified intact (P84 2/2/3 bands, P94 SKU-028/029). Live
+verification (gemma4:12b): modal prompt end-to-end — tool start+end events, reply names
+SKU-001/003/006/007 pull-forward and SKU-027 push-out, 0 errors. Sign-off PASS
+(proof-of-execution): unit 1170 exit 0, full-DSN integration 153 exit 0, playwright 42/42
+exit 0, build 0, lint 0, typecheck 0.
+
+Programme summary (P93–P95, all Done 2026-06-12): daily screening cadence live
+(in-process scheduler + screening_runs + /api/v1/screenings + DailyExceptionsPanel; ADR
+2026-06-12-daily-screening-scheduler), SPEC Q5 (analyze_forecast_deviation), SPEC Q8
+(analyze_supply_order_timing). Registry 37→39 tools, migration 0021, unit suite
+1080→1170, full-DSN integration 110→153, playwright 36→42. SPEC question coverage: all 10
+questions now have dedicated or covering tools; modal scenarios exist for Q1–Q4, Q5, Q7,
+Q8, Q9, Q10. Remaining deliberate deferrals: auth (out of scope per user 2026-06-12),
+Celery activation (P69, Azure), Anthropic cost computation (P83), SPEC Agent Catalog
+runtime agents (P65 routing collapse).
+
+Previously:
 
 P94 — Forecast Deviation Decomposition (SPEC Q5) (2026-06-12). New tool
 `analyze_forecast_deviation` (registry 37→38): SKU × ISO-week forecast-vs-actual
