@@ -1381,7 +1381,7 @@ Dependencies: B-01
 
 ---
 
-## P97 — Context Saturation Mitigation — Not Started
+## P97 — Context Saturation Mitigation — In Progress
 
 **Goal:** Remove the recurrence risk of the P92 truncation failure. P94 live verification
 measured an orchestrator-side final synthesize call at input_tokens=14080 (86% of
@@ -1392,12 +1392,12 @@ context, with the mechanism documented.
 
 Dependencies: P95 Done
 
-### Batch B-01 — Forensics + bounded fix (App Builder) — Not Started
+### Batch B-01 — Forensics + bounded fix (App Builder) — Done
 
 | Task | Description | Status |
 |---|---|---|
-| T-591 | Forensics first: using `llm_usage.prompt_messages_json` (P94 session + fresh reproduction), decompose the 14080-token final call — system prompt vs history vs raw tool outputs vs schema context. Report the breakdown in the batch handoff before fixing. | Not Started |
-| T-592 | Bounded fix informed by T-591 (combine as judged best): (a) raise `_OLLAMA_NUM_CTX` to 32768 IF live VRAM allows on the dev GPU (verify with a live call + nvidia-smi headroom; 16384 stays the documented floor); (b) bound the dominant context contributor — e.g. cap per-tool-output size injected into the synthesize call with a deterministic truncation marker, or summarize/drop the largest history segments (history-summarize path exists per P83). Constraints: no public interface changes; the ≥90% saturation WARNING stays; degenerate-guard soft-fail path untouched; document chosen values as single-source constants. | Not Started |
+| T-591 | Forensics first: using `llm_usage.prompt_messages_json` (P94 session + fresh reproduction), decompose the 14080-token final call — system prompt vs history vs raw tool outputs vs schema context. Report the breakdown in the batch handoff before fixing. | Done |
+| T-592 | Bounded fix informed by T-591 (combine as judged best): (a) raise `_OLLAMA_NUM_CTX` to 32768 IF live VRAM allows on the dev GPU (verify with a live call + nvidia-smi headroom; 16384 stays the documented floor); (b) bound the dominant context contributor — e.g. cap per-tool-output size injected into the synthesize call with a deterministic truncation marker, or summarize/drop the largest history segments (history-summarize path exists per P83). Constraints: no public interface changes; the ≥90% saturation WARNING stays; degenerate-guard soft-fail path untouched; document chosen values as single-source constants. | Done |
 
 Dependencies: none
 
