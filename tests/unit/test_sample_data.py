@@ -188,7 +188,9 @@ def test_forecast_history_csv_columns():
     rows = _run_and_read(42, "forecast_history.csv")
     required = {"sku_id", "forecast_date", "target_date", "forecast_qty", "model_version"}
     assert required <= set(rows[0].keys())
-    assert len(rows) == 30 * 12  # 30 SKUs × 12 months (365 // 30)
+    # 30 SKUs × 12 months (365 // 30) = 360 standard rows
+    # P94 T-579: FORECAST_OVER_SKU + FORECAST_UNDER_SKU × 4 weeks = 8 additional rows
+    assert len(rows) == 30 * 12 + 8  # 368 total rows
 
 
 def _load_gt_sku_params() -> list[dict]:

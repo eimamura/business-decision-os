@@ -27,7 +27,7 @@ def test_intent_tool_subset_tool_names_all_registered() -> None:
 
 
 def test_intent_tool_subset_supply_chain_list_is_unchanged() -> None:
-    """The supply_chain subset must exactly match its specification (updated in P89-T-559)."""
+    """The supply_chain subset must exactly match its specification (updated in P94-T-578)."""
     expected = [
         "nl_query",
         "list_today_exceptions",
@@ -43,6 +43,7 @@ def test_intent_tool_subset_supply_chain_list_is_unchanged() -> None:
         "calculate_stockout_risk",
         "calculate_stockout_cost_impact",
         "calculate_expedite_cost",
+        "analyze_forecast_deviation",
         "identify_binding_constraint",
     ]
     assert _INTENT_TOOL_SUBSET["supply_chain"] == expected
@@ -122,4 +123,32 @@ def test_identify_binding_constraint_in_supply_chain() -> None:
     """identify_binding_constraint must be present in supply_chain subset (P89-T-559)."""
     assert "identify_binding_constraint" in _INTENT_TOOL_SUBSET["supply_chain"], (
         "identify_binding_constraint must be in supply_chain for constraint-impact questions"
+    )
+
+
+def test_analyze_forecast_deviation_in_supply_chain() -> None:
+    """analyze_forecast_deviation must be present in supply_chain subset (P94-T-578)."""
+    assert "analyze_forecast_deviation" in _INTENT_TOOL_SUBSET["supply_chain"], (
+        "analyze_forecast_deviation must be in supply_chain for SPEC Q5 gap questions"
+    )
+
+
+def test_analyze_forecast_deviation_in_domain_analysis() -> None:
+    """analyze_forecast_deviation must be present in domain_analysis subset (P94-T-578)."""
+    assert "analyze_forecast_deviation" in _INTENT_TOOL_SUBSET["domain_analysis"], (
+        "analyze_forecast_deviation must be in domain_analysis for SPEC Q5 questions"
+    )
+
+
+def test_analyze_forecast_deviation_in_cross_domain_analysis() -> None:
+    """analyze_forecast_deviation must be present in cross_domain_analysis subset (P94-T-578)."""
+    assert "analyze_forecast_deviation" in _INTENT_TOOL_SUBSET["cross_domain_analysis"], (
+        "analyze_forecast_deviation must be in cross_domain_analysis for SPEC Q5 questions"
+    )
+
+
+def test_analyze_forecast_deviation_in_decision_support() -> None:
+    """analyze_forecast_deviation must be present in decision_support subset (P94-T-578)."""
+    assert "analyze_forecast_deviation" in _INTENT_TOOL_SUBSET["decision_support"], (
+        "analyze_forecast_deviation must be in decision_support for SPEC Q5 questions"
     )

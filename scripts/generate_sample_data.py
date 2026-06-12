@@ -157,6 +157,45 @@ CONTIGUOUS_GAP_SKU = "SKU-001"
 CONTIGUOUS_GAP_START_DAY = 60
 CONTIGUOUS_GAP_LENGTH = 7
 
+# ---------------------------------------------------------------------------
+# Deterministic forecast-deviation overrides for P94 SPEC Q5
+# (analyze_forecast_deviation tool; last 4 complete ISO weeks window)
+#
+# SKU selection: must NOT collide with:
+#   - P84 risk-band SKUs (SKU-001..SKU-007)
+#   - P87 delay-cause SKUs (CO-0001..CO-0008: SKU-001..SKU-004, SKU-010, SKU-012, SKU-015, SKU-016)
+#   - P88 demand-shift SKUs (first non-risk-band SKU = SKU-008 used for CO-DS rows)
+#   - P89 production SKUs (SKU-026 overproduction, SKU-001 underproduction,
+#                          PRODUCTION_NORMAL_SKUS = SKU-011..SKU-025)
+#
+# Safe choices: SKU-027, SKU-028, SKU-029, SKU-030.
+# SKU-028 → over-forecast: forecast is well above actual (bias >> +10%)
+# SKU-029 → under-forecast: forecast is well below actual (bias << -10%)
+#
+# SKU parameters from ground_truth/sku_parameters.csv:
+#   SKU-028: base_demand_mean=0.5 units/day → actual ≈ 3.5 units/week (slow-moving)
+#   SKU-029: base_demand_mean=1.2 units/day → actual ≈ 8.4 units/week (slow-moving)
+#
+# P94 seed inserts one forecast row per complete week in the last-4-weeks window.
+# The target_date for each week is the Monday of that week (= window_start + N*7d).
+# forecast_date is set to 14 days before target_date (two-week-ahead forecast).
+# model_version = "v1.0-p94-seed" for traceability.
+#
+# Expected classifications (tool bias threshold ±10% of total actual):
+#   SKU-028: forecast=6.0/week, actual≈3.5/week
+#            bias_pct ≈ (6.0-3.5)/3.5 × 100 ≈ +71% >> +10% → over_forecast
+#   SKU-029: forecast=4.0/week, actual≈8.4/week
+#            bias_pct ≈ (4.0-8.4)/8.4 × 100 ≈ -52% << -10% → under_forecast
+#
+# The bias magnitudes (+71% / -52%) are large enough that demand variance
+# (dispersion ≈ 0.40/0.32 for SKU-028/029) does not flip the direction.
+# ---------------------------------------------------------------------------
+
+FORECAST_OVER_SKU = "SKU-028"    # over-forecast: forecast >> actual
+FORECAST_OVER_WEEKLY_QTY = 6.0   # weekly forecast qty; actual ≈ 3.5/week → bias ≈ +71%
+FORECAST_UNDER_SKU = "SKU-029"   # under-forecast: forecast << actual
+FORECAST_UNDER_WEEKLY_QTY = 4.0  # weekly forecast qty; actual ≈ 8.4/week → bias ≈ -52%
+
 # Deterministic risk-band overrides for the demo query
 # "Which products are at stockout risk this week?" (horizon_days=7, min_risk_level="medium").
 #
@@ -531,9 +570,45 @@ def generate_location_master(locations: list[CsvRow], out_dir: Path) -> None:
 def generate_forecast_history(
     skus: list[CsvRow], rng: random.Random, out_dir: Path, config: SampleDataConfig
 ) -> None:
+    """Write forecast_history.csv.
+
+    Standard rows: monthly grain for all SKUs over the full horizon.
+
+    P94 deterministic overrides (T-579):
+      For the last 4 complete ISO weeks (ending before the current week), inject
+      per-week forecast rows for FORECAST_OVER_SKU and FORECAST_UNDER_SKU with
+      fixed weekly forecast quantities.  These rows use target_date = Monday of
+      each week (ISO-week grain expected by analyze_forecast_deviation) and
+      forecast_date = target_date − 14 days (two-week-ahead forecast).
+
+      The tool's DISTINCT ON (sku_id, target_date) ORDER BY forecast_date DESC
+      will prefer the latest forecast_date row per (sku_id, target_date).  Since
+      the P94 rows use week-Monday target_dates (not the month-start dates used by
+      the standard generator), there is no collision; all P94 rows are additive.
+
+      Expected tool classifications:
+        FORECAST_OVER_SKU  (SKU-028): forecast=6.0/week, actual≈3.5/week (0.5/day × 7)
+                                       bias_pct ≈ (6.0-3.5)/3.5 × 100 ≈ +71% → over_forecast
+        FORECAST_UNDER_SKU (SKU-029): forecast=4.0/week, actual≈8.4/week (1.2/day × 7)
+                                       bias_pct ≈ (4.0-8.4)/8.4 × 100 ≈ -52% → under_forecast
+
+    Must NOT disturb: P84 risk bands, P87 delay causes, P88 demand-shift,
+    P89 production scenarios.
+    """
     fields = ["sku_id", "forecast_date", "target_date", "forecast_qty", "model_version"]
     forecast_lead_days = 30
     num_months = max(1, config.horizon_days // 30)
+
+    # Compute the 4 complete ISO weeks for P94 overrides (anchored to date.today())
+    today = date.today()
+    current_week_monday = today - timedelta(days=today.weekday())
+    p94_week_mondays: list[date] = [
+        current_week_monday - timedelta(weeks=(4 - i)) for i in range(4)
+    ]
+    # p94_week_mondays = [monday-4w, monday-3w, monday-2w, monday-1w]
+    # These are the starts of the last 4 complete ISO weeks before the current week.
+
+    p94_forecast_lead = 14  # days before target_date; distinct from monthly 30-day lead
 
     with open(out_dir / "forecast_history.csv", "w", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=fields)
@@ -561,6 +636,38 @@ def generate_forecast_history(
                     "forecast_qty": round(forecast_qty, 2),
                     "model_version": model_version,
                 })
+
+        # ---- P94 deterministic per-week forecast rows ----
+        # One row per SKU × ISO week for each of the last 4 complete weeks.
+        # forecast_date = target_date - 14 days (two-week-ahead forecast run).
+        # model_version = "v1.0-p94-seed" (distinct from standard rows for traceability).
+        for monday in p94_week_mondays:
+            p94_forecast_date = monday - timedelta(days=p94_forecast_lead)
+
+            # Over-forecast SKU: forecast 150 units/week vs ≈100 actual → +50% bias
+            writer.writerow({
+                "sku_id": FORECAST_OVER_SKU,
+                "forecast_date": p94_forecast_date.isoformat(),
+                "target_date": monday.isoformat(),
+                "forecast_qty": FORECAST_OVER_WEEKLY_QTY,
+                "model_version": "v1.0-p94-seed",
+            })
+
+            # Under-forecast SKU: forecast 60 units/week vs ≈100 actual → -40% bias
+            writer.writerow({
+                "sku_id": FORECAST_UNDER_SKU,
+                "forecast_date": p94_forecast_date.isoformat(),
+                "target_date": monday.isoformat(),
+                "forecast_qty": FORECAST_UNDER_WEEKLY_QTY,
+                "model_version": "v1.0-p94-seed",
+            })
+
+    print(
+        f"forecast_history: standard monthly rows for {len(skus)} SKUs × {num_months} months;"
+        f" P94 per-week rows: {FORECAST_OVER_SKU}={FORECAST_OVER_WEEKLY_QTY}/week"
+        f" (over-forecast), {FORECAST_UNDER_SKU}={FORECAST_UNDER_WEEKLY_QTY}/week"
+        f" (under-forecast) for last 4 complete ISO weeks"
+    )
 
 
 def generate_customer_orders_and_shipments(

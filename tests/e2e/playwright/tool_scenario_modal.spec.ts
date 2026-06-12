@@ -167,6 +167,27 @@ test.describe("ToolScenarioModal (real API backend)", () => {
     });
   });
 
+  test("Supply Chain tab shows Forecast vs Actual Gap scenario (P94)", async ({
+    page,
+    request,
+    createdSessionIds,
+  }) => {
+    const sessionId = await createSession(request, "Forecast vs Actual Gap test");
+    createdSessionIds.push(sessionId);
+
+    await page.goto(`/chat/${sessionId}`);
+    await expect(page.locator("textarea")).toBeVisible();
+    await page.getByTitle("Browse all tool scenarios").click();
+    await expect(page.getByRole("dialog")).toBeVisible({ timeout: 5_000 });
+
+    const dialog = page.getByRole("dialog");
+    await dialog.getByRole("button", { name: "Supply Chain" }).click();
+
+    await expect(dialog.getByText("Forecast vs Actual Gap").first()).toBeVisible({
+      timeout: 5_000,
+    });
+  });
+
   test("clicking Forecasting tab shows its scenario cards", async ({
     page,
     request,

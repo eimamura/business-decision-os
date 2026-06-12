@@ -217,6 +217,14 @@ const CATEGORIES: Category[] = [
           "Detect demand changes by customer or region this month using demand shift analysis",
         prompt: "Are there demand changes by customer or region this month?",
       },
+      {
+        id: "sc-forecast-vs-actual",
+        title: "Forecast vs Actual Gap",
+        description:
+          "Decompose the gap between the demand forecast and actual demand by SKU and ISO week",
+        prompt:
+          "Why is there a gap between the demand forecast and actual demand over the last four weeks?",
+      },
     ],
   },
 ];
