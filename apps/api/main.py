@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 from collections.abc import AsyncIterator
@@ -29,6 +30,7 @@ from apps.api.routers import (  # noqa: E402
     policies,
     recommendations,
     scenarios,
+    screenings,
     sessions,
     settings,
 )
@@ -79,10 +81,20 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             await saver.setup()
 
     from apps.api import state
+    from apps.api.screening import start_screening_scheduler
 
     await state.init_shared_pool()
 
+    screening_task = start_screening_scheduler()
+
     yield
+
+    if screening_task is not None:
+        screening_task.cancel()
+        try:
+            await screening_task
+        except asyncio.CancelledError:
+            pass
 
     await state.close_shared_pool()
 
@@ -136,3 +148,4 @@ app.include_router(kpi.router)
 app.include_router(settings.router)
 app.include_router(notifications.router)
 app.include_router(policies.router)
+app.include_router(screenings.router)

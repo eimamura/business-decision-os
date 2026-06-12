@@ -1241,13 +1241,13 @@ Verification:
   \d screening_runs — columns, check constraints, composite index all correct
 -->
 
-### Batch B-02 — Scheduler + repo + API endpoints (App Builder) — Not Started
+### Batch B-02 — Scheduler + repo + API endpoints (App Builder) — Done (2026-06-12)
 
 | Task | Description | Status |
 |---|---|---|
-| T-571 | `packages/persistence/screening_runs_repo.py`: `ScreeningRunsRepository` with `create(...)`, `latest_for_date(run_date)`, `latest()` — real DB implementation (asyncpg/SQL pattern per existing repos, parameterized only). | Not Started |
-| T-572 | Screening runner + scheduler in `apps/api/` (trigger placement per DESIGN.md §Screening Layer; logic stays in `packages/tools/`): a service function that invokes the registered `list_today_exceptions` tool's `handle()` directly (deterministic — no LLM), derives `exception_count` + per-severity counts, and persists via `ScreeningRunsRepository` (status `failed` + `error` message on exception — never crash the app). Lifespan-managed asyncio background task: on startup, run if no completed row for today; then run daily at `SCREENING_HOUR_UTC` (env, default `6`; document in `.env.example`). Exception-safe loop (log + continue), cancelled cleanly on shutdown, disabled when `SCREENING_SCHEDULER_ENABLED=false` (default true; tests/CI can disable). | Not Started |
-| T-573 | New router `apps/api/routers/screenings.py` (`/api/v1/screenings`): `GET /today` → latest run for today (200 with run payload; 200 with `{"run": null}` shape when absent — no 404), `POST /run` → execute screening now (`triggered_by="manual"`), return the created run. Pydantic v2 response models; register router in `main.py`. | Not Started |
+| T-571 | `packages/persistence/screening_runs_repo.py`: `ScreeningRunsRepository` with `create(...)`, `latest_for_date(run_date)`, `latest()` — real DB implementation (asyncpg/SQL pattern per existing repos, parameterized only). | Done |
+| T-572 | Screening runner + scheduler in `apps/api/` (trigger placement per DESIGN.md §Screening Layer; logic stays in `packages/tools/`): a service function that invokes the registered `list_today_exceptions` tool's `handle()` directly (deterministic — no LLM), derives `exception_count` + per-severity counts, and persists via `ScreeningRunsRepository` (status `failed` + `error` message on exception — never crash the app). Lifespan-managed asyncio background task: on startup, run if no completed row for today; then run daily at `SCREENING_HOUR_UTC` (env, default `6`; document in `.env.example`). Exception-safe loop (log + continue), cancelled cleanly on shutdown, disabled when `SCREENING_SCHEDULER_ENABLED=false` (default true; tests/CI can disable). | Done |
+| T-573 | New router `apps/api/routers/screenings.py` (`/api/v1/screenings`): `GET /today` → latest run for today (200 with run payload; 200 with `{"run": null}` shape when absent — no 404), `POST /run` → execute screening now (`triggered_by="manual"`), return the created run. Pydantic v2 response models; register router in `main.py`. | Done |
 
 Dependencies: B-01
 

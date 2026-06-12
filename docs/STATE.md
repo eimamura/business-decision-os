@@ -46,7 +46,7 @@ programme approved 2026-06-12: P93 daily cadence, P94 SPEC Q5, P95 SPEC Q8; ADR
 
 ## Active Lease
 
-P93-B-02 (App Builder — scheduler + repo + API endpoints)
+P93-B-03 (App Builder — web Daily Exceptions panel)
 
 ## Last Completed
 
