@@ -29,6 +29,12 @@ They represent daily operational decisions where agent-assisted analysis creates
 **MVP starting point: questions 1, 3, and 4** — Stockout risk → Today's exceptions → Shipment delay root causes.
 These are checked daily and deliver value immediately.
 
+> **Status (v0.1.0, 2026-06-12): MVP complete.** All 10 questions are answered by
+> deterministic tools through the Control Agent, validated by an LLM-as-a-Judge campaign
+> (final 10/10 PASS — `docs/judge-reports/2026-06-12-spec10-campaign.md`). The daily
+> screening cadence runs automatically. Remaining deferrals are tracked in
+> `docs/TASKS.md §Carry-Over for Re-Planning`.
+
 ---
 
 ## Agent Capabilities and Limitations
