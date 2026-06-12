@@ -164,6 +164,14 @@ const CATEGORIES: Category[] = [
         prompt: "What are today's exceptions?",
       },
       {
+        id: "sc-daily-exception-review",
+        title: "Daily Exception Review",
+        description:
+          "Aggregate all stockout risk, delayed supply orders, demand anomalies, and data quality issues into one prioritized list for daily review",
+        prompt:
+          "What exceptions require human judgment today? Give me a severity-ranked list covering stockout risk, delayed supply orders, demand anomalies, and data quality issues.",
+      },
+      {
         id: "sc-stockout-risk",
         title: "Stockout Risk This Week",
         description:

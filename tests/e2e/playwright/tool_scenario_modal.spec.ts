@@ -83,6 +83,27 @@ test.describe("ToolScenarioModal (real API backend)", () => {
     await expect(dialog.getByText("Finance & Cost")).not.toBeVisible();
   });
 
+  test("Supply Chain tab shows Daily Exception Review scenario (P86)", async ({
+    page,
+    request,
+    createdSessionIds,
+  }) => {
+    const sessionId = await createSession(request, "Supply Chain scenarios test");
+    createdSessionIds.push(sessionId);
+
+    await page.goto(`/chat/${sessionId}`);
+    await expect(page.locator("textarea")).toBeVisible();
+    await page.getByTitle("Browse all tool scenarios").click();
+    await expect(page.getByRole("dialog")).toBeVisible({ timeout: 5_000 });
+
+    const dialog = page.getByRole("dialog");
+    await dialog.getByRole("button", { name: "Supply Chain" }).click();
+
+    await expect(dialog.getByText("Daily Exception Review").first()).toBeVisible({
+      timeout: 5_000,
+    });
+  });
+
   test("clicking Forecasting tab shows its scenario cards", async ({
     page,
     request,

@@ -383,13 +383,13 @@ async def test_doi_happy_path_missing_data_is_empty():
 
 
 def test_tool_registry_count_is_31_after_dos_removal() -> None:
-    """calculate_days_of_supply was removed in T-483; registry must have exactly 31 tools."""
+    """Registry count must reflect current tools; updated in P86-T-535 (list_today_exceptions added)."""
     from packages.tools import create_tool_registry
 
     registry = create_tool_registry()
     count = len(registry._tools)
-    assert count == 31, (
-        f"Expected 31 registered tools after DOS→DOI merge (T-483), got {count}. "
+    assert count == 32, (
+        f"Expected 32 registered tools after P86-T-535 (list_today_exceptions added), got {count}. "
         "Update this test if tools are intentionally added/removed."
     )
 

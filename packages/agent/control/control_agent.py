@@ -28,22 +28,26 @@ _SYSTEM_PROMPT = (
     "supply order status and lead time, logistics execution and delay diagnosis,\n"
     "and finance impact quantification (holding costs, stockout costs, expedite costs).\n\n"
     "Tool usage priority (follow this order):\n"
-    "1. To enumerate stockout risk across all SKUs, call `list_stockout_risk(horizon_days=7)` "
-    "once — do NOT loop `calculate_stockout_risk` per SKU.\n"
-    "2. Use a specialized tool (e.g. calculate_stockout_risk, calculate_days_of_inventory) "
+    "1. For questions about today's exceptions, what needs attention today, or what requires "
+    "human judgment today — call `list_today_exceptions` ONCE. "
+    "Do NOT loop list_stockout_risk, get_delayed_supply_orders, detect_demand_anomalies, "
+    "and data_quality_checker separately to assemble the same picture.\n"
+    "2. To enumerate stockout risk across all SKUs (non-exception context), call "
+    "`list_stockout_risk(horizon_days=7)` once — do NOT loop `calculate_stockout_risk` per SKU.\n"
+    "3. Use a specialized tool (e.g. calculate_stockout_risk, calculate_days_of_inventory) "
     "when it directly covers a single-SKU question, including days-of-cover "
     "and when-do-we-run-out analysis.\n"
-    "3. Use nl_query for bulk or cross-product questions — pass the question in plain English; "
+    "4. Use nl_query for bulk or cross-product questions — pass the question in plain English; "
     "nl_query generates schema-correct SQL internally.\n"
-    "4. Never fabricate column names or assume columns that are not confirmed by tool results.\n\n"
+    "5. Never fabricate column names or assume columns that are not confirmed by tool results.\n\n"
     "Always ground recommendations in tool results. Do not fabricate quantities or risk scores.\n"
     "Once you have sufficient data from tools, stop calling tools"
     " and produce a final text response.\n"
     "Never call the same tool twice in one session. "
     "After receiving results from list_stockout_risk, synthesise them immediately"
     " into a final answer — do NOT call any tool again.\n"
-    "For exception/delay questions, call get_delayed_supply_orders() to surface"
-    " supply chain delays alongside list_stockout_risk for stockout enumeration.\n"
+    "For exception/delay questions, call list_today_exceptions to surface the full daily"
+    " exception picture in one call.\n"
     "\n"
     "## Response Format\n\n"
     "Structure every response using the following four sections:\n\n"
@@ -71,6 +75,7 @@ _INTENT_TOOL_SUBSET: dict[str, list[str]] = {
     # supply_chain: cross-domain stockout/gap/delay/cost diagnosis
     "supply_chain": [
         "nl_query",
+        "list_today_exceptions",
         "list_stockout_risk",
         "get_delayed_supply_orders",
         "get_open_supply_orders",
@@ -87,6 +92,7 @@ _INTENT_TOOL_SUBSET: dict[str, list[str]] = {
         "nl_query",
         "table_schema_reader",
         "data_catalog_search",
+        "list_today_exceptions",
         "list_stockout_risk",
         "get_open_supply_orders",
         "get_available_to_promise",
@@ -95,6 +101,7 @@ _INTENT_TOOL_SUBSET: dict[str, list[str]] = {
     # domain_analysis: all analytical tools, no heavy execution (max_tool_calls=10)
     "domain_analysis": [
         "nl_query",
+        "list_today_exceptions",
         "profile_demand_data",
         "analyze_demand_trend",
         "evaluate_forecast_accuracy",
@@ -121,6 +128,7 @@ _INTENT_TOOL_SUBSET: dict[str, list[str]] = {
     # cross_domain_analysis: domain_analysis + data quality tools (max_tool_calls=15)
     "cross_domain_analysis": [
         "nl_query",
+        "list_today_exceptions",
         "data_catalog_search",
         "data_quality_checker",
         "table_schema_reader",
@@ -150,6 +158,7 @@ _INTENT_TOOL_SUBSET: dict[str, list[str]] = {
     # decision_support: analytical + execution tools for optimization/approval (max_tool_calls=20)
     "decision_support": [
         "nl_query",
+        "list_today_exceptions",
         "list_stockout_risk",
         "calculate_stockout_risk",
         "calculate_excess_inventory_risk",

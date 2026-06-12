@@ -955,3 +955,162 @@ Dependencies: none
 - Acceptance: `make test-integration` exit 0 with both tests passing, preserving their original behavioral intent (no-interrupt for fully-specified request; ask_user resume returns a complete SessionResponse).
 
 Dependencies: B-01
+
+---
+
+## P86 — Today's Exceptions Screening Tool (SPEC Q3) — In Progress
+
+**Goal:** The system can answer SPEC Q3 "What exceptions require human judgment today?" — the
+MVP validation question with the highest stated daily value — via a single deterministic
+screening tool that aggregates existing detectors into one prioritized exception list.
+Done when: a user query like "What exceptions need my attention today?" causes the
+ControlAgent to call `list_today_exceptions` and answer with a severity-ranked exception list
+covering stockout risk, delayed inbound supply, demand anomalies, and data quality issues.
+
+Design basis: `docs/DESIGN.md §Screening Layer` (screening tools live in `packages/tools/`,
+invoked through the Tool Gateway). Scope decision: on-demand tool only; the scheduled daily
+Celery job is deferred (P69 user decision keeps Celery untouched) — see DECISIONS.md 2026-06-11.
+
+Dependencies: P85 Done
+
+### Batch B-01 — Exception screening tool + wiring (App Builder) — Done
+
+| Task | Description | Status |
+|---|---|---|
+| T-535 | New tool `list_today_exceptions` in `packages/tools/` (Level 1 deterministic, read_only). Composes existing screen logic into one prioritized exception list: (a) stockout risk critical/high (reuse `list_stockout_risk` internals or call its query path), (b) delayed inbound supply orders (reuse `get_delayed_supply_orders` logic), (c) recent demand anomalies (reuse `detect_demand_anomalies` logic, last 7 days), (d) data quality issues (reuse `data_quality_checker` logic). Output: hybrid contract per ADR 2026-06-10-tool-output-contract-hybrid — `exceptions: list[{domain, severity, sku_id/order_ref, headline_metric, detail}]` sorted by severity, capped (LIMIT + `truncated` flag), `missing_data: list[str]` mandatory, `count` per domain. No new SQL surface: only `ALLOWED_READ_TABLES` tables, parameterized queries, no hardcoded schema strings. Register in the tool registry (read_only). | Done |
+| T-536 | Wire into Layer 3: add `list_today_exceptions` to `_INTENT_TOOL_SUBSET` for `supply_chain`, `domain_analysis`, `cross_domain_analysis`, `decision_support`, and `lookup` (Layer 1 auto-derives). Update `ControlAgent._SYSTEM_PROMPT` priority rules: for "today's exceptions / what needs attention" questions call `list_today_exceptions` once — never assemble the same picture by looping the individual detectors. | Done |
+| T-537 | ToolScenarioModal: add one English scenario for daily exception review (category: existing Supply Chain or a new "Daily Operations"); update the Playwright spec assertion list accordingly. | Done |
+
+Dependencies: none
+
+### Batch B-02 — Tests + gate (Test/Review) — Not Started
+
+| Task | Description | Status |
+|---|---|---|
+| T-538 | Unit tests for `list_today_exceptions`: severity ordering, per-domain counts, cap + `truncated`, `missing_data` populated when a source domain has no data (zero-demand SKUs), empty-DB shape. Zero-network rule; follow existing tool test patterns. | Not Started |
+| T-539 | Batch gate: `make test-unit && make lint && make typecheck` — proof-of-execution per gate. | Not Started |
+
+Dependencies: B-01
+
+---
+
+## P87 — Order-to-Ship Data Domain: Shipment Delay Root Causes (SPEC Q4) — Not Started
+
+**Goal:** The system can answer SPEC Q4 "What is causing shipment delays or unshipped orders?" —
+an MVP validation question currently impossible because the data model has no customer orders or
+shipments. Done when: `customer_orders` and `shipments` tables exist with deterministic seeded
+delay scenarios, and a query like "Why are orders unshipped this week?" returns root-cause
+candidates that distinguish inventory shortage vs warehouse processing delay vs carrier delay
+vs upstream supply delay (the SPEC's flagship cross-domain interpretation).
+
+ADR: `docs/adr/2026-06-11-order-to-ship-and-production-data-domains.md` (table schemas are the
+contract; additive migration only).
+
+Dependencies: P86 Done (sequential execution; no technical coupling)
+
+### Batch B-01 — Schema migration + seed data (App Builder) — Not Started
+
+| Task | Description | Status |
+|---|---|---|
+| T-540 | Alembic migration (additive, `apps/api/alembic/`) creating `customer_orders` and `shipments` per the ADR schema. No changes to existing tables. | Not Started |
+| T-541 | Seed generation: extend `scripts/generate_sample_data.py` + `scripts/seed_db.py` to produce `customer_orders.csv` / `shipments.csv` with deterministic, date-relative scenarios (P82 convention: all dates relative to `date.today()`; P84 convention: fixed index-based assignment, independently verifiable): orders fulfilled on time (majority), unshipped due to inventory shortage (tie to P84 critical-risk SKUs), shipped late (warehouse delay), shipped on time but delivered late (carrier delay), and unshipped pending delayed inbound supply. Must not disturb P84 risk-band determinism for existing tables. | Not Started |
+| T-542 | Add `customer_orders` and `shipments` to `ALLOWED_READ_TABLES` (and `_LEGACY_TABLE_MAP` entries `"orders"→"customer_orders"` only if unambiguous); confirm `get_schema_context()` picks the new tables up from `information_schema` (no hand-written schema strings); data catalog updated if it enumerates tables. | Not Started |
+
+Dependencies: none
+
+### Batch B-02 — Shipment delay tools + wiring (App Builder) — Not Started
+
+| Task | Description | Status |
+|---|---|---|
+| T-543 | New tool `list_unshipped_orders`: open/allocated customer orders past or near `requested_ship_date`, with per-order context (on_hand at ship-from location, open inbound supply for the SKU). Hybrid output contract (cap + `truncated`, `missing_data`). | Not Started |
+| T-544 | New tool `analyze_shipment_delay_causes`: cross-references customer_orders × shipments × inventory_snapshot × supply_orders to classify each delayed/unshipped order into root-cause candidates — inventory_shortage (insufficient on_hand), upstream_supply_delay (open delayed supply order for the SKU), warehouse_processing_delay (actual_ship_date > planned_ship_date), carrier_delay (shipped on time, delivered/projected late), unknown (facts insufficient → listed in `missing_data`). Returns per-cause counts + capped order details. Deterministic classification only — no LLM calls inside the tool. | Not Started |
+| T-545 | Layer 3 wiring: add both tools to `_INTENT_TOOL_SUBSET` (`supply_chain`, `domain_analysis`, `cross_domain_analysis`, `decision_support`; `list_unshipped_orders` also in `lookup`). System prompt priority rule for shipment-delay questions. ToolScenarioModal: one English shipment-delay scenario; `list_today_exceptions` (P86) gains unshipped-orders as a fifth exception domain. | Not Started |
+
+Dependencies: B-01
+
+### Batch B-03 — Tests + gate (Test/Review) — Not Started
+
+| Task | Description | Status |
+|---|---|---|
+| T-546 | Unit tests for both tools: each root-cause class is correctly assigned from constructed fixture rows; precedence when multiple causes apply is stable and documented; caps, `missing_data`, empty-table shape. | Not Started |
+| T-547 | Integration tests (real DB): after migration + seed, `analyze_shipment_delay_causes` returns every seeded delay class with non-zero count; `list_unshipped_orders` returns the seeded unshipped orders. | Not Started |
+| T-548 | Batch gate: `make test-unit && make lint && make typecheck` — proof-of-execution per gate. | Not Started |
+
+Dependencies: B-02
+
+---
+
+## P88 — Demand Shift Detection by Customer / Region (SPEC Q9) — Not Started
+
+**Goal:** The system can answer SPEC Q9 "Are there demand changes by customer or region?".
+Currently impossible: `demand_history` has only sku_id/date/quantity. Decision (ADR
+2026-06-11): customer/region demand axes come from `customer_orders` (introduced in P87), not
+from altering `demand_history`. Done when: a query like "Which customers or regions show
+demand shifts this month?" returns period-over-period demand comparison by customer and by
+region with shift magnitude and direction.
+
+Dependencies: P87 Done (hard dependency: reads `customer_orders`)
+
+### Batch B-01 — Demand shift tool + wiring (App Builder) — Not Started
+
+| Task | Description | Status |
+|---|---|---|
+| T-549 | New tool `detect_demand_shift`: compares aggregated `customer_orders` quantity between two windows (default: last 28 days vs prior 28 days; window params exposed), grouped by customer and by region; returns top shifts (growth and decline) with pct change, absolute change, and contributing SKUs; flags customers/regions with no prior-period baseline in `missing_data`. Hybrid output contract; deterministic SQL only. Seed data from P87 T-541 must contain at least one deterministic demand-shift scenario (one growing customer/region, one declining) — if it does not, extend the seed in this task. | Not Started |
+| T-550 | Layer 3 wiring: add to `_INTENT_TOOL_SUBSET` (`domain_analysis`, `cross_domain_analysis`, `decision_support`). System prompt note: for customer/region demand-shift questions call `detect_demand_shift`; `segment_demand`/`compare_demand_periods` remain the SKU-axis tools. | Not Started |
+
+Dependencies: none
+
+### Batch B-02 — Tests + gate (Test/Review) — Not Started
+
+| Task | Description | Status |
+|---|---|---|
+| T-551 | Unit tests: shift math (pct/absolute), grouping by customer and region, no-baseline → `missing_data`, window parameter handling, cap + `truncated`. | Not Started |
+| T-552 | Integration test (real DB): seeded growth and decline scenarios are detected with correct direction. | Not Started |
+| T-553 | Batch gate: `make test-unit && make lint && make typecheck` — proof-of-execution per gate. | Not Started |
+
+Dependencies: B-01
+
+---
+
+## P89 — Production Plan & Constraint Analysis (SPEC Q7 / Q10) — Not Started
+
+**Goal:** The system can answer SPEC Q7 "Which products require production plan adjustments?"
+and Q10 "Which constraint is having the biggest negative impact on sales or profit?". Currently
+impossible: no production capacity or plan data exists. Done when: `production_capacity` and
+`production_plan` tables exist with deterministic seeded over/under-production and bottleneck
+scenarios, and the two questions return grounded answers (plan-vs-demand gaps; the binding
+constraint ranked by estimated profit impact via `cost_master`).
+
+ADR: `docs/adr/2026-06-11-order-to-ship-and-production-data-domains.md` (shared with P87).
+
+Dependencies: P88 Done (sequential execution; no technical coupling)
+
+### Batch B-01 — Schema migration + seed data (App Builder) — Not Started
+
+| Task | Description | Status |
+|---|---|---|
+| T-554 | Alembic migration (additive) creating `production_capacity` and `production_plan` per the ADR schema. No changes to existing tables. | Not Started |
+| T-555 | Seed generation: deterministic, date-relative scenarios — at least one overproduction SKU (planned ≫ forecast/demand), one underproduction SKU (planned ≪ demand, ideally tied to a P84 risk SKU so the narratives connect), one capacity-saturated location (utilization ≥ 100% — the intended binding constraint), and majority-normal rows. P82/P84 conventions apply; existing table determinism untouched. | Not Started |
+| T-556 | Add both tables to `ALLOWED_READ_TABLES`; `get_schema_context()` picks them up from `information_schema`; catalog updated if applicable. | Not Started |
+
+Dependencies: none
+
+### Batch B-02 — Production analysis tools + wiring (App Builder) — Not Started
+
+| Task | Description | Status |
+|---|---|---|
+| T-557 | New tool `analyze_production_plan_gap`: per SKU (and location), compare `production_plan` against forward demand (forecast_history where present, else recent demand_history run-rate) over a horizon; classify overproduction / underproduction / balanced with gap quantities; hybrid output contract. Deterministic SQL only. | Not Started |
+| T-558 | New tool `identify_binding_constraint`: rank constraint candidates by estimated negative impact — production capacity utilization per location (capacity vs planned load), inbound supply gaps (reuse supply-gap logic), and inventory-driven lost-sales exposure (stockout-risk SKUs × `cost_master.stockout_cost`). Returns ranked constraints with impact estimate and evidence; analytical output only — no recommendations (Control Agent concludes). | Not Started |
+| T-559 | Layer 3 wiring: add both tools to `_INTENT_TOOL_SUBSET` (`domain_analysis`, `cross_domain_analysis`, `decision_support`; `identify_binding_constraint` also `supply_chain`). System prompt priority rules for production-adjustment and biggest-constraint questions. | Not Started |
+
+Dependencies: B-01
+
+### Batch B-03 — Tests + gate (Test/Review) — Not Started
+
+| Task | Description | Status |
+|---|---|---|
+| T-560 | Unit tests: gap classification thresholds, capacity utilization math, impact ranking order is deterministic and documented, `missing_data` (no plan rows / no cost rows), caps. | Not Started |
+| T-561 | Integration tests (real DB): seeded overproduction, underproduction, and capacity-saturation scenarios are detected; binding constraint returned is the seeded capacity-saturated location. | Not Started |
+| T-562 | Batch gate: `make test-unit && make lint && make typecheck` — proof-of-execution per gate. | Not Started |
+
+Dependencies: B-02

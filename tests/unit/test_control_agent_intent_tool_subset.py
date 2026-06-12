@@ -27,9 +27,10 @@ def test_intent_tool_subset_tool_names_all_registered() -> None:
 
 
 def test_intent_tool_subset_supply_chain_list_is_unchanged() -> None:
-    """The supply_chain subset must exactly match its original specification."""
+    """The supply_chain subset must exactly match its specification (updated in P86-T-536)."""
     expected = [
         "nl_query",
+        "list_today_exceptions",
         "list_stockout_risk",
         "get_delayed_supply_orders",
         "get_open_supply_orders",

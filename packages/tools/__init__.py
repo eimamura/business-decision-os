@@ -28,6 +28,7 @@ from packages.tools.inventory_excess_tool import CalculateExcessInventoryRiskToo
 from packages.tools.inventory_stockout_risk_tool import CalculateStockoutRiskTool
 from packages.tools.job_dispatch_tool import JobDispatchTool
 from packages.tools.list_stockout_risk_tool import ListStockoutRiskTool
+from packages.tools.list_today_exceptions_tool import ListTodayExceptionsTool
 from packages.tools.nl_query_tool import NlQueryTool
 from packages.tools.optimizer_tool import OptimizerTool
 from packages.tools.simulation_tool import SimulationTool
@@ -76,6 +77,7 @@ __all__ = [
     "CalculateExcessInventoryRiskTool",
     "CalculateStockoutRiskTool",
     "ListStockoutRiskTool",
+    "ListTodayExceptionsTool",
     "TableSchemaReaderTool",
     "TrainForecastTool",
     "create_tool_registry",
@@ -117,6 +119,7 @@ def create_tool_registry(
     registry.register(CalculateDaysOfInventoryTool(db_session=db_session))
     registry.register(CalculateStockoutRiskTool(db_session=db_session))
     registry.register(ListStockoutRiskTool(db_session=db_session))
+    registry.register(ListTodayExceptionsTool(db_session=db_session))
     registry.register(CalculateExcessInventoryRiskTool(db_session=db_session))
     registry.register(GetAvailableToPromiseTool(db_session=db_session))
     return registry

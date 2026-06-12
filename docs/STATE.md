@@ -40,11 +40,13 @@ See `docs/archive/v3/STATE.md` for P0–P23 per-phase details.
 
 ## Active Phase
 
-None
+P86 — Today's Exceptions Screening Tool (SPEC Q3). Programme context: P86–P89 close the
+SPEC gaps (Q3 → Q4 → Q9 → Q7/Q10), planned 2026-06-11 via intake; ADR
+2026-06-11-order-to-ship-and-production-data-domains.md covers P87/P89 schemas.
 
 ## Active Lease
 
-None
+P86 B-02 (Test/Review) — acquired 2026-06-11
 
 ## Last Completed
 
