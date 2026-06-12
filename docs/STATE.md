@@ -40,15 +40,32 @@ See `docs/archive/v3/STATE.md` for P0–P23 per-phase details.
 
 ## Active Phase
 
-P93 — Daily Screening Job + Exceptions Surface (first of the P93–P95 MVP gap closure
-programme approved 2026-06-12: P93 daily cadence, P94 SPEC Q5, P95 SPEC Q8; ADR
-2026-06-12-daily-screening-scheduler).
+P94 — Forecast Deviation Decomposition (SPEC Q5) (second of the P93–P95 MVP gap closure
+programme approved 2026-06-12; ADR 2026-06-12-daily-screening-scheduler).
 
 ## Active Lease
 
-P93-B-04 (Test/Review — tests + phase sign-off)
+P94-B-01 (App Builder — tool + wiring + seed + scenario)
 
 ## Last Completed
+
+P93 — Daily Screening Job + Exceptions Surface (2026-06-12). The Screening Layer now runs
+on the daily cadence per DESIGN.md §Operational Cadence: in-process asyncio lifespan
+scheduler in `apps/api/screening.py` (startup catch-up run + daily `SCREENING_HOUR_UTC`
+tick, `SCREENING_SCHEDULER_ENABLED` kill switch; Celery deliberately untouched per P69 —
+ADR 2026-06-12-daily-screening-scheduler records the interim mechanism and Azure migration
+trigger). `run_screening` invokes the `list_today_exceptions` tool handle directly (no LLM)
+and persists to new `screening_runs` table (migration 0021; NOT in ALLOWED_READ_TABLES).
+API: `GET /api/v1/screenings/today` (`{"run": ...|null}`), `POST /api/v1/screenings/run`
+(manual, 201). Web: DailyExceptionsPanel on the chat empty state below QuickActionGrid —
+severity badges, top-5 exceptions, "Investigate in chat" injects the Q3 prompt, "Run now",
+quiet-fail on fetch error. Live smoke: completed row with exception_count=37
+(21 critical / 3 high / 13 medium) on seeded data. Sign-off PASS (proof-of-execution):
+unit 1099 exit 0, full-DSN integration 114 exit 0, playwright 40/40 exit 0, build 0,
+lint 0, typecheck 0. Boundary note: App Builder self-set the B-03 batch header (value
+correct; recorded for failure-pattern awareness, no defect).
+
+Previously:
 
 P92 — Ollama Context Window Fix + Degenerate Guard Surfacing (2026-06-12). Judge-FAIL
 ("Which products are at stockout risk this week?" → "Agent control failed: None", aggregate

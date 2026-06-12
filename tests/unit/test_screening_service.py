@@ -120,6 +120,29 @@ async def test_run_screening_empty_exceptions_zero_count() -> None:
     assert row["exception_count"] == 0
 
 
+async def test_run_screening_zero_exceptions_repo_called_with_empty_severity_counts() -> None:
+    """When no exceptions exist, repo.create is called with severity_counts={} (not None)."""
+    tool_result = _make_tool_result([])
+    expected_row = _stub_repo_create(status="completed", exception_count=0, severity_counts={})
+
+    mock_tool = AsyncMock()
+    mock_tool.handle = AsyncMock(return_value=tool_result)
+    mock_repo = AsyncMock()
+    mock_repo.create = AsyncMock(return_value=expected_row)
+
+    with (
+        patch("apps.api.screening.ListTodayExceptionsTool", return_value=mock_tool),
+        patch("apps.api.screening.ScreeningRunsRepository", return_value=mock_repo),
+    ):
+        from apps.api.screening import run_screening
+        await run_screening(triggered_by="startup")
+
+    call_kwargs = mock_repo.create.call_args.kwargs
+    # severity_counts must be an empty dict, not None, for zero-exception payloads
+    assert call_kwargs["severity_counts"] == {}
+    assert call_kwargs["exception_count"] == 0
+
+
 # ---------------------------------------------------------------------------
 # run_screening: failure path
 # ---------------------------------------------------------------------------

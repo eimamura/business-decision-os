@@ -1202,7 +1202,7 @@ Dependencies: B-01
 
 ---
 
-## P93 — Daily Screening Job + Exceptions Surface — Not Started
+## P93 — Daily Screening Job + Exceptions Surface — Done (2026-06-12)
 
 **Goal:** The Screening Layer runs on the daily cadence automatically (DESIGN.md §Operational
 Cadence: "MVP targets the daily cadence"; §Screening Layer: scheduled job) instead of only
@@ -1259,12 +1259,12 @@ Dependencies: B-01
 
 Dependencies: B-02
 
-### Batch B-04 — Tests + phase sign-off (Test/Review) — Not Started
+### Batch B-04 — Tests + phase sign-off (Test/Review) — Done (2026-06-12)
 
 | Task | Description | Status |
 |---|---|---|
-| T-575 | Tests: unit — runner service (counts derivation, failed-run persistence, scheduler next-run computation with frozen clock, disabled flag); router via `httpx.AsyncClient` + ASGITransport (today-empty shape, manual run); integration — real-DB screening run persists a completed row with non-null payload; Playwright — panel renders with mocked `/screenings/today` (counts + investigate injects prompt) and empty state. Zero-network rule respected (tool handle is deterministic SQL — stub the repo/DB at unit tier). | Not Started |
-| T-576 | Phase sign-off: `make test-unit && make test-integration && make test-playwright && make build && make lint && make typecheck` — proof-of-execution per gate (gate rows with exit codes + output tails). | Not Started |
+| T-575 | Tests: unit — runner service (counts derivation, failed-run persistence, scheduler next-run computation with frozen clock, disabled flag); router via `httpx.AsyncClient` + ASGITransport (today-empty shape, manual run); integration — real-DB screening run persists a completed row with non-null payload; Playwright — panel renders with mocked `/screenings/today` (counts + investigate injects prompt) and empty state. Zero-network rule respected (tool handle is deterministic SQL — stub the repo/DB at unit tier). | Done |
+| T-576 | Phase sign-off: `make test-unit && make test-integration && make test-playwright && make build && make lint && make typecheck` — proof-of-execution per gate (gate rows with exit codes + output tails). | Done |
 
 Dependencies: B-03
 
