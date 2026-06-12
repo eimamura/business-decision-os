@@ -100,6 +100,8 @@ Full task history for P0–P23 is archived at `docs/archive/v3/TASKS.md`.
 | P94 — Forecast Deviation Decomposition (SPEC Q5) | T-577–T-582 | 2026-06-12 |
 | P95 — Supply Order Timing Analysis (SPEC Q8) | T-583–T-588 | 2026-06-12 |
 | P96 — Supply Order Timing: push_out Signal Quality | T-589–T-590 | 2026-06-12 |
+| P97 — Context Saturation Mitigation | T-591–T-593 | 2026-06-12 |
+| P98 — Daily Exceptions Persistent Surface | T-594–T-595 | 2026-06-12 |
 
 > **Design Realignment Note (2026-06-05):** P29–P36 built Specialist Domain Agents (DemandAgent,
 > InventoryAgent, SupplyPlanningAgent, FinanceImpactAgent, SopAgent) as independent runtime units.
@@ -1430,7 +1432,7 @@ Dependencies: B-01
 
 ---
 
-## P98 — Daily Exceptions Persistent Surface — Not Started
+## P98 — Daily Exceptions Persistent Surface — Done (2026-06-12)
 
 **Goal:** The daily screening result is visible beyond the chat empty state (P93 panel
 disappears once a conversation starts). Done when: a compact, collapsible Daily Exceptions
@@ -1448,11 +1450,11 @@ Dependencies: P93 Done
 
 Dependencies: none
 
-### Batch B-02 — Tests + phase sign-off (Test/Review) — Not Started
+### Batch B-02 — Tests + phase sign-off (Test/Review) — Done
 
 | Task | Description | Status |
 |---|---|---|
-| T-595 | Playwright: strip visible with an active conversation (mock SSE precedent), expand/collapse toggles content, Investigate still injects the Q3 prompt, empty-state default-expanded preserved; update the P93 panel spec where placement changed. Vitest component test sync if broken. Phase sign-off: `make test-unit && make test-integration && make test-playwright && make build && make lint && make typecheck` — proof-of-execution per gate. | Not Started |
+| T-595 | Playwright: strip visible with an active conversation (mock SSE precedent), expand/collapse toggles content, Investigate still injects the Q3 prompt, empty-state default-expanded preserved; update the P93 panel spec where placement changed. Vitest component test sync if broken. Phase sign-off: `make test-unit && make test-integration && make test-playwright && make build && make lint && make typecheck` — proof-of-execution per gate. | Done |
 
 Dependencies: B-01
 

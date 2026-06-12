@@ -1,10 +1,10 @@
 /**
- * T-575: DailyExceptionsPanel Playwright tests — mock-API tier.
+ * T-575 / T-595: DailyExceptionsPanel Playwright tests — mock-API tier.
  *
  * All GET /api/v1/screenings/today and POST /api/v1/screenings/run calls are
  * intercepted via page.route() so no real screening job is needed.
  *
- * Scenarios:
+ * T-575 scenarios (empty-state suite — defaultExpanded=true):
  *   1. Populated state — GET returns a completed run with severity counts;
  *      panel renders severity counts and Investigate button; clicking it
  *      injects the Q3 prompt into the chat textarea.
@@ -12,6 +12,13 @@
  *      state with data-testid="daily-exceptions-empty" and Run now button.
  *   3. Run now + refresh — POST /run succeeds; follow-up GET returns the
  *      new run; panel transitions from empty state to populated state.
+ *
+ * T-595 scenarios (active-conversation suite — defaultExpanded=false):
+ *   4. Active conversation: strip visible, expanded content NOT visible
+ *      (collapsed default).
+ *   5. Toggle: expand → top exceptions visible; toggle again → collapsed.
+ *   6. Investigate from active conversation: expand → click investigate →
+ *      chat textarea contains the Q3 prompt.
  *
  * Run via:
  *   make dev-up
@@ -21,6 +28,7 @@
  */
 
 import { testWithCleanup as test, expect } from "./fixtures";
+import { mockCompletedStream } from "./sse-mock";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
@@ -279,5 +287,177 @@ test.describe("DailyExceptionsPanel — mock-API tier", () => {
 
     // Severity count from RUN_NOW_RESULT
     await expect(page.getByText(/1 high/i)).toBeVisible();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// T-595: Active-conversation suite — defaultExpanded=false
+//
+// Strategy: create a real session, register mock routes for the SSE stream
+// (mockCompletedStream) and for GET /screenings/today BEFORE page.goto().
+// Send a message so the assistant reply renders — this transitions isEmpty
+// to false, which means DailyExceptionsPanel receives defaultExpanded=false
+// and starts collapsed.
+// ---------------------------------------------------------------------------
+
+/** Maximum ms to wait for the mock "total" footer to confirm stream done. */
+const ACTIVE_CONV_TIMEOUT = 15_000;
+
+test.describe("DailyExceptionsPanel — active conversation (mock SSE)", () => {
+  test("strip is visible and expanded content is hidden after an active conversation starts", async ({
+    page,
+    request,
+    createdSessionIds,
+  }) => {
+    test.setTimeout(30_000);
+
+    const sessionId = await createSession(request, "P98 T-595 strip visibility test");
+    createdSessionIds.push(sessionId);
+
+    // Register mocks BEFORE navigation.
+    await mockCompletedStream(page, sessionId);
+    await page.route("**/api/v1/screenings/today", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ run: POPULATED_RUN }),
+      });
+    });
+
+    await page.goto(`/chat/${sessionId}`);
+    await expect(page.locator("textarea")).toBeVisible();
+
+    // Send a message — the mock SSE resolves immediately; messages load
+    // from the mocked GET /messages endpoint.
+    await page.locator("textarea").fill("Show me today's exceptions");
+    await page.getByRole("button", { name: /send/i }).click();
+
+    // Wait until the stream completes (footer shows "total")
+    await expect(page.locator("text=/total/").first()).toBeVisible({
+      timeout: ACTIVE_CONV_TIMEOUT,
+    });
+
+    // Strip must be visible — always mounted
+    await expect(page.locator('[data-testid="daily-exceptions-strip"]')).toBeVisible({
+      timeout: 8_000,
+    });
+
+    // Severity badges visible in the strip even when collapsed
+    await expect(page.getByText(/2 critical/i)).toBeVisible();
+
+    // Expanded content must NOT be visible (collapsed default in active conv)
+    await expect(
+      page.locator('[data-testid="daily-exceptions-investigate"]'),
+    ).not.toBeVisible();
+  });
+
+  test("toggle expands content then collapses it again in active conversation", async ({
+    page,
+    request,
+    createdSessionIds,
+  }) => {
+    test.setTimeout(30_000);
+
+    const sessionId = await createSession(request, "P98 T-595 toggle test");
+    createdSessionIds.push(sessionId);
+
+    await mockCompletedStream(page, sessionId);
+    await page.route("**/api/v1/screenings/today", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ run: POPULATED_RUN }),
+      });
+    });
+
+    await page.goto(`/chat/${sessionId}`);
+    await expect(page.locator("textarea")).toBeVisible();
+
+    await page.locator("textarea").fill("Show me today's exceptions");
+    await page.getByRole("button", { name: /send/i }).click();
+    await expect(page.locator("text=/total/").first()).toBeVisible({
+      timeout: ACTIVE_CONV_TIMEOUT,
+    });
+
+    // Confirm strip is present and content is collapsed
+    const strip = page.locator('[data-testid="daily-exceptions-strip"]');
+    await expect(strip).toBeVisible({ timeout: 8_000 });
+
+    const toggle = page.locator('[data-testid="daily-exceptions-toggle"]');
+    await expect(toggle).toBeVisible();
+
+    // Expanded content not visible yet
+    await expect(
+      page.locator('[data-testid="daily-exceptions-investigate"]'),
+    ).not.toBeVisible();
+
+    // Click toggle → expand
+    await toggle.click();
+
+    // Top exceptions must be visible after expanding
+    await expect(
+      page.locator('[data-testid="daily-exceptions-investigate"]'),
+    ).toBeVisible({ timeout: 3_000 });
+    // Severity count in the exception rows (SKU-001 should be listed)
+    await expect(page.getByText("SKU-001")).toBeVisible();
+
+    // Click toggle again → collapse
+    await toggle.click();
+
+    await expect(
+      page.locator('[data-testid="daily-exceptions-investigate"]'),
+    ).not.toBeVisible();
+    // Strip still present
+    await expect(strip).toBeVisible();
+  });
+
+  test("Investigate from active conversation: expand then click injects Q3 prompt", async ({
+    page,
+    request,
+    createdSessionIds,
+  }) => {
+    test.setTimeout(30_000);
+
+    const sessionId = await createSession(request, "P98 T-595 investigate test");
+    createdSessionIds.push(sessionId);
+
+    await mockCompletedStream(page, sessionId);
+    await page.route("**/api/v1/screenings/today", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ run: POPULATED_RUN }),
+      });
+    });
+
+    await page.goto(`/chat/${sessionId}`);
+    await expect(page.locator("textarea")).toBeVisible();
+
+    await page.locator("textarea").fill("Show me today's exceptions");
+    await page.getByRole("button", { name: /send/i }).click();
+    await expect(page.locator("text=/total/").first()).toBeVisible({
+      timeout: ACTIVE_CONV_TIMEOUT,
+    });
+
+    // Strip visible but collapsed
+    await expect(
+      page.locator('[data-testid="daily-exceptions-strip"]'),
+    ).toBeVisible({ timeout: 8_000 });
+
+    // Expand the panel
+    await page.locator('[data-testid="daily-exceptions-toggle"]').click();
+
+    // Investigate button must appear
+    const investigateBtn = page.locator('[data-testid="daily-exceptions-investigate"]');
+    await expect(investigateBtn).toBeVisible({ timeout: 3_000 });
+
+    // Click Investigate
+    await investigateBtn.click();
+
+    // Textarea must be filled with the Q3 prompt
+    await expect(page.locator("textarea")).toHaveValue(
+      "What exceptions require human judgment today?",
+      { timeout: 3_000 },
+    );
   });
 });

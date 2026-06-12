@@ -40,13 +40,25 @@ See `docs/archive/v3/STATE.md` for P0–P23 per-phase details.
 
 ## Active Phase
 
-P98 — Daily Exceptions Persistent Surface (P96–P100 MVP hardening programme).
+P99 — Screening Scheduler Multi-Process Hardening (P96–P100 MVP hardening programme).
 
 ## Active Lease
 
-P98-B-01 (App Builder — persistent strip)
+P99-B-01 (App Builder — advisory lock + idempotent tick)
 
 ## Last Completed
+
+P98 — Daily Exceptions Persistent Surface (2026-06-12). DailyExceptionsPanel reworked
+into a persistent collapsible strip docked between the chat header and message area —
+`daily-exceptions-strip` (icon, label, run date, severity badges, toggle) mounted in BOTH
+empty and active-conversation states; `defaultExpanded={isEmpty}`; all P93 testids kept;
+quiet-fail unchanged; Investigate-in-chat works mid-conversation. Playwright 42→45
+(active-conversation: collapsed default, toggle expand/collapse, investigate injects Q3
+prompt). Sign-off PASS: unit 1199 exit 0, playwright 45/45 exit 0, build 0, lint 0,
+typecheck 0; `make test-integration` SKIPPED by user decision (DECISIONS.md 2026-06-12 —
+P98 is web-only; gate skip applies to P98–P100 sign-offs).
+
+Previously:
 
 P97 — Context Saturation Mitigation (2026-06-12). Forensics (T-591): the 14,080-token
 (86% of num_ctx) call was the orchestrator-side `_synthesize_response` receiving raw
