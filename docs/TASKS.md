@@ -657,7 +657,7 @@ Dependencies: B-01
 
 ---
 
-## P79 — Session Resume & Lifecycle Robustness — Not Started
+## P79 — Session Resume & Lifecycle Robustness — Done (2026-06-10)
 
 **Goal:** Resolve D-006 (ask_user resume crashes with `KeyError: 'session_id'` when no
 LangGraph checkpoint exists for the thread) and D-007 (session deletion does not cancel
@@ -725,7 +725,7 @@ Dependencies: B-01, B-02
 
 ---
 
-## P80 — Verifier Blocked-Path UX — In Progress
+## P80 — Verifier Blocked-Path UX — Done (2026-06-10)
 
 **Goal:** Resolve D-008. The P61 rule-based findings verifier blocks legitimate
 no-tool answers stochastically (Rule 1 regex `\d|no\b|none\b|なし` fires on any digit —
