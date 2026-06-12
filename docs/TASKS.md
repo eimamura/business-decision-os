@@ -1028,13 +1028,13 @@ Dependencies: none
 
 Dependencies: B-01
 
-### Batch B-03 — Tests + gate (Test/Review) — Not Started
+### Batch B-03 — Tests + gate (Test/Review) — Done
 
 | Task | Description | Status |
 |---|---|---|
-| T-546 | Unit tests for both tools: each root-cause class is correctly assigned from constructed fixture rows; precedence when multiple causes apply is stable and documented; caps, `missing_data`, empty-table shape. | Not Started |
-| T-547 | Integration tests (real DB): after migration + seed, `analyze_shipment_delay_causes` returns every seeded delay class with non-zero count; `list_unshipped_orders` returns the seeded unshipped orders. | Not Started |
-| T-548 | Batch gate: `make test-unit && make lint && make typecheck` — proof-of-execution per gate. | Not Started |
+| T-546 | Unit tests for both tools: each root-cause class is correctly assigned from constructed fixture rows; precedence when multiple causes apply is stable and documented; caps, `missing_data`, empty-table shape. | Done |
+| T-547 | Integration tests (real DB): after migration + seed, `analyze_shipment_delay_causes` returns every seeded delay class with non-zero count; `list_unshipped_orders` returns the seeded unshipped orders. | Done |
+| T-548 | Batch gate: `make test-unit && make lint && make typecheck` — proof-of-execution per gate. | Done |
 
 Dependencies: B-02
 
