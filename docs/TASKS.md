@@ -1040,7 +1040,7 @@ Dependencies: B-02
 
 ---
 
-## P88 — Demand Shift Detection by Customer / Region (SPEC Q9) — Not Started
+## P88 — Demand Shift Detection by Customer / Region (SPEC Q9) — In Progress
 
 **Goal:** The system can answer SPEC Q9 "Are there demand changes by customer or region?".
 Currently impossible: `demand_history` has only sku_id/date/quantity. Decision (ADR
@@ -1051,12 +1051,12 @@ region with shift magnitude and direction.
 
 Dependencies: P87 Done (hard dependency: reads `customer_orders`)
 
-### Batch B-01 — Demand shift tool + wiring (App Builder) — Not Started
+### Batch B-01 — Demand shift tool + wiring (App Builder) — Done
 
 | Task | Description | Status |
 |---|---|---|
-| T-549 | New tool `detect_demand_shift`: compares aggregated `customer_orders` quantity between two windows (default: last 28 days vs prior 28 days; window params exposed), grouped by customer and by region; returns top shifts (growth and decline) with pct change, absolute change, and contributing SKUs; flags customers/regions with no prior-period baseline in `missing_data`. Hybrid output contract; deterministic SQL only. Seed data from P87 T-541 must contain at least one deterministic demand-shift scenario (one growing customer/region, one declining) — if it does not, extend the seed in this task. | Not Started |
-| T-550 | Layer 3 wiring: add to `_INTENT_TOOL_SUBSET` (`domain_analysis`, `cross_domain_analysis`, `decision_support`). System prompt note: for customer/region demand-shift questions call `detect_demand_shift`; `segment_demand`/`compare_demand_periods` remain the SKU-axis tools. | Not Started |
+| T-549 | New tool `detect_demand_shift`: compares aggregated `customer_orders` quantity between two windows (default: last 28 days vs prior 28 days; window params exposed), grouped by customer and by region; returns top shifts (growth and decline) with pct change, absolute change, and contributing SKUs; flags customers/regions with no prior-period baseline in `missing_data`. Hybrid output contract; deterministic SQL only. Seed data from P87 T-541 must contain at least one deterministic demand-shift scenario (one growing customer/region, one declining) — if it does not, extend the seed in this task. | Done |
+| T-550 | Layer 3 wiring: add to `_INTENT_TOOL_SUBSET` (`domain_analysis`, `cross_domain_analysis`, `decision_support`). System prompt note: for customer/region demand-shift questions call `detect_demand_shift`; `segment_demand`/`compare_demand_periods` remain the SKU-axis tools. | Done |
 
 Dependencies: none
 

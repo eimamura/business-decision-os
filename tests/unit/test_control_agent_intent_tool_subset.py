@@ -45,3 +45,31 @@ def test_intent_tool_subset_supply_chain_list_is_unchanged() -> None:
         "calculate_expedite_cost",
     ]
     assert _INTENT_TOOL_SUBSET["supply_chain"] == expected
+
+
+def test_detect_demand_shift_in_domain_analysis() -> None:
+    """detect_demand_shift must be present in the domain_analysis intent subset (P88-T-550)."""
+    assert "detect_demand_shift" in _INTENT_TOOL_SUBSET["domain_analysis"], (
+        "detect_demand_shift must be in domain_analysis for customer/region Q9 questions"
+    )
+
+
+def test_detect_demand_shift_in_cross_domain_analysis() -> None:
+    """detect_demand_shift must be present in the cross_domain_analysis intent subset (P88-T-550)."""
+    assert "detect_demand_shift" in _INTENT_TOOL_SUBSET["cross_domain_analysis"], (
+        "detect_demand_shift must be in cross_domain_analysis for customer/region Q9 questions"
+    )
+
+
+def test_detect_demand_shift_in_decision_support() -> None:
+    """detect_demand_shift must be present in the decision_support intent subset (P88-T-550)."""
+    assert "detect_demand_shift" in _INTENT_TOOL_SUBSET["decision_support"], (
+        "detect_demand_shift must be in decision_support for customer/region Q9 questions"
+    )
+
+
+def test_detect_demand_shift_not_in_supply_chain() -> None:
+    """detect_demand_shift should not be in supply_chain subset (P88-T-550 scope)."""
+    assert "detect_demand_shift" not in _INTENT_TOOL_SUBSET["supply_chain"], (
+        "detect_demand_shift is not a supply-chain execution tool; keep supply_chain focused"
+    )

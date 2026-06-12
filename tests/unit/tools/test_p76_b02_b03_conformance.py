@@ -382,15 +382,15 @@ async def test_doi_happy_path_missing_data_is_empty():
 # ===========================================================================
 
 
-def test_tool_registry_count_is_34_after_p87_b02() -> None:
-    """Registry count must reflect current tools; updated in P87-T-545 (2 new tools added)."""
+def test_tool_registry_count_is_35_after_p88_b01() -> None:
+    """Registry count must reflect current tools; updated in P88-T-549 (detect_demand_shift added)."""
     from packages.tools import create_tool_registry
 
     registry = create_tool_registry()
     count = len(registry._tools)
-    assert count == 34, (
-        f"Expected 34 registered tools after P87-T-545 "
-        "(list_unshipped_orders + analyze_shipment_delay_causes added), got {count}. "
+    assert count == 35, (
+        f"Expected 35 registered tools after P88-T-549 "
+        "(detect_demand_shift added), got {count}. "
         "Update this test if tools are intentionally added/removed."
     )
 

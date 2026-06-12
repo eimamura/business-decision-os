@@ -16,6 +16,7 @@ from packages.tools.demand_profile_tool import DemandProfileTool
 from packages.tools.demand_seasonality_tool import DemandSeasonalityTool
 from packages.tools.demand_segment_tool import DemandSegmentTool
 from packages.tools.demand_trend_tool import DemandTrendTool
+from packages.tools.detect_demand_shift_tool import DetectDemandShiftTool
 from packages.tools.evaluator_tool import EvaluatorTool
 from packages.tools.finance_expedite_cost_tool import CalculateExpediteCostTool
 from packages.tools.finance_holding_cost_tool import CalculateHoldingCostImpactTool
@@ -51,6 +52,7 @@ __all__ = [
     "AuditLogTool",
     "DataCatalogSearchTool",
     "DataQualityCheckerTool",
+    "DetectDemandShiftTool",
     "DemandAnomalyTool",
     "DemandCompareTool",
     "DemandDriversTool",
@@ -128,4 +130,5 @@ def create_tool_registry(
     registry.register(AnalyzeShipmentDelayCausesTool(db_session=db_session))
     registry.register(CalculateExcessInventoryRiskTool(db_session=db_session))
     registry.register(GetAvailableToPromiseTool(db_session=db_session))
+    registry.register(DetectDemandShiftTool(db_session=db_session))
     return registry

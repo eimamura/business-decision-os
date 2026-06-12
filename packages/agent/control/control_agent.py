@@ -43,12 +43,15 @@ _SYSTEM_PROMPT = (
     "inventory_snapshot, and supply_orders yourself. "
     "For a plain listing of unshipped orders (without root-cause analysis) call "
     "`list_unshipped_orders` ONCE.\n"
-    "5. Use nl_query for bulk or cross-product questions — pass the question in plain English; "
-    "nl_query generates schema-correct SQL internally.\n"
-    "6. Never fabricate column names or assume columns that are not confirmed by tool results.\n\n"
+    "5. For demand-shift questions by customer or region — call `detect_demand_shift` ONCE. "
+    "segment_demand and compare_demand_periods are SKU-axis tools (demand_history); "
+    "they do NOT answer customer/region demand questions. "
     "Customer/region demand questions (SPEC Q9) are answered from customer_orders data, "
     "not from demand_history. demand_history is the consumption series for forecast/stockout "
-    "tools only.\n\n"
+    "tools only.\n"
+    "6. Use nl_query for bulk or cross-product questions — pass the question in plain English; "
+    "nl_query generates schema-correct SQL internally.\n"
+    "7. Never fabricate column names or assume columns that are not confirmed by tool results.\n\n"
     "Always ground recommendations in tool results. Do not fabricate quantities or risk scores.\n"
     "Once you have sufficient data from tools, stop calling tools"
     " and produce a final text response.\n"
@@ -116,6 +119,7 @@ _INTENT_TOOL_SUBSET: dict[str, list[str]] = {
         "list_today_exceptions",
         "list_unshipped_orders",
         "analyze_shipment_delay_causes",
+        "detect_demand_shift",
         "profile_demand_data",
         "analyze_demand_trend",
         "evaluate_forecast_accuracy",
@@ -145,6 +149,7 @@ _INTENT_TOOL_SUBSET: dict[str, list[str]] = {
         "list_today_exceptions",
         "list_unshipped_orders",
         "analyze_shipment_delay_causes",
+        "detect_demand_shift",
         "data_catalog_search",
         "data_quality_checker",
         "table_schema_reader",
@@ -177,6 +182,7 @@ _INTENT_TOOL_SUBSET: dict[str, list[str]] = {
         "list_today_exceptions",
         "list_unshipped_orders",
         "analyze_shipment_delay_causes",
+        "detect_demand_shift",
         "list_stockout_risk",
         "calculate_stockout_risk",
         "calculate_excess_inventory_risk",
