@@ -316,12 +316,17 @@ async def test_push_out_sku027_classified_as_push_out_candidate() -> None:
 
 
 @_SKIP_NO_DB
-async def test_push_out_sku027_days_of_cover_at_arrival_exceeds_30() -> None:
-    """SKU-027 push_out orders must have days_of_cover_at_arrival > 30.
+async def test_push_out_sku027_days_of_cover_at_arrival_exceeds_floor() -> None:
+    """SKU-027 push_out orders must have days_of_cover_at_arrival >= PUSH_OUT_K_FLOOR × LT.
 
-    This is the defining condition for push_out classification.
+    T-589 refinement: the floor is relative — PUSH_OUT_K_FLOOR (3) × lead_time_days_mean.
+    SKU-027 has lead_time_days_mean=60 → floor = 3×60 = 180 days.
+    Seeded DOC ≈ 200 days; DOC_at_arrival ≈ 195–199 days >> 180 → push_out_candidate.
     """
-    from packages.tools.analyze_supply_order_timing_tool import AnalyzeSupplyOrderTimingTool
+    from packages.tools.analyze_supply_order_timing_tool import (
+        AnalyzeSupplyOrderTimingTool,
+        PUSH_OUT_K_FLOOR,
+    )
 
     result = await AnalyzeSupplyOrderTimingTool().handle(
         {"sku_id": _PUSH_OUT_SKU}, _ctx()
@@ -336,24 +341,29 @@ async def test_push_out_sku027_days_of_cover_at_arrival_exceeds_30() -> None:
 
     for order in push_out_orders:
         doc = order["days_of_cover_at_arrival"]
+        lt = order["lead_time_days"]
+        floor_threshold = PUSH_OUT_K_FLOOR * lt
         assert doc is not None, (
             f"{_PUSH_OUT_SKU} push_out order {order['order_id']}: "
             "days_of_cover_at_arrival must not be null"
         )
-        assert doc > 30, (
+        assert doc >= floor_threshold, (
             f"{_PUSH_OUT_SKU} push_out order {order['order_id']}: "
-            f"expected days_of_cover_at_arrival > 30, got {doc}"
+            f"expected days_of_cover_at_arrival >= {floor_threshold} "
+            f"({PUSH_OUT_K_FLOOR}×LT={lt}), got {doc}"
         )
 
 
 @_SKIP_NO_DB
-async def test_push_out_sku027_days_misaligned_is_negative() -> None:
-    """SKU-027 push_out orders must have negative days_misaligned.
+async def test_push_out_sku027_days_misaligned_is_non_positive() -> None:
+    """SKU-027 push_out orders must have non-positive days_misaligned.
 
-    days_misaligned = -floor(days_of_cover_at_arrival - PUSH_OUT_COVER_DAYS)
-    With DOC_at_arrival ≈ 195 and PUSH_OUT_COVER_DAYS=30:
-    days_misaligned = -floor(195 - 30) = -165 (exact value depends on seed).
-    Must be strongly negative (< -1).
+    T-589 formula: days_misaligned = -floor(doc_at_arrival - PUSH_OUT_K_FLOOR × LT).
+    For well-above-floor orders (e.g., DOC_at_arrival ≈ 198d, floor=180d):
+      days_misaligned = -floor(198 - 180) = -18.
+    For borderline orders (excess < 1d, e.g., DOC_at_arrival ≈ 180.9d):
+      days_misaligned = -floor(0.9) = 0 (still a valid push_out — barely exceeds floor).
+    Must be non-positive (<= 0); strictly negative for most orders.
     """
     from packages.tools.analyze_supply_order_timing_tool import AnalyzeSupplyOrderTimingTool
 
@@ -367,9 +377,9 @@ async def test_push_out_sku027_days_misaligned_is_negative() -> None:
         o for o in result.output["orders"] if o["classification"] == "push_out_candidate"
     ]
     for order in push_out_orders:
-        assert order["days_misaligned"] < 0, (
+        assert order["days_misaligned"] <= 0, (
             f"{_PUSH_OUT_SKU} push_out order {order['order_id']}: "
-            f"expected negative days_misaligned, got {order['days_misaligned']}"
+            f"expected non-positive days_misaligned (push_out), got {order['days_misaligned']}"
         )
 
 
@@ -428,14 +438,17 @@ async def test_count_equals_sum_of_summary_counts() -> None:
 
 @_SKIP_NO_DB
 async def test_order_row_keys_are_complete() -> None:
-    """Every order row returned by the real DB must include all required keys."""
+    """Every order row returned by the real DB must include all required keys.
+
+    T-589 adds lead_time_days to the required set.
+    """
     from packages.tools.analyze_supply_order_timing_tool import AnalyzeSupplyOrderTimingTool
 
     result = await AnalyzeSupplyOrderTimingTool().handle({}, _ctx())
 
     required_keys = {
         "order_id", "sku_id", "supplier_id", "order_date", "expected_arrival",
-        "quantity", "status", "on_hand", "avg_daily_demand",
+        "quantity", "status", "on_hand", "avg_daily_demand", "lead_time_days",
         "projected_stockout_date", "days_of_cover_at_arrival",
         "days_misaligned", "classification",
     }
@@ -502,3 +515,96 @@ async def test_orders_within_class_sorted_by_abs_days_misaligned_desc() -> None:
             f"Sort violated at position {i}: "
             f"{a['order_id']} |dm|={abs_a} vs {b['order_id']} |dm|={abs_b}"
         )
+
+
+# ===========================================================================
+# T-589: Acceptance criteria — push_out signal quality
+# ===========================================================================
+
+
+@_SKIP_NO_DB
+async def test_t589_push_out_share_at_most_25_percent() -> None:
+    """T-589 AC3: seeded dev DB must yield push_out_candidates ≤ 25% of open orders.
+
+    The P95 flat threshold (30d) produced 32/40 = 80% — no screening signal.
+    The T-589 relative threshold (3×LT ≤ doc@arrival < 5×LT, future-only) must
+    reduce this to ≤ 10/40 = 25%.
+    """
+    from packages.tools.analyze_supply_order_timing_tool import AnalyzeSupplyOrderTimingTool
+
+    result = await AnalyzeSupplyOrderTimingTool().handle({}, _ctx())
+
+    out = result.output
+    total_open = out["count"]
+    push_out_count = out["summary"]["push_out_count"]
+    # Guard: at least 1 open order required to make the ratio meaningful.
+    assert total_open >= 1, "No open orders in seeded DB — cannot check push_out share"
+
+    share = push_out_count / total_open
+    assert share <= 0.25, (
+        f"push_out share {push_out_count}/{total_open} = {100*share:.1f}% > 25%. "
+        "T-589 AC3 violated."
+    )
+
+
+@_SKIP_NO_DB
+async def test_t589_sku027_ranked_first_among_push_out_rows() -> None:
+    """T-589 AC2: SKU-027 must be ranked #1 among push_out_candidate rows.
+
+    The seeded DB has SKU-027 as the deliberate push_out scenario (ample cover,
+    lead_time=60d, doc@arrival ≈ 180–199d landing in [3×LT=180d, 5×LT=300d)).
+    Other SKUs with super-ample cover (doc@arrival ≥ 5×LT) are excluded by the
+    T-589 ceiling rule and must not appear before SKU-027 in the sorted output.
+    """
+    from packages.tools.analyze_supply_order_timing_tool import AnalyzeSupplyOrderTimingTool
+
+    result = await AnalyzeSupplyOrderTimingTool().handle({}, _ctx())
+
+    push_out_orders = [
+        o for o in result.output["orders"] if o["classification"] == "push_out_candidate"
+    ]
+    assert len(push_out_orders) >= 1, (
+        f"No push_out_candidate orders found. Summary: {result.output['summary']}"
+    )
+
+    # The first push_out row (highest |days_misaligned|) must be SKU-027.
+    first_push_out = push_out_orders[0]
+    assert first_push_out["sku_id"] == _PUSH_OUT_SKU, (
+        f"Expected first push_out row to be {_PUSH_OUT_SKU}, "
+        f"got {first_push_out['sku_id']} (days_misaligned={first_push_out['days_misaligned']}). "
+        f"All push_out SKUs: {[o['sku_id'] for o in push_out_orders]}"
+    )
+
+
+@_SKIP_NO_DB
+async def test_t589_pull_forward_results_unchanged_from_p95() -> None:
+    """T-589 AC1: pull_forward logic and results must be byte-identical to P95.
+
+    P95 seed guarantees 8 pull_forward orders including SKU-001 with positive
+    days_misaligned. The T-589 changes only affect push_out classification;
+    pull_forward (arrival > stockout) is untouched.
+    """
+    from packages.tools.analyze_supply_order_timing_tool import AnalyzeSupplyOrderTimingTool
+
+    result = await AnalyzeSupplyOrderTimingTool().handle({}, _ctx())
+
+    out = result.output
+    pull_orders = [o for o in out["orders"] if o["classification"] == "pull_forward_candidate"]
+
+    # P95 guarantees >= 1 pull_forward (P84 risk-band SKUs push supply to today+10)
+    assert len(pull_orders) >= 1, (
+        "Expected at least 1 pull_forward_candidate — P84 risk-band supply guarantee"
+    )
+
+    # SKU-001 must be pull_forward with positive days_misaligned (same as P95)
+    sku001_pf = [o for o in pull_orders if o["sku_id"] == _PULL_FORWARD_SKU]
+    assert len(sku001_pf) >= 1, (
+        f"{_PULL_FORWARD_SKU} must appear as pull_forward_candidate"
+    )
+    for order in sku001_pf:
+        assert order["days_misaligned"] > 0, (
+            f"{_PULL_FORWARD_SKU}: expected positive days_misaligned, "
+            f"got {order['days_misaligned']}"
+        )
+    # pull_forward summary count must be >= 1
+    assert out["summary"]["pull_forward_count"] >= 1

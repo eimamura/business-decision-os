@@ -1,42 +1,78 @@
-"""analyze_supply_order_timing — T-583
+"""analyze_supply_order_timing — T-583 / T-589
 
 Classifies open supply orders as pull_forward_candidate, push_out_candidate,
 or on_track by comparing each order's expected_arrival against the SKU's
 projected stockout date (derived from on-hand inventory and demand run-rate).
 
-## Classification rules
+## Classification rules (T-589 refinement)
 
 For each open supply_orders row (status in pending / confirmed / in_transit):
 
   1. Join inventory_snapshot.on_hand (SUM across warehouses) for the SKU.
   2. Join demand_history avg_daily run-rate (30-day rolling window, same as
      other tools in this codebase).
-  3. Compute:
+  3. Join sku_master.lead_time_days_mean for the SKU (reference window for the
+     relative push_out threshold — see § push_out classification below).
+  4. Compute:
        projected_stockout_date = today + floor(on_hand / avg_daily)
          (null / missing_data when avg_daily == 0 → "zero-demand SKU ...")
        days_of_cover_at_arrival = (on_hand / avg_daily) - days_until_arrival
          (how many days of cover remain when the order lands)
 
-  4. Classify:
+  5. Classify:
        pull_forward_candidate: expected_arrival > projected_stockout_date
          (supply lands after projected stockout; arrival is too late)
          days_misaligned = (expected_arrival - projected_stockout_date).days  [positive]
 
-       push_out_candidate: days_of_cover_at_arrival >= PUSH_OUT_COVER_DAYS
-         (at arrival the SKU still has ≥ 30 days of cover remaining; order is early)
-         days_misaligned = floor(days_of_cover_at_arrival - PUSH_OUT_COVER_DAYS)
-         expressed as negative (arrival is N days too early relative to the threshold)
-         NOTE: a push_out_candidate CANNOT also be a pull_forward_candidate
-         (pull_forward takes precedence — if arrival is after stockout, supply is needed).
+       push_out_candidate: ALL of the following must be true
+         (a) Not pull_forward (pull_forward takes precedence).
+         (b) days_until_arrival >= 0 (order has not yet passed its expected arrival
+             date — overdue-and-still-open orders are excluded; they are data-quality
+             issues rather than actionable timing signals).
+         (c) days_of_cover_at_arrival >= PUSH_OUT_K_FLOOR × lead_time_days_mean
+             (at arrival the SKU has at least PUSH_OUT_K_FLOOR full replenishment
+             cycles of remaining cover; the order is clearly premature).
+         (d) days_of_cover_at_arrival < PUSH_OUT_K_CEIL × lead_time_days_mean
+             (super-ample exclusion: SKUs with > PUSH_OUT_K_CEIL × LT of cover at
+             arrival are structurally over-inventoried — flagging them as push_out
+             provides no actionable timing signal; they need strategic review).
+         days_misaligned = -floor(days_of_cover_at_arrival
+                                  - PUSH_OUT_K_FLOOR × lead_time_days_mean)
+         expressed as negative (excess cover-days above the floor threshold).
 
        on_track: otherwise
 
-  5. PUSH_OUT_COVER_DAYS = 30 (documented constant).
-     Rationale: 30 days of remaining cover at the time of arrival means the
-     existing inventory could carry the SKU for another month without this
-     order.  This is a conservative threshold — higher values reduce false
-     push-out signals for fast-movers; lower values increase them.  30 days
-     is a common supply-chain reorder-cycle target.
+## Push-out threshold rationale (T-589)
+
+### Why relative (× lead_time) instead of a flat constant?
+  The P95 flat threshold PUSH_OUT_COVER_DAYS=30 flagged 32/40 (80%) of open
+  orders on the seeded dev DB because every ample-cover SKU — fast-movers with
+  30+ days of stock and slow-movers with hundreds of days — exceeded the floor.
+  "Almost everything is a candidate" is not a screening signal.
+
+  A relative threshold (k × lead_time_days_mean) adapts to each SKU's natural
+  replenishment cycle: a fast-mover with a 14-day lead time is flagged when it
+  has ≥ 42 days of cover at arrival (3×14); a slow-mover with a 60-day lead
+  time is only flagged when it has ≥ 180 days (3×60).  This avoids false
+  signals on fast-movers whose larger safety stocks naturally carry more cover.
+
+### Why a super-ample ceiling (× PUSH_OUT_K_CEIL)?
+  SKUs with DOC-at-arrival > PUSH_OUT_K_CEIL × LT (e.g., > 5×LT = 300d for a
+  60-day-LT SKU) are so over-inventoried that tactical push-out decisions have
+  negligible impact; the root cause is a structural overstock requiring a
+  strategic review, not a single-order timing adjustment.  Including them would
+  again dilute the signal with borderline-unactionable rows.
+
+### Why future-only (days_until_arrival >= 0)?
+  Orders whose expected_arrival has already passed but are still "open" in the
+  system are data-quality or receiving anomalies.  Flagging them as push_out
+  candidates is misleading; the decision window has closed.
+
+### Constants (single-source, documented):
+  PUSH_OUT_K_FLOOR = 3  — lower multiplier; order is push_out when cover at
+                          arrival ≥ 3 full replenishment cycles.
+  PUSH_OUT_K_CEIL  = 5  — upper multiplier; cover ≥ 5 replenishment cycles
+                          → super_ample, excluded from push_out screening.
 
 ## Output contract (hybrid)
 
@@ -83,9 +119,16 @@ _OPEN_STATUSES = ["pending", "confirmed", "in_transit"]
 # Demand history look-back for run-rate (days) — house convention (30d).
 _RUNRATE_LOOKBACK_DAYS = 30
 
-# Days-of-cover remaining at arrival threshold for push_out classification.
-# Documented in module docstring above.
-PUSH_OUT_COVER_DAYS = 30
+# Push-out threshold multipliers (single-source constants; see module docstring).
+#
+# An order is push_out_candidate when:
+#   days_of_cover_at_arrival >= PUSH_OUT_K_FLOOR × lead_time_days_mean  (floor)
+#   AND
+#   days_of_cover_at_arrival <  PUSH_OUT_K_CEIL  × lead_time_days_mean  (ceiling)
+#   AND
+#   days_until_arrival >= 0  (future arrivals only)
+PUSH_OUT_K_FLOOR: int = 3
+PUSH_OUT_K_CEIL: int = 5
 
 # Classification labels.
 _PULL_FORWARD = "pull_forward_candidate"
@@ -106,6 +149,11 @@ class AnalyzeSupplyOrderTimingTool:
     Computes projected stockout date from on-hand inventory and 30-day demand
     run-rate, then compares each open order's expected_arrival against that date.
 
+    Push-out classification uses a relative threshold: the order must arrive when
+    the SKU still has between PUSH_OUT_K_FLOOR×LT and PUSH_OUT_K_CEIL×LT days of
+    remaining cover (where LT = sku_master.lead_time_days_mean).  Only orders with
+    days_until_arrival >= 0 (future arrivals) qualify as push_out candidates.
+
     Analytical output only — no recommendations.  No LLM calls — deterministic SQL only.
     """
 
@@ -113,11 +161,13 @@ class AnalyzeSupplyOrderTimingTool:
     description = (
         "Classify open supply orders by timing fit: "
         "pull_forward_candidate (arrival after projected stockout — order is too late), "
-        "push_out_candidate (arrival while days-of-cover still >= 30 days — order is too early), "
+        "push_out_candidate (future arrival when days-of-cover-at-arrival is in "
+        "[PUSH_OUT_K_FLOOR × lead_time, PUSH_OUT_K_CEIL × lead_time) — order is premature "
+        "but still within the actionable window), "
         "or on_track. "
         "Per-order output includes projected_stockout_date, days_of_cover_at_arrival, "
         "days_misaligned (positive = days late past stockout; negative = excess days of cover "
-        "above threshold at arrival), and evidence numbers (on_hand, avg_daily_demand). "
+        "above the push-out floor at arrival), and evidence numbers (on_hand, avg_daily_demand). "
         "Ranked by severity (pull_forward first, then push_out, then on_track; within each "
         "class by |days_misaligned| descending). "
         "Call this for SPEC Q8 — 'Which materials or items should be purchased earlier or later?'. "
@@ -168,6 +218,14 @@ class AnalyzeSupplyOrderTimingTool:
                         "status": {"type": "string"},
                         "on_hand": {"type": "number"},
                         "avg_daily_demand": {"type": "number"},
+                        "lead_time_days": {
+                            "type": "number",
+                            "description": (
+                                "SKU's mean lead time in days (from sku_master). "
+                                "Used as the reference window for the relative "
+                                "push_out threshold."
+                            ),
+                        },
                         "projected_stockout_date": {
                             "type": ["string", "null"],
                             "description": "ISO date string or null when avg_daily_demand == 0.",
@@ -184,7 +242,8 @@ class AnalyzeSupplyOrderTimingTool:
                             "description": (
                                 "Signed integer: positive = arrival N days after projected "
                                 "stockout (pull_forward); negative = excess days of cover "
-                                "above threshold at arrival (push_out). Zero for on_track."
+                                "above the push-out floor (PUSH_OUT_K_FLOOR × lead_time) "
+                                "at arrival (push_out). Zero for on_track."
                             ),
                         },
                         "classification": {
@@ -206,6 +265,7 @@ class AnalyzeSupplyOrderTimingTool:
                         "status",
                         "on_hand",
                         "avg_daily_demand",
+                        "lead_time_days",
                         "projected_stockout_date",
                         "days_of_cover_at_arrival",
                         "days_misaligned",
@@ -256,6 +316,7 @@ class AnalyzeSupplyOrderTimingTool:
             order_rows = await _fetch_open_orders(sku_filter)
             inventory_map = await _fetch_inventory_map(sku_filter)
             demand_map = await _fetch_demand_map(sku_filter)
+            lead_time_map = await _fetch_lead_time_map(sku_filter)
         except Exception as exc:
             return ToolResult(
                 output={"error": db_error_message(exc)},
@@ -300,6 +361,14 @@ class AnalyzeSupplyOrderTimingTool:
                     missing_data.append(note)
                     seen_missing.add(note)
 
+            # --- Lead time (reference window for push_out threshold) ---
+            lead_time_days: float = lead_time_map.get(sku_id, 0.0)
+            if sku_id not in lead_time_map:
+                note = f"no sku_master row for {sku_id} — lead_time_days assumed 0"
+                if note not in seen_missing:
+                    missing_data.append(note)
+                    seen_missing.add(note)
+
             # --- Demand run-rate ---
             avg_daily: float = demand_map.get(sku_id, 0.0)
             if avg_daily == 0.0:
@@ -321,6 +390,7 @@ class AnalyzeSupplyOrderTimingTool:
                     "status": status,
                     "on_hand": on_hand,
                     "avg_daily_demand": 0.0,
+                    "lead_time_days": lead_time_days,
                     "projected_stockout_date": None,
                     "days_of_cover_at_arrival": None,
                     "days_misaligned": 0,
@@ -338,15 +408,23 @@ class AnalyzeSupplyOrderTimingTool:
             # Positive: stock lasts beyond arrival; negative: already stocked out by arrival.
             days_of_cover_at_arrival = days_of_stock - days_until_arrival
 
+            # --- Push-out threshold bounds (relative to SKU's lead time) ---
+            push_out_floor = PUSH_OUT_K_FLOOR * lead_time_days
+            push_out_ceil = PUSH_OUT_K_CEIL * lead_time_days
+
             # --- Classification ---
             if expected_arrival_date > projected_stockout_date:
                 # Arrival is after projected stockout → pull_forward_candidate.
                 days_misaligned = (expected_arrival_date - projected_stockout_date).days
                 classification = _PULL_FORWARD
-            elif days_of_cover_at_arrival >= PUSH_OUT_COVER_DAYS:
-                # At arrival, cover still >= threshold → push_out_candidate.
-                # days_misaligned is negative: excess cover above threshold.
-                excess = days_of_cover_at_arrival - PUSH_OUT_COVER_DAYS
+            elif (
+                days_until_arrival >= 0  # future arrivals only (closed decision window excluded)
+                and days_of_cover_at_arrival >= push_out_floor  # cover exceeds floor
+                and days_of_cover_at_arrival < push_out_ceil  # below super-ample ceiling
+            ):
+                # At future arrival, cover in [floor, ceil) → push_out_candidate.
+                # days_misaligned is negative: excess cover above the floor threshold.
+                excess = days_of_cover_at_arrival - push_out_floor
                 days_misaligned = -int(math.floor(excess))
                 classification = _PUSH_OUT
             else:
@@ -363,6 +441,7 @@ class AnalyzeSupplyOrderTimingTool:
                 "status": status,
                 "on_hand": on_hand,
                 "avg_daily_demand": round(avg_daily, 6),
+                "lead_time_days": lead_time_days,
                 "projected_stockout_date": projected_stockout_date.isoformat(),
                 "days_of_cover_at_arrival": round(days_of_cover_at_arrival, 4),
                 "days_misaligned": days_misaligned,
@@ -499,6 +578,33 @@ async def _fetch_demand_map(sku_filter: str | None) -> dict[str, float]:
                 _RUNRATE_LOOKBACK_DAYS,
             )
         return {str(r["sku_id"]): float(r["avg_daily"]) for r in rows}
+
+
+async def _fetch_lead_time_map(sku_filter: str | None) -> dict[str, float]:
+    """Return {sku_id: lead_time_days_mean} from sku_master.
+
+    lead_time_days_mean is the reference window for the push_out relative
+    threshold: push_out floor = PUSH_OUT_K_FLOOR × lead_time_days_mean.
+    """
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        if sku_filter:
+            rows = await conn.fetch(
+                """
+                SELECT sku_id, lead_time_days_mean
+                FROM sku_master
+                WHERE sku_id = $1
+                """,
+                sku_filter,
+            )
+        else:
+            rows = await conn.fetch(
+                """
+                SELECT sku_id, lead_time_days_mean
+                FROM sku_master
+                """
+            )
+        return {str(r["sku_id"]): float(r["lead_time_days_mean"]) for r in rows}
 
 
 # ---------------------------------------------------------------------------

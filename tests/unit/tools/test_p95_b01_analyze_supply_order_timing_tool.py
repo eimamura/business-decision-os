@@ -1,14 +1,18 @@
-"""T-583 / T-584: Unit tests for analyze_supply_order_timing_tool.
+"""T-583 / T-584 / T-589: Unit tests for analyze_supply_order_timing_tool.
 
 Covers:
-- Schema contract: required top-level keys present.
-- Classification boundaries:
+- Schema contract: required top-level keys present (including lead_time_days added in T-589).
+- Classification boundaries (T-589 relative-threshold rule):
     pull_forward_candidate: expected_arrival > projected_stockout_date.
-    push_out_candidate: days_of_cover_at_arrival >= PUSH_OUT_COVER_DAYS.
+    push_out_candidate: days_until_arrival >= 0 AND
+                        days_of_cover_at_arrival >= PUSH_OUT_K_FLOOR × lead_time_days AND
+                        days_of_cover_at_arrival <  PUSH_OUT_K_CEIL  × lead_time_days.
     on_track: otherwise.
+- Super-ample exclusion: doc_at_arrival >= PUSH_OUT_K_CEIL × LT → on_track (not push_out).
+- Future-only filter: days_until_arrival < 0 → on_track (not push_out).
 - days_misaligned math:
     pull_forward: positive = (arrival - stockout).days.
-    push_out: negative = -floor(days_of_cover_at_arrival - PUSH_OUT_COVER_DAYS).
+    push_out: negative = -floor(doc_at_arrival - PUSH_OUT_K_FLOOR × lead_time_days).
     on_track: 0.
 - Summary counts computed pre-cap.
 - Cap + truncated: >100 orders → truncated=True; count reflects full pre-cap set.
@@ -22,6 +26,7 @@ Covers:
   within class |days_misaligned| desc; then order_id asc.
 - Registration: analyze_supply_order_timing in create_tool_registry().
 - Pure-Python date helpers: _to_date, _date_to_iso.
+- Constants: PUSH_OUT_K_FLOOR=3, PUSH_OUT_K_CEIL=5 (T-589 documented thresholds).
 """
 from __future__ import annotations
 
@@ -50,10 +55,22 @@ def make_ctx() -> ToolContext:
     )
 
 
-def _make_pool(order_rows: list[Any], inv_rows: list[Any], demand_rows: list[Any]) -> MagicMock:
-    """Mock pool whose three fetch() calls return order, inventory, demand sequences."""
+def _make_pool(
+    order_rows: list[Any],
+    inv_rows: list[Any],
+    demand_rows: list[Any],
+    lead_time_rows: list[Any] | None = None,
+) -> MagicMock:
+    """Mock pool whose four fetch() calls return order, inventory, demand, lead_time sequences.
+
+    lead_time_rows defaults to an empty list when not provided (all SKUs will have
+    lead_time_days=0.0, which means push_out floor and ceil are both 0 — so push_out
+    classification always requires non-zero lead_time_rows to produce push_out candidates).
+    """
+    if lead_time_rows is None:
+        lead_time_rows = []
     mock_conn = AsyncMock()
-    mock_conn.fetch.side_effect = [order_rows, inv_rows, demand_rows]
+    mock_conn.fetch.side_effect = [order_rows, inv_rows, demand_rows, lead_time_rows]
     mock_pool = MagicMock()
     mock_pool.acquire.return_value.__aenter__ = AsyncMock(return_value=mock_conn)
     mock_pool.acquire.return_value.__aexit__ = AsyncMock(return_value=False)
@@ -91,6 +108,10 @@ def _inv(sku_id: str, on_hand: float) -> dict[str, Any]:
 
 def _demand(sku_id: str, avg_daily: float) -> dict[str, Any]:
     return {"sku_id": sku_id, "avg_daily": avg_daily}
+
+
+def _lead_time(sku_id: str, lt_days: float) -> dict[str, Any]:
+    return {"sku_id": sku_id, "lead_time_days_mean": lt_days}
 
 
 # Patch target
@@ -131,22 +152,23 @@ async def test_schema_summary_has_required_keys() -> None:
 
 
 async def test_schema_order_row_has_required_keys() -> None:
-    """Each order row must include all required keys."""
+    """Each order row must include all required keys, including lead_time_days (T-589)."""
     from packages.tools.analyze_supply_order_timing_tool import AnalyzeSupplyOrderTimingTool
 
     today = datetime.date.today()
     orders = [_order("SKU-A", expected_arrival=today + datetime.timedelta(days=20))]
     inv = [_inv("SKU-A", 50.0)]
     demand = [_demand("SKU-A", 1.0)]
+    lt = [_lead_time("SKU-A", 14.0)]
 
-    with patch(_PATCH, return_value=_make_pool(orders, inv, demand)):
+    with patch(_PATCH, return_value=_make_pool(orders, inv, demand, lt)):
         result = await AnalyzeSupplyOrderTimingTool().handle({}, make_ctx())
 
     assert len(result.output["orders"]) == 1
     row = result.output["orders"][0]
     required = (
         "order_id", "sku_id", "supplier_id", "order_date", "expected_arrival",
-        "quantity", "status", "on_hand", "avg_daily_demand",
+        "quantity", "status", "on_hand", "avg_daily_demand", "lead_time_days",
         "projected_stockout_date", "days_of_cover_at_arrival",
         "days_misaligned", "classification",
     )
@@ -169,8 +191,9 @@ async def test_pull_forward_when_arrival_after_stockout() -> None:
     orders = [_order("SKU-A", expected_arrival=today + datetime.timedelta(days=20))]
     inv = [_inv("SKU-A", 10.0)]
     demand = [_demand("SKU-A", 1.0)]
+    lt = [_lead_time("SKU-A", 14.0)]
 
-    with patch(_PATCH, return_value=_make_pool(orders, inv, demand)):
+    with patch(_PATCH, return_value=_make_pool(orders, inv, demand, lt)):
         result = await AnalyzeSupplyOrderTimingTool().handle({}, make_ctx())
 
     assert len(result.output["orders"]) == 1
@@ -179,41 +202,103 @@ async def test_pull_forward_when_arrival_after_stockout() -> None:
     assert row["days_misaligned"] > 0
 
 
-async def test_push_out_when_cover_exceeds_threshold() -> None:
-    """days_of_cover_at_arrival >= 30 → push_out_candidate (and not pull_forward)."""
+async def test_push_out_when_cover_in_floor_ceil_window() -> None:
+    """doc_at_arrival in [K_FLOOR×LT, K_CEIL×LT) with future arrival → push_out_candidate.
+
+    Setup:
+      on_hand=100, avg_daily=1 → DOC=100d, stockout=today+100
+      arrival=today+5 → doc_at_arrival=95, days_until=5 (future)
+      lead_time=20 → floor=3×20=60, ceil=5×20=100
+      95 >= 60 and 95 < 100 → push_out_candidate.
+    """
     from packages.tools.analyze_supply_order_timing_tool import AnalyzeSupplyOrderTimingTool
-    from packages.tools.analyze_supply_order_timing_tool import PUSH_OUT_COVER_DAYS
+    from packages.tools.analyze_supply_order_timing_tool import PUSH_OUT_K_FLOOR
 
     today = datetime.date.today()
-    # on_hand=100, avg_daily=1 → stockout in 100 days, arrival=today+5
-    # days_of_cover_at_arrival = 100-5 = 95 >= 30 → push_out
     orders = [_order("SKU-B", expected_arrival=today + datetime.timedelta(days=5))]
     inv = [_inv("SKU-B", 100.0)]
     demand = [_demand("SKU-B", 1.0)]
+    lt = [_lead_time("SKU-B", 20.0)]  # floor=60, ceil=100
 
-    with patch(_PATCH, return_value=_make_pool(orders, inv, demand)):
+    with patch(_PATCH, return_value=_make_pool(orders, inv, demand, lt)):
         result = await AnalyzeSupplyOrderTimingTool().handle({}, make_ctx())
 
     assert len(result.output["orders"]) == 1
     row = result.output["orders"][0]
     assert row["classification"] == "push_out_candidate"
     assert row["days_misaligned"] < 0
-    # days_misaligned = -floor(95 - 30) = -65
-    assert row["days_misaligned"] == -(95 - PUSH_OUT_COVER_DAYS)
+    # days_misaligned = -floor(95 - 3×20) = -floor(95 - 60) = -35
+    assert row["days_misaligned"] == -(95 - PUSH_OUT_K_FLOOR * 20)
+
+
+async def test_super_ample_excluded_from_push_out() -> None:
+    """doc_at_arrival >= PUSH_OUT_K_CEIL × LT → on_track (super-ample exclusion).
+
+    Setup:
+      on_hand=120, avg_daily=1 → DOC=120d
+      arrival=today+5 → doc_at_arrival=115, days_until=5
+      lead_time=20 → floor=60, ceil=100
+      115 >= 100 (ceil) → NOT push_out → on_track.
+    """
+    from packages.tools.analyze_supply_order_timing_tool import AnalyzeSupplyOrderTimingTool
+
+    today = datetime.date.today()
+    orders = [_order("SKU-SA", expected_arrival=today + datetime.timedelta(days=5))]
+    inv = [_inv("SKU-SA", 120.0)]
+    demand = [_demand("SKU-SA", 1.0)]
+    lt = [_lead_time("SKU-SA", 20.0)]  # ceil=100, 115 >= 100 → excluded
+
+    with patch(_PATCH, return_value=_make_pool(orders, inv, demand, lt)):
+        result = await AnalyzeSupplyOrderTimingTool().handle({}, make_ctx())
+
+    row = result.output["orders"][0]
+    assert row["classification"] == "on_track", (
+        f"Expected on_track (super-ample), got {row['classification']!r}; "
+        f"doc_at_arrival={row['days_of_cover_at_arrival']}"
+    )
+    assert row["days_misaligned"] == 0
+
+
+async def test_past_arrival_excluded_from_push_out() -> None:
+    """Order with expected_arrival in the past (days_until < 0) → on_track, not push_out.
+
+    The decision window for past-arrival orders is closed; flagging them as
+    push_out would be misleading.
+    """
+    from packages.tools.analyze_supply_order_timing_tool import AnalyzeSupplyOrderTimingTool
+
+    today = datetime.date.today()
+    # arrival is 5 days ago; doc_at_arrival = 100 - (-5) = 105 which would pass
+    # the floor/ceil check if days_until were >= 0, but it isn't.
+    past_arrival = today - datetime.timedelta(days=5)
+    orders = [_order("SKU-PA", expected_arrival=past_arrival)]
+    inv = [_inv("SKU-PA", 100.0)]
+    demand = [_demand("SKU-PA", 1.0)]
+    lt = [_lead_time("SKU-PA", 20.0)]
+
+    with patch(_PATCH, return_value=_make_pool(orders, inv, demand, lt)):
+        result = await AnalyzeSupplyOrderTimingTool().handle({}, make_ctx())
+
+    row = result.output["orders"][0]
+    assert row["classification"] == "on_track", (
+        f"Past-arrival order should be on_track, got {row['classification']!r}"
+    )
+    assert row["days_misaligned"] == 0
 
 
 async def test_on_track_when_between_bands() -> None:
-    """Order arriving before stockout with cover < 30 days at arrival → on_track."""
+    """Order arriving before stockout with cover < floor at arrival → on_track."""
     from packages.tools.analyze_supply_order_timing_tool import AnalyzeSupplyOrderTimingTool
 
     today = datetime.date.today()
     # on_hand=50, avg_daily=1 → stockout in 50 days, arrival=today+30
-    # days_of_cover_at_arrival = 50-30 = 20 < 30 and arrival < stockout → on_track
+    # doc_at_arrival = 50-30 = 20 < floor=3×20=60 and arrival < stockout → on_track
     orders = [_order("SKU-C", expected_arrival=today + datetime.timedelta(days=30))]
     inv = [_inv("SKU-C", 50.0)]
     demand = [_demand("SKU-C", 1.0)]
+    lt = [_lead_time("SKU-C", 20.0)]  # floor=60; 20 < 60 → on_track
 
-    with patch(_PATCH, return_value=_make_pool(orders, inv, demand)):
+    with patch(_PATCH, return_value=_make_pool(orders, inv, demand, lt)):
         result = await AnalyzeSupplyOrderTimingTool().handle({}, make_ctx())
 
     assert len(result.output["orders"]) == 1
@@ -228,13 +313,13 @@ async def test_pull_forward_takes_precedence_over_push_out() -> None:
 
     today = datetime.date.today()
     # on_hand=5, avg_daily=1 → stockout in 5 days, arrival=today+60
-    # days_of_cover_at_arrival = 5-60 = -55 (negative — already stocked out at arrival)
-    # arrival > projected_stockout → pull_forward wins
+    # arrival > projected_stockout → pull_forward wins (even though days_until=60 >= 0)
     orders = [_order("SKU-D", expected_arrival=today + datetime.timedelta(days=60))]
     inv = [_inv("SKU-D", 5.0)]
     demand = [_demand("SKU-D", 1.0)]
+    lt = [_lead_time("SKU-D", 14.0)]
 
-    with patch(_PATCH, return_value=_make_pool(orders, inv, demand)):
+    with patch(_PATCH, return_value=_make_pool(orders, inv, demand, lt)):
         result = await AnalyzeSupplyOrderTimingTool().handle({}, make_ctx())
 
     row = result.output["orders"][0]
@@ -256,8 +341,9 @@ async def test_days_misaligned_pull_forward_is_arrival_minus_stockout() -> None:
     orders = [_order("SKU-E", expected_arrival=today + datetime.timedelta(days=20))]
     inv = [_inv("SKU-E", 10.0)]
     demand = [_demand("SKU-E", 1.0)]
+    lt = [_lead_time("SKU-E", 14.0)]
 
-    with patch(_PATCH, return_value=_make_pool(orders, inv, demand)):
+    with patch(_PATCH, return_value=_make_pool(orders, inv, demand, lt)):
         result = await AnalyzeSupplyOrderTimingTool().handle({}, make_ctx())
 
     row = result.output["orders"][0]
@@ -265,25 +351,31 @@ async def test_days_misaligned_pull_forward_is_arrival_minus_stockout() -> None:
     assert row["days_misaligned"] == 10
 
 
-async def test_days_misaligned_push_out_is_negative_excess_cover() -> None:
-    """days_misaligned for push_out = -floor(days_of_cover_at_arrival - PUSH_OUT_COVER_DAYS)."""
+async def test_days_misaligned_push_out_is_negative_excess_over_floor() -> None:
+    """days_misaligned for push_out = -floor(doc_at_arrival - PUSH_OUT_K_FLOOR × LT).
+
+    Setup:
+      on_hand=80, avg_daily=1 → DOC=80d, stockout=today+80, arrival=today+5
+      doc_at_arrival = 80-5 = 75, days_until=5 (future)
+      lead_time=20 → floor=3×20=60, ceil=5×20=100
+      75 in [60, 100) → push_out_candidate
+      days_misaligned = -floor(75 - 60) = -15
+    """
     from packages.tools.analyze_supply_order_timing_tool import AnalyzeSupplyOrderTimingTool
-    from packages.tools.analyze_supply_order_timing_tool import PUSH_OUT_COVER_DAYS
+    from packages.tools.analyze_supply_order_timing_tool import PUSH_OUT_K_FLOOR
 
     today = datetime.date.today()
-    # on_hand=80, avg_daily=1 → stockout=today+80, arrival=today+5
-    # days_of_cover_at_arrival = 80-5 = 75 >= 30 → push_out
-    # days_misaligned = -floor(75 - 30) = -45
     orders = [_order("SKU-F", expected_arrival=today + datetime.timedelta(days=5))]
     inv = [_inv("SKU-F", 80.0)]
     demand = [_demand("SKU-F", 1.0)]
+    lt = [_lead_time("SKU-F", 20.0)]
 
-    with patch(_PATCH, return_value=_make_pool(orders, inv, demand)):
+    with patch(_PATCH, return_value=_make_pool(orders, inv, demand, lt)):
         result = await AnalyzeSupplyOrderTimingTool().handle({}, make_ctx())
 
     row = result.output["orders"][0]
     assert row["classification"] == "push_out_candidate"
-    assert row["days_misaligned"] == -(75 - PUSH_OUT_COVER_DAYS)
+    assert row["days_misaligned"] == -(75 - PUSH_OUT_K_FLOOR * 20)
 
 
 async def test_days_misaligned_on_track_is_zero() -> None:
@@ -292,12 +384,13 @@ async def test_days_misaligned_on_track_is_zero() -> None:
 
     today = datetime.date.today()
     # on_hand=50, avg_daily=1 → stockout=today+50, arrival=today+30
-    # cover_at_arrival=20 < 30 and arrival < stockout → on_track
+    # cover_at_arrival=20 < floor=60 and arrival < stockout → on_track
     orders = [_order("SKU-G", expected_arrival=today + datetime.timedelta(days=30))]
     inv = [_inv("SKU-G", 50.0)]
     demand = [_demand("SKU-G", 1.0)]
+    lt = [_lead_time("SKU-G", 20.0)]
 
-    with patch(_PATCH, return_value=_make_pool(orders, inv, demand)):
+    with patch(_PATCH, return_value=_make_pool(orders, inv, demand, lt)):
         result = await AnalyzeSupplyOrderTimingTool().handle({}, make_ctx())
 
     row = result.output["orders"][0]
@@ -310,11 +403,16 @@ async def test_days_misaligned_on_track_is_zero() -> None:
 
 
 async def test_summary_counts_match_pre_cap() -> None:
-    """Summary counts must reflect the full pre-cap set, not the capped list."""
+    """Summary counts must reflect the full pre-cap set, not the capped list.
+
+    Setup:
+      SKU-P: on_hand=10, avg=1, arrival=today+20, lt=14 → stockout=today+10 < arrival → pull_forward
+      SKU-Q: on_hand=100, avg=1, arrival=today+5, lt=20 → doc@arr=95 in [60,100) → push_out
+      SKU-R: on_hand=50, avg=1, arrival=today+30, lt=20 → doc@arr=20 < floor=60 → on_track
+    """
     from packages.tools.analyze_supply_order_timing_tool import AnalyzeSupplyOrderTimingTool
 
     today = datetime.date.today()
-    # Build 3 orders: 1 pull_forward, 1 push_out, 1 on_track
     orders = [
         _order("SKU-P", expected_arrival=today + datetime.timedelta(days=20)),  # pull_forward
         _order("SKU-Q", expected_arrival=today + datetime.timedelta(days=5)),   # push_out
@@ -322,8 +420,9 @@ async def test_summary_counts_match_pre_cap() -> None:
     ]
     inv = [_inv("SKU-P", 10.0), _inv("SKU-Q", 100.0), _inv("SKU-R", 50.0)]
     demand = [_demand("SKU-P", 1.0), _demand("SKU-Q", 1.0), _demand("SKU-R", 1.0)]
+    lt = [_lead_time("SKU-P", 14.0), _lead_time("SKU-Q", 20.0), _lead_time("SKU-R", 20.0)]
 
-    with patch(_PATCH, return_value=_make_pool(orders, inv, demand)):
+    with patch(_PATCH, return_value=_make_pool(orders, inv, demand, lt)):
         result = await AnalyzeSupplyOrderTimingTool().handle({}, make_ctx())
 
     summary = result.output["summary"]
@@ -337,10 +436,10 @@ async def test_summary_counts_computed_pre_cap_with_many_orders() -> None:
     """Summary counts and count reflect the full pre-cap set even when truncated.
 
     Setup:
-      SKU-000..SKU-109: on_hand=10, avg_daily=1, arrival=today+20
+      SKU-000..SKU-109: on_hand=10, avg_daily=1, arrival=today+20, lt=14
         → stockout=today+10, arrival>stockout → pull_forward (110 orders)
-      SKU-110..SKU-114: on_hand=50, avg_daily=1, arrival=today+30
-        → stockout=today+50, arrival<stockout, cover_at_arrival=20 < 30 → on_track (5 orders)
+      SKU-110..SKU-114: on_hand=50, avg_daily=1, arrival=today+30, lt=20
+        → stockout=today+50, arrival<stockout, doc@arr=20 < floor=60 → on_track (5 orders)
     Total = 115 > 100 → truncated=True, len(orders)=100, count=115.
     Summary pre-cap: pull_forward=110, on_track=5.
     """
@@ -352,8 +451,7 @@ async def test_summary_counts_computed_pre_cap_with_many_orders() -> None:
         _order(f"SKU-{i:03d}", expected_arrival=today + datetime.timedelta(days=20))
         for i in range(110)
     ]
-    # 5 on_track orders: on_hand=50, arrival=today+30, avg_daily=1
-    # stockout=today+50, cover_at_arrival=50-30=20 < 30 → on_track
+    # 5 on_track orders: on_hand=50, arrival=today+30, lt=20 → doc@arr=20 < 60
     ot_orders = [
         _order(f"SKU-{i:03d}", supplier_id="SUP-002",
                expected_arrival=today + datetime.timedelta(days=30))
@@ -366,10 +464,16 @@ async def test_summary_counts_computed_pre_cap_with_many_orders() -> None:
         [_inv(f"SKU-{i:03d}", 10.0) for i in range(110)]
         + [_inv(f"SKU-{i:03d}", 50.0) for i in range(110, 115)]
     )
-    # All avg_daily=1; pull_forward: stockout=today+10 < arrival=today+20; on_track: stockout=today+50
+    # All avg_daily=1; pull_forward: stockout=today+10 < arrival=today+20
     demand = [_demand(f"SKU-{i:03d}", 1.0) for i in range(115)]
+    # Pull_forward SKUs get lt=14 (floor=42 — irrelevant, they're pull_forward)
+    # on_track SKUs get lt=20 (floor=60 > doc@arr=20 → on_track confirmed)
+    lt = (
+        [_lead_time(f"SKU-{i:03d}", 14.0) for i in range(110)]
+        + [_lead_time(f"SKU-{i:03d}", 20.0) for i in range(110, 115)]
+    )
 
-    with patch(_PATCH, return_value=_make_pool(all_orders, inv, demand)):
+    with patch(_PATCH, return_value=_make_pool(all_orders, inv, demand, lt)):
         result = await AnalyzeSupplyOrderTimingTool().handle({}, make_ctx())
 
     assert result.output["truncated"] is True
@@ -394,8 +498,9 @@ async def test_missing_data_zero_demand_sku_classified_on_track_null_dates() -> 
     orders = [_order("SKU-Z", expected_arrival=today + datetime.timedelta(days=5))]
     inv = [_inv("SKU-Z", 50.0)]
     demand: list[Any] = []  # no demand row → avg_daily=0
+    lt = [_lead_time("SKU-Z", 20.0)]
 
-    with patch(_PATCH, return_value=_make_pool(orders, inv, demand)):
+    with patch(_PATCH, return_value=_make_pool(orders, inv, demand, lt)):
         result = await AnalyzeSupplyOrderTimingTool().handle({}, make_ctx())
 
     assert len(result.output["missing_data"]) >= 1
@@ -419,8 +524,9 @@ async def test_missing_data_null_expected_arrival_excluded() -> None:
     orders[0]["expected_arrival"] = None
     inv = [_inv("SKU-N", 50.0)]
     demand = [_demand("SKU-N", 1.0)]
+    lt = [_lead_time("SKU-N", 20.0)]
 
-    with patch(_PATCH, return_value=_make_pool(orders, inv, demand)):
+    with patch(_PATCH, return_value=_make_pool(orders, inv, demand, lt)):
         result = await AnalyzeSupplyOrderTimingTool().handle({}, make_ctx())
 
     assert len(result.output["orders"]) == 0
@@ -436,8 +542,9 @@ async def test_missing_data_no_inventory_snapshot_on_hand_assumed_zero() -> None
     orders = [_order("SKU-NI", expected_arrival=today + datetime.timedelta(days=1))]
     inv: list[Any] = []  # no inventory row for SKU-NI
     demand = [_demand("SKU-NI", 5.0)]
+    lt = [_lead_time("SKU-NI", 14.0)]
 
-    with patch(_PATCH, return_value=_make_pool(orders, inv, demand)):
+    with patch(_PATCH, return_value=_make_pool(orders, inv, demand, lt)):
         result = await AnalyzeSupplyOrderTimingTool().handle({}, make_ctx())
 
     assert any("inventory_snapshot" in m and "SKU-NI" in m for m in result.output["missing_data"])
@@ -496,7 +603,13 @@ async def test_db_error_returns_error_key() -> None:
 
 
 async def test_sort_order_pull_forward_before_push_out_before_on_track() -> None:
-    """pull_forward rows come before push_out which come before on_track."""
+    """pull_forward rows come before push_out which come before on_track.
+
+    Setup:
+      SKU-OT: on_hand=50, avg=1, lt=20 → doc@arr=20 < floor=60 → on_track
+      SKU-PO: on_hand=100, avg=1, lt=20, arrival=today+5 → doc@arr=95 in [60,100) → push_out
+      SKU-PF: on_hand=10, avg=1, arrival=today+20, lt=14 → stockout<arrival → pull_forward
+    """
     from packages.tools.analyze_supply_order_timing_tool import AnalyzeSupplyOrderTimingTool
 
     today = datetime.date.today()
@@ -507,8 +620,9 @@ async def test_sort_order_pull_forward_before_push_out_before_on_track() -> None
     ]
     inv = [_inv("SKU-OT", 50.0), _inv("SKU-PO", 100.0), _inv("SKU-PF", 10.0)]
     demand = [_demand("SKU-OT", 1.0), _demand("SKU-PO", 1.0), _demand("SKU-PF", 1.0)]
+    lt = [_lead_time("SKU-OT", 20.0), _lead_time("SKU-PO", 20.0), _lead_time("SKU-PF", 14.0)]
 
-    with patch(_PATCH, return_value=_make_pool(orders, inv, demand)):
+    with patch(_PATCH, return_value=_make_pool(orders, inv, demand, lt)):
         result = await AnalyzeSupplyOrderTimingTool().handle({}, make_ctx())
 
     classes = [row["classification"] for row in result.output["orders"]]
@@ -531,8 +645,9 @@ async def test_sort_order_within_class_by_abs_days_misaligned_desc() -> None:
     ]
     inv = [_inv("SKU-PF1", 5.0), _inv("SKU-PF2", 5.0)]
     demand = [_demand("SKU-PF1", 1.0), _demand("SKU-PF2", 1.0)]
+    lt = [_lead_time("SKU-PF1", 14.0), _lead_time("SKU-PF2", 14.0)]
 
-    with patch(_PATCH, return_value=_make_pool(orders, inv, demand)):
+    with patch(_PATCH, return_value=_make_pool(orders, inv, demand, lt)):
         result = await AnalyzeSupplyOrderTimingTool().handle({}, make_ctx())
 
     orders_out = result.output["orders"]
@@ -556,8 +671,9 @@ async def test_sort_order_tie_break_by_order_id_asc() -> None:
     ]
     inv = [_inv("SKU-ZZZ", 50.0), _inv("SKU-AAA", 50.0)]
     demand = [_demand("SKU-ZZZ", 1.0), _demand("SKU-AAA", 1.0)]
+    lt = [_lead_time("SKU-ZZZ", 20.0), _lead_time("SKU-AAA", 20.0)]
 
-    with patch(_PATCH, return_value=_make_pool(orders, inv, demand)):
+    with patch(_PATCH, return_value=_make_pool(orders, inv, demand, lt)):
         result = await AnalyzeSupplyOrderTimingTool().handle({}, make_ctx())
 
     ids = [r["order_id"] for r in result.output["orders"]]
@@ -628,15 +744,42 @@ def test_date_to_iso_with_none() -> None:
 
 
 # ---------------------------------------------------------------------------
-# PUSH_OUT_COVER_DAYS constant documentation
+# T-589 threshold constants documentation
 # ---------------------------------------------------------------------------
 
 
-def test_push_out_cover_days_is_30() -> None:
-    """PUSH_OUT_COVER_DAYS must be 30 (documented threshold)."""
-    from packages.tools.analyze_supply_order_timing_tool import PUSH_OUT_COVER_DAYS
+def test_push_out_k_floor_is_3() -> None:
+    """PUSH_OUT_K_FLOOR must be 3 (T-589 documented lower multiplier).
 
-    assert PUSH_OUT_COVER_DAYS == 30, (
-        f"PUSH_OUT_COVER_DAYS changed from 30 to {PUSH_OUT_COVER_DAYS}. "
+    An order is push_out_candidate when doc_at_arrival >= 3 × lead_time_days.
+    Update the module docstring and this test if the threshold is intentionally changed.
+    """
+    from packages.tools.analyze_supply_order_timing_tool import PUSH_OUT_K_FLOOR
+
+    assert PUSH_OUT_K_FLOOR == 3, (
+        f"PUSH_OUT_K_FLOOR changed from 3 to {PUSH_OUT_K_FLOOR}. "
         "Update the module docstring and this test if the threshold is intentionally changed."
+    )
+
+
+def test_push_out_k_ceil_is_5() -> None:
+    """PUSH_OUT_K_CEIL must be 5 (T-589 documented super-ample exclusion multiplier).
+
+    Orders with doc_at_arrival >= 5 × lead_time_days are super-ample (excluded).
+    Update the module docstring and this test if the threshold is intentionally changed.
+    """
+    from packages.tools.analyze_supply_order_timing_tool import PUSH_OUT_K_CEIL
+
+    assert PUSH_OUT_K_CEIL == 5, (
+        f"PUSH_OUT_K_CEIL changed from 5 to {PUSH_OUT_K_CEIL}. "
+        "Update the module docstring and this test if the threshold is intentionally changed."
+    )
+
+
+def test_push_out_thresholds_are_ordered() -> None:
+    """PUSH_OUT_K_FLOOR < PUSH_OUT_K_CEIL (floor must be strictly less than ceiling)."""
+    from packages.tools.analyze_supply_order_timing_tool import PUSH_OUT_K_CEIL, PUSH_OUT_K_FLOOR
+
+    assert PUSH_OUT_K_FLOOR < PUSH_OUT_K_CEIL, (
+        f"PUSH_OUT_K_FLOOR ({PUSH_OUT_K_FLOOR}) must be < PUSH_OUT_K_CEIL ({PUSH_OUT_K_CEIL})"
     )

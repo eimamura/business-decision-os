@@ -1362,11 +1362,11 @@ is documented in the tool docstring.
 
 Dependencies: P95 Done
 
-### Batch B-01 — Threshold refinement (App Builder) — Not Started
+### Batch B-01 — Threshold refinement (App Builder) — Done
 
 | Task | Description | Status |
 |---|---|---|
-| T-589 | Refine `analyze_supply_order_timing` push_out classification. App Builder picks and documents the mechanism — candidate options (combine as judged best): raise the absolute floor; make the threshold relative (e.g. cover-at-arrival ≥ k× a reference window such as supplier lead time if derivable from data, else a documented constant ≥ 60d); require a minimum excess magnitude; cap the flagged set to top-N by days_misaligned with the rest on_track (summary counts must then distinguish flagged vs suppressed — keep pre-cap semantics honest). Constraints: deterministic; pull_forward logic and precedence untouched; SKU-027 still flagged and ranked #1 push_out; seeded dev DB yields ≤ 25% of open orders as push_out_candidates; docstring documents rule + rationale; output_schema updated if fields change. Update unit tests accordingly. | Not Started |
+| T-589 | Refine `analyze_supply_order_timing` push_out classification. App Builder picks and documents the mechanism — candidate options (combine as judged best): raise the absolute floor; make the threshold relative (e.g. cover-at-arrival ≥ k× a reference window such as supplier lead time if derivable from data, else a documented constant ≥ 60d); require a minimum excess magnitude; cap the flagged set to top-N by days_misaligned with the rest on_track (summary counts must then distinguish flagged vs suppressed — keep pre-cap semantics honest). Constraints: deterministic; pull_forward logic and precedence untouched; SKU-027 still flagged and ranked #1 push_out; seeded dev DB yields ≤ 25% of open orders as push_out_candidates; docstring documents rule + rationale; output_schema updated if fields change. Update unit tests accordingly. | Done |
 
 Dependencies: none
 
