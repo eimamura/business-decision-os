@@ -40,13 +40,27 @@ See `docs/archive/v3/STATE.md` for P0–P23 per-phase details.
 
 ## Active Phase
 
-P99 — Screening Scheduler Multi-Process Hardening (P96–P100 MVP hardening programme).
+P100 — SPEC 10-Question Judge Evaluation Campaign (final phase of the P96–P100 MVP
+hardening programme).
 
 ## Active Lease
 
-P99-B-01 (App Builder — advisory lock + idempotent tick)
+P100-B-01 (Judge — run + judge all 10 questions)
 
 ## Last Completed
+
+P99 — Screening Scheduler Multi-Process Hardening (2026-06-12). New
+`_run_scheduled_tick(triggered_by)` in apps/api/screening.py wraps schedule/startup runs
+in `pg_try_advisory_lock(_SCREENING_ADVISORY_LOCK_KEY=0x73637265656E` — "screen" packed
+int64`)` on a dedicated pool connection (unlock in finally, same connection) +
+double-checked idempotency (latest_for_date re-checked inside the lock); manual POST /run
+exempt. Live + integration concurrency proof: two concurrent ticks → exactly 1 new
+completed row (no prior row) / 0 new rows (completed row exists). Sign-off PASS: unit
+1207 exit 0, targeted integration (test_p99_concurrent_screening_tick.py) 2 passed exit 0,
+playwright 45/45 exit 0, build 0, lint 0, typecheck 0; full integration suite SKIPPED per
+user gate deviation (DECISIONS.md 2026-06-12).
+
+Previously:
 
 P98 — Daily Exceptions Persistent Surface (2026-06-12). DailyExceptionsPanel reworked
 into a persistent collapsible strip docked between the chat header and message area —

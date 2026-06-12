@@ -440,8 +440,12 @@ async def test_manual_run_screening_bypasses_lock_and_idempotency() -> None:
     assert row["triggered_by"] == "manual"
 
 
-async def test_run_scheduled_tick_lock_acquired_failed_row_skips_run() -> None:
-    """When the latest row for today is failed (not completed), run_screening is called."""
+async def test_run_scheduled_tick_lock_acquired_failed_row_still_runs() -> None:
+    """When the latest row for today is failed (not completed), run_screening is called.
+
+    A failed row does NOT satisfy the double-checked idempotency guard because the guard
+    only skips when ``status == 'completed'``.  A failed run may be retried.
+    """
     today = datetime.date.today()
     failed_row = _stub_repo_create(
         run_date=today,
@@ -466,3 +470,51 @@ async def test_run_scheduled_tick_lock_acquired_failed_row_skips_run() -> None:
     # A failed previous row does NOT satisfy the idempotency check — must still run
     mock_run.assert_called_once_with(triggered_by="schedule")
     conn.execute.assert_called_once()
+
+
+# ---------------------------------------------------------------------------
+# T-597: Advisory lock key constant and exact argument contract
+# ---------------------------------------------------------------------------
+
+
+def test_screening_advisory_lock_key_constant_value() -> None:
+    """_SCREENING_ADVISORY_LOCK_KEY must equal 0x73637265656E (ASCII 'screen' big-endian).
+
+    This value is burned into the module docstring and must never change once written
+    to any DB.  Test guards against accidental mutation.
+    """
+    from apps.api.screening import _SCREENING_ADVISORY_LOCK_KEY
+
+    expected = 0x73637265656E  # 31077564654702
+    assert _SCREENING_ADVISORY_LOCK_KEY == expected, (
+        f"Lock key changed: got {_SCREENING_ADVISORY_LOCK_KEY!r}, "
+        f"expected {expected!r} (0x73637265656E)"
+    )
+
+
+async def test_run_scheduled_tick_passes_correct_lock_key_to_fetchval() -> None:
+    """pg_try_advisory_lock is called with the documented _SCREENING_ADVISORY_LOCK_KEY value.
+
+    Validates that _run_scheduled_tick passes the exact constant as the advisory lock key
+    argument, not a computed or default value.
+    """
+    conn = _make_stub_conn(lock_acquired=False)  # lock not acquired → early return
+    pool = _make_stub_pool(conn)
+
+    with patch("apps.api.screening.get_pool", AsyncMock(return_value=pool)):
+        from apps.api.screening import _run_scheduled_tick, _SCREENING_ADVISORY_LOCK_KEY
+        await _run_scheduled_tick(triggered_by="schedule")
+
+    # fetchval must have been called with the advisory lock SQL and the expected key.
+    conn.fetchval.assert_called_once()
+    call_args = conn.fetchval.call_args
+    positional_args = call_args.args
+    # First arg is the SQL statement (must mention pg_try_advisory_lock).
+    assert "pg_try_advisory_lock" in positional_args[0], (
+        f"fetchval SQL does not mention pg_try_advisory_lock: {positional_args[0]!r}"
+    )
+    # Second arg is the key value.
+    assert positional_args[1] == _SCREENING_ADVISORY_LOCK_KEY, (
+        f"fetchval received key {positional_args[1]!r}, "
+        f"expected {_SCREENING_ADVISORY_LOCK_KEY!r}"
+    )

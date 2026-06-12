@@ -102,6 +102,7 @@ Full task history for P0–P23 is archived at `docs/archive/v3/TASKS.md`.
 | P96 — Supply Order Timing: push_out Signal Quality | T-589–T-590 | 2026-06-12 |
 | P97 — Context Saturation Mitigation | T-591–T-593 | 2026-06-12 |
 | P98 — Daily Exceptions Persistent Surface | T-594–T-595 | 2026-06-12 |
+| P99 — Screening Scheduler Multi-Process Hardening | T-596–T-597 | 2026-06-12 |
 
 > **Design Realignment Note (2026-06-05):** P29–P36 built Specialist Domain Agents (DemandAgent,
 > InventoryAgent, SupplyPlanningAgent, FinanceImpactAgent, SopAgent) as independent runtime units.
@@ -1460,7 +1461,7 @@ Dependencies: B-01
 
 ---
 
-## P99 — Screening Scheduler Multi-Process Hardening — Not Started
+## P99 — Screening Scheduler Multi-Process Hardening — Done
 
 **Goal:** The daily screening tick is safe under multiple API processes (ADR
 2026-06-12-daily-screening-scheduler accepted single-process double-fire as a caveat;
@@ -1477,11 +1478,11 @@ Dependencies: P93 Done
 
 Dependencies: none
 
-### Batch B-02 — Tests + phase sign-off (Test/Review) — Not Started
+### Batch B-02 — Tests + phase sign-off (Test/Review) — Done
 
 | Task | Description | Status |
 |---|---|---|
-| T-597 | Integration test: two concurrent scheduled-tick invocations against the real DB yield exactly one new completed schedule/startup row for today (second skips via lock or idempotency); unit tests for skip paths with stubbed repo/lock. Phase sign-off: `make test-unit && make test-integration && make test-playwright && make build && make lint && make typecheck` — proof-of-execution per gate. | Not Started |
+| T-597 | Integration test: two concurrent scheduled-tick invocations against the real DB yield exactly one new completed schedule/startup row for today (second skips via lock or idempotency); unit tests for skip paths with stubbed repo/lock. Phase sign-off: `make test-unit && make test-integration && make test-playwright && make build && make lint && make typecheck` — proof-of-execution per gate. | Done |
 
 Dependencies: B-01
 
