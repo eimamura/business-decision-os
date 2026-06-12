@@ -40,20 +40,37 @@ See `docs/archive/v3/STATE.md` for P0–P23 per-phase details.
 
 ## Active Phase
 
-P97 — Context Saturation Mitigation (P96–P100 MVP hardening programme).
+P98 — Daily Exceptions Persistent Surface (P96–P100 MVP hardening programme).
 
 ## Active Lease
 
-P97 D-011 fix (App Builder)
-
-## Blockers
-
-D-011 (P97-B-02, Open): live grounding regression — gemma4:12b duplicate tool calls trip
-the loop guard → verify blocks on empty text → fallback text; pre-P97 the synthesize call
-recovered grounding from raw tool_results (the very payload that caused 86% saturation),
-post-P97 it cannot. Saturation goal itself PASS (max 37%). Fix owner: App Builder.
+P98-B-01 (App Builder — persistent strip)
 
 ## Last Completed
+
+P97 — Context Saturation Mitigation (2026-06-12). Forensics (T-591): the 14,080-token
+(86% of num_ctx) call was the orchestrator-side `_synthesize_response` receiving raw
+`tool_results` blobs verbatim (25,770 chars for analyze_forecast_deviation — 30 SKUs ×
+weekly_breakdown). Fix: `_slim_agent_output` passes text/specialist/verification only
+(+8,000-char text cap); `_OLLAMA_NUM_CTX` stays 16384 (RTX 4070 Ti 12GB: 1.8GB free <
+~2GB KV-cache cost of 32768 — nvidia-smi evidence). Synthesize 14,080→222 tokens.
+**D-011 (Resolved, FP-011 recorded):** stripping tool_results exposed a latent bug the
+fat payload had been masking since ≥P94 — gemma4:12b duplicates tool calls → P60 loop
+guard → verifier blocks on empty text → fallback; synthesize had been silently
+re-grounding replies from raw tool data. Root-cause fix: new `synthesize_from_tools`
+LangGraph node (duplicate-tool guard routes to ONE forced no-tools LLM call over
+accumulated observations before verification) + bounded `tool_results_digest` (≤4,000
+chars) in the slim payload when agent text < 50 chars. Re-verified (fresh sessions,
+gemma4:12b): Q2 names SKU-001 pull-forward + SKU-027 push-out, Q3 names SKU-001/002
+critical, Q1 grounded directional equivalent (SKU-015/016 from real tool data); max
+input_tokens 6,152 = 37.5% of window; 0 errors; no saturation WARNING; P92 degenerate
+soft-fail semantics regression-tested intact. Sign-off PASS (proof-of-execution): unit
+1199 exit 0, full-DSN integration 156 exit 0, playwright 42/42 exit 0, build 0, lint 0,
+typecheck 0. Note for P100 judge campaign: Q1 forecast-deviation answers skew toward
+SKUs with zero forecast rows (sparse forecast_history coverage outside SKU-028/029) —
+assess whether missing_data framing needs work.
+
+Previously:
 
 P96 — Supply Order Timing: push_out Signal Quality (2026-06-12). push_out classification
 moved from flat `cover ≥ 30d` (32/40 orders flagged on seed) to a relative lead-time

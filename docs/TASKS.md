@@ -1381,7 +1381,7 @@ Dependencies: B-01
 
 ---
 
-## P97 — Context Saturation Mitigation — In Progress
+## P97 — Context Saturation Mitigation — Done (2026-06-12)
 
 **Goal:** Remove the recurrence risk of the P92 truncation failure. P94 live verification
 measured an orchestrator-side final synthesize call at input_tokens=14080 (86% of
@@ -1401,17 +1401,17 @@ Dependencies: P95 Done
 
 Dependencies: none
 
-### Batch B-02 — Live measurement + phase sign-off (Test/Review) — Blocked (D-011, Blocked Count: 1)
+### Batch B-02 — Live measurement + phase sign-off (Test/Review) — Done (2026-06-12)
 
 | Task | Description | Status |
 |---|---|---|
-| T-593 | Live verification (gemma4:12b): run the three heaviest prompts end-to-end; report max input_tokens per call vs configured num_ctx — every call ≤ 70%; answers remain grounded (tool events + seeded entities named); no saturation WARNING in logs. Unit tests for any new truncation/budget logic. Phase sign-off: `make test-unit && make test-integration && make test-playwright && make build && make lint && make typecheck` — proof-of-execution per gate. | Blocked |
+| T-593 | Live verification (gemma4:12b): run the three heaviest prompts end-to-end; report max input_tokens per call vs configured num_ctx — every call ≤ 70%; answers remain grounded (tool events + seeded entities named); no saturation WARNING in logs. Unit tests for any new truncation/budget logic. Phase sign-off: `make test-unit && make test-integration && make test-playwright && make build && make lint && make typecheck` — proof-of-execution per gate. | Done |
 
 Dependencies: B-01
 
 #### Defect: D-011
 
-- Status: Open
+- Status: Resolved (commit 42f03bc: synthesize_from_tools node + bounded tool digest; re-verified by Test/Review 2026-06-12, all three prompts grounded, max 37.5% of num_ctx)
 - Severity: High (BLOCKER for P97 sign-off)
 - Repro: Send any of the three heaviest prompts (Q1 forecast-gap, Q2 supply-order-timing, Q3 exceptions) to a fresh session on the live stack (gemma4:12b); inspect reply.
 - Observed: All three prompts produce degenerate fallback text ("Could not verify findings. Please rephrase your question or try again."). Root cause: gemma4:12b consistently calls the targeted domain tool twice in succession (duplicate tool call); the tool-loop guard forces `verify_findings`; rule 2 fires (empty text, since the pending response is `finish_reason=tool_use`); status="blocked"; `output["text"]` is set to the hard-coded fallback. The P97-B-01 fix stripped `tool_results` from the `_synthesize_response` payload; before the fix the synthesize call received the raw tool data and could (sometimes) construct a grounded reply even when the control agent text was blocked; after the fix the synthesize call only gets the blocked fallback text and cannot recover grounding. This produces a grounding regression for all sessions that trigger the duplicate-tool loop guard.
