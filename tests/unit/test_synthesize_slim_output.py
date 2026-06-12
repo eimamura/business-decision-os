@@ -169,6 +169,48 @@ def test_slim_output_within_token_budget():
 
 
 # ---------------------------------------------------------------------------
+# Blocked-path contract: slim preserves verification.blocked_reason
+# ---------------------------------------------------------------------------
+
+
+def test_slim_preserves_blocked_reason_in_verification():
+    """When the control agent is blocked (verify_findings soft-fail), the output
+    carries verification.blocked_reason.  _slim_agent_output must pass the full
+    verification dict through so the synthesize prompt retains the reason.
+
+    Regression guard for P97 T-593: this also documents that when the control
+    agent is blocked, output["text"] is the hard-coded fallback and tool_results
+    are absent from the slim payload — meaning the synthesize LLM cannot recover
+    grounding from a blocked run.  That is a known limitation; the slim function
+    itself is correct.
+    """
+    blocked_output = {
+        "text": "Could not verify findings. Please rephrase your question or try again.",
+        "specialist": "ControlAgent",
+        "tool_results": {
+            "list_today_exceptions": {"exceptions": [{"sku_id": "SKU-001", "severity": "critical"}]}
+        },
+        "verification": {
+            "grounded": True,
+            "revised": False,
+            "blocked_reason": "findings verifier: response not grounded in tool results",
+        },
+    }
+    slim = _slim_agent_output(blocked_output)
+
+    # tool_results must be stripped
+    assert "tool_results" not in slim
+
+    # blocked_reason must survive inside verification
+    assert slim["verification"]["blocked_reason"] == (
+        "findings verifier: response not grounded in tool results"
+    )
+
+    # generic fallback text must be preserved (synthesize sees it)
+    assert "rephrase" in slim["text"]
+
+
+# ---------------------------------------------------------------------------
 # Constant guard: _SYNTHESIZE_AGENT_OUTPUT_MAX_CHARS must be documented value
 # ---------------------------------------------------------------------------
 

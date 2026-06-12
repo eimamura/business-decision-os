@@ -44,7 +44,14 @@ P97 — Context Saturation Mitigation (P96–P100 MVP hardening programme).
 
 ## Active Lease
 
-P97-B-01 (App Builder — forensics + bounded fix)
+P97 D-011 fix (App Builder)
+
+## Blockers
+
+D-011 (P97-B-02, Open): live grounding regression — gemma4:12b duplicate tool calls trip
+the loop guard → verify blocks on empty text → fallback text; pre-P97 the synthesize call
+recovered grounding from raw tool_results (the very payload that caused 86% saturation),
+post-P97 it cannot. Saturation goal itself PASS (max 37%). Fix owner: App Builder.
 
 ## Last Completed
 

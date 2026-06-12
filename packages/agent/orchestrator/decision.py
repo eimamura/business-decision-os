@@ -30,13 +30,68 @@ from packages.agent.orchestrator.parsing import _iso_now
 #   and large enough to hold any reasonable text reply from ControlAgent.
 _SYNTHESIZE_AGENT_OUTPUT_MAX_CHARS = 8_000
 
+# Maximum total characters for the bounded tool_results digest included in the
+# synthesize prompt as a safety net (D-011 fix, approach B).
+# When the agent text is the blocked fallback or very short (< 50 chars), the
+# synthesize call would have no grounding data at all.  This digest provides
+# recoverable signal without risking context saturation.
+#
+# Budget: synthesize prompt already fits comfortably under 70% of num_ctx after
+# P97-B-01 slimming; this digest adds at most ~1000 tokens (4000 chars / 4).
+# Combined with _SYNTHESIZE_AGENT_OUTPUT_MAX_CHARS=8000 the total headroom is
+# well within the 11469-token target.
+_SYNTHESIZE_TOOL_DIGEST_MAX_CHARS = 4_000
+
+# Agent text is considered a blocked/degenerate fallback when it is shorter than
+# this length; in that case the tool_results digest is included in the slim output
+# so the synthesize LLM has grounding data to work with.
+_FALLBACK_TEXT_MIN_LEN = 50
+
+
+def _build_tool_digest(
+    tool_results: Any,
+    max_chars: int = _SYNTHESIZE_TOOL_DIGEST_MAX_CHARS,
+) -> str:
+    """Build a bounded, deterministic digest of tool_results for the synthesize prompt.
+
+    Serialises each tool result entry to JSON, taking entries in order until the
+    character budget is exhausted.  A truncation marker is appended when the budget
+    is hit so the LLM knows the digest is not complete.
+
+    Returns an empty string when tool_results is falsy or not a list.
+    """
+    if not tool_results or not isinstance(tool_results, list):
+        return ""
+
+    parts: list[str] = []
+    used = 0
+    for entry in tool_results:
+        chunk = json.dumps(entry, default=lambda o: float(o) if isinstance(o, Decimal) else str(o))
+        if used + len(chunk) > max_chars:
+            remaining = max_chars - used
+            if remaining > 0:
+                parts.append(chunk[:remaining] + " ...[truncated]")
+            break
+        parts.append(chunk)
+        used += len(chunk)
+        if used >= max_chars:
+            break
+
+    return "\n".join(parts)
+
 
 def _slim_agent_output(output: dict[str, Any] | None) -> dict[str, Any]:
     """Return a slimmed copy of an agent output for use in the synthesize prompt.
 
-    Strips ``tool_results`` (raw DB data — dominant contributor at 86% of
-    num_ctx in the P94 session) and any other keys not needed by synthesis.
+    Strips raw ``tool_results`` (dominant context contributor at 86% of num_ctx in
+    the P94 session) and any keys not needed by synthesis.
     Keeps: ``text``, ``specialist``, ``verification``.
+
+    Safety net (D-011 fix, approach B):
+    When ``text`` is absent, empty, or shorter than _FALLBACK_TEXT_MIN_LEN
+    (indicating the control-agent produced a blocked/degenerate fallback), a bounded
+    digest of ``tool_results`` (capped at _SYNTHESIZE_TOOL_DIGEST_MAX_CHARS) is
+    included so the synthesize LLM has recoverable grounding data.
 
     If the remaining serialized entry still exceeds _SYNTHESIZE_AGENT_OUTPUT_MAX_CHARS
     (e.g. an unusually long reply text), the ``text`` field is hard-truncated with
@@ -57,6 +112,14 @@ def _slim_agent_output(output: dict[str, Any] | None) -> dict[str, Any]:
     text = slim.get("text", "")
     if isinstance(text, str) and len(text) > _SYNTHESIZE_AGENT_OUTPUT_MAX_CHARS:
         slim["text"] = text[:_SYNTHESIZE_AGENT_OUTPUT_MAX_CHARS] + " ...[truncated]"
+        text = slim["text"]
+
+    # Safety net: when agent text is a fallback/very short, inject a bounded tool digest.
+    text_is_fallback = not isinstance(text, str) or len(text.strip()) < _FALLBACK_TEXT_MIN_LEN
+    if text_is_fallback and output.get("tool_results"):
+        digest = _build_tool_digest(output["tool_results"])
+        if digest:
+            slim["tool_results_digest"] = digest
 
     return slim
 

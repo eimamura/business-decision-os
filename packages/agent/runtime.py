@@ -46,6 +46,24 @@ _GROUNDED_VERIFY_INTENTS: frozenset[str] = frozenset(
 # Maximum length (characters) of a serialized tool result value before truncation.
 _TOOL_RESULT_VALUE_TRUNCATE = 500
 
+# Maximum characters of the observations JSON injected into the forced-final synthesis
+# call that runs when the duplicate-tool-loop guard fires (D-011 fix, approach A).
+# Budget: _OLLAMA_NUM_CTX=16384 tokens × 70% = 11469 tokens;
+# system prompt ≈ 300 tokens, query envelope ≈ 200 tokens → remaining ≈ 10969 tokens.
+# At ~4 chars/token that is ~43876 chars.  We cap conservatively at 6000 chars
+# (~1500 tokens) to leave headroom for the model to generate a full prose reply.
+_LOOP_GUARD_SYNTHESIS_MAX_CHARS = 6_000
+
+# Maximum characters of the total tool_results JSON serialization passed to the
+# verify_findings LLM groundedness check.  Per-value truncation (_TOOL_RESULT_VALUE_TRUNCATE)
+# is applied first; this is a hard total budget cap to prevent context saturation on
+# large multi-SKU tool outputs (e.g. analyze_forecast_deviation returns 30 SKUs ×
+# weekly breakdown which can exceed num_ctx even after per-value truncation).
+# Budget: system prompt ≈ 200 tokens, conclusion ≈ 500 tokens, remaining ≈ 10769 tokens.
+# At ~4 chars/token → 43076 chars available.  We cap at 8000 chars (~2000 tokens) to
+# leave ample headroom for the structured-output schema and conclusion.
+_VERIFY_TOOL_RESULTS_MAX_CHARS = 8_000
+
 
 class GroundednessVerdict(BaseModel):
     """Structured output schema for the LLM groundedness check."""
@@ -297,6 +315,9 @@ class AgentState(TypedDict):
     groundedness: dict[str, Any] | None
     # Revised flag — set by call_model_final to prevent a second revision cycle.
     revised: bool
+    # Loop-guard flag — set by _should_continue when duplicate tool call is detected.
+    # Consumed by synthesize_from_tools to know it must produce a forced final conclusion.
+    loop_guard_triggered: bool
 
 
 # ---------------------------------------------------------------------------
@@ -630,17 +651,20 @@ class AgentRuntime:
                 iteration=state["iteration"],
             )
             return "verify_findings"
-        # Detect duplicate tool calls — force verify_findings to break the loop
+        # Detect duplicate tool calls — force synthesis/verify to break the loop.
+        # When tool_results are present the run is NOT degenerate; route through
+        # synthesize_from_tools so the agent can produce a grounded conclusion from
+        # accumulated observations before verify_findings runs (fix for D-011).
         seen_tool_names: list[str] = []
         for tr in (state.get("tool_results") or []):
             seen_tool_names.extend(tr.keys())
         if len(seen_tool_names) != len(set(seen_tool_names)):
             _log.warning(
-                "duplicate tool call detected — forcing verify_findings",
+                "duplicate tool call detected — forcing synthesize_from_tools",
                 agent_role=self.role,
                 seen_tools=seen_tool_names,
             )
-            return "verify_findings"
+            return "synthesize_from_tools"
         if not response.tool_calls or response.finish_reason == "stop":
             return "verify_findings"
         # Check if any pending HITL approval needs processing
@@ -1077,6 +1101,14 @@ class AgentRuntime:
         try:
             compact_results = _truncate_tool_results_for_prompt(tool_results)
             tool_results_json = json.dumps(compact_results, default=str)
+            # Hard cap on total tool_results size injected into the verifier prompt.
+            # Per-value truncation is applied above; this guards against large multi-SKU
+            # outputs (e.g. analyze_forecast_deviation: 30 SKUs × weekly breakdown) that
+            # can still saturate the context window after per-value truncation.
+            if len(tool_results_json) > _VERIFY_TOOL_RESULTS_MAX_CHARS:
+                tool_results_json = (
+                    tool_results_json[:_VERIFY_TOOL_RESULTS_MAX_CHARS] + " ...[truncated]"
+                )
 
             from langchain_core.messages import HumanMessage, SystemMessage
 
@@ -1230,6 +1262,120 @@ class AgentRuntime:
         return result
 
     # ------------------------------------------------------------------
+    # Node: synthesize_from_tools  (D-011 fix — approach A)
+    # ------------------------------------------------------------------
+
+    async def _synthesize_from_tools_node(
+        self, state: AgentState, config: RunnableConfig
+    ) -> dict[str, Any]:
+        """Forced-final synthesis node — runs one LLM call WITHOUT tools.
+
+        Triggered by the duplicate-tool-call loop guard.  At this point the agent
+        has valid tool observations in state["tool_results"] but produced no text
+        conclusion (finish_reason=tool_use, text="").  Without this node, control
+        falls directly to verify_findings where Rule 2 fires (empty text → "blocked")
+        and every reply becomes the hard-coded fallback — which is the D-011 regression.
+
+        Strategy:
+          1. Compact the accumulated tool_results into a readable summary (bounded to
+             avoid re-inflating the context).
+          2. Invoke the LLM with tools=[] (no tool-binding) so it cannot loop again.
+          3. Store the resulting response in state["response"] and mark
+             loop_guard_triggered=True so verify_findings has context.
+          4. If the LLM call fails or produces a degenerate text, fall through to
+             verify_findings without overwriting the previous response — the blocked
+             path will handle it as before (soft-fail, not a regression).
+        """
+        if self._lc_model is None:
+            _log.warning(
+                "synthesize_from_tools: no LLM model available — skipping",
+                agent_role=self.role,
+            )
+            return {"loop_guard_triggered": True}
+
+        tool_results: list[dict[str, Any]] = state.get("tool_results") or []
+        if not tool_results:
+            _log.warning(
+                "synthesize_from_tools: no tool_results — skipping",
+                agent_role=self.role,
+            )
+            return {"loop_guard_triggered": True}
+
+        # Build a compact, bounded text summary of the tool observations.
+        compact = _truncate_tool_results_for_prompt(tool_results)
+        observations_text = json.dumps(compact, default=str)
+        # Hard cap so this single prompt injection stays far below context budget.
+        if len(observations_text) > _LOOP_GUARD_SYNTHESIS_MAX_CHARS:
+            observations_text = (
+                observations_text[:_LOOP_GUARD_SYNTHESIS_MAX_CHARS] + " ...[truncated]"
+            )
+
+        from langchain_core.messages import HumanMessage, SystemMessage
+
+        synthesis_prompt = [
+            SystemMessage(self._system_prompt),
+            HumanMessage(
+                "You have gathered the following tool observations. "
+                "Produce a concise, grounded analysis and recommendation "
+                "based solely on these results. "
+                "Do not call any tools — write your conclusion in prose.\n\n"
+                f"## Tool observations (JSON)\n{observations_text}"
+            ),
+        ]
+
+        try:
+            _log.info(
+                "synthesize_from_tools: making forced-final LLM call",
+                agent_role=self.role,
+                observations_chars=len(observations_text),
+            )
+            # Invoke WITHOUT bind_tools — tool_choice effectively becomes "none"
+            ai_msg = await self._lc_model.ainvoke(synthesis_prompt)
+            synthesis_text = str(ai_msg.content) if ai_msg is not None else ""
+            usage_meta: dict[str, Any] = getattr(ai_msg, "usage_metadata", {}) or {}
+
+            if len(synthesis_text.strip()) < _DEGENERATE_RESPONSE_MIN_LEN:
+                _log.warning(
+                    "synthesize_from_tools: forced-final call produced degenerate text",
+                    agent_role=self.role,
+                    text_len=len(synthesis_text.strip()),
+                )
+                return {"loop_guard_triggered": True}
+
+            # Build a response object that verify_findings / the output builder will accept.
+            new_response = _LCResponse(
+                text=synthesis_text,
+                tool_calls=[],
+                finish_reason="stop",
+                model=getattr(self._lc_model, "model", "langchain"),
+                input_tokens=int(usage_meta.get("input_tokens", 0)),
+                output_tokens=int(usage_meta.get("output_tokens", 0)),
+            )
+
+            from packages.agent.llm import LLMMessage
+
+            _log.info(
+                "synthesize_from_tools: forced-final synthesis complete",
+                agent_role=self.role,
+                text_len=len(synthesis_text),
+            )
+            return {
+                "response": new_response,
+                "messages": [LLMMessage(role="assistant", content=synthesis_text)],
+                "input_tokens": new_response.input_tokens,
+                "output_tokens": new_response.output_tokens,
+                "loop_guard_triggered": True,
+            }
+
+        except Exception as exc:
+            _log.warning(
+                "synthesize_from_tools: forced-final LLM call failed — falling through",
+                agent_role=self.role,
+                error=str(exc),
+            )
+            return {"loop_guard_triggered": True}
+
+    # ------------------------------------------------------------------
     # Node: compress_history
     # ------------------------------------------------------------------
 
@@ -1276,6 +1422,7 @@ class AgentRuntime:
         sg.add_node("prepare_hitl", self._prepare_hitl_node)
         sg.add_node("wait_for_approval", self._wait_for_approval_node)
         sg.add_node("execute_tools", self._execute_tools_node)
+        sg.add_node("synthesize_from_tools", self._synthesize_from_tools_node)
         sg.add_node("verify_findings", self._verify_findings_node)
         sg.add_node("add_revision_message", self._add_revision_message_node)
         sg.add_node("call_model_final", self._call_model_final_node)
@@ -1290,11 +1437,14 @@ class AgentRuntime:
                 "verify_findings": "verify_findings",
                 "execute_tools": "execute_tools",
                 "prepare_hitl": "prepare_hitl",
+                "synthesize_from_tools": "synthesize_from_tools",
             },
         )
         sg.add_edge("prepare_hitl", "wait_for_approval")
         sg.add_edge("wait_for_approval", "execute_tools")
         sg.add_edge("execute_tools", "call_model")
+        # synthesize_from_tools → verify_findings (D-011: loop guard produces text first)
+        sg.add_edge("synthesize_from_tools", "verify_findings")
         sg.add_conditional_edges(
             "verify_findings",
             self._after_verify,
@@ -1411,6 +1561,7 @@ class AgentRuntime:
             "tool_plan": [],
             "groundedness": None,
             "revised": False,
+            "loop_guard_triggered": False,
         }
 
         final_state: dict[str, Any] = await graph.ainvoke(initial_state, config=run_config)

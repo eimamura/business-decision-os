@@ -1401,13 +1401,32 @@ Dependencies: P95 Done
 
 Dependencies: none
 
-### Batch B-02 — Live measurement + phase sign-off (Test/Review) — Not Started
+### Batch B-02 — Live measurement + phase sign-off (Test/Review) — Blocked (D-011, Blocked Count: 1)
 
 | Task | Description | Status |
 |---|---|---|
-| T-593 | Live verification (gemma4:12b): run the three heaviest prompts end-to-end; report max input_tokens per call vs configured num_ctx — every call ≤ 70%; answers remain grounded (tool events + seeded entities named); no saturation WARNING in logs. Unit tests for any new truncation/budget logic. Phase sign-off: `make test-unit && make test-integration && make test-playwright && make build && make lint && make typecheck` — proof-of-execution per gate. | Not Started |
+| T-593 | Live verification (gemma4:12b): run the three heaviest prompts end-to-end; report max input_tokens per call vs configured num_ctx — every call ≤ 70%; answers remain grounded (tool events + seeded entities named); no saturation WARNING in logs. Unit tests for any new truncation/budget logic. Phase sign-off: `make test-unit && make test-integration && make test-playwright && make build && make lint && make typecheck` — proof-of-execution per gate. | Blocked |
 
 Dependencies: B-01
+
+#### Defect: D-011
+
+- Status: Open
+- Severity: High (BLOCKER for P97 sign-off)
+- Repro: Send any of the three heaviest prompts (Q1 forecast-gap, Q2 supply-order-timing, Q3 exceptions) to a fresh session on the live stack (gemma4:12b); inspect reply.
+- Observed: All three prompts produce degenerate fallback text ("Could not verify findings. Please rephrase your question or try again."). Root cause: gemma4:12b consistently calls the targeted domain tool twice in succession (duplicate tool call); the tool-loop guard forces `verify_findings`; rule 2 fires (empty text, since the pending response is `finish_reason=tool_use`); status="blocked"; `output["text"]` is set to the hard-coded fallback. The P97-B-01 fix stripped `tool_results` from the `_synthesize_response` payload; before the fix the synthesize call received the raw tool data and could (sometimes) construct a grounded reply even when the control agent text was blocked; after the fix the synthesize call only gets the blocked fallback text and cannot recover grounding. This produces a grounding regression for all sessions that trigger the duplicate-tool loop guard.
+- Token saturation: PASS — all per-call LLM calls ≤ 37.0% of num_ctx 16384 (Q1 max 37.0%, Q2 max 27.8%, Q3 max 30.0%); no saturation WARNINGs in API logs.
+- Grounding: FAIL — no seeded entity (SKU-028, SKU-029, SKU-001, SKU-002) named in any reply.
+- Area: packages/agent/runtime.py (duplicate tool call / loop guard / verify_findings blocked path), packages/agent/orchestrator/decision.py (_slim_agent_output / _synthesize_response)
+- Owner: App Builder
+- Acceptance: All three prompts produce a reply naming at least one seeded entity per the T-593 grounding matrix AND all per-call input_tokens ≤ 70% of num_ctx.
+- Fix notes (2026-06-12, App Builder):
+  - Approach A (root cause): Added `synthesize_from_tools` LangGraph node in `packages/agent/runtime.py`. When `_should_continue()` detects a duplicate tool call it routes to this node instead of directly to `verify_findings`. The node makes a forced final LLM call without tool binding, using accumulated tool observations as context, producing grounded text before the verifier sees it. On error or degenerate output the node falls through to `verify_findings` unchanged (soft-fail preserved).
+  - Approach B (safety net): In `packages/agent/orchestrator/decision.py`, `_slim_agent_output()` now includes a bounded digest of `tool_results` (capped at `_SYNTHESIZE_TOOL_DIGEST_MAX_CHARS = 4000` chars) when agent text is shorter than `_FALLBACK_TEXT_MIN_LEN = 50` chars. This gives the synthesize LLM recoverable grounding data even when the control agent produced a blocked fallback.
+  - Context saturation guard: Added `_VERIFY_TOOL_RESULTS_MAX_CHARS = 8000` cap in `_verify_findings_node` to prevent `analyze_forecast_deviation` (30 SKUs × weekly breakdown) from saturating the verifier's context.
+  - Live verification (gemma4:12b): Q1 max 6143 tokens (37.5%), Q2 max 5151 tokens (31.4%), Q3 max 4878 tokens (29.8%) — all well under 11469 (70%) limit. All three prompts produced grounded replies with seeded entities.
+  - Gates: `make test-unit` 1199 passed, 15 skipped; `make lint` all checks passed; `make typecheck` no issues in 175 source files.
+  - New test file: `tests/unit/test_d011_loop_guard_synthesis.py` (9 unit tests for both approach A and B).
 
 ---
 

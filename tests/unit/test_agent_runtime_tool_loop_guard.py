@@ -1,7 +1,9 @@
 """T-391: Unit tests for the duplicate-tool detection guard in AgentRuntime._should_continue().
 
 The guard inspects state["tool_results"] for repeated tool names and forces
-an early transition to "verify_findings" before _MAX_ITERATIONS is reached.
+an early transition to "synthesize_from_tools" (D-011 fix) before _MAX_ITERATIONS
+is reached.  Prior to D-011 the guard routed directly to "verify_findings", which
+caused Rule 2 to fire (empty text → "blocked") on every duplicate-tool session.
 """
 from __future__ import annotations
 
@@ -77,19 +79,25 @@ def _make_state(
 
 
 # ---------------------------------------------------------------------------
-# T-391 (a): duplicate tool in tool_results → "verify_findings"
+# T-391 (a): duplicate tool in tool_results → "synthesize_from_tools" (D-011 fix)
 # ---------------------------------------------------------------------------
 
 
-def test_should_continue_duplicate_tool_returns_verify_findings() -> None:
+def test_should_continue_duplicate_tool_returns_synthesize_from_tools() -> None:
     """When state["tool_results"] contains the same tool name twice,
-    _should_continue() must return "verify_findings" (duplicate-tool guard fires)."""
+    _should_continue() must return "synthesize_from_tools" (D-011 fix).
+
+    Pre-D-011 the guard returned "verify_findings" directly; with empty response
+    text (finish_reason=tool_use) Rule 2 fired and every reply became the fallback.
+    The fix routes through synthesize_from_tools first so the agent produces a
+    grounded conclusion from accumulated tool observations before verification.
+    """
     tool_results = [
         {"list_stockout_risk": {}},
         {"list_stockout_risk": {}},
     ]
     # Provide a non-None response with a tool_call and finish_reason="tool_use"
-    # so the only reason to return "verify_findings" is the duplicate-tool guard.
+    # so the only reason to leave "execute_tools" is the duplicate-tool guard.
     response = _LCResponse(
         text="",
         tool_calls=[{"name": "list_stockout_risk", "id": "call_001", "input": {}}],
@@ -100,8 +108,8 @@ def test_should_continue_duplicate_tool_returns_verify_findings() -> None:
 
     result = runtime._should_continue(state)  # type: ignore[arg-type]
 
-    assert result == "verify_findings", (
-        f"Expected 'verify_findings' for duplicate tool, got {result!r}"
+    assert result == "synthesize_from_tools", (
+        f"Expected 'synthesize_from_tools' for duplicate tool (D-011 fix), got {result!r}"
     )
 
 
