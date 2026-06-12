@@ -1469,11 +1469,11 @@ scheduled run per day, enforced in the database, covered by an integration test.
 
 Dependencies: P93 Done
 
-### Batch B-01 — Advisory lock + idempotent tick (App Builder) — Not Started
+### Batch B-01 — Advisory lock + idempotent tick (App Builder) — Done
 
 | Task | Description | Status |
 |---|---|---|
-| T-596 | Harden the scheduled/startup tick in `apps/api/screening.py`: Postgres advisory lock (`pg_try_advisory_lock`, documented constant key; skip when held elsewhere) AND re-check "completed row already exists for today" inside the lock before executing (double-checked idempotency). Manual `POST /run` stays exempt (explicit user intent). No schema change. Log skip reasons at INFO. | Not Started |
+| T-596 | Harden the scheduled/startup tick in `apps/api/screening.py`: Postgres advisory lock (`pg_try_advisory_lock`, documented constant key; skip when held elsewhere) AND re-check "completed row already exists for today" inside the lock before executing (double-checked idempotency). Manual `POST /run` stays exempt (explicit user intent). No schema change. Log skip reasons at INFO. | Done |
 
 Dependencies: none
 

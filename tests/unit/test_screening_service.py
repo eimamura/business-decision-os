@@ -1,4 +1,4 @@
-"""Unit tests for apps/api/screening.py — T-575 (unit tier).
+"""Unit tests for apps/api/screening.py — T-575 (unit tier) + T-596 (advisory lock).
 
 Coverage:
   - run_screening: counts derivation, completed-row persistence
@@ -6,6 +6,12 @@ Coverage:
   - _seconds_until_next_hour_utc: next-run computation with frozen clock
   - _scheduler_enabled: disabled flag via env var
   - _screening_hour: default and custom parsing
+  - _run_scheduled_tick (T-596):
+      lock-not-acquired → skip, no run_screening called
+      lock acquired + today-row exists → skip (double-check), no run_screening called
+      lock acquired + no today-row → run_screening called, unlock called
+      unlock called even when run_screening raises
+      manual path (run_screening directly) bypasses lock/idempotency entirely
 
 Zero-network rule: asyncpg pool and the tool handle() are both mocked.
 """
@@ -13,7 +19,7 @@ from __future__ import annotations
 
 import datetime
 import uuid
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, call, patch
 
 import pytest
 
@@ -55,6 +61,28 @@ def _stub_repo_create(
         "error": error,
         "created_at": "2026-06-12T06:00:00+00:00",
     }
+
+
+def _make_stub_conn(lock_acquired: bool = True) -> AsyncMock:
+    """Return an AsyncMock mimicking an asyncpg Connection.
+
+    fetchval(...) returns *lock_acquired* (simulates pg_try_advisory_lock result).
+    execute(...) is a no-op (simulates pg_advisory_unlock).
+    """
+    conn = AsyncMock()
+    conn.fetchval = AsyncMock(return_value=lock_acquired)
+    conn.execute = AsyncMock(return_value=None)
+    # Support async context manager protocol (pool.acquire())
+    conn.__aenter__ = AsyncMock(return_value=conn)
+    conn.__aexit__ = AsyncMock(return_value=False)
+    return conn
+
+
+def _make_stub_pool(conn: AsyncMock) -> MagicMock:
+    """Return a MagicMock pool whose acquire() returns *conn* as an async ctx manager."""
+    pool = MagicMock()
+    pool.acquire = MagicMock(return_value=conn)
+    return pool
 
 
 # ---------------------------------------------------------------------------
@@ -287,3 +315,154 @@ def test_screening_hour_invalid_falls_back_to_default(monkeypatch: pytest.Monkey
     monkeypatch.setenv("SCREENING_HOUR_UTC", "not-a-number")
     from apps.api.screening import _screening_hour
     assert _screening_hour() == 6
+
+
+# ---------------------------------------------------------------------------
+# T-596: _run_scheduled_tick — advisory lock + double-checked idempotency
+# ---------------------------------------------------------------------------
+
+async def test_run_scheduled_tick_lock_not_acquired_skips_run() -> None:
+    """When pg_try_advisory_lock returns False, skip with INFO — do NOT call run_screening."""
+    conn = _make_stub_conn(lock_acquired=False)
+    pool = _make_stub_pool(conn)
+
+    with (
+        patch("apps.api.screening.get_pool", AsyncMock(return_value=pool)),
+        patch("apps.api.screening.run_screening") as mock_run,
+    ):
+        from apps.api.screening import _run_scheduled_tick
+        await _run_scheduled_tick(triggered_by="schedule")
+
+    # run_screening must NOT have been called
+    mock_run.assert_not_called()
+    # pg_advisory_unlock must NOT be called when lock was not acquired
+    conn.execute.assert_not_called()
+
+
+async def test_run_scheduled_tick_lock_acquired_today_row_exists_skips_run() -> None:
+    """When lock is acquired but a completed row exists for today, skip (double-check)."""
+    today = datetime.date.today()
+    existing_row = _stub_repo_create(
+        run_date=today,
+        triggered_by="startup",
+        status="completed",
+    )
+
+    conn = _make_stub_conn(lock_acquired=True)
+    pool = _make_stub_pool(conn)
+
+    mock_repo = AsyncMock()
+    mock_repo.latest_for_date = AsyncMock(return_value=existing_row)
+
+    with (
+        patch("apps.api.screening.get_pool", AsyncMock(return_value=pool)),
+        patch("apps.api.screening.ScreeningRunsRepository", return_value=mock_repo),
+        patch("apps.api.screening.run_screening") as mock_run,
+    ):
+        from apps.api.screening import _run_scheduled_tick
+        await _run_scheduled_tick(triggered_by="schedule")
+
+    # run_screening must NOT have been called
+    mock_run.assert_not_called()
+    # pg_advisory_unlock MUST have been called (in finally block)
+    conn.execute.assert_called_once()
+    assert "pg_advisory_unlock" in conn.execute.call_args.args[0]
+
+
+async def test_run_scheduled_tick_lock_acquired_no_row_calls_run_screening() -> None:
+    """When lock is acquired and no completed row exists, run_screening is called."""
+    conn = _make_stub_conn(lock_acquired=True)
+    pool = _make_stub_pool(conn)
+
+    mock_repo = AsyncMock()
+    mock_repo.latest_for_date = AsyncMock(return_value=None)
+
+    with (
+        patch("apps.api.screening.get_pool", AsyncMock(return_value=pool)),
+        patch("apps.api.screening.ScreeningRunsRepository", return_value=mock_repo),
+        patch("apps.api.screening.run_screening", AsyncMock(return_value={})) as mock_run,
+    ):
+        from apps.api.screening import _run_scheduled_tick
+        await _run_scheduled_tick(triggered_by="startup")
+
+    mock_run.assert_called_once_with(triggered_by="startup")
+    # pg_advisory_unlock MUST have been called in the finally block
+    conn.execute.assert_called_once()
+    assert "pg_advisory_unlock" in conn.execute.call_args.args[0]
+
+
+async def test_run_scheduled_tick_unlock_called_even_when_run_screening_raises() -> None:
+    """pg_advisory_unlock is called in finally even when run_screening raises."""
+    conn = _make_stub_conn(lock_acquired=True)
+    pool = _make_stub_pool(conn)
+
+    mock_repo = AsyncMock()
+    mock_repo.latest_for_date = AsyncMock(return_value=None)
+
+    with (
+        patch("apps.api.screening.get_pool", AsyncMock(return_value=pool)),
+        patch("apps.api.screening.ScreeningRunsRepository", return_value=mock_repo),
+        patch(
+            "apps.api.screening.run_screening",
+            AsyncMock(side_effect=RuntimeError("unexpected boom")),
+        ),
+    ):
+        from apps.api.screening import _run_scheduled_tick
+        with pytest.raises(RuntimeError, match="unexpected boom"):
+            await _run_scheduled_tick(triggered_by="schedule")
+
+    # unlock must still have been called despite the exception
+    conn.execute.assert_called_once()
+    assert "pg_advisory_unlock" in conn.execute.call_args.args[0]
+
+
+async def test_manual_run_screening_bypasses_lock_and_idempotency() -> None:
+    """run_screening(triggered_by='manual') calls the tool directly, no advisory lock."""
+    tool_result = _make_tool_result([])
+    expected_row = _stub_repo_create(status="completed", exception_count=0, triggered_by="manual")
+
+    mock_tool = AsyncMock()
+    mock_tool.handle = AsyncMock(return_value=tool_result)
+    mock_repo = AsyncMock()
+    mock_repo.create = AsyncMock(return_value=expected_row)
+
+    with (
+        patch("apps.api.screening.ListTodayExceptionsTool", return_value=mock_tool),
+        patch("apps.api.screening.ScreeningRunsRepository", return_value=mock_repo),
+        patch("apps.api.screening.get_pool") as mock_get_pool,
+    ):
+        from apps.api.screening import run_screening
+        row = await run_screening(triggered_by="manual")
+
+    # get_pool must NOT have been called (no advisory lock for manual runs)
+    mock_get_pool.assert_not_called()
+    assert row["status"] == "completed"
+    assert row["triggered_by"] == "manual"
+
+
+async def test_run_scheduled_tick_lock_acquired_failed_row_skips_run() -> None:
+    """When the latest row for today is failed (not completed), run_screening is called."""
+    today = datetime.date.today()
+    failed_row = _stub_repo_create(
+        run_date=today,
+        triggered_by="startup",
+        status="failed",
+    )
+
+    conn = _make_stub_conn(lock_acquired=True)
+    pool = _make_stub_pool(conn)
+
+    mock_repo = AsyncMock()
+    mock_repo.latest_for_date = AsyncMock(return_value=failed_row)
+
+    with (
+        patch("apps.api.screening.get_pool", AsyncMock(return_value=pool)),
+        patch("apps.api.screening.ScreeningRunsRepository", return_value=mock_repo),
+        patch("apps.api.screening.run_screening", AsyncMock(return_value={})) as mock_run,
+    ):
+        from apps.api.screening import _run_scheduled_tick
+        await _run_scheduled_tick(triggered_by="schedule")
+
+    # A failed previous row does NOT satisfy the idempotency check — must still run
+    mock_run.assert_called_once_with(triggered_by="schedule")
+    conn.execute.assert_called_once()

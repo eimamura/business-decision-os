@@ -1,6 +1,7 @@
 """Daily screening runner service + lifespan-managed asyncio scheduler.
 
 Design basis: docs/adr/2026-06-12-daily-screening-scheduler.md
+Hardening:    T-596 — Postgres advisory lock + double-checked idempotency
 
 The transport-agnostic service function ``run_screening`` invokes the
 ``list_today_exceptions`` tool's ``handle()`` directly (deterministic SQL, no LLM),
@@ -11,6 +12,20 @@ The scheduler is a background asyncio task managed by the FastAPI lifespan:
   - Daily loop: sleep until the next SCREENING_HOUR_UTC tick, then run with
     triggered_by="schedule".
   - Disabled entirely when SCREENING_SCHEDULER_ENABLED=false (default true).
+
+Advisory lock (T-596):
+  ``_run_scheduled_tick`` is the hardened entry point for "schedule" and "startup"
+  triggered_by values.  It acquires ``pg_try_advisory_lock(_SCREENING_ADVISORY_LOCK_KEY)``
+  on a single dedicated connection before running, skips with INFO if the lock is held by
+  another process, and releases the lock in a finally block on the *same* connection
+  (Postgres advisory locks are connection-scoped).  Inside the lock it re-checks whether a
+  completed run already exists for today (double-checked idempotency guard) and skips if so.
+  Manual ``POST /run`` calls bypass this wrapper — explicit user intent is never blocked.
+
+Lock key derivation:
+  _SCREENING_ADVISORY_LOCK_KEY = 0x73637265656E (int64 = 31077564654702)
+  Derived from the ASCII bytes of "screen" packed into a big-endian int48 then zero-padded
+  to int64.  The value is stable; it is not dynamically computed at runtime.
 
 Environment variables (document in .env.example):
   SCREENING_SCHEDULER_ENABLED   true (default) | false — set false in tests/CI
@@ -25,6 +40,7 @@ import os
 from typing import Any
 from uuid import uuid4
 
+from packages.persistence.db import get_pool
 from packages.persistence.screening_runs_repo import ScreeningRunsRepository
 from packages.tools.base import ToolContext
 from packages.tools.list_today_exceptions_tool import ListTodayExceptionsTool
@@ -34,6 +50,11 @@ _log = logging.getLogger(__name__)
 _SCHEDULER_ENABLED_ENV = "SCREENING_SCHEDULER_ENABLED"
 _HOUR_ENV = "SCREENING_HOUR_UTC"
 _DEFAULT_HOUR = 6
+
+# Advisory lock key for Postgres pg_try_advisory_lock / pg_advisory_unlock.
+# Derived from ASCII("screen") = 0x73 0x63 0x72 0x65 0x65 0x6E packed big-endian → int64.
+# This is a module-level constant; its value must never change once written to any DB.
+_SCREENING_ADVISORY_LOCK_KEY: int = 0x73637265656E  # 31077564654702
 
 
 def _scheduler_enabled() -> bool:
@@ -71,6 +92,10 @@ async def run_screening(triggered_by: str) -> dict[str, Any]:
     Always returns the persisted row dict.  On exception, persists a ``failed``
     row with a generic error message (full error logged server-side) and returns
     that row — never raises to the caller.
+
+    This function is the *pure executor* — it performs no lock or idempotency check.
+    Scheduled / startup callers MUST go through ``_run_scheduled_tick`` instead.
+    Manual ``POST /run`` may call this directly (explicit user intent, no gating).
 
     Args:
         triggered_by: one of "schedule", "startup", or "manual".
@@ -143,6 +168,68 @@ async def run_screening(triggered_by: str) -> dict[str, Any]:
             }
 
 
+async def _run_scheduled_tick(triggered_by: str) -> None:
+    """Hardened entry point for scheduled/startup ticks.
+
+    Applies two guards before invoking ``run_screening``:
+
+    1. Postgres advisory lock (``pg_try_advisory_lock``): a single connection is
+       acquired from the pool and held for the duration of this function.  If the lock
+       is already held by another process the tick is skipped with an INFO log.  The
+       lock is released in a finally block on the *same* connection — Postgres advisory
+       locks are connection-scoped, so both acquire and release MUST use the same
+       connection object.
+
+    2. Double-checked idempotency: *inside* the lock, re-fetch
+       ``ScreeningRunsRepository.latest_for_date(today)`` and skip if a completed row
+       already exists for today.  This closes the race where two processes both pass the
+       pre-lock check (the lightweight check in ``_screening_loop``) before either
+       acquires the lock.
+
+    Manual ``POST /run`` calls (triggered_by="manual") MUST NOT use this function;
+    they call ``run_screening`` directly.
+
+    Args:
+        triggered_by: "schedule" or "startup".
+    """
+    pool = await get_pool()
+    lock_key = _SCREENING_ADVISORY_LOCK_KEY
+    today = datetime.date.today()
+
+    # Hold a dedicated connection for the advisory lock lifetime.
+    async with pool.acquire() as conn:
+        # Attempt a non-blocking advisory lock.
+        acquired: bool = await conn.fetchval(
+            "SELECT pg_try_advisory_lock($1)", lock_key
+        )
+        if not acquired:
+            _log.info(
+                "screening tick skipped: lock held elsewhere (triggered_by=%s)", triggered_by
+            )
+            return
+
+        try:
+            # Double-check idempotency inside the lock.
+            repo = ScreeningRunsRepository()
+            existing = await repo.latest_for_date(today)
+            if existing is not None and existing.get("status") == "completed":
+                _log.info(
+                    "screening tick skipped: completed run already exists for %s "
+                    "(id=%s, triggered_by=%s)",
+                    today.isoformat(),
+                    existing.get("id"),
+                    triggered_by,
+                )
+                return
+
+            # Lock acquired + no completed row for today → execute the screening.
+            await run_screening(triggered_by=triggered_by)
+
+        finally:
+            # Always release the advisory lock on the same connection.
+            await conn.execute("SELECT pg_advisory_unlock($1)", lock_key)
+
+
 def _seconds_until_next_hour_utc(target_hour: int) -> float:
     """Return seconds until the next occurrence of *target_hour* (UTC)."""
     now = datetime.datetime.now(datetime.timezone.utc)
@@ -163,23 +250,15 @@ async def _screening_loop() -> None:
     Designed to run as a long-lived asyncio task inside the FastAPI lifespan.
     Handles asyncio.CancelledError cleanly (re-raises after logging).
     All other exceptions are caught, logged, and the loop continues.
+
+    Uses ``_run_scheduled_tick`` for both the startup run and the daily tick so
+    that advisory-lock + idempotency guards apply in all scheduled paths.
     """
     _log.info("screening scheduler started")
 
-    # --- Startup run: execute if no completed run exists for today ---
+    # --- Startup run (hardened via advisory lock + double-check) ---
     try:
-        repo = ScreeningRunsRepository()
-        today = datetime.date.today()
-        existing = await repo.latest_for_date(today)
-        if existing is None or existing.get("status") != "completed":
-            _log.info("no completed screening run for today — running startup check")
-            await run_screening(triggered_by="startup")
-        else:
-            _log.info(
-                "startup check skipped: completed run already exists for %s (id=%s)",
-                today.isoformat(),
-                existing.get("id"),
-            )
+        await _run_scheduled_tick(triggered_by="startup")
     except asyncio.CancelledError:
         _log.info("screening scheduler cancelled during startup check")
         raise
@@ -202,12 +281,12 @@ async def _screening_loop() -> None:
             raise
 
         try:
-            await run_screening(triggered_by="schedule")
+            await _run_scheduled_tick(triggered_by="schedule")
         except asyncio.CancelledError:
             _log.info("screening scheduler cancelled during scheduled run")
             raise
         except Exception as exc:
-            # run_screening itself never raises, but guard here for safety.
+            # _run_scheduled_tick itself should not raise, but guard here for safety.
             _log.error("screening scheduler loop error: %s", exc, exc_info=True)
 
 
