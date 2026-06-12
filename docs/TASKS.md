@@ -1270,7 +1270,7 @@ Dependencies: B-03
 
 ---
 
-## P94 — Forecast Deviation Decomposition (SPEC Q5) — In Progress
+## P94 — Forecast Deviation Decomposition (SPEC Q5) — Done (2026-06-12)
 
 **Goal:** The system answers SPEC Q5 "Why is there a gap between demand forecast and actual
 demand?" with a grounded decomposition instead of a generic accuracy metric. Done when: a
@@ -1282,7 +1282,7 @@ rule should direct the agent to pair them when the user asks "which customer/reg
 
 Dependencies: P92 Done (P93 not required)
 
-### Batch B-01 — Tool + wiring + seed + scenario (App Builder) — Done
+### Batch B-01 — Tool + wiring + seed + scenario (App Builder) — Done (2026-06-12)
 
 | Task | Description | Status |
 |---|---|---|

@@ -40,14 +40,33 @@ See `docs/archive/v3/STATE.md` for P0–P23 per-phase details.
 
 ## Active Phase
 
-P94 — Forecast Deviation Decomposition (SPEC Q5) (second of the P93–P95 MVP gap closure
-programme approved 2026-06-12; ADR 2026-06-12-daily-screening-scheduler).
+P95 — Supply Order Timing Analysis (SPEC Q8) (last of the P93–P95 MVP gap closure
+programme approved 2026-06-12).
 
 ## Active Lease
 
-P94-B-01 (App Builder — tool + wiring + seed + scenario)
+P95-B-01 (App Builder — tool + wiring + seed + scenario)
 
 ## Last Completed
+
+P94 — Forecast Deviation Decomposition (SPEC Q5) (2026-06-12). New tool
+`analyze_forecast_deviation` (registry 37→38): SKU × ISO-week forecast-vs-actual
+decomposition over the last 4 complete weeks (DISTINCT ON latest-forecast dedupe,
+is_missing actuals excluded, ±10% bias threshold over/under/mixed, rank total abs gap
+desc / sku asc, ROW_CAP 100, hybrid contract). Wired into 4 intent subsets + system prompt
+rule 6 (forecast-model quality stays with evaluate_forecast_accuracy; customer/region
+attribution pairs with detect_demand_shift). Seed: SKU-028 over-forecast (24 vs 9),
+SKU-029 under-forecast (16 vs 21), anchored to date.today(); P84 bands re-verified intact.
+Live verification (gemma4:12b): modal prompt end-to-end — 3 control calls each selecting
+analyze_forecast_deviation(weeks=4), tool events present, reply directionally correct,
+0 errors. WATCH ITEM: final synthesize call hit input_tokens=14080 (86% of num_ctx 16384)
+— approaching the P92 90% saturation warning; next prompt-growth phase should re-check.
+Sign-off PASS (proof-of-execution): unit 1141 exit 0, full-DSN integration 134 exit 0,
+playwright 41/41 exit 0, build 0, lint 0, typecheck 0. Process notes: orchestrator
+committed B-01 after B-02 (ordering slip, content consistent); Test/Review self-committed
+B-02 and App Builder self-set batch headers (boundary violations recorded, values correct).
+
+Previously:
 
 P93 — Daily Screening Job + Exceptions Surface (2026-06-12). The Screening Layer now runs
 on the daily cadence per DESIGN.md §Operational Cadence: in-process asyncio lifespan
