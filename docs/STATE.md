@@ -48,6 +48,17 @@ None
 
 ## Last Completed
 
+P90 — Tool Scenario Modal: Q10 Constraint Analysis Scenario (2026-06-12). "Biggest
+Constraint Impact" scenario (id sc-biggest-constraint-impact, prompt "Which constraint is
+having the biggest negative impact on sales or profit right now?") added to the Supply Chain
+category of ToolScenarioModal, targeting P89's `identify_binding_constraint`; dedicated
+Playwright test added (P86 precedent). Known remaining scenario gaps (deliberately out of
+scope, user-request gated): Q7 `analyze_production_plan_gap`, Q9 `detect_demand_shift`.
+Sign-off PASS (proof-of-execution): unit 1073 exit 0, canonical integration 16 exit 0,
+full-DSN integration 110 exit 0, playwright 34/34 exit 0, build 0, lint 0, typecheck 0.
+
+Previously:
+
 P89 — Production Plan & Constraint Analysis (SPEC Q7 / Q10) (2026-06-11). Final phase of the
 P86–P89 SPEC gap closure programme (ADR 2026-06-11-order-to-ship-and-production-data-domains).
 Alembic 0020 adds `production_capacity` (16 rows: WH-001 2000/wk, WH-002 1500/wk × 8 weeks)

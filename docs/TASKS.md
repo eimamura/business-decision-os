@@ -1114,3 +1114,23 @@ Dependencies: B-01
 | T-562 | Batch gate: `make test-unit && make lint && make typecheck` — proof-of-execution per gate. | Done |
 
 Dependencies: B-02
+
+---
+
+## P90 — Tool Scenario Modal: Q10 Constraint Analysis Scenario — Done (2026-06-12)
+
+**Goal:** ToolScenarioModal offers a scenario exercising SPEC Q10 ("Which constraint is having
+the biggest negative impact on sales or profit?") via the P89 `identify_binding_constraint`
+tool. Gap found 2026-06-12: P89 added the tools but no modal scenario. (Q7
+`analyze_production_plan_gap` and Q9 `detect_demand_shift` also lack scenarios — out of scope
+here unless the user requests them.)
+
+Dependencies: P89 Done
+
+### Batch B-01 — Scenario + spec sync (App Builder) — Done
+
+| Task | Description | Status |
+|---|---|---|
+| T-563 | Add one English "Biggest Constraint Impact" scenario to ToolScenarioModal.tsx (Supply Chain category) whose prompt targets `identify_binding_constraint` (e.g. "Which constraint is having the biggest negative impact on sales or profit right now?"); sync the Playwright spec assertions in tests/e2e/playwright/tool_scenario_modal.spec.ts if they enumerate scenario titles. Gate: make test-unit, lint, typecheck, make test-playwright. | Done |
+
+Dependencies: none

@@ -194,6 +194,14 @@ const CATEGORIES: Category[] = [
         prompt:
           "What is causing shipment delays or unshipped orders? Classify each delayed order by root cause.",
       },
+      {
+        id: "sc-biggest-constraint-impact",
+        title: "Biggest Constraint Impact",
+        description:
+          "Identify the binding constraint with the largest negative impact on sales or profit using capacity and demand data",
+        prompt:
+          "Which constraint is having the biggest negative impact on sales or profit right now?",
+      },
     ],
   },
 ];
