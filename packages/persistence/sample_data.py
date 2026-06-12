@@ -143,9 +143,38 @@ TABLES: tuple[TableSpec, ...] = (
             ColumnSpec("model_version", _text),
         ),
     ),
+    TableSpec(
+        "customer_orders",
+        (
+            ColumnSpec("order_id", _text),
+            ColumnSpec("customer_id", _text),
+            ColumnSpec("sku_id", _text),
+            ColumnSpec("ship_from_location_id", _text),
+            ColumnSpec("region", _text),
+            ColumnSpec("quantity", _int),
+            ColumnSpec("order_date", _date),
+            ColumnSpec("requested_ship_date", _date),
+            ColumnSpec("status", _text),
+        ),
+    ),
+    TableSpec(
+        "shipments",
+        (
+            ColumnSpec("shipment_id", _text),
+            ColumnSpec("order_id", _text),
+            ColumnSpec("carrier", _text),
+            ColumnSpec("planned_ship_date", _date),
+            ColumnSpec("actual_ship_date", _date),
+            ColumnSpec("planned_delivery_date", _date),
+            ColumnSpec("actual_delivery_date", _date),
+            ColumnSpec("status", _text),
+        ),
+    ),
 )
 
 DELETE_ORDER = (
+    "shipments",
+    "customer_orders",
     "forecast_history",
     "cost_master",
     "supply_orders",
@@ -164,6 +193,8 @@ INSERT_ORDER = (
     "supply_orders",
     "cost_master",
     "forecast_history",
+    "customer_orders",
+    "shipments",
 )
 
 

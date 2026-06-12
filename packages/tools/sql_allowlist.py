@@ -11,15 +11,23 @@ ALLOWED_READ_TABLES: frozenset[str] = frozenset([
     "supply_orders",
     "cost_master",
     "forecast_history",
+    "customer_orders",
+    "shipments",
 ])
 
 # Legacy table names that small LLMs generate from training data.
 # Applied before guardrail validation so queries still succeed.
+#
+# "orders" → "customer_orders": safe because the regex uses \b word boundaries,
+# so "supply_orders" contains "orders" as a suffix but NOT as a whole word —
+# the boundary before "o" in "supply_orders" is not a word boundary (preceded by "_").
+# Verified: re.sub(r'\borders\b', ..., 'supply_orders') → 'supply_orders' (unchanged).
 _LEGACY_TABLE_MAP: dict[str, str] = {
     "inventory": "inventory_snapshot",
     "supply": "supply_orders",
     "cost": "cost_master",
     "customers": "customer_master",
+    "orders": "customer_orders",
 }
 
 _LEGACY_PATTERN = re.compile(

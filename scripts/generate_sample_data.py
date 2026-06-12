@@ -22,6 +22,64 @@ CsvRow = dict[str, str]
 # and the tools' 30-day rolling window always has data on re-seed.
 START_DATE = date.today() - timedelta(days=365)
 
+# ---------------------------------------------------------------------------
+# Deterministic order-to-ship scenario constants (P87 T-541)
+#
+# Scenario assignment uses fixed indices so outcomes are independently
+# verifiable without running the generator (P84 convention).
+#
+# SCENARIO_ORDER_IDS maps order_id → scenario label for documentation.
+# The actual scenario is encoded in the data via status / shipment fields.
+# ---------------------------------------------------------------------------
+
+# Orders whose SKU is a P84 critical-risk SKU (SKU-001 or SKU-002) placed at
+# their warehouse (WH-001) so on_hand < quantity → inventory shortage.
+INVENTORY_SHORTAGE_ORDERS: list[dict[str, str]] = [
+    {"order_id": "CO-0001", "customer_id": "CUST-001", "sku_id": "SKU-001",
+     "ship_from_location_id": "WH-001", "region": "Kanto"},
+    {"order_id": "CO-0002", "customer_id": "CUST-003", "sku_id": "SKU-002",
+     "ship_from_location_id": "WH-001", "region": "Kansai"},
+]
+
+# Orders whose SKU is a P84 critical-risk SKU with a pending inbound supply
+# order arriving at today+10 (set by P84 generate_supply) — upstream supply delay.
+UPSTREAM_SUPPLY_DELAY_ORDERS: list[dict[str, str]] = [
+    {"order_id": "CO-0003", "customer_id": "CUST-002", "sku_id": "SKU-001",
+     "ship_from_location_id": "WH-001", "region": "Tohoku"},
+    {"order_id": "CO-0004", "customer_id": "CUST-004", "sku_id": "SKU-002",
+     "ship_from_location_id": "WH-001", "region": "Kyushu"},
+]
+
+# Orders that were shipped late: actual_ship_date > planned_ship_date
+# (warehouse processing delay).
+WAREHOUSE_DELAY_ORDERS: list[dict[str, str]] = [
+    {"order_id": "CO-0005", "customer_id": "CUST-005", "sku_id": "SKU-010",
+     "ship_from_location_id": "WH-001", "region": "Kanto"},
+    {"order_id": "CO-0006", "customer_id": "CUST-006", "sku_id": "SKU-012",
+     "ship_from_location_id": "WH-002", "region": "Kansai"},
+]
+
+# Orders shipped on time but delivered late: actual_delivery_date > planned_delivery_date
+# (carrier delay).
+CARRIER_DELAY_ORDERS: list[dict[str, str]] = [
+    {"order_id": "CO-0007", "customer_id": "CUST-007", "sku_id": "SKU-015",
+     "ship_from_location_id": "WH-001", "region": "Kanto"},
+    {"order_id": "CO-0008", "customer_id": "CUST-008", "sku_id": "SKU-016",
+     "ship_from_location_id": "WH-002", "region": "Chubu"},
+]
+
+# Demand-shift signal for P88 SPEC Q9 (customer/region demand).
+# DEMAND_GROWTH_CUSTOMERS: order quantity in last 28 days clearly > prior 28 days.
+# DEMAND_DECLINE_CUSTOMERS: order quantity in last 28 days clearly < prior 28 days.
+#
+# Prior period: today-56 to today-29; current period: today-28 to today-1.
+# Growth customer CUST-009 orders 3 orders in current vs 1 in prior for region Kanto.
+# Decline customer CUST-010 orders 1 order in current vs 3 in prior for region Kansai.
+DEMAND_SHIFT_GROWTH_CUSTOMER = "CUST-009"
+DEMAND_SHIFT_GROWTH_REGION = "Kanto"
+DEMAND_SHIFT_DECLINE_CUSTOMER = "CUST-010"
+DEMAND_SHIFT_DECLINE_REGION = "Kansai"
+
 DETERMINISTIC_NULL_SKUS = {"SKU-003", "SKU-005", "SKU-007"}
 CONTIGUOUS_GAP_SKU = "SKU-001"
 CONTIGUOUS_GAP_START_DAY = 60
@@ -425,6 +483,271 @@ def generate_forecast_history(
                 })
 
 
+def generate_customer_orders_and_shipments(
+    skus: list[CsvRow],
+    rng: random.Random,
+    out_dir: Path,
+    config: SampleDataConfig,
+) -> None:
+    """Write customer_orders.csv and shipments.csv with deterministic delay scenarios.
+
+    Scenario index (fixed, independently verifiable — P84 convention):
+      CO-0001, CO-0002 : inventory_shortage    (P84 critical SKUs at WH-001, status=open)
+      CO-0003, CO-0004 : upstream_supply_delay (P84 critical SKUs, supply arrives today+10)
+      CO-0005, CO-0006 : warehouse_delay       (shipped late: actual_ship > planned_ship)
+      CO-0007, CO-0008 : carrier_delay         (shipped on time, delivered late)
+      CO-0009 .. majority : fulfilled_on_time  (shipped + delivered, dates consistent)
+      CO-demand-* : demand_shift signal for P88 (CUST-009 growth, CUST-010 decline)
+    """
+    today = date.today()
+    order_fields = [
+        "order_id", "customer_id", "sku_id", "ship_from_location_id",
+        "region", "quantity", "order_date", "requested_ship_date", "status",
+    ]
+    shipment_fields = [
+        "shipment_id", "order_id", "carrier", "planned_ship_date",
+        "actual_ship_date", "planned_delivery_date", "actual_delivery_date", "status",
+    ]
+    orders: list[CsvRow] = []
+    shipments: list[CsvRow] = []
+
+    # ---- Scenario 1: inventory shortage (open, no shipment) ----
+    for spec in INVENTORY_SHORTAGE_ORDERS:
+        order_date = today - timedelta(days=5)
+        requested_ship_date = today - timedelta(days=2)
+        orders.append({
+            "order_id": spec["order_id"],
+            "customer_id": spec["customer_id"],
+            "sku_id": spec["sku_id"],
+            "ship_from_location_id": spec["ship_from_location_id"],
+            "region": spec["region"],
+            "quantity": "200",  # >> on_hand for critical SKUs (DOC=2 → tiny stock)
+            "order_date": order_date.isoformat(),
+            "requested_ship_date": requested_ship_date.isoformat(),
+            "status": "open",
+        })
+        # No shipment row — unshipped
+
+    # ---- Scenario 2: upstream supply delay (open, no shipment) ----
+    for spec in UPSTREAM_SUPPLY_DELAY_ORDERS:
+        order_date = today - timedelta(days=3)
+        requested_ship_date = today + timedelta(days=2)
+        orders.append({
+            "order_id": spec["order_id"],
+            "customer_id": spec["customer_id"],
+            "sku_id": spec["sku_id"],
+            "ship_from_location_id": spec["ship_from_location_id"],
+            "region": spec["region"],
+            "quantity": "150",
+            "order_date": order_date.isoformat(),
+            "requested_ship_date": requested_ship_date.isoformat(),
+            "status": "open",
+        })
+        # No shipment row — unshipped, waiting on supply arriving today+10
+
+    # ---- Scenario 3: warehouse processing delay (shipped late) ----
+    for idx, spec in enumerate(WAREHOUSE_DELAY_ORDERS):
+        order_date = today - timedelta(days=14)
+        planned_ship = today - timedelta(days=7)
+        actual_ship = today - timedelta(days=4)   # 3 days late vs planned
+        planned_delivery = planned_ship + timedelta(days=3)
+        actual_delivery = actual_ship + timedelta(days=3)
+        order_id = spec["order_id"]
+        orders.append({
+            "order_id": order_id,
+            "customer_id": spec["customer_id"],
+            "sku_id": spec["sku_id"],
+            "ship_from_location_id": spec["ship_from_location_id"],
+            "region": spec["region"],
+            "quantity": str(50 + idx * 20),
+            "order_date": order_date.isoformat(),
+            "requested_ship_date": planned_ship.isoformat(),
+            "status": "shipped",
+        })
+        shipment_id = f"SH-{order_id}"
+        shipments.append({
+            "shipment_id": shipment_id,
+            "order_id": order_id,
+            "carrier": "CARRIER-A",
+            "planned_ship_date": planned_ship.isoformat(),
+            "actual_ship_date": actual_ship.isoformat(),
+            "planned_delivery_date": planned_delivery.isoformat(),
+            "actual_delivery_date": actual_delivery.isoformat(),
+            "status": "delivered",
+        })
+
+    # ---- Scenario 4: carrier delay (shipped on time, delivered late) ----
+    for idx, spec in enumerate(CARRIER_DELAY_ORDERS):
+        order_date = today - timedelta(days=12)
+        planned_ship = today - timedelta(days=6)
+        actual_ship = today - timedelta(days=6)   # on time
+        planned_delivery = planned_ship + timedelta(days=3)
+        actual_delivery = planned_ship + timedelta(days=7)   # 4 days late
+        order_id = spec["order_id"]
+        orders.append({
+            "order_id": order_id,
+            "customer_id": spec["customer_id"],
+            "sku_id": spec["sku_id"],
+            "ship_from_location_id": spec["ship_from_location_id"],
+            "region": spec["region"],
+            "quantity": str(30 + idx * 10),
+            "order_date": order_date.isoformat(),
+            "requested_ship_date": planned_ship.isoformat(),
+            "status": "shipped",
+        })
+        shipment_id = f"SH-{order_id}"
+        shipments.append({
+            "shipment_id": shipment_id,
+            "order_id": order_id,
+            "carrier": "CARRIER-B",
+            "planned_ship_date": planned_ship.isoformat(),
+            "actual_ship_date": actual_ship.isoformat(),
+            "planned_delivery_date": planned_delivery.isoformat(),
+            "actual_delivery_date": actual_delivery.isoformat(),
+            "status": "delivered",
+        })
+
+    # ---- Scenario 5: majority on-time fulfilled orders ----
+    # Use non-risk SKUs (SKU-008 to SKU-030) so they don't interfere with P84.
+    # Fixed assignment: order index → customer, sku, location, region (deterministic).
+    on_time_sku_pool = [
+        sku["sku_id"] for sku in skus
+        if sku["sku_id"] not in SKU_RISK_BANDS
+    ][:10]  # cap at 10 to stay deterministic even when sku_count varies
+    on_time_customers = [
+        "CUST-001", "CUST-002", "CUST-003", "CUST-004", "CUST-005",
+        "CUST-006", "CUST-007", "CUST-008", "CUST-001", "CUST-002",
+    ]
+    on_time_locations = ["WH-001", "WH-002", "WH-001", "WH-002", "WH-001",
+                         "WH-002", "WH-001", "WH-002", "WH-001", "WH-002"]
+    on_time_regions = ["Kanto", "Kansai", "Tohoku", "Kyushu", "Chubu",
+                       "Kanto", "Kansai", "Tohoku", "Kanto", "Kansai"]
+    num_on_time = min(len(on_time_sku_pool), 10)
+    for idx in range(num_on_time):
+        order_id = f"CO-{9 + idx:04d}"
+        sku_id = on_time_sku_pool[idx % len(on_time_sku_pool)]
+        customer_id = on_time_customers[idx]
+        location_id = on_time_locations[idx]
+        region = on_time_regions[idx]
+        order_date = today - timedelta(days=20 + idx)
+        planned_ship = today - timedelta(days=10 + idx)
+        actual_ship = planned_ship
+        planned_delivery = planned_ship + timedelta(days=3)
+        actual_delivery = planned_delivery
+        qty = 20 + idx * 5
+        orders.append({
+            "order_id": order_id,
+            "customer_id": customer_id,
+            "sku_id": sku_id,
+            "ship_from_location_id": location_id,
+            "region": region,
+            "quantity": str(qty),
+            "order_date": order_date.isoformat(),
+            "requested_ship_date": planned_ship.isoformat(),
+            "status": "shipped",
+        })
+        shipment_id = f"SH-{order_id}"
+        shipments.append({
+            "shipment_id": shipment_id,
+            "order_id": order_id,
+            "carrier": "CARRIER-A",
+            "planned_ship_date": planned_ship.isoformat(),
+            "actual_ship_date": actual_ship.isoformat(),
+            "planned_delivery_date": planned_delivery.isoformat(),
+            "actual_delivery_date": actual_delivery.isoformat(),
+            "status": "delivered",
+        })
+
+    # ---- Demand-shift signal for P88 (SPEC Q9) ----
+    # CUST-009 (region Kanto): 1 order in prior period (today-56 to today-29),
+    #   3 orders in current period (today-28 to today-1) → clearly growing.
+    # CUST-010 (region Kansai): 3 orders in prior period, 1 in current → declining.
+    #
+    # Use non-risk SKUs so P84 determinism is untouched.
+    demand_shift_sku = on_time_sku_pool[0] if on_time_sku_pool else "SKU-008"
+    demand_shift_loc = "WH-001"
+
+    # CUST-009 growth: 1 prior order, 3 current orders
+    orders.append({
+        "order_id": "CO-DS01",
+        "customer_id": DEMAND_SHIFT_GROWTH_CUSTOMER,
+        "sku_id": demand_shift_sku,
+        "ship_from_location_id": demand_shift_loc,
+        "region": DEMAND_SHIFT_GROWTH_REGION,
+        "quantity": "50",
+        "order_date": (today - timedelta(days=45)).isoformat(),
+        "requested_ship_date": (today - timedelta(days=40)).isoformat(),
+        "status": "shipped",
+    })
+    for ds_idx in range(3):
+        ds_order_id = f"CO-DS0{2 + ds_idx}"
+        orders.append({
+            "order_id": ds_order_id,
+            "customer_id": DEMAND_SHIFT_GROWTH_CUSTOMER,
+            "sku_id": demand_shift_sku,
+            "ship_from_location_id": demand_shift_loc,
+            "region": DEMAND_SHIFT_GROWTH_REGION,
+            "quantity": "50",
+            "order_date": (today - timedelta(days=20 - ds_idx * 5)).isoformat(),
+            "requested_ship_date": (today - timedelta(days=15 - ds_idx * 5)).isoformat(),
+            "status": "shipped",
+        })
+
+    # CUST-010 decline: 3 prior orders, 1 current order
+    for ds_idx in range(3):
+        ds_order_id = f"CO-DS0{5 + ds_idx}"
+        orders.append({
+            "order_id": ds_order_id,
+            "customer_id": DEMAND_SHIFT_DECLINE_CUSTOMER,
+            "sku_id": demand_shift_sku,
+            "ship_from_location_id": "WH-002",
+            "region": DEMAND_SHIFT_DECLINE_REGION,
+            "quantity": "50",
+            "order_date": (today - timedelta(days=50 - ds_idx * 5)).isoformat(),
+            "requested_ship_date": (today - timedelta(days=45 - ds_idx * 5)).isoformat(),
+            "status": "shipped",
+        })
+    orders.append({
+        "order_id": "CO-DS08",
+        "customer_id": DEMAND_SHIFT_DECLINE_CUSTOMER,
+        "sku_id": demand_shift_sku,
+        "ship_from_location_id": "WH-002",
+        "region": DEMAND_SHIFT_DECLINE_REGION,
+        "quantity": "50",
+        "order_date": (today - timedelta(days=10)).isoformat(),
+        "requested_ship_date": (today - timedelta(days=5)).isoformat(),
+        "status": "shipped",
+    })
+
+    with open(out_dir / "customer_orders.csv", "w", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=order_fields)
+        writer.writeheader()
+        writer.writerows(orders)
+
+    with open(out_dir / "shipments.csv", "w", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=shipment_fields)
+        writer.writeheader()
+        writer.writerows(shipments)
+
+    # Summary for verification
+    scenario_counts = {
+        "inventory_shortage": len(INVENTORY_SHORTAGE_ORDERS),
+        "upstream_supply_delay": len(UPSTREAM_SUPPLY_DELAY_ORDERS),
+        "warehouse_delay": len(WAREHOUSE_DELAY_ORDERS),
+        "carrier_delay": len(CARRIER_DELAY_ORDERS),
+        "on_time": num_on_time,
+        "demand_shift_growth": 4,   # 1 prior + 3 current for CUST-009
+        "demand_shift_decline": 4,  # 3 prior + 1 current for CUST-010
+    }
+    total_orders = len(orders)
+    total_shipments = len(shipments)
+    print(
+        f"customer_orders: {total_orders} rows — "
+        + ", ".join(f"{k}={v}" for k, v in scenario_counts.items())
+    )
+    print(f"shipments: {total_shipments} rows")
+
+
 def generate(config: SampleDataConfig, out_dir: Path = Path("data/sample")) -> None:
     rng = random.Random(config.seed)
 
@@ -444,6 +767,7 @@ def generate(config: SampleDataConfig, out_dir: Path = Path("data/sample")) -> N
     generate_supply(skus, suppliers, rng, out_dir)
     generate_cost(skus, rng, out_dir, config)
     generate_forecast_history(skus, rng, out_dir, config)
+    generate_customer_orders_and_shipments(skus, rng, out_dir, config)
 
     print(
         f"Sample data generated in {out_dir}/ "

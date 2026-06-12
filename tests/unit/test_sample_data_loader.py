@@ -88,6 +88,20 @@ async def test_replace_operational_tables_uses_fk_safe_order(tmp_path: Path) -> 
         ["sku_id", "forecast_date", "target_date", "forecast_qty", "model_version"],
         [["SKU-001", "2024-12-02", "2025-01-01", "310.50", "v1.0-naive"]],
     )
+    _write_csv(
+        tmp_path / "customer_orders.csv",
+        ["order_id", "customer_id", "sku_id", "ship_from_location_id",
+         "region", "quantity", "order_date", "requested_ship_date", "status"],
+        [["CO-0001", "CUST-001", "SKU-001", "WH-001",
+          "Kanto", "100", "2026-06-01", "2026-06-05", "open"]],
+    )
+    _write_csv(
+        tmp_path / "shipments.csv",
+        ["shipment_id", "order_id", "carrier", "planned_ship_date",
+         "actual_ship_date", "planned_delivery_date", "actual_delivery_date", "status"],
+        [["SH-CO-0009", "CO-0001", "CARRIER-A",
+          "2026-06-01", "2026-06-01", "2026-06-04", "2026-06-04", "delivered"]],
+    )
 
     conn = FakeConnection()
 
@@ -96,7 +110,10 @@ async def test_replace_operational_tables_uses_fk_safe_order(tmp_path: Path) -> 
     deletes = [s for s in conn.statements if s.startswith("DELETE")]
     inserts = [s.split()[2] for s in conn.statements if s.startswith("INSERT")]
 
+    # DELETE order: child tables first (shipments → customer_orders → ... → sku_master)
     assert deletes == [
+        "DELETE FROM shipments",
+        "DELETE FROM customer_orders",
         "DELETE FROM forecast_history",
         "DELETE FROM cost_master",
         "DELETE FROM supply_orders",
@@ -106,9 +123,10 @@ async def test_replace_operational_tables_uses_fk_safe_order(tmp_path: Path) -> 
         "DELETE FROM location_master",
         "DELETE FROM sku_master",
     ]
+    # INSERT order: parent tables first (sku_master → ... → customer_orders → shipments)
     assert inserts == [
         "sku_master", "location_master", "customer_master",
         "inventory_snapshot", "demand_history", "supply_orders",
-        "cost_master", "forecast_history",
+        "cost_master", "forecast_history", "customer_orders", "shipments",
     ]
     assert [summary["table_name"] for summary in summaries] == inserts

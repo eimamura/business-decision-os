@@ -122,13 +122,15 @@ async def test_tool_calls_repo_raises():
 # SQL allowlist
 # ---------------------------------------------------------------------------
 
-def test_allowed_tables_are_exactly_eight():
-    assert len(ALLOWED_READ_TABLES) == 8
+def test_allowed_tables_are_exactly_ten():
+    # P87 added customer_orders and shipments; total is now 10.
+    assert len(ALLOWED_READ_TABLES) == 10
 
 
 @pytest.mark.parametrize("table", [
     "sku_master", "location_master", "customer_master",
     "inventory_snapshot", "demand_history", "supply_orders", "cost_master", "forecast_history",
+    "customer_orders", "shipments",
 ])
 def test_allowed_tables_pass(table: str):
     assert check_allowed(table) is True

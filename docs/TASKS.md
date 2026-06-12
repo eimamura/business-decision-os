@@ -994,7 +994,7 @@ Dependencies: B-01
 
 ---
 
-## P87 — Order-to-Ship Data Domain: Shipment Delay Root Causes (SPEC Q4) — Not Started
+## P87 — Order-to-Ship Data Domain: Shipment Delay Root Causes (SPEC Q4) — In Progress
 
 **Goal:** The system can answer SPEC Q4 "What is causing shipment delays or unshipped orders?" —
 an MVP validation question currently impossible because the data model has no customer orders or
@@ -1008,13 +1008,13 @@ contract; additive migration only).
 
 Dependencies: P86 Done (sequential execution; no technical coupling)
 
-### Batch B-01 — Schema migration + seed data (App Builder) — Not Started
+### Batch B-01 — Schema migration + seed data (App Builder) — Done (2026-06-11)
 
 | Task | Description | Status |
 |---|---|---|
-| T-540 | Alembic migration (additive, `apps/api/alembic/`) creating `customer_orders` and `shipments` per the ADR schema. No changes to existing tables. | Not Started |
-| T-541 | Seed generation: extend `scripts/generate_sample_data.py` + `scripts/seed_db.py` to produce `customer_orders.csv` / `shipments.csv` with deterministic, date-relative scenarios (P82 convention: all dates relative to `date.today()`; P84 convention: fixed index-based assignment, independently verifiable): orders fulfilled on time (majority), unshipped due to inventory shortage (tie to P84 critical-risk SKUs), shipped late (warehouse delay), shipped on time but delivered late (carrier delay), and unshipped pending delayed inbound supply. Must not disturb P84 risk-band determinism for existing tables. | Not Started |
-| T-542 | Add `customer_orders` and `shipments` to `ALLOWED_READ_TABLES` (and `_LEGACY_TABLE_MAP` entries `"orders"→"customer_orders"` only if unambiguous); confirm `get_schema_context()` picks the new tables up from `information_schema` (no hand-written schema strings); data catalog updated if it enumerates tables. | Not Started |
+| T-540 | Alembic migration (additive, `apps/api/alembic/`) creating `customer_orders` and `shipments` per the ADR schema. No changes to existing tables. | Done |
+| T-541 | Seed generation: extend `scripts/generate_sample_data.py` + `scripts/seed_db.py` to produce `customer_orders.csv` / `shipments.csv` with deterministic, date-relative scenarios (P82 convention: all dates relative to `date.today()`; P84 convention: fixed index-based assignment, independently verifiable): orders fulfilled on time (majority), unshipped due to inventory shortage (tie to P84 critical-risk SKUs), shipped late (warehouse delay), shipped on time but delivered late (carrier delay), and unshipped pending delayed inbound supply. Must not disturb P84 risk-band determinism for existing tables. | Done |
+| T-542 | Add `customer_orders` and `shipments` to `ALLOWED_READ_TABLES` (and `_LEGACY_TABLE_MAP` entries `"orders"→"customer_orders"` only if unambiguous); confirm `get_schema_context()` picks the new tables up from `information_schema` (no hand-written schema strings); data catalog updated if it enumerates tables. | Done |
 
 Dependencies: none
 
