@@ -54,6 +54,20 @@ class _RoleToolAllowlist(dict):  # type: ignore[type-arg]
             _get_control_allowlist()
         return super().get(key, default)
 
+    def items(self) -> Any:
+        # Resolve "control" before any caller iterates .items() so that the
+        # control entry is populated even on a freshly restarted process where
+        # __getitem__ has never been called.  Calling _get_control_allowlist()
+        # here is safe: it uses dict.__setitem__/__getitem__ internally so it
+        # does not re-enter this method.
+        _get_control_allowlist()
+        return super().items()
+
+    def values(self) -> Any:
+        # Same rationale as items() above.
+        _get_control_allowlist()
+        return super().values()
+
 
 _ROLE_TOOL_ALLOWLIST: _RoleToolAllowlist = _RoleToolAllowlist({
     # orchestrator: safety guard — prevents any code calling list_for_role("orchestrator")

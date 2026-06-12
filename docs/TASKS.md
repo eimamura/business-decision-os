@@ -954,6 +954,17 @@ Dependencies: none
 - Owner: Test/Review
 - Acceptance: `make test-integration` exit 0 with both tests passing, preserving their original behavioral intent (no-interrupt for fully-specified request; ask_user resume returns a complete SessionResponse).
 
+#### Defect: D-010
+
+- Status: Resolved (2026-06-12 — override items()/values() on _RoleToolAllowlist to call _get_control_allowlist() before delegating to super(), fixing empty tools list on fresh-process registry query)
+- Severity: Medium
+- Repro: restart the API process, then `GET /api/v1/admin/registry` before any agent run — response is 200 with `tools: []`; the web `/agents` Tools tab renders empty. Reproduced live 2026-06-12 (user report) and via `uv run python`: `_ROLE_TOOL_ALLOWLIST.items()` → control len 0; after `_ROLE_TOOL_ALLOWLIST["control"]` → 37.
+- Observed: `get_registry` (apps/api/routers/admin.py) iterates `_ROLE_TOOL_ALLOWLIST.items()` / `.values()` to build the tools list, but `_RoleToolAllowlist` (packages/tools/base.py, P67 lazy control-allowlist) only hooks `__getitem__` and `.get` — `.items()`/`.values()` return the unresolved empty `control` list until some other code path (an agent run calling `list_for_role("control")`) resolves it. On a freshly restarted API process the Tools tab is therefore empty until the first tool-calling agent query.
+- Expected: `GET /api/v1/admin/registry` returns all registered LLM-callable tools (37) regardless of whether an agent run has occurred since process start.
+- Area: packages/tools/base.py (`_RoleToolAllowlist` iteration paths) — P85's endpoint consumed the P67 lazy dict via an unhooked path; P85 live verification was deferred to the user and is what surfaced this.
+- Owner: App Builder
+- Acceptance: fresh-process registry call returns 37 tools (regression unit test that calls `.items()`/`.values()` before any `__getitem__`); `make test-unit`, `make lint`, `make typecheck`, `make test-integration` all exit 0.
+
 Dependencies: B-01
 
 ---

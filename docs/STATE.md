@@ -40,11 +40,12 @@ See `docs/archive/v3/STATE.md` for P0–P23 per-phase details.
 
 ## Active Phase
 
-None
+D-010 resolution (P85 defect: registry Tools list empty on fresh process) + P91 (Q7/Q9
+Tool Scenario Modal scenarios)
 
 ## Active Lease
 
-None
+D-010 (App Builder) — acquired 2026-06-12
 
 ## Last Completed
 
