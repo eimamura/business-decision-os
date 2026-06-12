@@ -1095,13 +1095,13 @@ Dependencies: P88 Done (sequential execution; no technical coupling)
 
 Dependencies: none
 
-### Batch B-02 — Production analysis tools + wiring (App Builder) — Not Started
+### Batch B-02 — Production analysis tools + wiring (App Builder) — Done
 
 | Task | Description | Status |
 |---|---|---|
-| T-557 | New tool `analyze_production_plan_gap`: per SKU (and location), compare `production_plan` against forward demand (forecast_history where present, else recent demand_history run-rate) over a horizon; classify overproduction / underproduction / balanced with gap quantities; hybrid output contract. Deterministic SQL only. | Not Started |
-| T-558 | New tool `identify_binding_constraint`: rank constraint candidates by estimated negative impact — production capacity utilization per location (capacity vs planned load), inbound supply gaps (reuse supply-gap logic), and inventory-driven lost-sales exposure (stockout-risk SKUs × `cost_master.stockout_cost`). Returns ranked constraints with impact estimate and evidence; analytical output only — no recommendations (Control Agent concludes). | Not Started |
-| T-559 | Layer 3 wiring: add both tools to `_INTENT_TOOL_SUBSET` (`domain_analysis`, `cross_domain_analysis`, `decision_support`; `identify_binding_constraint` also `supply_chain`). System prompt priority rules for production-adjustment and biggest-constraint questions. | Not Started |
+| T-557 | New tool `analyze_production_plan_gap`: per SKU (and location), compare `production_plan` against forward demand (forecast_history where present, else recent demand_history run-rate) over a horizon; classify overproduction / underproduction / balanced with gap quantities; hybrid output contract. Deterministic SQL only. | Done |
+| T-558 | New tool `identify_binding_constraint`: rank constraint candidates by estimated negative impact — production capacity utilization per location (capacity vs planned load), inbound supply gaps (reuse supply-gap logic), and inventory-driven lost-sales exposure (stockout-risk SKUs × `cost_master.stockout_cost`). Returns ranked constraints with impact estimate and evidence; analytical output only — no recommendations (Control Agent concludes). | Done |
+| T-559 | Layer 3 wiring: add both tools to `_INTENT_TOOL_SUBSET` (`domain_analysis`, `cross_domain_analysis`, `decision_support`; `identify_binding_constraint` also `supply_chain`). System prompt priority rules for production-adjustment and biggest-constraint questions. | Done |
 
 Dependencies: B-01
 

@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 from packages.prediction import DatabasePredictor
+from packages.tools.analyze_production_plan_gap_tool import AnalyzeProductionPlanGapTool
 from packages.tools.analyze_shipment_delay_causes_tool import AnalyzeShipmentDelayCausesTool
 from packages.tools.approval_tool import ApprovalTool
 from packages.tools.audit_tool import AuditLogTool
@@ -24,6 +25,7 @@ from packages.tools.finance_scenario_tool import CompareCostScenariosTool
 from packages.tools.finance_stockout_cost_tool import CalculateStockoutCostImpactTool
 from packages.tools.forecast_accuracy_tool import ForecastAccuracyTool
 from packages.tools.forecast_tool import ForecastTool
+from packages.tools.identify_binding_constraint_tool import IdentifyBindingConstraintTool
 from packages.tools.inventory_atp_tool import GetAvailableToPromiseTool
 from packages.tools.inventory_doi_tool import CalculateDaysOfInventoryTool
 from packages.tools.inventory_excess_tool import CalculateExcessInventoryRiskTool
@@ -80,7 +82,9 @@ __all__ = [
     "CalculateDaysOfInventoryTool",
     "CalculateExcessInventoryRiskTool",
     "CalculateStockoutRiskTool",
+    "AnalyzeProductionPlanGapTool",
     "AnalyzeShipmentDelayCausesTool",
+    "IdentifyBindingConstraintTool",
     "ListStockoutRiskTool",
     "ListTodayExceptionsTool",
     "ListUnshippedOrdersTool",
@@ -131,4 +135,6 @@ def create_tool_registry(
     registry.register(CalculateExcessInventoryRiskTool(db_session=db_session))
     registry.register(GetAvailableToPromiseTool(db_session=db_session))
     registry.register(DetectDemandShiftTool(db_session=db_session))
+    registry.register(AnalyzeProductionPlanGapTool(db_session=db_session))
+    registry.register(IdentifyBindingConstraintTool(db_session=db_session))
     return registry

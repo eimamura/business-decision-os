@@ -27,7 +27,7 @@ def test_intent_tool_subset_tool_names_all_registered() -> None:
 
 
 def test_intent_tool_subset_supply_chain_list_is_unchanged() -> None:
-    """The supply_chain subset must exactly match its specification (updated in P87-T-545)."""
+    """The supply_chain subset must exactly match its specification (updated in P89-T-559)."""
     expected = [
         "nl_query",
         "list_today_exceptions",
@@ -43,6 +43,7 @@ def test_intent_tool_subset_supply_chain_list_is_unchanged() -> None:
         "calculate_stockout_risk",
         "calculate_stockout_cost_impact",
         "calculate_expedite_cost",
+        "identify_binding_constraint",
     ]
     assert _INTENT_TOOL_SUBSET["supply_chain"] == expected
 
@@ -72,4 +73,53 @@ def test_detect_demand_shift_not_in_supply_chain() -> None:
     """detect_demand_shift should not be in supply_chain subset (P88-T-550 scope)."""
     assert "detect_demand_shift" not in _INTENT_TOOL_SUBSET["supply_chain"], (
         "detect_demand_shift is not a supply-chain execution tool; keep supply_chain focused"
+    )
+
+
+def test_analyze_production_plan_gap_in_domain_analysis() -> None:
+    """analyze_production_plan_gap must be present in domain_analysis subset (P89-T-559)."""
+    assert "analyze_production_plan_gap" in _INTENT_TOOL_SUBSET["domain_analysis"], (
+        "analyze_production_plan_gap must be in domain_analysis for SPEC Q7 questions"
+    )
+
+
+def test_analyze_production_plan_gap_in_cross_domain_analysis() -> None:
+    """analyze_production_plan_gap must be present in cross_domain_analysis subset (P89-T-559)."""
+    assert "analyze_production_plan_gap" in _INTENT_TOOL_SUBSET["cross_domain_analysis"], (
+        "analyze_production_plan_gap must be in cross_domain_analysis for SPEC Q7 questions"
+    )
+
+
+def test_analyze_production_plan_gap_in_decision_support() -> None:
+    """analyze_production_plan_gap must be present in decision_support subset (P89-T-559)."""
+    assert "analyze_production_plan_gap" in _INTENT_TOOL_SUBSET["decision_support"], (
+        "analyze_production_plan_gap must be in decision_support for SPEC Q7 questions"
+    )
+
+
+def test_identify_binding_constraint_in_domain_analysis() -> None:
+    """identify_binding_constraint must be present in domain_analysis subset (P89-T-559)."""
+    assert "identify_binding_constraint" in _INTENT_TOOL_SUBSET["domain_analysis"], (
+        "identify_binding_constraint must be in domain_analysis for SPEC Q10 questions"
+    )
+
+
+def test_identify_binding_constraint_in_cross_domain_analysis() -> None:
+    """identify_binding_constraint must be present in cross_domain_analysis subset (P89-T-559)."""
+    assert "identify_binding_constraint" in _INTENT_TOOL_SUBSET["cross_domain_analysis"], (
+        "identify_binding_constraint must be in cross_domain_analysis for SPEC Q10 questions"
+    )
+
+
+def test_identify_binding_constraint_in_decision_support() -> None:
+    """identify_binding_constraint must be present in decision_support subset (P89-T-559)."""
+    assert "identify_binding_constraint" in _INTENT_TOOL_SUBSET["decision_support"], (
+        "identify_binding_constraint must be in decision_support for SPEC Q10 questions"
+    )
+
+
+def test_identify_binding_constraint_in_supply_chain() -> None:
+    """identify_binding_constraint must be present in supply_chain subset (P89-T-559)."""
+    assert "identify_binding_constraint" in _INTENT_TOOL_SUBSET["supply_chain"], (
+        "identify_binding_constraint must be in supply_chain for constraint-impact questions"
     )

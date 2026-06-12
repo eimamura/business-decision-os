@@ -46,7 +46,7 @@ P86–P89 close the SPEC gaps (Q3 → Q4 → Q9 → Q7/Q10), planned 2026-06-11 
 
 ## Active Lease
 
-P89 B-01 (App Builder) — acquired 2026-06-11
+P89 B-02 (App Builder) — acquired 2026-06-11
 
 ## Last Completed
 

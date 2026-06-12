@@ -49,9 +49,18 @@ _SYSTEM_PROMPT = (
     "Customer/region demand questions (SPEC Q9) are answered from customer_orders data, "
     "not from demand_history. demand_history is the consumption series for forecast/stockout "
     "tools only.\n"
-    "6. Use nl_query for bulk or cross-product questions — pass the question in plain English; "
+    "6. For production plan adjustment questions (SPEC Q7) — which products need production "
+    "plan changes, overproduction/underproduction analysis — call "
+    "`analyze_production_plan_gap` ONCE. "
+    "Do NOT reconstruct plan-vs-demand gaps by hand-joining production_plan and "
+    "demand_history yourself.\n"
+    "7. For biggest-constraint or bottleneck-impact questions (SPEC Q10) — "
+    "call `identify_binding_constraint` ONCE. "
+    "Do NOT separately evaluate capacity, supply-gap, and stockout risks "
+    "by assembling your own ranking from individual tool results.\n"
+    "8. Use nl_query for bulk or cross-product questions — pass the question in plain English; "
     "nl_query generates schema-correct SQL internally.\n"
-    "7. Never fabricate column names or assume columns that are not confirmed by tool results.\n\n"
+    "9. Never fabricate column names or assume columns that are not confirmed by tool results.\n\n"
     "Always ground recommendations in tool results. Do not fabricate quantities or risk scores.\n"
     "Once you have sufficient data from tools, stop calling tools"
     " and produce a final text response.\n"
@@ -100,6 +109,7 @@ _INTENT_TOOL_SUBSET: dict[str, list[str]] = {
         "calculate_stockout_risk",
         "calculate_stockout_cost_impact",
         "calculate_expedite_cost",
+        "identify_binding_constraint",
     ],
     # lookup: lightweight read-only tools for factual questions (max_tool_calls=5)
     "lookup": [
@@ -142,6 +152,8 @@ _INTENT_TOOL_SUBSET: dict[str, list[str]] = {
         "calculate_stockout_cost_impact",
         "calculate_expedite_cost",
         "compare_cost_scenarios",
+        "analyze_production_plan_gap",
+        "identify_binding_constraint",
     ],
     # cross_domain_analysis: domain_analysis + data quality tools (max_tool_calls=15)
     "cross_domain_analysis": [
@@ -175,6 +187,8 @@ _INTENT_TOOL_SUBSET: dict[str, list[str]] = {
         "calculate_stockout_cost_impact",
         "calculate_expedite_cost",
         "compare_cost_scenarios",
+        "analyze_production_plan_gap",
+        "identify_binding_constraint",
     ],
     # decision_support: analytical + execution tools for optimization/approval (max_tool_calls=20)
     "decision_support": [
@@ -203,6 +217,8 @@ _INTENT_TOOL_SUBSET: dict[str, list[str]] = {
         "request_approval",
         "forecast",
         "evaluate_forecast_accuracy",
+        "analyze_production_plan_gap",
+        "identify_binding_constraint",
     ],
 }
 
