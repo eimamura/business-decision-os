@@ -216,8 +216,10 @@ class DetectDemandShiftTool:
         pass
 
     async def handle(self, input: dict[str, Any], ctx: ToolContext) -> ToolResult:  # noqa: A002
-        window_days: int = int(input.get("window_days") or 28)
-        end_date_offset: int = int(input.get("end_date_offset") or 1)
+        _window_days = input.get("window_days")
+        window_days: int = int(_window_days if _window_days is not None else 28)
+        _end_date_offset = input.get("end_date_offset")
+        end_date_offset: int = int(_end_date_offset if _end_date_offset is not None else 1)
 
         if window_days < 1:
             return ToolResult(

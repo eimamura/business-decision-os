@@ -1060,13 +1060,13 @@ Dependencies: P87 Done (hard dependency: reads `customer_orders`)
 
 Dependencies: none
 
-### Batch B-02 — Tests + gate (Test/Review) — Not Started
+### Batch B-02 — Tests + gate (Test/Review) — Done
 
 | Task | Description | Status |
 |---|---|---|
-| T-551 | Unit tests: shift math (pct/absolute), grouping by customer and region, no-baseline → `missing_data`, window parameter handling, cap + `truncated`. | Not Started |
-| T-552 | Integration test (real DB): seeded growth and decline scenarios are detected with correct direction. | Not Started |
-| T-553 | Batch gate: `make test-unit && make lint && make typecheck` — proof-of-execution per gate. | Not Started |
+| T-551 | Unit tests: shift math (pct/absolute), grouping by customer and region, no-baseline → `missing_data`, window parameter handling, cap + `truncated`. | Done |
+| T-552 | Integration test (real DB): seeded growth and decline scenarios are detected with correct direction. | Done |
+| T-553 | Batch gate: `make test-unit && make lint && make typecheck` — proof-of-execution per gate. | Done |
 
 Dependencies: B-01
 
