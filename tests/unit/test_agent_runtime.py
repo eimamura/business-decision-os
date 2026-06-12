@@ -709,9 +709,11 @@ async def test_t504_degenerate_after_revision_sets_blocked_reason() -> None:
     result = await runtime.run(task, ctx)
 
     # blocked_reason must be propagated through to output verification meta.
-    # Note: run() also detects the short "ok" response as is_degenerate, which overrides
-    # specialist_status to "failed".  blocked_reason is still present because run_status
-    # remains "blocked" (from _call_model_final_node) and the verification block fires.
+    # Note: run() also detects the short "ok" response as is_degenerate (T-566 soft-fail).
+    # specialist_status remains "completed" (blocked maps to completed; degenerate no longer
+    # overrides to "failed").  blocked_reason from graph state ("degenerate response after
+    # revision") takes precedence over the degenerate_response default because
+    # run_blocked_reason is non-None.
     assert result.output.get("verification", {}).get("blocked_reason") == (
         "degenerate response after revision"
     )

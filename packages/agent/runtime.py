@@ -23,6 +23,17 @@ if TYPE_CHECKING:
     from packages.agent.orchestrator import SpecialistResult, SpecialistTask
     from packages.tools.base import ToolContext
 
+# Import Ollama num_ctx constant so the context-saturation threshold is defined once.
+# Lazy import inside the warning block avoids circular-import risk at module load time.
+def _ollama_ctx_saturation_threshold() -> float:
+    """Return 90% of the configured Ollama num_ctx (single source of truth)."""
+    from packages.agent.model_registry import (  # noqa: PLC0415
+        _CTX_SATURATION_RATIO,
+        _OLLAMA_NUM_CTX,
+    )
+
+    return _OLLAMA_NUM_CTX * _CTX_SATURATION_RATIO
+
 _log = structlog.get_logger(__name__)
 
 _MAX_ITERATIONS = 10
@@ -563,6 +574,17 @@ class AgentRuntime:
                 "output_tokens near max_tokens limit — response may be truncated",
                 output_tokens=response.output_tokens,
                 threshold=_MAX_TOKENS_WARN_THRESHOLD,
+                agent_role=self.role,
+            )
+        # Context-saturation guard (Ollama): warn when input tokens reach ≥90% of num_ctx.
+        # Saturation means Ollama silently truncated the prompt — tool definitions may be missing.
+        _ctx_saturation_threshold = _ollama_ctx_saturation_threshold()
+        if response.input_tokens >= _ctx_saturation_threshold:
+            _log.warning(
+                "input_tokens near Ollama num_ctx limit — prompt may be truncated; "
+                "consider reducing num_ctx or prompt size",
+                input_tokens=response.input_tokens,
+                ctx_saturation_threshold=int(_ctx_saturation_threshold),
                 agent_role=self.role,
             )
 
@@ -1435,7 +1457,9 @@ class AgentRuntime:
                 response_len=len(final_text),
                 response_preview=final_text,
             )
-            specialist_status = "failed"
+            # T-566: soft-fail (mirrors P80 blocked-path precedent).
+            # specialist_status stays "completed"; degenerate runs surface the fallback text
+            # and a machine-readable reason in verification meta — no agent_failed SSE is emitted.
 
         output = self._output_builder(merged_tool_results, last_response)
         if is_degenerate:
@@ -1449,10 +1473,13 @@ class AgentRuntime:
 
         # T-460: surface groundedness verdict in output meta (omitted when no verdict ran)
         # T-501/T-502: also carry blocked_reason into verification meta when run was blocked.
+        # T-566: degenerate runs also inject blocked_reason="degenerate_response" into
+        # verification meta (merged carefully so a degenerate run without a groundedness
+        # verdict still gets the verification dict).
         groundedness_result: dict[str, Any] | None = final_state.get("groundedness")
         is_revised: bool = bool(final_state.get("revised", False))
         run_blocked_reason: str | None = final_state.get("blocked_reason")
-        if groundedness_result is not None or run_status == "blocked":
+        if groundedness_result is not None or run_status == "blocked" or is_degenerate:
             if isinstance(output, dict):
                 verification: dict[str, Any] = {
                     "grounded": bool(
@@ -1464,13 +1491,20 @@ class AgentRuntime:
                 }
                 if run_blocked_reason is not None:
                     verification["blocked_reason"] = run_blocked_reason
+                # Degenerate reason takes precedence only when no other blocked_reason is set
+                # (e.g. degenerate-after-revision already has "degenerate response after revision"
+                # coming from the blocked_reason graph state field).
+                if is_degenerate and "blocked_reason" not in verification:
+                    verification["blocked_reason"] = "degenerate_response"
                 output["verification"] = verification
         # blocked_error: use the truthful blocked_reason from graph state (T-501).
-        # For genuine error-status runs, surface the error string.
-        # For blocked runs (now soft-fail/completed), error stays None.
+        # For genuine error-status runs, surface the error string (never None).
+        # For blocked/degenerate runs (soft-fail/completed), error stays None.
         blocked_error: str | None
         if run_status == "error":
-            blocked_error = final_state.get("error")
+            blocked_error = (
+                final_state.get("error") or "agent run failed (no error detail)"
+            )
         else:
             blocked_error = None
 

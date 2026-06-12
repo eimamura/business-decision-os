@@ -40,11 +40,12 @@ See `docs/archive/v3/STATE.md` for P0–P23 per-phase details.
 
 ## Active Phase
 
-None
+P92 — Ollama Context Window Fix + Degenerate Guard Surfacing (Judge-FAIL 2026-06-12:
+control prompt truncated at Ollama default num_ctx=4096 → "Agent control failed: None")
 
 ## Active Lease
 
-None
+P92 B-01 (App Builder) — acquired 2026-06-12
 
 ## Last Completed
 

@@ -1163,3 +1163,39 @@ Dependencies: P90 Done
 | T-564 | Add two English scenarios to ToolScenarioModal.tsx Supply Chain category: "Production Plan Adjustments" (prompt targeting `analyze_production_plan_gap`, e.g. "Which products require production plan adjustments over the next four weeks?") and "Customer & Region Demand Shifts" (prompt targeting `detect_demand_shift`, e.g. "Are there demand changes by customer or region this month?"). Sync Playwright spec assertions (P90 precedent). Gate: make test-unit, lint, typecheck, make test-playwright. | Done |
 
 Dependencies: none
+
+---
+
+## P92 — Ollama Context Window Fix + Degenerate Guard Surfacing — In Progress
+
+**Goal:** The control agent answers tool-requiring questions again on the local Ollama
+provider. Judge-FAIL root cause (2026-06-12, "Which products are at stockout risk this
+week?" → "Agent control failed: None"): `ChatOllama` in `packages/agent/model_registry.py`
+sets no `num_ctx`, so Ollama's default 4096-token window silently truncates the control
+prompt — `llm_usage` shows input_tokens=4095 / output_tokens=1 on every control call since
+the P86–P91 growth (tools 31→37, schema tables 8→12) pushed the prompt past 4096. The model
+never saw its tool definitions (0 tool events), emitted "**", and the degenerate guard
+hard-failed with `error=None`, surfacing the uninformative "Agent control failed: None".
+Done when: the exact failing query returns a grounded stockout answer with
+`list_stockout_risk` called, and no run can surface "failed: None".
+
+Dependencies: P91 Done
+
+### Batch B-01 — Config + guard surfacing (App Builder) — Done
+
+| Task | Description | Status |
+|---|---|---|
+| T-565 | `packages/agent/model_registry.py`: add `num_ctx=16384` to BOTH `ChatOllama` constructions (structured + control). gemma4:12b supports 128K; 16384 gives ~4× headroom over the current ~4.1K control prompt. If live verification shows VRAM pressure makes 16384 unusable, 8192 is the accepted floor — document the chosen value in a code comment. Add a context-saturation WARNING log: when a response's reported input token count is ≥ 90% of the configured num_ctx, log a warning (mirror the P59 num_predict-saturation log placement). | Done |
+| T-566 | `packages/agent/runtime.py` degenerate-guard surfacing: today the guard sets `specialist_status="failed"` with `error=None` → SSE "Agent control failed: None". Follow the P80 blocked-path precedent: degenerate runs soft-fail — return `status="completed"` with the existing `_FALLBACK_DEGENERATE` text as the reply and a machine-readable reason in output meta (e.g. `verification.blocked_reason="degenerate_response"` or equivalent existing meta channel); the run must no longer emit an `agent_failed` SSE for this path. Genuine `run_status=="error"` paths keep `failed` but must never surface a bare None: default the message to the error-kind when `final_state["error"]` is absent. | Done |
+
+Dependencies: none
+
+### Batch B-02 — Tests + live verification + gate (Test/Review) — Not Started
+
+| Task | Description | Status |
+|---|---|---|
+| T-567 | Unit tests: (a) degenerate response (<80 chars, non-tool finish) → SpecialistResult status completed, text == fallback, reason present in meta, no agent_failed push; (b) error-status run with `final_state["error"]=None` → error string is non-None/non-"None"; (c) model_registry ollama provider: both models carry `num_ctx=16384`. | Not Started |
+| T-568 | Live verification (dev stack, gemma4:12b): restart api, send the exact failing query "Which products are at stockout risk this week?" through the runtime, confirm (i) control LLM input_tokens < 90% of num_ctx and no truncation pattern (no 4095/1 rows), (ii) `list_stockout_risk` tool event present, (iii) reply contains the seeded risk SKUs (2 critical + 2 high + 3 medium per P84). Report evidence (llm_usage rows + session_events + reply excerpt). | Not Started |
+| T-569 | Batch gate: `make test-unit && make lint && make typecheck && make test-integration` — proof-of-execution per gate. | Not Started |
+
+Dependencies: B-01

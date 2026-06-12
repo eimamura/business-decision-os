@@ -1,10 +1,12 @@
-"""T-398: Unit tests for the degenerate LLM response guard in AgentRuntime.
+"""T-398/T-566: Unit tests for the degenerate LLM response guard in AgentRuntime.
 
 When the final assistant text is non-empty but shorter than _DEGENERATE_RESPONSE_MIN_LEN
-(10 chars), AgentRuntime.run() must:
+(10 chars), AgentRuntime.run() must (T-566 soft-fail):
   - emit a WARNING log containing 'Degenerate LLM response'
   - override output["text"] with _FALLBACK_DEGENERATE
-  - return SpecialistResult.status == "failed"
+  - return SpecialistResult.status == "completed" (soft-fail; mirrors P80 blocked-path)
+  - set output["verification"]["blocked_reason"] == "degenerate_response"
+  - return SpecialistResult.error is None (no agent_failed SSE)
 
 When text is >= _DEGENERATE_RESPONSE_MIN_LEN, run() completes normally.
 """
@@ -75,8 +77,9 @@ async def test_degenerate_response_logs_warning_and_overrides_output(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
     """When the final LLM response text is fewer than 10 characters, AgentRuntime.run()
-    must emit a WARNING log, override output["text"] with the fallback message, and
-    return status == "failed"."""
+    must emit a WARNING log, override output["text"] with the fallback message,
+    return status == "completed" (soft-fail), set the degenerate_response blocked_reason,
+    and return error == None (no agent_failed SSE emitted)."""
     short_text = "Based"  # 5 chars — below the 10-char threshold
     # Rule-based verifier: no tool calls + no digit/no/none → passes through as "completed"
     # but degenerate guard in run() fires on the short text before output is built
@@ -90,9 +93,12 @@ async def test_degenerate_response_logs_warning_and_overrides_output(
     with caplog.at_level(logging.WARNING, logger="packages.agent.runtime"):
         result = await runtime.run(task, ctx)
 
-    assert result.status == "failed"
+    # T-566: degenerate is now a soft-fail — status completed, no agent_failed SSE
+    assert result.status == "completed"
+    assert result.error is None
     assert isinstance(result.output, dict)
     assert result.output["text"] == _FALLBACK_DEGENERATE
+    assert result.output.get("verification", {}).get("blocked_reason") == "degenerate_response"
     assert any("Degenerate" in r.message for r in caplog.records)
 
 

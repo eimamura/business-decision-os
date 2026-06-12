@@ -1,11 +1,23 @@
 from __future__ import annotations
 
+import logging
 import os
 from typing import Any
 
 from langchain_core.language_models.chat_models import BaseChatModel
 
 from packages.agent.llm import UsageWriter
+
+_log = logging.getLogger(__name__)
+
+# Ollama default num_ctx=4096 silently truncated the control prompt after P86-P91 growth
+# (tools 31→37, schema tables 8→12 pushed the prompt past 4096 — judge-FAIL 2026-06-12).
+# 16384 ≈ 4× headroom over the current ~4.1K control prompt; gemma4:12b supports 128K.
+# Accepted floor 8192 if VRAM-constrained — document the change in a code comment if lowered.
+_OLLAMA_NUM_CTX = 16384
+
+# Warn when reported input tokens reach 90% of the configured context window.
+_CTX_SATURATION_RATIO = 0.9
 
 
 class ModelRegistry:
@@ -106,21 +118,25 @@ def create_model_registry(usage_writer: UsageWriter | None = None) -> ModelRegis
         # Prevents thinking models (qwen3, deepseek-r1, gemma4) from exhausting num_predict
         # before emitting JSON content. Note: ChatOllama(think=False) is silently ignored.
         # temperature=0.1: gemma4 is tuned for temperature=1.0; 0.0 causes greedy-decoding loops.
+        # num_ctx=_OLLAMA_NUM_CTX: sets the KV-cache / context window; see constant docstring.
         structured_model = ChatOllama(
             model=model_name,
             base_url=base_url,
             temperature=0.1,
             num_predict=512,
+            num_ctx=_OLLAMA_NUM_CTX,
             reasoning=False,
             callbacks=callbacks or None,
         )
         # reasoning=False (→ Ollama API: think=false) required for tool calling accuracy.
         # num_predict=2048: surfaces truncation via output_tokens warning log if thinking leaks.
+        # num_ctx=_OLLAMA_NUM_CTX: sets the KV-cache / context window; see constant docstring.
         control_model = ChatOllama(
             model=model_name,
             base_url=base_url,
             temperature=0.1,
             num_predict=2048,
+            num_ctx=_OLLAMA_NUM_CTX,
             reasoning=False,
             callbacks=callbacks or None,
         )
