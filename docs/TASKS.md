@@ -1166,7 +1166,7 @@ Dependencies: none
 
 ---
 
-## P92 — Ollama Context Window Fix + Degenerate Guard Surfacing — In Progress
+## P92 — Ollama Context Window Fix + Degenerate Guard Surfacing — Done (2026-06-12)
 
 **Goal:** The control agent answers tool-requiring questions again on the local Ollama
 provider. Judge-FAIL root cause (2026-06-12, "Which products are at stockout risk this

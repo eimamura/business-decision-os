@@ -40,14 +40,33 @@ See `docs/archive/v3/STATE.md` for P0–P23 per-phase details.
 
 ## Active Phase
 
-P92 — Ollama Context Window Fix + Degenerate Guard Surfacing (Judge-FAIL 2026-06-12:
-control prompt truncated at Ollama default num_ctx=4096 → "Agent control failed: None")
+None
 
 ## Active Lease
 
-P92 B-02 (Test/Review) — acquired 2026-06-12
+None
 
 ## Last Completed
+
+P92 — Ollama Context Window Fix + Degenerate Guard Surfacing (2026-06-12). Judge-FAIL
+("Which products are at stockout risk this week?" → "Agent control failed: None", aggregate
+0.00) root-caused via llm_usage forensics: `ChatOllama` had no `num_ctx`, so Ollama's
+default 4096-token window silently truncated the control prompt once P86–P91 growth (tools
+31→37, schema tables 8→12) pushed it past 4096 — every control call showed
+input_tokens=4095/output_tokens=1, zero tool events, final text "**" → degenerate guard
+hard-failed with error=None. Fixed: `num_ctx=16384` on both ChatOllama models
+(`_OLLAMA_NUM_CTX` single source; 8192 accepted floor if VRAM-constrained) + ≥90%
+input-context saturation WARNING; degenerate guard now soft-fails per P80 precedent
+(completed + `_FALLBACK_DEGENERATE` + `verification.blocked_reason="degenerate_response"`,
+no agent_failed SSE); genuine error paths default to "agent run failed (no error detail)"
+so "failed: None" can never render. Live verification (T-568): exact failing query
+end-to-end on gemma4:12b — control input_tokens 4112–4119 (~25% of window, no truncation
+pattern), `list_stockout_risk` start+end tool events present, reply names SKU-001/002
+critical, SKU-003/004 high, SKU-005/006/007 medium (P84 seed match), 0 error events.
+Sign-off PASS (proof-of-execution): unit 1080 exit 0, canonical integration 16 exit 0,
+full-DSN integration 110 exit 0, playwright 36/36 exit 0, build 0, lint 0, typecheck 0.
+
+Previously:
 
 P91 — Tool Scenario Modal: Q7 + Q9 Scenarios (2026-06-12). "Production Plan Adjustments"
 (→ `analyze_production_plan_gap`, SPEC Q7) and "Customer & Region Demand Shifts"
