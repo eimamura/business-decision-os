@@ -1199,3 +1199,140 @@ Dependencies: none
 | T-569 | Batch gate: `make test-unit && make lint && make typecheck && make test-integration` — proof-of-execution per gate. | Done |
 
 Dependencies: B-01
+
+---
+
+## P93 — Daily Screening Job + Exceptions Surface — Not Started
+
+**Goal:** The Screening Layer runs on the daily cadence automatically (DESIGN.md §Operational
+Cadence: "MVP targets the daily cadence"; §Screening Layer: scheduled job) instead of only
+when a user asks. Done when: the API process runs the `list_today_exceptions` screening once
+per day (and on startup when today's run is missing), persists the result to a new
+`screening_runs` table, exposes it via `GET /api/v1/screenings/today` + manual
+`POST /api/v1/screenings/run`, and the web chat page shows a Daily Exceptions panel with
+severity counts and an "investigate in chat" action — without the user typing a question.
+
+Scheduler mechanism: in-process asyncio task in the API lifespan — NOT Celery. DESIGN.md
+§Screening Layer names a Celery task as the trigger, but the P69 user decision keeps
+Celery/redis untouched until Azure deployment; ADR `2026-06-12-daily-screening-scheduler.md`
+records the interim mechanism and the migration trigger. Notifications table stays
+approval-centric and untouched; the panel + `screening_runs` artifact are the MVP surface
+(Working Context Store precedent, DESIGN.md §Screening Layer).
+
+Dependencies: P92 Done
+
+### Batch B-01 — screening_runs migration (Infra) — Done (2026-06-12)
+
+| Task | Description | Status |
+|---|---|---|
+| T-570 | Alembic 0021: new table `screening_runs` — `id UUID PK DEFAULT gen_random_uuid()`, `run_date DATE NOT NULL`, `triggered_by TEXT NOT NULL CHECK (triggered_by IN ('schedule','startup','manual'))`, `status TEXT NOT NULL CHECK (status IN ('completed','failed'))`, `exception_count INT`, `severity_counts JSONB`, `payload JSONB`, `error TEXT`, `created_at TIMESTAMPTZ NOT NULL DEFAULT now()`; index on `(run_date, created_at DESC)`. Multiple rows per day allowed (manual re-runs); readers take the latest completed. Downgrade drops the table. Do NOT add it to `ALLOWED_READ_TABLES` (it is an application artifact, not an operational data domain). | Done |
+
+Dependencies: none
+
+<!--
+## Infra Handoff — P93-B-01
+Changed files: apps/api/alembic/versions/0021_screening_runs.py
+Smoke checks: SKIPPED (stack not running — only db container started for migration verification)
+New env vars: none
+Verification:
+  upgrade head      exit 0 — INFO Running upgrade 0020 -> 0021
+  downgrade 0020    exit 0 — INFO Running downgrade 0021 -> 0020, table absent confirmed
+  re-upgrade head   exit 0 — INFO Running upgrade 0020 -> 0021, table present confirmed
+  \d screening_runs — columns, check constraints, composite index all correct
+-->
+
+### Batch B-02 — Scheduler + repo + API endpoints (App Builder) — Not Started
+
+| Task | Description | Status |
+|---|---|---|
+| T-571 | `packages/persistence/screening_runs_repo.py`: `ScreeningRunsRepository` with `create(...)`, `latest_for_date(run_date)`, `latest()` — real DB implementation (asyncpg/SQL pattern per existing repos, parameterized only). | Not Started |
+| T-572 | Screening runner + scheduler in `apps/api/` (trigger placement per DESIGN.md §Screening Layer; logic stays in `packages/tools/`): a service function that invokes the registered `list_today_exceptions` tool's `handle()` directly (deterministic — no LLM), derives `exception_count` + per-severity counts, and persists via `ScreeningRunsRepository` (status `failed` + `error` message on exception — never crash the app). Lifespan-managed asyncio background task: on startup, run if no completed row for today; then run daily at `SCREENING_HOUR_UTC` (env, default `6`; document in `.env.example`). Exception-safe loop (log + continue), cancelled cleanly on shutdown, disabled when `SCREENING_SCHEDULER_ENABLED=false` (default true; tests/CI can disable). | Not Started |
+| T-573 | New router `apps/api/routers/screenings.py` (`/api/v1/screenings`): `GET /today` → latest run for today (200 with run payload; 200 with `{"run": null}` shape when absent — no 404), `POST /run` → execute screening now (`triggered_by="manual"`), return the created run. Pydantic v2 response models; register router in `main.py`. | Not Started |
+
+Dependencies: B-01
+
+### Batch B-03 — Web Daily Exceptions panel (App Builder) — Not Started
+
+| Task | Description | Status |
+|---|---|---|
+| T-574 | Web chat page Daily Exceptions panel: fetch `GET /api/v1/screenings/today` on load; render run date, per-severity counts, and top exceptions (domain + headline); "Investigate in chat" action injects the Q3 prompt ("What exceptions require human judgment today?") into the chat input; "Run now" action calls `POST /run` and refreshes; empty state when no run exists. English-only strings; `data-testid` attributes (`daily-exceptions-panel`, `daily-exceptions-run-now`, `daily-exceptions-investigate`); design tokens consistent with existing components. | Not Started |
+
+Dependencies: B-02
+
+### Batch B-04 — Tests + phase sign-off (Test/Review) — Not Started
+
+| Task | Description | Status |
+|---|---|---|
+| T-575 | Tests: unit — runner service (counts derivation, failed-run persistence, scheduler next-run computation with frozen clock, disabled flag); router via `httpx.AsyncClient` + ASGITransport (today-empty shape, manual run); integration — real-DB screening run persists a completed row with non-null payload; Playwright — panel renders with mocked `/screenings/today` (counts + investigate injects prompt) and empty state. Zero-network rule respected (tool handle is deterministic SQL — stub the repo/DB at unit tier). | Not Started |
+| T-576 | Phase sign-off: `make test-unit && make test-integration && make test-playwright && make build && make lint && make typecheck` — proof-of-execution per gate (gate rows with exit codes + output tails). | Not Started |
+
+Dependencies: B-03
+
+---
+
+## P94 — Forecast Deviation Decomposition (SPEC Q5) — Not Started
+
+**Goal:** The system answers SPEC Q5 "Why is there a gap between demand forecast and actual
+demand?" with a grounded decomposition instead of a generic accuracy metric. Done when: a
+query like "Why is actual demand deviating from the forecast?" causes the ControlAgent to
+call a new `analyze_forecast_deviation` tool and answer with the largest SKU×week gaps,
+bias direction, and data caveats. Decomposition grain: SKU × ISO week (forecast_history is
+SKU-grain; customer/region attribution stays with `detect_demand_shift` — the system prompt
+rule should direct the agent to pair them when the user asks "which customer/region").
+
+Dependencies: P92 Done (P93 not required)
+
+### Batch B-01 — Tool + wiring + seed + scenario (App Builder) — Not Started
+
+| Task | Description | Status |
+|---|---|---|
+| T-577 | New tool `analyze_forecast_deviation` in `packages/tools/` (Level 1 deterministic, read_only, hybrid output contract): per SKU × ISO week over a horizon (default: last 4 complete weeks; `weeks` param), compare summed `forecast_history.forecast_qty` (deduped to the latest `forecast_date` row per sku/target_date) against summed `demand_history.quantity`; output per-SKU weekly rows (forecast, actual, gap qty, gap pct), per-SKU bias direction (over/under/mixed) and aggregate deviation pct, ranked by absolute gap; LIMIT + `truncated`; mandatory `missing_data` (no forecast rows for SKU/window, no actuals, `is_missing` actuals). Parameterized SQL on allowlisted tables only; register in tool registry. | Not Started |
+| T-578 | Wire `analyze_forecast_deviation` into `_INTENT_TOOL_SUBSET` (`supply_chain`, `domain_analysis`, `cross_domain_analysis`, `decision_support`) + ControlAgent system prompt rule: forecast-vs-actual gap questions → `analyze_forecast_deviation`; `evaluate_forecast_accuracy` stays the metric-quality axis (MAPE/bias of the forecasting model); pair with `detect_demand_shift` when the user asks which customer/region drives the gap. | Not Started |
+| T-579 | Deterministic seed scenario in the sample-data/seed path: ensure `forecast_history` rows exist for the rolling window anchored to `date.today()` with two knowable deviations — one over-forecast SKU and one under-forecast SKU (fixed SKU index overrides per the P84 precedent; document expected values in the seed comment). Must not disturb the P84 risk bands (2 critical / 2 high / 3 medium) or the P87/P88 order-to-ship narratives. | Not Started |
+| T-580 | ToolScenarioModal: add "Forecast vs Actual Gap" scenario (Supply Chain category, prompt e.g. "Why is there a gap between the demand forecast and actual demand over the last four weeks?"); sync Playwright spec assertions (P90/P91 precedent). | Not Started |
+
+Dependencies: none
+
+### Batch B-02 — Tests + live verification + phase sign-off (Test/Review) — Not Started
+
+| Task | Description | Status |
+|---|---|---|
+| T-581 | Unit tests: weekly bucketing + latest-forecast dedupe, gap/bias classification, ranking determinism, caps + `truncated`, `missing_data` population (no forecast / no actuals), empty-DB shape. Integration tests (full DSN): seeded over/under-forecast SKUs classified as expected. | Not Started |
+| T-582 | Live verification (dev stack, gemma4:12b): the modal prompt end-to-end — `analyze_forecast_deviation` tool events present, reply names the seeded over/under-forecast SKUs. Phase sign-off: `make test-unit && make test-integration && make test-playwright && make build && make lint && make typecheck` — proof-of-execution per gate. | Not Started |
+
+Dependencies: B-01
+
+---
+
+## P95 — Supply Order Timing Analysis (SPEC Q8) — Not Started
+
+**Goal:** The system answers SPEC Q8 "Which materials or items should be purchased earlier
+or later?" with order-level timing analysis. Supersedes the 2026-06-11 "Q8 partial coverage
+accepted" decision per user approval 2026-06-12 (DECISIONS.md entry required). Done when: a
+query like "Which supply orders should be pulled forward or pushed out?" causes the
+ControlAgent to call a new `analyze_supply_order_timing` tool and answer with per-order
+pull-forward / push-out candidates and evidence. Analytical output only — the tool surfaces
+candidates and evidence; the Control Agent (and ultimately the human) concludes (P89
+`identify_binding_constraint` precedent).
+
+Dependencies: P92 Done (P93/P94 not required)
+
+### Batch B-01 — Tool + wiring + seed + scenario (App Builder) — Not Started
+
+| Task | Description | Status |
+|---|---|---|
+| T-583 | New tool `analyze_supply_order_timing` in `packages/tools/` (Level 1 deterministic, read_only, hybrid output contract): for each open `supply_orders` row, compute projected stockout date from current `inventory_snapshot.on_hand` and demand run-rate (recent `demand_history`; reuse `_shared.py` helpers where applicable) and compare with `expected_arrival` → classify `pull_forward_candidate` (arrival after projected stockout), `push_out_candidate` (arrival while days-of-cover exceeds a documented threshold), or `on_track`; output per-order rows with `days_misaligned` and evidence (on_hand, avg_daily_demand, projected_stockout_date, expected_arrival); LIMIT + `truncated`; mandatory `missing_data` (no snapshot, zero-demand SKUs, null expected_arrival). Parameterized SQL only; register in tool registry. | Not Started |
+| T-584 | Wire into `_INTENT_TOOL_SUBSET` (`supply_chain`, `domain_analysis`, `cross_domain_analysis`, `decision_support`) + ControlAgent system prompt rule: purchase-earlier/later and order-timing questions → `analyze_supply_order_timing` once; keep `get_delayed_supply_orders` for "what is late" (status axis) vs timing-misalignment axis. | Not Started |
+| T-585 | Deterministic seed scenario: verify the P84 risk-SKU supply orders (arrival today+10 after projected stockout) already produce ≥1 `pull_forward_candidate`; add one knowable `push_out_candidate` (ample-cover SKU with an early arrival) via fixed SKU index override. Must not disturb P84 risk bands or P87/P88/P94 narratives. | Not Started |
+| T-586 | ToolScenarioModal: add "Purchase Timing Adjustments" scenario (Supply Chain category, prompt e.g. "Which supply orders should be purchased earlier or later? Identify pull-forward and push-out candidates."); sync Playwright spec assertions. | Not Started |
+
+Dependencies: none
+
+### Batch B-02 — Tests + live verification + phase sign-off (Test/Review) — Not Started
+
+| Task | Description | Status |
+|---|---|---|
+| T-587 | Unit tests: classification thresholds (pull-forward / push-out / on-track boundaries), days_misaligned math, ranking/caps + `truncated`, `missing_data` (no snapshot / zero demand / null arrival), empty-DB shape. Integration tests (full DSN): seeded pull-forward and push-out orders classified as expected. | Not Started |
+| T-588 | Live verification (dev stack, gemma4:12b): the modal prompt end-to-end — `analyze_supply_order_timing` tool events present, reply names the seeded candidates. Phase sign-off: `make test-unit && make test-integration && make test-playwright && make build && make lint && make typecheck` — proof-of-execution per gate. | Not Started |
+
+Dependencies: B-01

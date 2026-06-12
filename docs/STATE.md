@@ -40,11 +40,13 @@ See `docs/archive/v3/STATE.md` for P0–P23 per-phase details.
 
 ## Active Phase
 
-None
+P93 — Daily Screening Job + Exceptions Surface (first of the P93–P95 MVP gap closure
+programme approved 2026-06-12: P93 daily cadence, P94 SPEC Q5, P95 SPEC Q8; ADR
+2026-06-12-daily-screening-scheduler).
 
 ## Active Lease
 
-None
+P93-B-02 (App Builder — scheduler + repo + API endpoints)
 
 ## Last Completed
 
