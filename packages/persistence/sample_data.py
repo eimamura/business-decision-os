@@ -170,9 +170,28 @@ TABLES: tuple[TableSpec, ...] = (
             ColumnSpec("status", _text),
         ),
     ),
+    TableSpec(
+        "production_capacity",
+        (
+            ColumnSpec("location_id", _text),
+            ColumnSpec("week_start", _date),
+            ColumnSpec("capacity_units", _int),
+        ),
+    ),
+    TableSpec(
+        "production_plan",
+        (
+            ColumnSpec("sku_id", _text),
+            ColumnSpec("location_id", _text),
+            ColumnSpec("week_start", _date),
+            ColumnSpec("planned_qty", _int),
+        ),
+    ),
 )
 
 DELETE_ORDER = (
+    "production_plan",
+    "production_capacity",
     "shipments",
     "customer_orders",
     "forecast_history",
@@ -195,6 +214,8 @@ INSERT_ORDER = (
     "forecast_history",
     "customer_orders",
     "shipments",
+    "production_capacity",
+    "production_plan",
 )
 
 

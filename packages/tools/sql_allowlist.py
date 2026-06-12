@@ -13,6 +13,8 @@ ALLOWED_READ_TABLES: frozenset[str] = frozenset([
     "forecast_history",
     "customer_orders",
     "shipments",
+    "production_capacity",
+    "production_plan",
 ])
 
 # Legacy table names that small LLMs generate from training data.

@@ -1072,7 +1072,7 @@ Dependencies: B-01
 
 ---
 
-## P89 — Production Plan & Constraint Analysis (SPEC Q7 / Q10) — Not Started
+## P89 — Production Plan & Constraint Analysis (SPEC Q7 / Q10) — In Progress
 
 **Goal:** The system can answer SPEC Q7 "Which products require production plan adjustments?"
 and Q10 "Which constraint is having the biggest negative impact on sales or profit?". Currently
@@ -1085,13 +1085,13 @@ ADR: `docs/adr/2026-06-11-order-to-ship-and-production-data-domains.md` (shared 
 
 Dependencies: P88 Done (sequential execution; no technical coupling)
 
-### Batch B-01 — Schema migration + seed data (App Builder) — Not Started
+### Batch B-01 — Schema migration + seed data (App Builder) — Done
 
 | Task | Description | Status |
 |---|---|---|
-| T-554 | Alembic migration (additive) creating `production_capacity` and `production_plan` per the ADR schema. No changes to existing tables. | Not Started |
-| T-555 | Seed generation: deterministic, date-relative scenarios — at least one overproduction SKU (planned ≫ forecast/demand), one underproduction SKU (planned ≪ demand, ideally tied to a P84 risk SKU so the narratives connect), one capacity-saturated location (utilization ≥ 100% — the intended binding constraint), and majority-normal rows. P82/P84 conventions apply; existing table determinism untouched. | Not Started |
-| T-556 | Add both tables to `ALLOWED_READ_TABLES`; `get_schema_context()` picks them up from `information_schema`; catalog updated if applicable. | Not Started |
+| T-554 | Alembic migration (additive) creating `production_capacity` and `production_plan` per the ADR schema. No changes to existing tables. | Done |
+| T-555 | Seed generation: deterministic, date-relative scenarios — at least one overproduction SKU (planned ≫ forecast/demand), one underproduction SKU (planned ≪ demand, ideally tied to a P84 risk SKU so the narratives connect), one capacity-saturated location (utilization ≥ 100% — the intended binding constraint), and majority-normal rows. P82/P84 conventions apply; existing table determinism untouched. | Done |
+| T-556 | Add both tables to `ALLOWED_READ_TABLES`; `get_schema_context()` picks them up from `information_schema`; catalog updated if applicable. | Done |
 
 Dependencies: none
 

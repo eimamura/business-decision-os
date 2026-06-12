@@ -98,6 +98,60 @@ DEMAND_SHIFT_GROWTH_REGION = "Kanto"
 DEMAND_SHIFT_DECLINE_CUSTOMER = "CUST-010"
 DEMAND_SHIFT_DECLINE_REGION = "Kansai"
 
+# ---------------------------------------------------------------------------
+# Deterministic production plan scenario constants (P89 T-555)
+#
+# Weekly granularity: 8 weeks starting from the Monday of the current week.
+# Locations: WH-001 and WH-002 (warehouse-type, used in P87/P88 scenarios).
+# Fixed-index assignment — independently verifiable without running the generator.
+#
+# PRODUCTION_OVERPRODUCTION_SKU: a low-demand slow-moving SKU whose planned_qty
+#   is far above its forward demand/forecast, creating a large overproduction gap.
+#   SKU-026 has base_demand_mean=1.5 units/day → ~10 units/week.
+#   planned_qty = 200 units/week → overproduction gap ≈ 190 units/week (≈ 19×).
+#
+# PRODUCTION_UNDERPRODUCTION_SKU: a P84 critical-risk SKU whose planned_qty is
+#   far below weekly demand, connecting underproduction to the stockout narrative.
+#   SKU-001 has base_demand_mean=10 units/day → ~70 units/week.
+#   planned_qty = 10 units/week → underproduction gap ≈ -60 units/week.
+#
+# PRODUCTION_SATURATED_LOCATION: WH-001 in week 0 (this week's Monday).
+#   capacity_units = 2000 for WH-001; normal weeks plan 15 standard SKUs at 100
+#   units each (Σ = 1500, utilization = 0.75).
+#   Saturated week 0: the 15 standard SKUs are planned at 150 units each
+#   (Σ = 2250, utilization = 1.125 ≥ 1.0) → binding constraint for Q10.
+#
+# PRODUCTION_WEEKS: number of forward weeks generated (8 weeks).
+# PRODUCTION_NORMAL_SKUS: fixed list of 15 standard SKUs used for normal rows.
+#   Drawn from SKU-011..SKU-025 (all standard sku_type, non-risk-band).
+# PRODUCTION_CAPACITY_WH001: weekly production capacity for WH-001.
+# PRODUCTION_CAPACITY_WH002: weekly production capacity for WH-002.
+# PRODUCTION_NORMAL_QTY: planned_qty for normal rows in non-saturated weeks.
+# PRODUCTION_SATURATED_QTY: planned_qty for normal SKUs in the saturated week.
+# ---------------------------------------------------------------------------
+
+PRODUCTION_OVERPRODUCTION_SKU = "SKU-026"   # slow-moving, ~10 units/week demand
+PRODUCTION_OVERPRODUCTION_PLANNED_QTY = 200  # >> demand; gap ≈ +190 units/week
+
+PRODUCTION_UNDERPRODUCTION_SKU = "SKU-001"   # P84 critical-risk; ~70 units/week demand
+PRODUCTION_UNDERPRODUCTION_PLANNED_QTY = 10  # << demand; gap ≈ -60 units/week
+
+PRODUCTION_SATURATED_LOCATION = "WH-001"     # location where Σ planned ≥ capacity
+PRODUCTION_SATURATED_WEEK_INDEX = 0          # week offset from this Monday (0 = current week)
+
+PRODUCTION_WEEKS = 8                         # number of forward weeks
+
+# 15 standard non-risk-band SKUs for normal production rows (SKU-011..SKU-025).
+PRODUCTION_NORMAL_SKUS: list[str] = [f"SKU-{i:03d}" for i in range(11, 26)]
+
+PRODUCTION_CAPACITY_WH001 = 2000             # units/week; WH-001
+PRODUCTION_CAPACITY_WH002 = 1500             # units/week; WH-002
+
+PRODUCTION_NORMAL_QTY = 100          # planned_qty for normal SKUs in non-saturated weeks
+PRODUCTION_SATURATED_QTY = 150       # planned_qty for normal SKUs in saturated week 0
+# Σ WH-001 week 0 = 15 × 150 = 2250 ≥ 2000 (utilization = 1.125)
+# Σ WH-001 other  = 15 × 100 = 1500 < 2000 (utilization = 0.75)
+
 DETERMINISTIC_NULL_SKUS = {"SKU-003", "SKU-005", "SKU-007"}
 CONTIGUOUS_GAP_SKU = "SKU-001"
 CONTIGUOUS_GAP_START_DAY = 60
@@ -777,6 +831,120 @@ def generate_customer_orders_and_shipments(
     print(f"shipments: {total_shipments} rows")
 
 
+def _this_week_monday() -> date:
+    """Return the Monday of the current ISO week (date-relative, P82 convention)."""
+    today = date.today()
+    return today - timedelta(days=today.weekday())
+
+
+def generate_production_data(out_dir: Path) -> None:
+    """Write production_capacity.csv and production_plan.csv.
+
+    Deterministic scenario assignment (P89 T-555, P84-style fixed-index constants):
+
+    production_capacity rows:
+      WH-001 and WH-002 × 8 weeks starting from this Monday.
+      Capacities: WH-001 = PRODUCTION_CAPACITY_WH001, WH-002 = PRODUCTION_CAPACITY_WH002.
+
+    production_plan scenarios:
+      - PRODUCTION_OVERPRODUCTION_SKU (SKU-026) at WH-001 and WH-002:
+          planned_qty = PRODUCTION_OVERPRODUCTION_PLANNED_QTY (200) for all 8 weeks.
+          Weekly demand ≈ 10 units → gap ≈ +190 units/week (overproduction).
+      - PRODUCTION_UNDERPRODUCTION_SKU (SKU-001) at WH-001:
+          planned_qty = PRODUCTION_UNDERPRODUCTION_PLANNED_QTY (10) for all 8 weeks.
+          Weekly demand ≈ 70 units → gap ≈ -60 units/week (underproduction).
+          Connects to P84 critical-risk / stockout narrative.
+      - PRODUCTION_NORMAL_SKUS (SKU-011..SKU-025) at WH-001 and WH-002:
+          Week 0 (PRODUCTION_SATURATED_WEEK_INDEX) at WH-001:
+              planned_qty = PRODUCTION_SATURATED_QTY (150) → Σ = 15×150 = 2250 ≥ 2000.
+          All other location-weeks: planned_qty = PRODUCTION_NORMAL_QTY (100).
+    """
+    monday = _this_week_monday()
+    locations = ["WH-001", "WH-002"]
+    capacity_by_location = {
+        "WH-001": PRODUCTION_CAPACITY_WH001,
+        "WH-002": PRODUCTION_CAPACITY_WH002,
+    }
+
+    capacity_fields = ["location_id", "week_start", "capacity_units"]
+    with open(out_dir / "production_capacity.csv", "w", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=capacity_fields)
+        writer.writeheader()
+        for loc in locations:
+            for week_idx in range(PRODUCTION_WEEKS):
+                week_start = monday + timedelta(weeks=week_idx)
+                writer.writerow({
+                    "location_id": loc,
+                    "week_start": week_start.isoformat(),
+                    "capacity_units": capacity_by_location[loc],
+                })
+
+    plan_fields = ["sku_id", "location_id", "week_start", "planned_qty"]
+    with open(out_dir / "production_plan.csv", "w", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=plan_fields)
+        writer.writeheader()
+
+        for week_idx in range(PRODUCTION_WEEKS):
+            week_start = monday + timedelta(weeks=week_idx)
+
+            # Overproduction SKU: planned >> demand at both locations
+            for loc in locations:
+                writer.writerow({
+                    "sku_id": PRODUCTION_OVERPRODUCTION_SKU,
+                    "location_id": loc,
+                    "week_start": week_start.isoformat(),
+                    "planned_qty": PRODUCTION_OVERPRODUCTION_PLANNED_QTY,
+                })
+
+            # Underproduction SKU: planned << demand at WH-001 only
+            writer.writerow({
+                "sku_id": PRODUCTION_UNDERPRODUCTION_SKU,
+                "location_id": "WH-001",
+                "week_start": week_start.isoformat(),
+                "planned_qty": PRODUCTION_UNDERPRODUCTION_PLANNED_QTY,
+            })
+
+            # Normal SKUs: majority rows, both locations
+            # WH-001 week 0 uses PRODUCTION_SATURATED_QTY → Σ = 15×150 = 2250 ≥ 2000
+            for loc in locations:
+                is_saturated_week = (
+                    loc == PRODUCTION_SATURATED_LOCATION
+                    and week_idx == PRODUCTION_SATURATED_WEEK_INDEX
+                )
+                qty = PRODUCTION_SATURATED_QTY if is_saturated_week else PRODUCTION_NORMAL_QTY
+                for sku_id in PRODUCTION_NORMAL_SKUS:
+                    writer.writerow({
+                        "sku_id": sku_id,
+                        "location_id": loc,
+                        "week_start": week_start.isoformat(),
+                        "planned_qty": qty,
+                    })
+
+    # Summary counts for verification
+    capacity_rows = PRODUCTION_WEEKS * len(locations)
+    # Overproduction: 2 locs × 8 weeks = 16 rows
+    # Underproduction: 1 loc × 8 weeks = 8 rows
+    # Normal: 15 SKUs × 2 locs × 8 weeks = 240 rows
+    normal_rows = len(PRODUCTION_NORMAL_SKUS) * 2 * PRODUCTION_WEEKS
+    plan_rows = (2 * PRODUCTION_WEEKS) + PRODUCTION_WEEKS + normal_rows
+    saturated_sum = len(PRODUCTION_NORMAL_SKUS) * PRODUCTION_SATURATED_QTY
+    over_sku = PRODUCTION_OVERPRODUCTION_SKU
+    over_qty = PRODUCTION_OVERPRODUCTION_PLANNED_QTY
+    under_sku = PRODUCTION_UNDERPRODUCTION_SKU
+    under_qty = PRODUCTION_UNDERPRODUCTION_PLANNED_QTY
+    print(
+        f"production_capacity: {capacity_rows} rows"
+        f" (WH-001={PRODUCTION_CAPACITY_WH001}/week, WH-002={PRODUCTION_CAPACITY_WH002}/week,"
+        f" {PRODUCTION_WEEKS} weeks)"
+    )
+    print(
+        f"production_plan: {plan_rows} rows —"
+        f" overproduction={over_sku}@{over_qty},"
+        f" underproduction={under_sku}@{under_qty},"
+        f" saturated=WH-001/week0(sum={saturated_sum}>={PRODUCTION_CAPACITY_WH001})"
+    )
+
+
 def generate(config: SampleDataConfig, out_dir: Path = Path("data/sample")) -> None:
     rng = random.Random(config.seed)
 
@@ -797,6 +965,7 @@ def generate(config: SampleDataConfig, out_dir: Path = Path("data/sample")) -> N
     generate_cost(skus, rng, out_dir, config)
     generate_forecast_history(skus, rng, out_dir, config)
     generate_customer_orders_and_shipments(skus, rng, out_dir, config)
+    generate_production_data(out_dir)
 
     print(
         f"Sample data generated in {out_dir}/ "
