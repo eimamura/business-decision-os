@@ -1040,7 +1040,7 @@ Dependencies: B-02
 
 ---
 
-## P88 — Demand Shift Detection by Customer / Region (SPEC Q9) — In Progress
+## P88 — Demand Shift Detection by Customer / Region (SPEC Q9) — Done (2026-06-11)
 
 **Goal:** The system can answer SPEC Q9 "Are there demand changes by customer or region?".
 Currently impossible: `demand_history` has only sku_id/date/quantity. Decision (ADR

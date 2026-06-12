@@ -40,15 +40,31 @@ See `docs/archive/v3/STATE.md` for P0–P23 per-phase details.
 
 ## Active Phase
 
-P88 — Demand Shift Detection by Customer / Region (SPEC Q9). Programme context:
+P89 — Production Plan & Constraint Analysis (SPEC Q7 / Q10). Programme context:
 P86–P89 close the SPEC gaps (Q3 → Q4 → Q9 → Q7/Q10), planned 2026-06-11 via intake; ADR
 2026-06-11-order-to-ship-and-production-data-domains.md covers P87/P89 schemas.
 
 ## Active Lease
 
-P88 B-02 (Test/Review) — acquired 2026-06-11
+P89 B-01 (App Builder) — acquired 2026-06-11
 
 ## Last Completed
+
+P88 — Demand Shift Detection by Customer / Region (SPEC Q9) (2026-06-11). New
+`detect_demand_shift` tool: period-over-period `customer_orders` quantity comparison
+(default last 28d vs prior 28d, contiguous windows; window_days/end_date_offset params),
+grouped by customer AND region, growth/decline lists with pct/abs change + top contributing
+SKUs, new_activity/full_decline flags, per-list truncated semantics, mandatory missing_data.
+Registry 34→35; intents domain_analysis/cross_domain_analysis/decision_support; system
+prompt rule 5 (customer/region axis → detect_demand_shift; segment_demand/
+compare_demand_periods stay SKU-axis). Two mid-batch fixes from review: truncated flag now
+per-list pre-cap (was combined-length false positive), and explicit `end_date_offset=0`
+honored (was `0 or 1` coercion — regression test added). Live-verified: CUST-009 growth
+50→150, CUST-010 decline 150→50, Kanto region growth. Sign-off PASS (proof-of-execution):
+unit 1028 exit 0, canonical integration 16 exit 0, full-DSN integration 95 passed exit 0,
+playwright 33/33 exit 0, build 0, lint 0, typecheck 0.
+
+Previously:
 
 P87 — Order-to-Ship Data Domain: Shipment Delay Root Causes (SPEC Q4) (2026-06-11). Alembic
 0019 adds `customer_orders` (26 seeded rows) + `shipments` (14 rows) per ADR
