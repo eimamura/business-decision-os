@@ -37,7 +37,9 @@ Rules:
 - success_criteria may contain 0, 1, 2, or 3 items — include only criteria that are
   clearly derivable from the query (do not invent criteria that have no basis in the
   query).
-- Write goal_text and success_criteria in the same language the user used.
+- IMPORTANT: Always write goal_text and success_criteria in English only,
+  regardless of the language the user used. The goal spec is consumed internally
+  by the orchestrator and control agent — English is the system language.
 - Be concise: goal_text should be 1–2 sentences; each criterion ≤ 15 words.
 """
 
@@ -53,12 +55,14 @@ Rules:
 - satisfied: true if the reply meaningfully addresses goal_text and each
   success criterion, false otherwise.
 - missing: when satisfied is false, provide a brief (≤ 20 words) description of
-  what is still missing or unanswered. Write in the same language the user used.
+  what is still missing or unanswered. Always write in English only — this text
+  is used internally by the orchestrator as refinement guidance, not shown to the user.
   When satisfied is true, missing must be null.
 - reroute_category: when satisfied is false and the gap could be better addressed
   by a different intent category, set this to one of:
     lookup, domain_analysis, cross_domain_analysis, supply_chain, decision_support
   Otherwise set to null. Never set to "chat".
+- IMPORTANT: Always respond in English only, regardless of the language in the goal text.
 """
 
 

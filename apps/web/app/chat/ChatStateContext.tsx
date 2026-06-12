@@ -430,6 +430,16 @@ export function ChatStateProvider({ children }: { children: ReactNode }): React.
               }));
             }
 
+            if (event.type === "text_reset") {
+              hasStreamedRef.current[sessionId] = false;
+              updateSession(sessionId, (prev) => ({
+                ...prev,
+                messages: prev.messages.map((m) =>
+                  m.id === assistantId ? { ...m, content: "", isStreaming: true } : m,
+                ),
+              }));
+            }
+
             if (event.type === "graph_node") {
               _handleGraphNodeEvent(sessionId, event);
             }
@@ -748,6 +758,16 @@ export function ChatStateProvider({ children }: { children: ReactNode }): React.
                   m.id === assistantId
                     ? { ...m, content: (m.content ?? "") + event.delta, isStreaming: true }
                     : m,
+                ),
+              }));
+            }
+
+            if (event.type === "text_reset") {
+              hasStreamedRef.current[sessionId] = false;
+              updateSession(sessionId, (prev) => ({
+                ...prev,
+                messages: prev.messages.map((m) =>
+                  m.id === assistantId ? { ...m, content: "", isStreaming: true } : m,
                 ),
               }));
             }

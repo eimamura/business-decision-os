@@ -139,6 +139,20 @@ class TextDeltaEvent(BaseModel):
     timestamp: str
 
 
+class TextResetEvent(BaseModel):
+    """Emitted before a second synthesis pass when the first was degenerate.
+
+    Signals clients to discard all previously received text_delta events for
+    this session and treat the next text_delta events as the authoritative reply.
+    This is emitted by run_sequential on goal-refinement when the first control-agent
+    reply was degenerate (D-014 fix).
+    """
+    type: Literal["text_reset"] = "text_reset"
+    session_id: str
+    reason: str
+    timestamp: str
+
+
 class DoneEvent(BaseModel):
     type: Literal["done"] = "done"
     session_id: UUID
@@ -171,6 +185,7 @@ SseEvent = Annotated[
         JobFailedEvent,
         ErrorEvent,
         TextDeltaEvent,
+        TextResetEvent,
         DoneEvent,
         AwaitingInputEvent,
     ],

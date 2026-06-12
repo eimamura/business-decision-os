@@ -134,6 +134,13 @@ export const TextDeltaEventSchema = z.object({
   timestamp: z.string(),
 });
 
+export const TextResetEventSchema = z.object({
+  type: z.literal("text_reset"),
+  session_id: z.string(),
+  reason: z.string(),
+  timestamp: z.string(),
+});
+
 export const DoneEventSchema = z.object({
   type: z.literal("done"),
   session_id: z.string().uuid(),
@@ -163,6 +170,7 @@ export const SseEventSchema = z.discriminatedUnion("type", [
   JobFailedEventSchema,
   ErrorEventSchema,
   TextDeltaEventSchema,
+  TextResetEventSchema,
   DoneEventSchema,
   AwaitingInputEventSchema,
 ]);

@@ -391,6 +391,38 @@ class SessionOrchestrator:
         self._schedule_status_update(session_id, "completed")
         return {"result": result}
 
+    # Minimum length for a reply to be considered non-degenerate.
+    # Replies shorter than this (or matching common apology patterns) are treated
+    # as degenerate and will trigger a text_reset event on refinement (D-014 fix).
+    _DEGENERATE_REPLY_MIN_LEN: int = 80
+
+    # Patterns that indicate a fabricated no-data / apology reply (D-014 fix).
+    # Matched case-insensitively against the stripped reply text.
+    _DEGENERATE_REPLY_PATTERNS: tuple[str, ...] = (
+        "i'm sorry",
+        "i am sorry",
+        "i don't have",
+        "i do not have",
+        "cannot provide",
+        "data is currently unavailable",
+        "please rephrase",
+        "try again",
+        "désolé",
+    )
+
+    def _is_degenerate_reply(self, reply: str) -> bool:
+        """Return True when *reply* looks like a degenerate/fallback response.
+
+        Used by _node_run_sequential to decide whether to emit text_reset (D-014).
+        A reply is degenerate if it is very short OR matches a known apology/refusal
+        pattern that indicates the model failed to produce grounded content.
+        """
+        stripped = reply.strip()
+        if len(stripped) < self._DEGENERATE_REPLY_MIN_LEN:
+            return True
+        lower = stripped.lower()
+        return any(pat in lower for pat in self._DEGENERATE_REPLY_PATTERNS)
+
     async def _node_run_sequential(
         self, state: OrchestratorState, config: RunnableConfig
     ) -> dict[str, Any]:
@@ -401,6 +433,28 @@ class SessionOrchestrator:
         assert route is not None
 
         _query = SessionUserQuery.model_validate(state["query"])
+        refine_count = state.get("refine_count") or 0
+
+        # D-014 fix: when this is a refinement pass (refine_count > 0), the first
+        # invocation's text_delta events are already on the SSE stream.  If the
+        # previous result was degenerate, emit text_reset so clients discard those
+        # deltas before the second (grounded) synthesis begins.
+        if refine_count > 0:
+            prev_result = state.get("result")
+            if prev_result is not None and self._is_degenerate_reply(prev_result.reply):
+                _log.info(
+                    "run_sequential refinement: previous reply was degenerate"
+                    " — emitting text_reset",
+                    session_id=str(session_id),
+                    refine_count=refine_count,
+                    prev_reply_len=len(prev_result.reply),
+                )
+                await self._push({
+                    "type": "text_reset",
+                    "session_id": str(session_id),
+                    "reason": "degenerate_first_invocation",
+                    "timestamp": _iso_now(),
+                })
 
         # Inject refinement feedback into intent.goal_text so _run_agents_in_order
         # picks it up as the instruction (planning.py uses `intent.goal_text or query.text`).
@@ -411,7 +465,11 @@ class SessionOrchestrator:
                 category=intent.category,
                 confidence=intent.confidence,
                 rationale=intent.rationale,
-                goal_text=f"{base}\n\nAdditional guidance: {refinement_feedback}",
+                goal_text=(
+                    f"{base}\n\nAdditional guidance: {refinement_feedback} "
+                    f"You must call the appropriate tool(s) to retrieve the data "
+                    f"before answering."
+                ),
             )
         else:
             augmented_intent = intent

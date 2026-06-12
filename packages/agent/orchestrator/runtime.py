@@ -104,10 +104,17 @@ async def _run_agent(
     _usage = result.usage or {}
     token_cost: dict[str, Any] | None = None
     if _usage.get("input_tokens") is not None:
+        # peak_input_tokens: max single-call Ollama context-window usage for this run.
+        # This is the authoritative saturation signal for the ≤90% threshold check.
+        # input_tokens is the operator.add SUM of all calls (always > num_ctx for multi-call
+        # runs) and MUST NOT be used for saturation evaluation.
+        peak = _usage.get("peak_input_tokens") or 0
         token_cost = {
-            "input_tokens": _usage.get("input_tokens", 0),
+            "input_tokens": peak if peak > 0 else _usage.get("input_tokens", 0),
             "output_tokens": _usage.get("output_tokens", 0),
             "cost_usd": _usage.get("cost_usd", 0.0),
+            "peak_input_tokens": peak,
+            "total_input_tokens": _usage.get("input_tokens", 0),
         }
     await orchestrator._push({
         "type": "graph_node", "event": "end",

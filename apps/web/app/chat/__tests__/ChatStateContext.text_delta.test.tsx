@@ -63,6 +63,15 @@ function makeDone(reply?: string | null): SseEvent {
   };
 }
 
+function makeTextReset(): SseEvent {
+  return {
+    type: "text_reset",
+    session_id: "sess-test",
+    reason: "degenerate_reply",
+    timestamp: new Date().toISOString(),
+  };
+}
+
 function makeQueryClient(): QueryClient {
   return new QueryClient({
     defaultOptions: {
@@ -244,5 +253,31 @@ describe("ChatStateProvider text_delta handling", () => {
     );
 
     expect(getByTestId("content").textContent).not.toBe("should be ignored");
+  });
+
+  // -------------------------------------------------------------------------
+  // D-014 text_reset: degenerate first run cleared before refinement
+  // -------------------------------------------------------------------------
+
+  it("text_reset clears accumulated text so subsequent text_delta rebuilds from empty", async () => {
+    // Simulate: degenerate first invocation ("abc") → server emits text_reset
+    // → grounded refinement invocation ("xyz") → done
+    const events: SseEvent[] = [
+      makeTextDelta("abc"),
+      makeTextReset(),
+      makeTextDelta("xyz"),
+      makeDone(null),
+    ];
+
+    const { getByTestId } = await renderScenario("s7", events);
+
+    await waitFor(
+      () => {
+        expect(getByTestId("sending").textContent).toBe("false");
+      },
+      { timeout: 3000 },
+    );
+
+    expect(getByTestId("content").textContent).toBe("xyz");
   });
 });

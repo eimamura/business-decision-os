@@ -43,6 +43,17 @@ _GROUNDED_VERIFY_INTENTS: frozenset[str] = frozenset(
     {"domain_analysis", "cross_domain_analysis", "decision_support", "supply_chain"}
 )
 
+# Maximum characters for a single tool-result message appended to the ReAct loop.
+# Each _execute_tools_node call serialises the tool output as JSON and appends it
+# as an LLMMessage(role="tool", ...).  Without a cap, large outputs (e.g. 30-SKU
+# analysis results) can saturate the Ollama context window even with per-value
+# truncation already applied by _truncate_tool_results_for_prompt.
+# Budget: _OLLAMA_NUM_CTX=16384 tokens × 70% = 11469 tokens; system prompt ≈ 500
+# tokens, query + tool definitions ≈ 3000 tokens → remaining ~7969 tokens.
+# At ~4 chars/token that is ~31876 chars.  We cap at 6000 chars (~1500 tokens) so
+# a single tool result never exceeds ~20% of the context budget.
+_LOOP_TOOL_RESULT_MESSAGE_MAX_CHARS = 6_000
+
 # Maximum length (characters) of a serialized tool result value before truncation.
 _TOOL_RESULT_VALUE_TRUNCATE = 500
 
@@ -318,6 +329,22 @@ class AgentState(TypedDict):
     # Loop-guard flag — set by _should_continue when duplicate tool call is detected.
     # Consumed by synthesize_from_tools to know it must produce a forced final conclusion.
     loop_guard_triggered: bool
+    # Seen tool fingerprints — accumulated list of "tool_name:args_json" strings.
+    # Used by _execute_tools_node to skip re-execution of identical tool calls
+    # before they are dispatched (D-012 pre-execution dedupe guard).
+    # operator.add accumulates across iterations (fingerprint history is never cleared).
+    seen_tool_fingerprints: Annotated[list[str], operator.add]
+    # Peak input_tokens across all LLM calls in this agent run.
+    # Updated by _call_model_node using max() on each response.
+    # This is the true context-saturation signal for Ollama: the Ollama-reported
+    # input_tokens from ai_msg.usage_metadata reflects the actual KV-cache / context
+    # window usage for that call (NOT a pre-truncation estimate).  The accumulator
+    # field input_tokens is operator.add (SUMMED across all calls), so it always
+    # exceeds num_ctx for multi-call runs — DO NOT use it for saturation checks.
+    # peak_input_tokens is reported in the token_cost payload of the graph_node "end"
+    # SSE event so that external monitoring (verify_d012_d015.py, session_events) can
+    # evaluate the ≤90% saturation threshold with the correct signal.
+    peak_input_tokens: int
 
 
 # ---------------------------------------------------------------------------
@@ -626,6 +653,13 @@ class AgentRuntime:
                 role="assistant", content=response.text, content_blocks=content_blocks
             ))
 
+        # Update peak_input_tokens: max across all LLM calls this run.
+        # This is the authoritative per-call context-window usage from Ollama
+        # (ai_msg.usage_metadata.input_tokens = full KV-cache size for this call).
+        # It differs from the accumulated state["input_tokens"] (operator.add SUM)
+        # which exceeds num_ctx for multi-call runs and cannot be used for saturation checks.
+        current_peak = state.get("peak_input_tokens") or 0
+        new_peak = max(current_peak, response.usage.input_tokens)
         return {
             "response": response,
             "messages": new_messages,
@@ -634,6 +668,7 @@ class AgentRuntime:
             "cost_usd": float(response.usage.total_cost_usd),
             "iteration": state["iteration"] + 1,
             "status": "running",
+            "peak_input_tokens": new_peak,
         }
 
     # ------------------------------------------------------------------
@@ -651,10 +686,11 @@ class AgentRuntime:
                 iteration=state["iteration"],
             )
             return "verify_findings"
-        # Detect duplicate tool calls — force synthesis/verify to break the loop.
-        # When tool_results are present the run is NOT degenerate; route through
-        # synthesize_from_tools so the agent can produce a grounded conclusion from
-        # accumulated observations before verify_findings runs (fix for D-011).
+        # Post-execution duplicate guard (D-011): detect duplicate names in tool_results.
+        # This fires AFTER execution — when two identical tools already completed.
+        # With the D-012 pre-execution dedupe active, this guard rarely fires (the pre-exec
+        # guard prevents the second result from being added).  It remains as a second line
+        # of defence for any bypass path.
         seen_tool_names: list[str] = []
         for tr in (state.get("tool_results") or []):
             seen_tool_names.extend(tr.keys())
@@ -667,6 +703,28 @@ class AgentRuntime:
             return "synthesize_from_tools"
         if not response.tool_calls or response.finish_reason == "stop":
             return "verify_findings"
+        # Pre-execution duplicate guard (D-012): check whether ALL pending tool calls
+        # are already in seen_tool_fingerprints.  When every call the model requested
+        # is a duplicate, _execute_tools_node will skip them all and append only cached-
+        # reference messages — the loop would continue indefinitely without this guard.
+        # Route to synthesize_from_tools when tool_results are non-empty (data available)
+        # or verify_findings when there are no results yet (nothing to synthesize from).
+        if response.tool_calls and state.get("seen_tool_fingerprints"):
+            seen_fp_set: set[str] = set(state.get("seen_tool_fingerprints") or [])
+            all_dupes = all(
+                self._tool_fingerprint(call) in seen_fp_set
+                for call in response.tool_calls
+            )
+            if all_dupes:
+                _log.warning(
+                    "all pending tool calls are pre-execution duplicates"
+                    " — routing to synthesize_from_tools (D-012 pre-exec guard)",
+                    agent_role=self.role,
+                    pending_calls=[c["name"] for c in response.tool_calls],
+                )
+                if state.get("tool_results"):
+                    return "synthesize_from_tools"
+                return "verify_findings"
         # Check if any pending HITL approval needs processing
         if state.get("pending_hitl_approval_id") is not None:
             return "prepare_hitl"
@@ -813,6 +871,21 @@ class AgentRuntime:
     # Node: execute_tools
     # ------------------------------------------------------------------
 
+    def _tool_fingerprint(self, call: dict[str, Any]) -> str:
+        """Return a stable fingerprint string for a tool call (name + sorted args JSON).
+
+        Used by the pre-execution dedupe guard (D-012) to identify identical tool calls
+        that have already been executed this run.
+        """
+        from packages.agent.orchestrator.parsing import json_safe as _json_safe
+
+        args = call.get("input", {}) or {}
+        try:
+            args_str = json.dumps(_json_safe(args), sort_keys=True)
+        except Exception:
+            args_str = str(args)
+        return f"{call['name']}:{args_str}"
+
     async def _run_single_read_only_tool(
         self,
         call: dict[str, Any],
@@ -826,6 +899,10 @@ class AgentRuntime:
         Returns (result_entry, message) where result_entry is ``{tool_name: output}``
         and message is an ``LLMMessage(role="tool", ...)`` ready to feed back to the LLM.
         Raises on tool failure (caller must handle).
+
+        The returned tool-result message content is capped at
+        _LOOP_TOOL_RESULT_MESSAGE_MAX_CHARS characters (D-012 fix) to prevent
+        large tool outputs from saturating the Ollama context window.
         """
         from packages.agent.llm import LLMMessage
         from packages.agent.orchestrator.parsing import json_safe
@@ -868,9 +945,14 @@ class AgentRuntime:
                 "duration_ms": tool_duration_ms,
                 "status": "ok", "output": output_with_query, "meta": {},
             }, sse_queue, persister)
+            # Serialise tool output for the LLM message, then cap the character length
+            # to prevent large results from saturating the Ollama context window (D-012).
+            raw_content = json.dumps(json_safe(tool_output))
+            if len(raw_content) > _LOOP_TOOL_RESULT_MESSAGE_MAX_CHARS:
+                raw_content = raw_content[:_LOOP_TOOL_RESULT_MESSAGE_MAX_CHARS] + " ...[truncated]"
             msg = LLMMessage(
                 role="tool",
-                content=json.dumps(json_safe(tool_output)),
+                content=raw_content,
                 tool_call_id=call["id"],
             )
             return {call["name"]: tool_output}, msg
@@ -904,15 +986,69 @@ class AgentRuntime:
 
         new_messages: list[Any] = []
         new_tool_results: list[dict[str, Any]] = []
+        new_fingerprints: list[str] = []
 
         pending_job_id: str | None = state.get("pending_hitl_job_id")
 
-        # Split tool calls into HITL and parallel (non-HITL) groups.
+        # Pre-execution dedupe guard (D-012): collect fingerprints of calls already
+        # executed this run.  Any call whose fingerprint is already present is skipped
+        # and replaced with a short cached-reference message — it is NEVER re-executed
+        # and its full output is NOT re-appended to the loop messages.
+        #
+        # This guard fires BEFORE tool execution (unlike the post-execution guard in
+        # _should_continue which fires AFTER duplicate results are appended).  Placing
+        # the check here prevents the second full tool-result blob from ever entering
+        # the context window, directly addressing the D-012 context overflow.
+        #
+        # The authoritative signal for context saturation is the Ollama-reported
+        # input_tokens from session_events.payload->token_cost (the graph_node "end"
+        # event for each agent run).  The llm_usage table's input_tokens records the
+        # pre-truncation prompt size reported by the LLM client and does NOT reflect
+        # the true Ollama KV-cache / context-window usage — it therefore cannot be
+        # used for the 90%-saturation WARNING.  The WARNING in _call_model_node uses
+        # response.input_tokens which is sourced from ai_msg.usage_metadata — this is
+        # the same Ollama-reported value and IS the correct signal.
+        seen_fingerprints: set[str] = set(state.get("seen_tool_fingerprints") or [])
+
+        dedupe_skipped_calls: list[dict[str, Any]] = []
+        pending_calls: list[dict[str, Any]] = []
+        for call in response.tool_calls:
+            fp = self._tool_fingerprint(call)
+            if fp in seen_fingerprints:
+                dedupe_skipped_calls.append(call)
+            else:
+                pending_calls.append(call)
+                seen_fingerprints.add(fp)
+                new_fingerprints.append(fp)
+
+        # Emit cached-reference messages for skipped calls.
+        # This tells the LLM the result is already present above — do NOT append a
+        # full duplicate result blob that would re-inflate the context window.
+        if dedupe_skipped_calls:
+            for skipped_call in dedupe_skipped_calls:
+                _log.warning(
+                    "pre-execution dedupe guard (D-012): skipping duplicate tool call",
+                    agent_role=self.role,
+                    tool_name=skipped_call["name"],
+                    tool_call_id=skipped_call.get("id"),
+                )
+                cached_msg = LLMMessage(
+                    role="tool",
+                    content=(
+                        f"[cached] Identical call to {skipped_call['name']} already executed "
+                        "this run — result is shown above. Do not repeat this tool call; "
+                        "synthesize your answer from the results already received."
+                    ),
+                    tool_call_id=skipped_call.get("id") or "",
+                )
+                new_messages.append(cached_msg)
+
+        # Split remaining (non-duplicate) tool calls into HITL and parallel groups.
         # HITL tools must remain sequential; non-HITL tools can be gathered.
         hitl_calls: list[dict[str, Any]] = []
         parallel_calls: list[dict[str, Any]] = []
 
-        for call in response.tool_calls:
+        for call in pending_calls:
             tool = self._tool_registry.get(call["name"])
             if tool is None:
                 continue
@@ -990,9 +1126,14 @@ class AgentRuntime:
                         "duration_ms": tool_duration_ms,
                         "status": "ok", "output": result_output, "meta": {},
                     }, sse_queue, persister)
+                    hitl_raw = json.dumps(json_safe(result_output))
+                    if len(hitl_raw) > _LOOP_TOOL_RESULT_MESSAGE_MAX_CHARS:
+                        hitl_raw = (
+                            hitl_raw[:_LOOP_TOOL_RESULT_MESSAGE_MAX_CHARS] + " ...[truncated]"
+                        )
                     new_messages.append(LLMMessage(
                         role="tool",
-                        content=json.dumps(json_safe(result_output)),
+                        content=hitl_raw,
                         tool_call_id=call["id"],
                     ))
                 except Exception as exc:
@@ -1022,6 +1163,8 @@ class AgentRuntime:
         return {
             "messages": new_messages,
             "tool_results": new_tool_results,
+            # Accumulate the fingerprints of newly executed (non-duplicate) calls.
+            "seen_tool_fingerprints": new_fingerprints,
             # Clear HITL state after execution
             "pending_hitl_job_id": None,
             "pending_hitl_approval_id": None,
@@ -1312,14 +1455,26 @@ class AgentRuntime:
 
         from langchain_core.messages import HumanMessage, SystemMessage
 
+        # Use a minimal system prompt for synthesis — the full control agent prompt
+        # contains 100 lines of tool-usage rules that can confuse local models (gemma4:12b)
+        # into trying to call tools again or producing "no data" fallback responses.
+        # A minimal prompt with a direct data-reporting instruction yields better results.
+        synthesis_system = (
+            "You are a supply chain analyst reporting findings from tool data. "
+            "Your ONLY job is to write a clear prose summary of the data you received. "
+            "You MUST report the specific items, quantities, dates, and risk levels "
+            "present in the data. Do NOT say you cannot provide information. "
+            "Do NOT apologize. Do NOT call any tools. "
+            "Write your report in English."
+        )
         synthesis_prompt = [
-            SystemMessage(self._system_prompt),
+            SystemMessage(synthesis_system),
             HumanMessage(
-                "You have gathered the following tool observations. "
-                "Produce a concise, grounded analysis and recommendation "
-                "based solely on these results. "
-                "Do not call any tools — write your conclusion in prose.\n\n"
-                f"## Tool observations (JSON)\n{observations_text}"
+                "Below are the raw results from supply chain analysis tools. "
+                "Write a clear, specific prose report summarizing what the data shows. "
+                "Include every item, SKU, risk level, quantity, and date visible in the data.\n\n"
+                f"## Tool data (JSON)\n{observations_text}\n\n"
+                "## Your report (prose only — no tool calls, no apologies):"
             ),
         ]
 
@@ -1562,6 +1717,8 @@ class AgentRuntime:
             "groundedness": None,
             "revised": False,
             "loop_guard_triggered": False,
+            "seen_tool_fingerprints": [],
+            "peak_input_tokens": 0,
         }
 
         final_state: dict[str, Any] = await graph.ainvoke(initial_state, config=run_config)
@@ -1691,5 +1848,10 @@ class AgentRuntime:
                 "input_tokens": final_state.get("input_tokens", 0),
                 "output_tokens": final_state.get("output_tokens", 0),
                 "cost_usd": final_state.get("cost_usd", 0.0),
+                # peak_input_tokens: the maximum single-call input_tokens seen during
+                # this agent run.  Unlike input_tokens (operator.add SUM), this field
+                # reflects the true Ollama KV-cache / context-window size for the heaviest
+                # call.  Use this value — not input_tokens — for the ≤90% saturation check.
+                "peak_input_tokens": final_state.get("peak_input_tokens", 0),
             },
         )
