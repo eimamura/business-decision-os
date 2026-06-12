@@ -40,11 +40,14 @@ See `docs/archive/v3/STATE.md` for P0–P23 per-phase details.
 
 ## Active Phase
 
-None
+P96 — Supply Order Timing: push_out Signal Quality (first of the P96–P100 MVP hardening
+programme approved 2026-06-12: P96 push_out noise, P97 context saturation, P98 persistent
+exceptions strip, P99 scheduler hardening, P100 judge campaign; auth + ERP re-confirmed
+out of scope).
 
 ## Active Lease
 
-None
+P96-B-01 (App Builder — threshold refinement)
 
 ## Last Completed
 

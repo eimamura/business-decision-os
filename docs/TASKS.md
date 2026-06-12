@@ -1347,3 +1347,147 @@ Dependencies: none
 | T-588 | Live verification (dev stack, gemma4:12b): the modal prompt end-to-end — `analyze_supply_order_timing` tool events present, reply names the seeded candidates. Phase sign-off: `make test-unit && make test-integration && make test-playwright && make build && make lint && make typecheck` — proof-of-execution per gate. | Done |
 
 Dependencies: B-01
+
+---
+
+## P96 — Supply Order Timing: push_out Signal Quality — Not Started
+
+**Goal:** Reduce push_out_candidate noise in `analyze_supply_order_timing`. P95 seed data
+yields 32/40 orders flagged push_out with the flat `days_of_cover_at_arrival >= 30`
+threshold — "almost everything is a candidate" is not a screening signal. Done when: on
+the standard seeded dev DB, push_out_candidates are a small high-signal set (target ≤ 25%
+of open orders), SKU-027 (the deliberate seed scenario, ~198d cover) remains flagged and
+ranked first, pull_forward results are unchanged vs P95, and the classification rationale
+is documented in the tool docstring.
+
+Dependencies: P95 Done
+
+### Batch B-01 — Threshold refinement (App Builder) — Not Started
+
+| Task | Description | Status |
+|---|---|---|
+| T-589 | Refine `analyze_supply_order_timing` push_out classification. App Builder picks and documents the mechanism — candidate options (combine as judged best): raise the absolute floor; make the threshold relative (e.g. cover-at-arrival ≥ k× a reference window such as supplier lead time if derivable from data, else a documented constant ≥ 60d); require a minimum excess magnitude; cap the flagged set to top-N by days_misaligned with the rest on_track (summary counts must then distinguish flagged vs suppressed — keep pre-cap semantics honest). Constraints: deterministic; pull_forward logic and precedence untouched; SKU-027 still flagged and ranked #1 push_out; seeded dev DB yields ≤ 25% of open orders as push_out_candidates; docstring documents rule + rationale; output_schema updated if fields change. Update unit tests accordingly. | Not Started |
+
+Dependencies: none
+
+### Batch B-02 — Tests + phase sign-off (Test/Review) — Not Started
+
+| Task | Description | Status |
+|---|---|---|
+| T-590 | Update/extend integration tests: seeded DB assertions for the new threshold (SKU-027 flagged + first; push_out share ≤ 25%; pull_forward set unchanged vs P95). Unit boundary tests for the new rule. Phase sign-off: `make test-unit && make test-integration && make test-playwright && make build && make lint && make typecheck` — proof-of-execution per gate. | Not Started |
+
+Dependencies: B-01
+
+---
+
+## P97 — Context Saturation Mitigation — Not Started
+
+**Goal:** Remove the recurrence risk of the P92 truncation failure. P94 live verification
+measured an orchestrator-side final synthesize call at input_tokens=14080 (86% of
+num_ctx 16384); a few more tools or a fatter tool output pushes past the 90% warning into
+silent-degradation territory. Done when: a live run of the heaviest known prompts (P94
+forecast-deviation, P95 timing, Q3 exceptions) measures every call ≤ 70% of the configured
+context, with the mechanism documented.
+
+Dependencies: P95 Done
+
+### Batch B-01 — Forensics + bounded fix (App Builder) — Not Started
+
+| Task | Description | Status |
+|---|---|---|
+| T-591 | Forensics first: using `llm_usage.prompt_messages_json` (P94 session + fresh reproduction), decompose the 14080-token final call — system prompt vs history vs raw tool outputs vs schema context. Report the breakdown in the batch handoff before fixing. | Not Started |
+| T-592 | Bounded fix informed by T-591 (combine as judged best): (a) raise `_OLLAMA_NUM_CTX` to 32768 IF live VRAM allows on the dev GPU (verify with a live call + nvidia-smi headroom; 16384 stays the documented floor); (b) bound the dominant context contributor — e.g. cap per-tool-output size injected into the synthesize call with a deterministic truncation marker, or summarize/drop the largest history segments (history-summarize path exists per P83). Constraints: no public interface changes; the ≥90% saturation WARNING stays; degenerate-guard soft-fail path untouched; document chosen values as single-source constants. | Not Started |
+
+Dependencies: none
+
+### Batch B-02 — Live measurement + phase sign-off (Test/Review) — Not Started
+
+| Task | Description | Status |
+|---|---|---|
+| T-593 | Live verification (gemma4:12b): run the three heaviest prompts end-to-end; report max input_tokens per call vs configured num_ctx — every call ≤ 70%; answers remain grounded (tool events + seeded entities named); no saturation WARNING in logs. Unit tests for any new truncation/budget logic. Phase sign-off: `make test-unit && make test-integration && make test-playwright && make build && make lint && make typecheck` — proof-of-execution per gate. | Not Started |
+
+Dependencies: B-01
+
+---
+
+## P98 — Daily Exceptions Persistent Surface — Not Started
+
+**Goal:** The daily screening result is visible beyond the chat empty state (P93 panel
+disappears once a conversation starts). Done when: a compact, collapsible Daily Exceptions
+strip is visible on the chat page at all times (collapsed: severity count badges;
+expanded: the P93 panel content), it does not crowd the conversation, and Playwright
+covers both states.
+
+Dependencies: P93 Done
+
+### Batch B-01 — Persistent strip (App Builder) — Not Started
+
+| Task | Description | Status |
+|---|---|---|
+| T-594 | Rework `DailyExceptionsPanel` placement: slim strip (severity count badges + expand toggle) docked at the top of the chat page in BOTH empty and active-conversation states; expanding shows the existing panel content (top exceptions, Investigate in chat, Run now); collapsed by default during active conversation, expanded by default in empty state; component-state persistence only. Keep existing data-testids; add `daily-exceptions-strip` + `daily-exceptions-toggle`. Quiet-fail unchanged; English-only; design tokens consistent. | Not Started |
+
+Dependencies: none
+
+### Batch B-02 — Tests + phase sign-off (Test/Review) — Not Started
+
+| Task | Description | Status |
+|---|---|---|
+| T-595 | Playwright: strip visible with an active conversation (mock SSE precedent), expand/collapse toggles content, Investigate still injects the Q3 prompt, empty-state default-expanded preserved; update the P93 panel spec where placement changed. Vitest component test sync if broken. Phase sign-off: `make test-unit && make test-integration && make test-playwright && make build && make lint && make typecheck` — proof-of-execution per gate. | Not Started |
+
+Dependencies: B-01
+
+---
+
+## P99 — Screening Scheduler Multi-Process Hardening — Not Started
+
+**Goal:** The daily screening tick is safe under multiple API processes (ADR
+2026-06-12-daily-screening-scheduler accepted single-process double-fire as a caveat;
+close it properly). Done when: concurrent scheduler ticks produce at most one completed
+scheduled run per day, enforced in the database, covered by an integration test.
+
+Dependencies: P93 Done
+
+### Batch B-01 — Advisory lock + idempotent tick (App Builder) — Not Started
+
+| Task | Description | Status |
+|---|---|---|
+| T-596 | Harden the scheduled/startup tick in `apps/api/screening.py`: Postgres advisory lock (`pg_try_advisory_lock`, documented constant key; skip when held elsewhere) AND re-check "completed row already exists for today" inside the lock before executing (double-checked idempotency). Manual `POST /run` stays exempt (explicit user intent). No schema change. Log skip reasons at INFO. | Not Started |
+
+Dependencies: none
+
+### Batch B-02 — Tests + phase sign-off (Test/Review) — Not Started
+
+| Task | Description | Status |
+|---|---|---|
+| T-597 | Integration test: two concurrent scheduled-tick invocations against the real DB yield exactly one new completed schedule/startup row for today (second skips via lock or idempotency); unit tests for skip paths with stubbed repo/lock. Phase sign-off: `make test-unit && make test-integration && make test-playwright && make build && make lint && make typecheck` — proof-of-execution per gate. | Not Started |
+
+Dependencies: B-01
+
+---
+
+## P100 — SPEC 10-Question Judge Evaluation Campaign — Not Started
+
+**Goal:** Cross-sectional answer-quality measurement of the post-P96/P97 system, replacing
+spot checks. Done when: all 10 SPEC questions have been run end-to-end on the live stack
+(gemma4:12b), each judged with the bdos-judge methodology (quality dimensions + aggregate
+score + root-cause classification for failures), results recorded in
+`docs/judge-reports/2026-06-12-spec10-campaign.md`, and every FAIL has either a registered
+Defect Task or an explicitly accepted limitation entry in the report.
+
+Dependencies: P96, P97 Done (quality fixes land first); P98/P99 not required
+
+### Batch B-01 — Run + judge all 10 questions (Judge) — Not Started
+
+| Task | Description | Status |
+|---|---|---|
+| T-598 | For each SPEC Top-10 question (exact wording from docs/SPEC.md table): send it through the live runtime, capture reply + tool events + llm_usage, judge it (dimensions per bdos-judge skill: groundedness, completeness, actionability, correct tool selection; PASS/FAIL + aggregate), classify each FAIL root cause (prompt/tool/model/missing). Write the consolidated report to `docs/judge-reports/2026-06-12-spec10-campaign.md` (per-question evidence: tools called, key entities named, scores, verdicts). | Not Started |
+
+Dependencies: none
+
+### Batch B-02 — Defect registration + programme close (Orchestrator) — Not Started
+
+| Task | Description | Status |
+|---|---|---|
+| T-599 | For each FAIL in the campaign report: register a Defect Task (model-limitation FAILs may instead be recorded as accepted limitations with rationale in the report + DECISIONS.md). Summarize campaign outcome in STATE.md; close the P96–P100 hardening programme. | Not Started |
+
+Dependencies: B-01
