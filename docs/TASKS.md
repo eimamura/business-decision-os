@@ -1270,7 +1270,7 @@ Dependencies: B-03
 
 ---
 
-## P94 — Forecast Deviation Decomposition (SPEC Q5) — Not Started
+## P94 — Forecast Deviation Decomposition (SPEC Q5) — In Progress
 
 **Goal:** The system answers SPEC Q5 "Why is there a gap between demand forecast and actual
 demand?" with a grounded decomposition instead of a generic accuracy metric. Done when: a
@@ -1282,23 +1282,23 @@ rule should direct the agent to pair them when the user asks "which customer/reg
 
 Dependencies: P92 Done (P93 not required)
 
-### Batch B-01 — Tool + wiring + seed + scenario (App Builder) — Not Started
+### Batch B-01 — Tool + wiring + seed + scenario (App Builder) — Done
 
 | Task | Description | Status |
 |---|---|---|
-| T-577 | New tool `analyze_forecast_deviation` in `packages/tools/` (Level 1 deterministic, read_only, hybrid output contract): per SKU × ISO week over a horizon (default: last 4 complete weeks; `weeks` param), compare summed `forecast_history.forecast_qty` (deduped to the latest `forecast_date` row per sku/target_date) against summed `demand_history.quantity`; output per-SKU weekly rows (forecast, actual, gap qty, gap pct), per-SKU bias direction (over/under/mixed) and aggregate deviation pct, ranked by absolute gap; LIMIT + `truncated`; mandatory `missing_data` (no forecast rows for SKU/window, no actuals, `is_missing` actuals). Parameterized SQL on allowlisted tables only; register in tool registry. | Not Started |
-| T-578 | Wire `analyze_forecast_deviation` into `_INTENT_TOOL_SUBSET` (`supply_chain`, `domain_analysis`, `cross_domain_analysis`, `decision_support`) + ControlAgent system prompt rule: forecast-vs-actual gap questions → `analyze_forecast_deviation`; `evaluate_forecast_accuracy` stays the metric-quality axis (MAPE/bias of the forecasting model); pair with `detect_demand_shift` when the user asks which customer/region drives the gap. | Not Started |
-| T-579 | Deterministic seed scenario in the sample-data/seed path: ensure `forecast_history` rows exist for the rolling window anchored to `date.today()` with two knowable deviations — one over-forecast SKU and one under-forecast SKU (fixed SKU index overrides per the P84 precedent; document expected values in the seed comment). Must not disturb the P84 risk bands (2 critical / 2 high / 3 medium) or the P87/P88 order-to-ship narratives. | Not Started |
-| T-580 | ToolScenarioModal: add "Forecast vs Actual Gap" scenario (Supply Chain category, prompt e.g. "Why is there a gap between the demand forecast and actual demand over the last four weeks?"); sync Playwright spec assertions (P90/P91 precedent). | Not Started |
+| T-577 | New tool `analyze_forecast_deviation` in `packages/tools/` (Level 1 deterministic, read_only, hybrid output contract): per SKU × ISO week over a horizon (default: last 4 complete weeks; `weeks` param), compare summed `forecast_history.forecast_qty` (deduped to the latest `forecast_date` row per sku/target_date) against summed `demand_history.quantity`; output per-SKU weekly rows (forecast, actual, gap qty, gap pct), per-SKU bias direction (over/under/mixed) and aggregate deviation pct, ranked by absolute gap; LIMIT + `truncated`; mandatory `missing_data` (no forecast rows for SKU/window, no actuals, `is_missing` actuals). Parameterized SQL on allowlisted tables only; register in tool registry. | Done |
+| T-578 | Wire `analyze_forecast_deviation` into `_INTENT_TOOL_SUBSET` (`supply_chain`, `domain_analysis`, `cross_domain_analysis`, `decision_support`) + ControlAgent system prompt rule: forecast-vs-actual gap questions → `analyze_forecast_deviation`; `evaluate_forecast_accuracy` stays the metric-quality axis (MAPE/bias of the forecasting model); pair with `detect_demand_shift` when the user asks which customer/region drives the gap. | Done |
+| T-579 | Deterministic seed scenario in the sample-data/seed path: ensure `forecast_history` rows exist for the rolling window anchored to `date.today()` with two knowable deviations — one over-forecast SKU and one under-forecast SKU (fixed SKU index overrides per the P84 precedent; document expected values in the seed comment). Must not disturb the P84 risk bands (2 critical / 2 high / 3 medium) or the P87/P88 order-to-ship narratives. | Done |
+| T-580 | ToolScenarioModal: add "Forecast vs Actual Gap" scenario (Supply Chain category, prompt e.g. "Why is there a gap between the demand forecast and actual demand over the last four weeks?"); sync Playwright spec assertions (P90/P91 precedent). | Done |
 
 Dependencies: none
 
-### Batch B-02 — Tests + live verification + phase sign-off (Test/Review) — Not Started
+### Batch B-02 — Tests + live verification + phase sign-off (Test/Review) — Done (2026-06-12)
 
 | Task | Description | Status |
 |---|---|---|
-| T-581 | Unit tests: weekly bucketing + latest-forecast dedupe, gap/bias classification, ranking determinism, caps + `truncated`, `missing_data` population (no forecast / no actuals), empty-DB shape. Integration tests (full DSN): seeded over/under-forecast SKUs classified as expected. | Not Started |
-| T-582 | Live verification (dev stack, gemma4:12b): the modal prompt end-to-end — `analyze_forecast_deviation` tool events present, reply names the seeded over/under-forecast SKUs. Phase sign-off: `make test-unit && make test-integration && make test-playwright && make build && make lint && make typecheck` — proof-of-execution per gate. | Not Started |
+| T-581 | Unit tests: weekly bucketing + latest-forecast dedupe, gap/bias classification, ranking determinism, caps + `truncated`, `missing_data` population (no forecast / no actuals), empty-DB shape. Integration tests (full DSN): seeded over/under-forecast SKUs classified as expected. | Done |
+| T-582 | Live verification (dev stack, gemma4:12b): the modal prompt end-to-end — `analyze_forecast_deviation` tool events present, reply names the seeded over/under-forecast SKUs. Phase sign-off: `make test-unit && make test-integration && make test-playwright && make build && make lint && make typecheck` — proof-of-execution per gate. | Done |
 
 Dependencies: B-01
 
