@@ -63,9 +63,13 @@ _SYSTEM_PROMPT = (
     "call `identify_binding_constraint` ONCE. "
     "Do NOT separately evaluate capacity, supply-gap, and stockout risks "
     "by assembling your own ranking from individual tool results.\n"
-    "9. Use nl_query for bulk or cross-product questions — pass the question in plain English; "
+    "9. For purchase-earlier/later or order-timing questions (SPEC Q8) — "
+    "call `analyze_supply_order_timing` ONCE. "
+    "`get_delayed_supply_orders` answers 'what is already late by status'; "
+    "`analyze_supply_order_timing` answers 'which orders should arrive sooner or later'.\n"
+    "10. Use nl_query for bulk or cross-product questions — pass the question in plain English; "
     "nl_query generates schema-correct SQL internally.\n"
-    "10. Never fabricate column names or assume columns that are not confirmed by tool results.\n\n"
+    "11. Never fabricate column names or assume columns that are not confirmed by tool results.\n\n"
     "Always ground recommendations in tool results. Do not fabricate quantities or risk scores.\n"
     "Once you have sufficient data from tools, stop calling tools"
     " and produce a final text response.\n"
@@ -116,6 +120,7 @@ _INTENT_TOOL_SUBSET: dict[str, list[str]] = {
         "calculate_expedite_cost",
         "analyze_forecast_deviation",
         "identify_binding_constraint",
+        "analyze_supply_order_timing",
     ],
     # lookup: lightweight read-only tools for factual questions (max_tool_calls=5)
     "lookup": [
@@ -161,6 +166,7 @@ _INTENT_TOOL_SUBSET: dict[str, list[str]] = {
         "analyze_production_plan_gap",
         "analyze_forecast_deviation",
         "identify_binding_constraint",
+        "analyze_supply_order_timing",
     ],
     # cross_domain_analysis: domain_analysis + data quality tools (max_tool_calls=15)
     "cross_domain_analysis": [
@@ -197,6 +203,7 @@ _INTENT_TOOL_SUBSET: dict[str, list[str]] = {
         "analyze_production_plan_gap",
         "analyze_forecast_deviation",
         "identify_binding_constraint",
+        "analyze_supply_order_timing",
     ],
     # decision_support: analytical + execution tools for optimization/approval (max_tool_calls=20)
     "decision_support": [
@@ -228,6 +235,7 @@ _INTENT_TOOL_SUBSET: dict[str, list[str]] = {
         "analyze_production_plan_gap",
         "analyze_forecast_deviation",
         "identify_binding_constraint",
+        "analyze_supply_order_timing",
     ],
 }
 

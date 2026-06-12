@@ -6,6 +6,7 @@ from packages.prediction import DatabasePredictor
 from packages.tools.analyze_forecast_deviation_tool import AnalyzeForecastDeviationTool
 from packages.tools.analyze_production_plan_gap_tool import AnalyzeProductionPlanGapTool
 from packages.tools.analyze_shipment_delay_causes_tool import AnalyzeShipmentDelayCausesTool
+from packages.tools.analyze_supply_order_timing_tool import AnalyzeSupplyOrderTimingTool
 from packages.tools.approval_tool import ApprovalTool
 from packages.tools.audit_tool import AuditLogTool
 from packages.tools.base import Tool, ToolContext, ToolRegistry, ToolResult
@@ -84,6 +85,7 @@ __all__ = [
     "CalculateExcessInventoryRiskTool",
     "CalculateStockoutRiskTool",
     "AnalyzeForecastDeviationTool",
+    "AnalyzeSupplyOrderTimingTool",
     "AnalyzeProductionPlanGapTool",
     "AnalyzeShipmentDelayCausesTool",
     "IdentifyBindingConstraintTool",
@@ -140,4 +142,5 @@ def create_tool_registry(
     registry.register(AnalyzeForecastDeviationTool(db_session=db_session))
     registry.register(AnalyzeProductionPlanGapTool(db_session=db_session))
     registry.register(IdentifyBindingConstraintTool(db_session=db_session))
+    registry.register(AnalyzeSupplyOrderTimingTool(db_session=db_session))
     return registry

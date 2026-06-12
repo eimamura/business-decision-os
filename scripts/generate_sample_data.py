@@ -196,6 +196,57 @@ FORECAST_OVER_WEEKLY_QTY = 6.0   # weekly forecast qty; actual ≈ 3.5/week → 
 FORECAST_UNDER_SKU = "SKU-029"   # under-forecast: forecast << actual
 FORECAST_UNDER_WEEKLY_QTY = 4.0  # weekly forecast qty; actual ≈ 8.4/week → bias ≈ -52%
 
+# ---------------------------------------------------------------------------
+# Deterministic supply-order timing scenario for P95 SPEC Q8
+# (analyze_supply_order_timing tool)
+#
+# SKU selection constraints (must NOT collide with):
+#   - P84 risk-band SKUs: SKU-001..SKU-007
+#   - P87 delay-cause SKUs: SKU-010, SKU-012, SKU-015, SKU-016
+#   - P88 demand-shift SKU: SKU-008 (first non-risk-band in CO-DS orders)
+#   - P89 production SKUs: SKU-026 (overproduction), SKU-001 (underproduction),
+#                          SKU-011..SKU-025 (PRODUCTION_NORMAL_SKUS)
+#   - P94 forecast-deviation SKUs: SKU-028, SKU-029
+#   - NO_OPEN_SUPPLY_SKUS: SKU-002, SKU-004
+#
+# Safe choice: SKU-027 (slow_moving, base_demand_mean=0.8/day, lead_time=60d).
+#
+# Push-out scenario design:
+#   SKU-027 normal inventory provides ~74 days of cover (59 units / 0.8/day).
+#   The P95 seed adds ONE extra open supply order arriving at today+5 with a
+#   small quantity (1 × MOQ = 3 units).
+#
+#   Tool computation:
+#     on_hand ≈ 59 units (from generate_inventory normal path)
+#     avg_daily ≈ 0.8 units/day (30-day rolling average)
+#     projected_stockout_date ≈ today + floor(59/0.8) = today + 73 days
+#     expected_arrival = today + P95_PUSH_OUT_ARRIVAL_DAYS (= today+5)
+#     days_of_cover_at_arrival = (59/0.8) - 5 ≈ 68.75 days ≥ PUSH_OUT_COVER_DAYS (30)
+#     → push_out_candidate
+#     days_misaligned = -floor(68.75 - 30) = -38
+#
+#   Note: the tool's on_hand comes from the *generated* inventory snapshot, which
+#   uses the random path for SKU-027 (not in SKU_RISK_BANDS). The exact on_hand
+#   will vary slightly with seed=42 but will always be >> (5 + 30) × avg_daily
+#   (≈ 28 units) because generate_inventory sets normal_on_hand = daily*(lt_mean+14)
+#   = 0.8*74 ≈ 59 units and gaussian noise is bounded to ±15%.  Minimum realistic
+#   on_hand = round(0.8 * 74 * 0.85) = 50 units → DOC_at_arrival = 50/0.8-5 ≈ 57.5
+#   ≥ 30 → push_out guaranteed.
+#
+# The P95 extra order MUST NOT affect P84 risk-band classifications:
+#   - SKU-027 is not in SKU_RISK_BANDS → no impact on list_stockout_risk.
+#   - The order arrives today+5 which IS within the 7-day horizon → incoming_supply
+#     counts for SKU-027 in list_stockout_risk; but SKU-027 is already ample-cover
+#     so this does not change its "none"/"low" risk category.
+#   - P84 risk SKUs (SKU-001..SKU-007) are unaffected because the override only
+#     applies to SKU-027.
+# ---------------------------------------------------------------------------
+
+PUSH_OUT_CANDIDATE_SKU = "SKU-027"         # slow_moving; ample cover
+PUSH_OUT_CANDIDATE_SUPPLIER = "SUP-003"    # slow_moving supplier
+PUSH_OUT_CANDIDATE_ARRIVAL_DAYS = 5        # today + 5 → within cover, arrival too early
+PUSH_OUT_CANDIDATE_QTY = 3                 # 1 × MOQ for SKU-027
+
 # Deterministic risk-band overrides for the demo query
 # "Which products are at stockout risk this week?" (horizon_days=7, min_risk_level="medium").
 #
@@ -512,6 +563,23 @@ def generate_supply(
                     "quantity": quantity,
                     "status": status,
                 })
+
+        # ---- P95 deterministic push_out_candidate order ----
+        # One extra pending supply order for PUSH_OUT_CANDIDATE_SKU (SKU-027) arriving
+        # today + PUSH_OUT_CANDIDATE_ARRIVAL_DAYS (today+5).  The SKU already has ample
+        # inventory (~74 days of cover), so days_of_cover_at_arrival ≈ 68 days ≥ 30
+        # → analyze_supply_order_timing classifies this order as push_out_candidate.
+        # order_date = today - 2 (recently placed, consistent with fast-arriving order).
+        p95_order_date = date.today() - timedelta(days=2)
+        p95_arrival_date = date.today() + timedelta(days=PUSH_OUT_CANDIDATE_ARRIVAL_DAYS)
+        writer.writerow({
+            "sku_id": PUSH_OUT_CANDIDATE_SKU,
+            "supplier_id": PUSH_OUT_CANDIDATE_SUPPLIER,
+            "order_date": p95_order_date.isoformat(),
+            "expected_arrival": p95_arrival_date.isoformat(),
+            "quantity": PUSH_OUT_CANDIDATE_QTY,
+            "status": "pending",
+        })
 
 
 def generate_cost(

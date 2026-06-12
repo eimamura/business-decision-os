@@ -225,6 +225,14 @@ const CATEGORIES: Category[] = [
         prompt:
           "Why is there a gap between the demand forecast and actual demand over the last four weeks?",
       },
+      {
+        id: "sc-purchase-timing",
+        title: "Purchase Timing Adjustments",
+        description:
+          "Identify open supply orders that should be pulled forward (arriving too late) or pushed out (arriving too early) relative to projected stockout dates",
+        prompt:
+          "Which supply orders should be purchased earlier or later? Identify pull-forward and push-out candidates.",
+      },
     ],
   },
 ];
