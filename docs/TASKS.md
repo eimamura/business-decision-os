@@ -1105,12 +1105,12 @@ Dependencies: none
 
 Dependencies: B-01
 
-### Batch B-03 — Tests + gate (Test/Review) — Not Started
+### Batch B-03 — Tests + gate (Test/Review) — Done
 
 | Task | Description | Status |
 |---|---|---|
-| T-560 | Unit tests: gap classification thresholds, capacity utilization math, impact ranking order is deterministic and documented, `missing_data` (no plan rows / no cost rows), caps. | Not Started |
-| T-561 | Integration tests (real DB): seeded overproduction, underproduction, and capacity-saturation scenarios are detected; binding constraint returned is the seeded capacity-saturated location. | Not Started |
-| T-562 | Batch gate: `make test-unit && make lint && make typecheck` — proof-of-execution per gate. | Not Started |
+| T-560 | Unit tests: gap classification thresholds, capacity utilization math, impact ranking order is deterministic and documented, `missing_data` (no plan rows / no cost rows), caps. | Done |
+| T-561 | Integration tests (real DB): seeded overproduction, underproduction, and capacity-saturation scenarios are detected; binding constraint returned is the seeded capacity-saturated location. | Done |
+| T-562 | Batch gate: `make test-unit && make lint && make typecheck` — proof-of-execution per gate. | Done |
 
 Dependencies: B-02

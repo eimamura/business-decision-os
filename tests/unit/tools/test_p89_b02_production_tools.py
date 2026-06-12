@@ -716,6 +716,46 @@ class TestIdentifyBindingConstraintTool:
         assert result.output["constraints"] == []
         assert result.output["truncated"] is False
 
+    async def test_capacity_units_zero_guard_skips_row(self, tool: Any) -> None:
+        """T-560 gap: capacity_units == 0 row is silently skipped (guard: capacity_units <= 0).
+
+        A production_capacity row with capacity_units=0 is invalid data; dividing planned
+        by 0 would produce inf/NaN.  The guard at line ~368 of identify_binding_constraint_tool
+        skips the row entirely — no constraint is produced, no exception is raised.
+        """
+        cost_rows = [{"sku_id": "SKU-001", "stockout_cost": 500.0}]
+        # capacity_units=0 row — should be silently skipped by the guard
+        cap_rows = [{
+            "location_id": "WH-BAD",
+            "week_start": "2026-06-09",
+            "capacity_units": 0,
+            "planned_units": 250,
+        }]
+        supply_rows: list[Any] = []
+        inv_rows: list[Any] = []
+
+        mock_conn = AsyncMock()
+        mock_conn.fetch.side_effect = [cost_rows, cap_rows, supply_rows, inv_rows]
+        mock_pool = MagicMock()
+        mock_pool.acquire.return_value.__aenter__ = AsyncMock(return_value=mock_conn)
+        mock_pool.acquire.return_value.__aexit__ = AsyncMock(return_value=False)
+
+        with patch(
+            "packages.tools.identify_binding_constraint_tool.get_pool",
+            return_value=mock_pool,
+        ):
+            result = await tool.handle({}, make_ctx())
+
+        # No error key; the bad row is skipped without crashing
+        assert "error" not in result.output
+        cap_constraints = [
+            c for c in result.output["constraints"]
+            if c["constraint_type"] == "production_capacity"
+        ]
+        assert cap_constraints == [], (
+            "A capacity row with capacity_units=0 must not produce a constraint record"
+        )
+
 
 # ===========================================================================
 # T-559 Wiring: registry registration
