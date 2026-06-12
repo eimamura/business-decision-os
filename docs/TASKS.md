@@ -1440,11 +1440,11 @@ covers both states.
 
 Dependencies: P93 Done
 
-### Batch B-01 — Persistent strip (App Builder) — Not Started
+### Batch B-01 — Persistent strip (App Builder) — Done
 
 | Task | Description | Status |
 |---|---|---|
-| T-594 | Rework `DailyExceptionsPanel` placement: slim strip (severity count badges + expand toggle) docked at the top of the chat page in BOTH empty and active-conversation states; expanding shows the existing panel content (top exceptions, Investigate in chat, Run now); collapsed by default during active conversation, expanded by default in empty state; component-state persistence only. Keep existing data-testids; add `daily-exceptions-strip` + `daily-exceptions-toggle`. Quiet-fail unchanged; English-only; design tokens consistent. | Not Started |
+| T-594 | Rework `DailyExceptionsPanel` placement: slim strip (severity count badges + expand toggle) docked at the top of the chat page in BOTH empty and active-conversation states; expanding shows the existing panel content (top exceptions, Investigate in chat, Run now); collapsed by default during active conversation, expanded by default in empty state; component-state persistence only. Keep existing data-testids; add `daily-exceptions-strip` + `daily-exceptions-toggle`. Quiet-fail unchanged; English-only; design tokens consistent. | Done |
 
 Dependencies: none
 

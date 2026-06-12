@@ -1,11 +1,16 @@
 /**
- * T-574: Unit tests for DailyExceptionsPanel component.
+ * T-574 / T-594: Unit tests for DailyExceptionsPanel component.
  *
  * Strategy: vi.mock global fetch at the module level so the component never
- * makes real network calls. Covers three scenarios:
- *   1. Empty state — run is null (no screening run today)
- *   2. Populated state — run with severity counts and exceptions
+ * makes real network calls. Covers the following scenarios:
+ *   1. Empty state — run is null, defaultExpanded=true (empty chat)
+ *   2. Populated state — run with severity counts and exceptions, defaultExpanded=true
  *   3. "Investigate in chat" button injects the expected prompt
+ *   4. Fetch failure renders nothing
+ *   5. Run now button disabled while in-flight
+ *   6. Strip is always rendered; toggle expands/collapses the panel content
+ *   7. Collapsed by default (defaultExpanded=false) — active conversation state
+ *   8. Active conversation: Investigate button accessible after expanding
  */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
@@ -81,8 +86,10 @@ beforeEach(() => {
 });
 
 describe("DailyExceptionsPanel", () => {
-  // T-574 scenario 1: empty state — run is null
-  it("renders the empty state when the API returns run: null", async () => {
+  // ---------------------------------------------------------------------------
+  // Scenario 1: empty state — run is null, defaultExpanded=true (default)
+  // ---------------------------------------------------------------------------
+  it("renders the strip and expanded empty state when the API returns run: null", async () => {
     mockFetchResponse({ run: null });
 
     const onInvestigate = vi.fn();
@@ -92,6 +99,12 @@ describe("DailyExceptionsPanel", () => {
       expect(screen.getByTestId("daily-exceptions-panel")).toBeInTheDocument();
     });
 
+    // Strip row always present
+    expect(screen.getByTestId("daily-exceptions-strip")).toBeInTheDocument();
+    // Toggle button always present
+    expect(screen.getByTestId("daily-exceptions-toggle")).toBeInTheDocument();
+
+    // Expanded by default — empty state content visible
     expect(screen.getByTestId("daily-exceptions-empty")).toBeInTheDocument();
     expect(screen.getByTestId("daily-exceptions-run-now")).toBeInTheDocument();
 
@@ -99,8 +112,10 @@ describe("DailyExceptionsPanel", () => {
     expect(screen.queryByTestId("daily-exceptions-investigate")).not.toBeInTheDocument();
   });
 
-  // T-574 scenario 2: populated state — severity counts and exception rows rendered
-  it("renders severity badges and exception rows when run has data", async () => {
+  // ---------------------------------------------------------------------------
+  // Scenario 2: populated state — severity counts and exception rows rendered
+  // ---------------------------------------------------------------------------
+  it("renders severity badges and exception rows when run has data (defaultExpanded=true)", async () => {
     mockFetchResponse({ run: makeRun() });
 
     const onInvestigate = vi.fn();
@@ -110,11 +125,15 @@ describe("DailyExceptionsPanel", () => {
       expect(screen.getByTestId("daily-exceptions-panel")).toBeInTheDocument();
     });
 
-    // Severity count badges
+    // Strip row present
+    expect(screen.getByTestId("daily-exceptions-strip")).toBeInTheDocument();
+    expect(screen.getByTestId("daily-exceptions-toggle")).toBeInTheDocument();
+
+    // Severity count badges appear in the strip
     expect(screen.getByText(/1 critical/i)).toBeInTheDocument();
     expect(screen.getByText(/1 high/i)).toBeInTheDocument();
 
-    // Exception rows — SKU identifiers and headline metrics
+    // Expanded content visible
     expect(screen.getByText("SKU-001")).toBeInTheDocument();
     expect(screen.getByText("SKU-002")).toBeInTheDocument();
 
@@ -125,7 +144,9 @@ describe("DailyExceptionsPanel", () => {
     expect(screen.getByTestId("daily-exceptions-run-now")).toBeInTheDocument();
   });
 
-  // T-574 scenario 3: "Investigate in chat" injects the correct prompt
+  // ---------------------------------------------------------------------------
+  // Scenario 3: "Investigate in chat" injects the correct prompt
+  // ---------------------------------------------------------------------------
   it("calls onInvestigate with the correct prompt when the investigate button is clicked", async () => {
     mockFetchResponse({ run: makeRun() });
 
@@ -144,7 +165,9 @@ describe("DailyExceptionsPanel", () => {
     );
   });
 
-  // T-574 scenario 4: fetch failure renders nothing (graceful failure)
+  // ---------------------------------------------------------------------------
+  // Scenario 4: fetch failure renders nothing (graceful failure)
+  // ---------------------------------------------------------------------------
   it("renders nothing when the fetch fails", async () => {
     global.fetch = vi.fn().mockRejectedValueOnce(new Error("network error"));
 
@@ -159,7 +182,9 @@ describe("DailyExceptionsPanel", () => {
     });
   });
 
-  // T-574 scenario 5: Run now button is disabled while in flight
+  // ---------------------------------------------------------------------------
+  // Scenario 5: Run now button is disabled while in flight
+  // ---------------------------------------------------------------------------
   it("disables the run-now button while the POST request is in flight", async () => {
     // First fetch: today endpoint returns null run
     global.fetch = vi
@@ -187,5 +212,118 @@ describe("DailyExceptionsPanel", () => {
 
     // Button should be disabled immediately after click
     expect(btn).toBeDisabled();
+  });
+
+  // ---------------------------------------------------------------------------
+  // Scenario 6: toggle collapses and re-expands the panel content
+  // ---------------------------------------------------------------------------
+  it("collapses expanded content when toggle is clicked, then re-expands", async () => {
+    mockFetchResponse({ run: makeRun() });
+
+    const onInvestigate = vi.fn();
+    render(<DailyExceptionsPanel onInvestigate={onInvestigate} />);
+
+    // Wait for panel to render in expanded state (defaultExpanded=true)
+    await waitFor(() => {
+      expect(screen.getByTestId("daily-exceptions-investigate")).toBeInTheDocument();
+    });
+
+    // Strip and toggle always present
+    expect(screen.getByTestId("daily-exceptions-strip")).toBeInTheDocument();
+    const toggle = screen.getByTestId("daily-exceptions-toggle");
+
+    // Click toggle to collapse
+    fireEvent.click(toggle);
+
+    // Expanded content should be gone
+    expect(screen.queryByTestId("daily-exceptions-investigate")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("daily-exceptions-run-now")).not.toBeInTheDocument();
+
+    // Strip is still present
+    expect(screen.getByTestId("daily-exceptions-strip")).toBeInTheDocument();
+
+    // Click toggle again to re-expand
+    fireEvent.click(toggle);
+
+    expect(screen.getByTestId("daily-exceptions-investigate")).toBeInTheDocument();
+    expect(screen.getByTestId("daily-exceptions-run-now")).toBeInTheDocument();
+  });
+
+  // ---------------------------------------------------------------------------
+  // Scenario 7: collapsed by default when defaultExpanded=false (active conv)
+  // ---------------------------------------------------------------------------
+  it("starts collapsed when defaultExpanded=false (active conversation state)", async () => {
+    mockFetchResponse({ run: makeRun() });
+
+    const onInvestigate = vi.fn();
+    render(<DailyExceptionsPanel onInvestigate={onInvestigate} defaultExpanded={false} />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("daily-exceptions-panel")).toBeInTheDocument();
+    });
+
+    // Strip is present
+    expect(screen.getByTestId("daily-exceptions-strip")).toBeInTheDocument();
+    expect(screen.getByTestId("daily-exceptions-toggle")).toBeInTheDocument();
+
+    // Severity badges visible in strip
+    expect(screen.getByText(/1 critical/i)).toBeInTheDocument();
+
+    // Expanded content NOT visible
+    expect(screen.queryByTestId("daily-exceptions-investigate")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("daily-exceptions-run-now")).not.toBeInTheDocument();
+  });
+
+  // ---------------------------------------------------------------------------
+  // Scenario 8: active conversation — Investigate accessible after manual expand
+  // ---------------------------------------------------------------------------
+  it("makes Investigate button accessible after user expands the collapsed strip", async () => {
+    mockFetchResponse({ run: makeRun() });
+
+    const onInvestigate = vi.fn();
+    render(<DailyExceptionsPanel onInvestigate={onInvestigate} defaultExpanded={false} />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("daily-exceptions-strip")).toBeInTheDocument();
+    });
+
+    // Initially collapsed — no investigate button
+    expect(screen.queryByTestId("daily-exceptions-investigate")).not.toBeInTheDocument();
+
+    // User clicks the toggle to expand
+    fireEvent.click(screen.getByTestId("daily-exceptions-toggle"));
+
+    // Now the investigate button is visible and functional
+    const investigateBtn = screen.getByTestId("daily-exceptions-investigate");
+    expect(investigateBtn).toBeInTheDocument();
+
+    fireEvent.click(investigateBtn);
+    expect(onInvestigate).toHaveBeenCalledOnce();
+    expect(onInvestigate).toHaveBeenCalledWith(
+      "What exceptions require human judgment today?"
+    );
+  });
+
+  // ---------------------------------------------------------------------------
+  // Scenario 9: null run + active conversation (collapsed by default)
+  // ---------------------------------------------------------------------------
+  it("shows minimal strip when run=null and defaultExpanded=false", async () => {
+    mockFetchResponse({ run: null });
+
+    const onInvestigate = vi.fn();
+    render(<DailyExceptionsPanel onInvestigate={onInvestigate} defaultExpanded={false} />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("daily-exceptions-panel")).toBeInTheDocument();
+    });
+
+    // Strip present
+    expect(screen.getByTestId("daily-exceptions-strip")).toBeInTheDocument();
+    // "No screening run today" text visible in strip
+    expect(screen.getByText(/No screening run today/i)).toBeInTheDocument();
+
+    // Expanded content NOT visible (collapsed)
+    expect(screen.queryByTestId("daily-exceptions-empty")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("daily-exceptions-run-now")).not.toBeInTheDocument();
   });
 });
