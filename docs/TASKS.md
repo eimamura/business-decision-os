@@ -1072,7 +1072,7 @@ Dependencies: B-01
 
 ---
 
-## P89 — Production Plan & Constraint Analysis (SPEC Q7 / Q10) — In Progress
+## P89 — Production Plan & Constraint Analysis (SPEC Q7 / Q10) — Done (2026-06-11)
 
 **Goal:** The system can answer SPEC Q7 "Which products require production plan adjustments?"
 and Q10 "Which constraint is having the biggest negative impact on sales or profit?". Currently

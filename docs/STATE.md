@@ -40,15 +40,41 @@ See `docs/archive/v3/STATE.md` for P0–P23 per-phase details.
 
 ## Active Phase
 
-P89 — Production Plan & Constraint Analysis (SPEC Q7 / Q10). Programme context:
-P86–P89 close the SPEC gaps (Q3 → Q4 → Q9 → Q7/Q10), planned 2026-06-11 via intake; ADR
-2026-06-11-order-to-ship-and-production-data-domains.md covers P87/P89 schemas.
+None
 
 ## Active Lease
 
-P89 B-03 (Test/Review) — acquired 2026-06-11
+None
 
 ## Last Completed
+
+P89 — Production Plan & Constraint Analysis (SPEC Q7 / Q10) (2026-06-11). Final phase of the
+P86–P89 SPEC gap closure programme (ADR 2026-06-11-order-to-ship-and-production-data-domains).
+Alembic 0020 adds `production_capacity` (16 rows: WH-001 2000/wk, WH-002 1500/wk × 8 weeks)
++ `production_plan` (264 rows) — allowlist now 12 tables. Deterministic seed scenarios:
+SKU-026 overproduction (200/wk vs ~8 demand), SKU-001 underproduction (10/wk vs ~67 — ties
+into P84 critical-risk narrative), WH-001 current week capacity-saturated (2460/2000,
+utilization 1.23 — the intended binding constraint). New tools (registry 35→37):
+`analyze_production_plan_gap` (±25% relative-gap threshold, forecast-else-run-rate demand
+basis, summary counts computed pre-cap after review fix) and `identify_binding_constraint`
+(3 constraint classes — capacity overload, supply gap, inventory stockout exposure — impact
+= units × cost_master.stockout_cost, rank impact desc/subject asc, analytical output only
+per DESIGN.md Cross-Domain constraint). Live-verified: SKU-026/SKU-001 classified correctly;
+WH-001 capacity constraint ranked #1. Mid-batch review fixes: module docstring horizon
+anchor (3rd docstring/code drift this programme — all caught by batch checks), summary
+counts post-truncation. Sign-off PASS (proof-of-execution): unit 1073 exit 0, canonical
+integration 16 exit 0, full-DSN integration 110 passed exit 0, playwright 33/33 exit 0,
+build 0, lint 0, typecheck 0.
+
+Programme summary (P86–P89, all Done 2026-06-11): SPEC Q3 (list_today_exceptions, 5
+screens), Q4 (order-to-ship domain + list_unshipped_orders + analyze_shipment_delay_causes),
+Q9 (detect_demand_shift customer/region), Q7/Q10 (production domain + 2 tools). Registry
+31→37 tools, allowlist 8→12 tables, migrations 0019/0020, unit suite 930→1073, integration
+full-DSN 82→110. Out of scope by settled decision: SPEC Agent Catalog runtime agents (P65
+routing collapse ADR), Q8 (partial coverage accepted), scheduled daily screening job (P69
+Celery decision).
+
+Previously:
 
 P88 — Demand Shift Detection by Customer / Region (SPEC Q9) (2026-06-11). New
 `detect_demand_shift` tool: period-over-period `customer_orders` quantity comparison
