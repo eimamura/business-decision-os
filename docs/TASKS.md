@@ -987,8 +987,8 @@ Dependencies: none
 
 | Task | Description | Status |
 |---|---|---|
-| T-538 | Unit tests for `list_today_exceptions`: severity ordering, per-domain counts, cap + `truncated`, `missing_data` populated when a source domain has no data (zero-demand SKUs), empty-DB shape. Zero-network rule; follow existing tool test patterns. | Not Started |
-| T-539 | Batch gate: `make test-unit && make lint && make typecheck` — proof-of-execution per gate. | Not Started |
+| T-538 | Unit tests for `list_today_exceptions`: severity ordering, per-domain counts, cap + `truncated`, `missing_data` populated when a source domain has no data (zero-demand SKUs), empty-DB shape. Zero-network rule; follow existing tool test patterns. | Done |
+| T-539 | Batch gate: `make test-unit && make lint && make typecheck` — proof-of-execution per gate. | Done |
 
 Dependencies: B-01
 
