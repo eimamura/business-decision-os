@@ -40,14 +40,27 @@ See `docs/archive/v3/STATE.md` for P0–P23 per-phase details.
 
 ## Active Phase
 
-D-010 resolution (P85 defect: registry Tools list empty on fresh process) + P91 (Q7/Q9
-Tool Scenario Modal scenarios)
+None
 
 ## Active Lease
 
-D-010 (App Builder) — acquired 2026-06-12
+None
 
 ## Last Completed
+
+P91 — Tool Scenario Modal: Q7 + Q9 Scenarios (2026-06-12). "Production Plan Adjustments"
+(→ `analyze_production_plan_gap`, SPEC Q7) and "Customer & Region Demand Shifts"
+(→ `detect_demand_shift`, SPEC Q9) added to the Supply Chain category with dedicated
+Playwright tests. All seven SPEC questions with implemented tools now have modal scenarios.
+Same turn: D-010 registered + Resolved (commit f625aa8) — `GET /api/v1/admin/registry`
+returned `tools: []` on a fresh API process because P67's lazy `_RoleToolAllowlist` hooked
+only `__getitem__`/`.get` while P85's `get_registry` iterates `.items()`/`.values()`;
+fixed with iteration-path overrides + fresh-state regression tests; live-verified 37 tools
+on first request after restart. FP-010 recorded (design-contract, record-only). Sign-off
+PASS (proof-of-execution): unit 1075 exit 0, canonical integration 16 exit 0, full-DSN
+integration 110 exit 0, playwright 36/36 exit 0, build 0, lint 0, typecheck 0.
+
+Previously:
 
 P90 — Tool Scenario Modal: Q10 Constraint Analysis Scenario (2026-06-12). "Biggest
 Constraint Impact" scenario (id sc-biggest-constraint-impact, prompt "Which constraint is

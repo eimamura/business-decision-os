@@ -1145,3 +1145,21 @@ Dependencies: P89 Done
 | T-563 | Add one English "Biggest Constraint Impact" scenario to ToolScenarioModal.tsx (Supply Chain category) whose prompt targets `identify_binding_constraint` (e.g. "Which constraint is having the biggest negative impact on sales or profit right now?"); sync the Playwright spec assertions in tests/e2e/playwright/tool_scenario_modal.spec.ts if they enumerate scenario titles. Gate: make test-unit, lint, typecheck, make test-playwright. | Done |
 
 Dependencies: none
+
+---
+
+## P91 — Tool Scenario Modal: Q7 + Q9 Scenarios — Done (2026-06-12)
+
+**Goal:** ToolScenarioModal offers scenarios exercising SPEC Q7 ("Which products require
+production plan adjustments?" via `analyze_production_plan_gap`) and Q9 ("Are there demand
+changes by customer or region?" via `detect_demand_shift`) — the two gaps noted at P90.
+
+Dependencies: P90 Done
+
+### Batch B-01 — Scenarios + spec sync (App Builder) — Done
+
+| Task | Description | Status |
+|---|---|---|
+| T-564 | Add two English scenarios to ToolScenarioModal.tsx Supply Chain category: "Production Plan Adjustments" (prompt targeting `analyze_production_plan_gap`, e.g. "Which products require production plan adjustments over the next four weeks?") and "Customer & Region Demand Shifts" (prompt targeting `detect_demand_shift`, e.g. "Are there demand changes by customer or region this month?"). Sync Playwright spec assertions (P90 precedent). Gate: make test-unit, lint, typecheck, make test-playwright. | Done |
+
+Dependencies: none

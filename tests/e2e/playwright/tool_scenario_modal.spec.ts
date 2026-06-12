@@ -125,6 +125,48 @@ test.describe("ToolScenarioModal (real API backend)", () => {
     });
   });
 
+  test("Supply Chain tab shows Production Plan Adjustments scenario (P91)", async ({
+    page,
+    request,
+    createdSessionIds,
+  }) => {
+    const sessionId = await createSession(request, "Production Plan Adjustments test");
+    createdSessionIds.push(sessionId);
+
+    await page.goto(`/chat/${sessionId}`);
+    await expect(page.locator("textarea")).toBeVisible();
+    await page.getByTitle("Browse all tool scenarios").click();
+    await expect(page.getByRole("dialog")).toBeVisible({ timeout: 5_000 });
+
+    const dialog = page.getByRole("dialog");
+    await dialog.getByRole("button", { name: "Supply Chain" }).click();
+
+    await expect(dialog.getByText("Production Plan Adjustments").first()).toBeVisible({
+      timeout: 5_000,
+    });
+  });
+
+  test("Supply Chain tab shows Customer & Region Demand Shifts scenario (P91)", async ({
+    page,
+    request,
+    createdSessionIds,
+  }) => {
+    const sessionId = await createSession(request, "Customer & Region Demand Shifts test");
+    createdSessionIds.push(sessionId);
+
+    await page.goto(`/chat/${sessionId}`);
+    await expect(page.locator("textarea")).toBeVisible();
+    await page.getByTitle("Browse all tool scenarios").click();
+    await expect(page.getByRole("dialog")).toBeVisible({ timeout: 5_000 });
+
+    const dialog = page.getByRole("dialog");
+    await dialog.getByRole("button", { name: "Supply Chain" }).click();
+
+    await expect(dialog.getByText("Customer & Region Demand Shifts").first()).toBeVisible({
+      timeout: 5_000,
+    });
+  });
+
   test("clicking Forecasting tab shows its scenario cards", async ({
     page,
     request,

@@ -202,6 +202,21 @@ const CATEGORIES: Category[] = [
         prompt:
           "Which constraint is having the biggest negative impact on sales or profit right now?",
       },
+      {
+        id: "sc-production-plan-adjustments",
+        title: "Production Plan Adjustments",
+        description:
+          "Identify products requiring production plan adjustments over the next four weeks using capacity and demand gap analysis",
+        prompt:
+          "Which products require production plan adjustments over the next four weeks?",
+      },
+      {
+        id: "sc-demand-shift",
+        title: "Customer & Region Demand Shifts",
+        description:
+          "Detect demand changes by customer or region this month using demand shift analysis",
+        prompt: "Are there demand changes by customer or region this month?",
+      },
     ],
   },
 ];
