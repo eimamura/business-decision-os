@@ -6,6 +6,7 @@ import { SlidersHorizontal, ChevronDown, Mic, BrainCircuit } from "lucide-react"
 import ExecutionPanel from "@/components/agent/ExecutionPanel";
 import LlmCallsPanel from "@/components/agent/LlmCallsPanel";
 import QuickActionGrid from "@/components/analysis/QuickActionGrid";
+import DailyExceptionsPanel from "@/components/DailyExceptionsPanel";
 import MessageBubble from "@/components/chat/MessageBubble";
 import { ExecutionProgressPanel } from "@/components/ExecutionProgressPanel";
 import { useChat } from "@/hooks/useChat";
@@ -174,6 +175,8 @@ export default function ChatPage({ params }: ChatPageProps) {
                   </div>
                   {/* Quick action cards */}
                   <QuickActionGrid onSelect={(prompt) => setInput(prompt)} />
+                  {/* Daily Exceptions panel — compact, below quick actions */}
+                  <DailyExceptionsPanel onInvestigate={(prompt) => setInput(prompt)} />
                 </div>
               ) : (
                 <div className="space-y-4">

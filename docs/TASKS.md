@@ -1251,11 +1251,11 @@ Verification:
 
 Dependencies: B-01
 
-### Batch B-03 — Web Daily Exceptions panel (App Builder) — Not Started
+### Batch B-03 — Web Daily Exceptions panel (App Builder) — Done (2026-06-12)
 
 | Task | Description | Status |
 |---|---|---|
-| T-574 | Web chat page Daily Exceptions panel: fetch `GET /api/v1/screenings/today` on load; render run date, per-severity counts, and top exceptions (domain + headline); "Investigate in chat" action injects the Q3 prompt ("What exceptions require human judgment today?") into the chat input; "Run now" action calls `POST /run` and refreshes; empty state when no run exists. English-only strings; `data-testid` attributes (`daily-exceptions-panel`, `daily-exceptions-run-now`, `daily-exceptions-investigate`); design tokens consistent with existing components. | Not Started |
+| T-574 | Web chat page Daily Exceptions panel: fetch `GET /api/v1/screenings/today` on load; render run date, per-severity counts, and top exceptions (domain + headline); "Investigate in chat" action injects the Q3 prompt ("What exceptions require human judgment today?") into the chat input; "Run now" action calls `POST /run` and refreshes; empty state when no run exists. English-only strings; `data-testid` attributes (`daily-exceptions-panel`, `daily-exceptions-run-now`, `daily-exceptions-investigate`); design tokens consistent with existing components. | Done |
 
 Dependencies: B-02
 
