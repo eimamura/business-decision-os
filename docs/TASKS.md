@@ -1499,11 +1499,11 @@ Defect Task or an explicitly accepted limitation entry in the report.
 
 Dependencies: P96, P97 Done (quality fixes land first); P98/P99 not required
 
-### Batch B-01 — Run + judge all 10 questions (Judge) — Not Started
+### Batch B-01 — Run + judge all 10 questions (Judge) — Done
 
 | Task | Description | Status |
 |---|---|---|
-| T-598 | For each SPEC Top-10 question (exact wording from docs/SPEC.md table): send it through the live runtime, capture reply + tool events + llm_usage, judge it (dimensions per bdos-judge skill: groundedness, completeness, actionability, correct tool selection; PASS/FAIL + aggregate), classify each FAIL root cause (prompt/tool/model/missing). Write the consolidated report to `docs/judge-reports/2026-06-12-spec10-campaign.md` (per-question evidence: tools called, key entities named, scores, verdicts). | Not Started |
+| T-598 | For each SPEC Top-10 question (exact wording from docs/SPEC.md table): send it through the live runtime, capture reply + tool events + llm_usage, judge it (dimensions per bdos-judge skill: groundedness, completeness, actionability, correct tool selection; PASS/FAIL + aggregate), classify each FAIL root cause (prompt/tool/model/missing). Write the consolidated report to `docs/judge-reports/2026-06-12-spec10-campaign.md` (per-question evidence: tools called, key entities named, scores, verdicts). | Done |
 
 Dependencies: none
 
@@ -1514,3 +1514,43 @@ Dependencies: none
 | T-599 | For each FAIL in the campaign report: register a Defect Task (model-limitation FAILs may instead be recorded as accepted limitations with rationale in the report + DECISIONS.md). Summarize campaign outcome in STATE.md; close the P96–P100 hardening programme. | Not Started |
 
 Dependencies: B-01
+
+#### Defect: D-012
+
+- Discovered: 2026-06-12, P100 judge campaign (docs/judge-reports/2026-06-12-spec10-campaign.md)
+- Symptom: 8/10 campaign sessions exceed num_ctx 16384 in real Ollama context usage (session_events token_cost 17,087–25,252 = 104–154%) → silent truncation → degenerate replies (Q1 FAIL 0.34, Q6 FAIL contribution, Q8 FAIL contribution). `llm_usage.input_tokens` under-measures actual context (max ~5,234 recorded vs 25K real) — the T-593 ≤70% verification measured the wrong signal.
+- Root cause: (1) every agent invocation executes the same tool TWICE (duplicate call before the D-011 guard reroutes), appending two full tool-result blobs to the loop messages; (2) the goal-refinement second invocation re-accumulates the conversation; (3) per-call llm_usage records prompt size pre-truncation, masking overflow.
+- Area: packages/agent/runtime.py (ReAct loop message accumulation, duplicate tool execution), llm_usage recording semantics
+- Owner: App Builder
+- Acceptance: re-run of campaign questions Q1, Q5 (worst, 154%), Q6, Q8 shows real Ollama context usage ≤ 90% of num_ctx on every call; Q1 produces a grounded PASS-quality reply naming the P84 risk SKUs; duplicate identical tool calls do not re-execute or re-append full output (dedupe/cache); saturation measurement uses the true signal.
+- Status: Open
+
+#### Defect: D-013
+
+- Discovered: 2026-06-12, P100 judge campaign (Q6 FAIL 0.32)
+- Symptom: "Which products may face supply shortages next week or next month?" routes to `list_stockout_risk` (wrong axis: current stockout risk, not forward supply shortage); `calculate_supply_gap` / `analyze_supply_risk` never selected; degenerate reply after context overflow.
+- Root cause: prompt_instruction — ControlAgent system prompt has no rule for the supply-shortage-horizon question family.
+- Area: packages/agent/control/control_agent.py (_SYSTEM_PROMPT, intent subsets)
+- Owner: App Builder
+- Acceptance: Q6 exact SPEC wording selects a supply-gap tool (calculate_supply_gap or analyze_supply_risk) and the reply names seeded supply-gap SKUs; rule kept tight (context budget).
+- Status: Open
+
+#### Defect: D-014
+
+- Discovered: 2026-06-12, P100 judge campaign (Q8 FAIL 0.48)
+- Symptom: when the goal-refinement loop runs a second agent invocation, the final assembled reply CONCATENATES the degenerate first-invocation text with the grounded second-invocation text (user sees an apology paragraph followed by the real answer).
+- Root cause: response assembly does not discard a superseded/degenerate first-run segment when refinement succeeds.
+- Area: packages/agent/orchestrator (response assembly / refinement merge path)
+- Owner: App Builder
+- Acceptance: when refinement produces a non-degenerate reply, the degenerate first segment is dropped; covered by a unit test.
+- Status: Open
+
+#### Defect: D-015
+
+- Discovered: 2026-06-12, P100 judge campaign (Q1 reply degraded to mixed French/English apology)
+- Symptom: French-language fragments bleed into user-facing replies on degenerate paths; campaign attributes injection to set_goal/evaluate_goal node outputs entering the reply path.
+- Root cause: goal-node outputs are not constrained to English and can leak into the synthesized reply when upstream text is degenerate.
+- Area: packages/agent (goal nodes prompts / synthesize fallback inputs)
+- Owner: App Builder
+- Acceptance: goal-node prompts pin output language to English; no non-English fragments in replies across the D-012 re-run; unit guard where feasible.
+- Status: Open
