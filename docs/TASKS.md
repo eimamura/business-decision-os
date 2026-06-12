@@ -958,7 +958,7 @@ Dependencies: B-01
 
 ---
 
-## P86 — Today's Exceptions Screening Tool (SPEC Q3) — In Progress
+## P86 — Today's Exceptions Screening Tool (SPEC Q3) — Done (2026-06-11)
 
 **Goal:** The system can answer SPEC Q3 "What exceptions require human judgment today?" — the
 MVP validation question with the highest stated daily value — via a single deterministic
@@ -983,7 +983,7 @@ Dependencies: P85 Done
 
 Dependencies: none
 
-### Batch B-02 — Tests + gate (Test/Review) — Not Started
+### Batch B-02 — Tests + gate (Test/Review) — Done
 
 | Task | Description | Status |
 |---|---|---|

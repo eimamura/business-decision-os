@@ -40,15 +40,27 @@ See `docs/archive/v3/STATE.md` for P0–P23 per-phase details.
 
 ## Active Phase
 
-P86 — Today's Exceptions Screening Tool (SPEC Q3). Programme context: P86–P89 close the
-SPEC gaps (Q3 → Q4 → Q9 → Q7/Q10), planned 2026-06-11 via intake; ADR
+P87 — Order-to-Ship Data Domain: Shipment Delay Root Causes (SPEC Q4). Programme context:
+P86–P89 close the SPEC gaps (Q3 → Q4 → Q9 → Q7/Q10), planned 2026-06-11 via intake; ADR
 2026-06-11-order-to-ship-and-production-data-domains.md covers P87/P89 schemas.
 
 ## Active Lease
 
-P86 B-02 (Test/Review) — acquired 2026-06-11
+P87 B-01 (App Builder) — acquired 2026-06-11
 
 ## Last Completed
+
+P86 — Today's Exceptions Screening Tool (SPEC Q3) (2026-06-11). New `list_today_exceptions`
+tool (read_only, deterministic) aggregates four screens — stockout risk critical/high,
+delayed inbound supply, recent demand anomalies (7d), data quality issues (via
+`catalog_repo.get_null_profile`, no f-string SQL after batch-check fix) — into one
+severity-ranked exception list (cap 50 + `truncated`, mandatory `missing_data`). Wired into
+all five `_INTENT_TOOL_SUBSET` intents (registry 31→32) + system prompt rule (call once,
+never loop detectors); ToolScenarioModal "Daily Exception Review" scenario added. 23 new
+unit tests. Sign-off PASS (proof-of-execution): unit 957 passed exit 0, integration 16
+passed exit 0, playwright 33/33 exit 0, build 0, lint 0, typecheck 0.
+
+Previously:
 
 P85 — Agents & Tools Registry: Tool Execution Stats Restoration (2026-06-11). Tools tab on `/agents` was frozen since P20 (commit d0977b8, 2026-06-03) removed the `tool_completed` SSE event: the admin registry query still aggregated the dead event type, AND the replacement tool `graph_node` events were put directly on the raw SSE queue by `AgentRuntime`, bypassing `SessionOrchestrator._push`/`_event_persister` — streamed live, never written to `session_events`. Fixed: new `_emit(event, sse_queue, persister)` helper in `runtime.py` routes tool start/end, `awaiting_approval`, and `session_paused` events to both the queue and the persister (passed via graph `configurable["event_persister"]` at all three config-build sites); `get_registry` tool stats now aggregate `graph_node` kind=tool event=end rows by `payload->>'name'`. D-009 registered+Resolved during sign-off (pre-existing, NOT P85: two ask_user integration tests latent-broken since P78 deterministic routing — stub registries lacked a control-role model; reproduced at baseline d05b122; test-side fix). FP-003 Count → 3 (D-001, D-002, D-009): /harden-system FP-003 required before next phase. Sign-off PASS (proof-of-execution): unit 930 passed exit 0, lint 0, typecheck 0, integration 16 passed exit 0, build 0, playwright 32/32 exit 0. Live verification deferred to user (curl POST denied): run any tool-calling query in the UI, then check /agents Tools tab.
 
