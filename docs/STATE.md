@@ -40,16 +40,25 @@ See `docs/archive/v3/STATE.md` for P0–P23 per-phase details.
 
 ## Active Phase
 
-P96 — Supply Order Timing: push_out Signal Quality (first of the P96–P100 MVP hardening
-programme approved 2026-06-12: P96 push_out noise, P97 context saturation, P98 persistent
-exceptions strip, P99 scheduler hardening, P100 judge campaign; auth + ERP re-confirmed
-out of scope).
+P97 — Context Saturation Mitigation (P96–P100 MVP hardening programme).
 
 ## Active Lease
 
-P96-B-01 (App Builder — threshold refinement)
+P97-B-01 (App Builder — forensics + bounded fix)
 
 ## Last Completed
+
+P96 — Supply Order Timing: push_out Signal Quality (2026-06-12). push_out classification
+moved from flat `cover ≥ 30d` (32/40 orders flagged on seed) to a relative lead-time
+window: future arrivals only AND doc_at_arrival ∈ [3×LT, 5×LT) (PUSH_OUT_K_FLOOR=3,
+PUSH_OUT_K_CEIL=5, LT from sku_master.lead_time_days_mean; ≥5×LT = structurally
+over-stocked → strategic review, not tactical flag; `lead_time_days` added to output
+rows). Seeded result: 5/40 push_out (12.5%, all SKU-027 ranked #1 by |days_misaligned|),
+pull_forward 8 unchanged vs P95 (SKU-001 +9d intact). Sign-off PASS (proof-of-execution):
+unit 1177 exit 0, full-DSN integration 156 exit 0, playwright 42/42 exit 0, build 0,
+lint 0, typecheck 0.
+
+Previously:
 
 P95 — Supply Order Timing Analysis (SPEC Q8) (2026-06-12). Final phase of the P93–P95 MVP
 gap closure programme (user-approved 2026-06-12; supersedes the 2026-06-11 "Q8 partial

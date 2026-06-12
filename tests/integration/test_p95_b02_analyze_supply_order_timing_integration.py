@@ -580,9 +580,15 @@ async def test_t589_sku027_ranked_first_among_push_out_rows() -> None:
 async def test_t589_pull_forward_results_unchanged_from_p95() -> None:
     """T-589 AC1: pull_forward logic and results must be byte-identical to P95.
 
-    P95 seed guarantees 8 pull_forward orders including SKU-001 with positive
-    days_misaligned. The T-589 changes only affect push_out classification;
-    pull_forward (arrival > stockout) is untouched.
+    P95 seed guarantees exactly 8 pull_forward orders (7 risk-band SKUs each with
+    at least one non-delivered order pushed to today+10 by generate_supply, plus the
+    composite count matches seed=42 determinism).  SKU-001 must be present with
+    days_misaligned == +9 (critical-band DOC ≈ 2 days → stockout≈today+2;
+    expected_arrival=today+10 → misaligned by 10-2+1=9 days; verified against
+    the seeded dev DB on 2026-06-12).
+
+    The T-589 changes only affect push_out classification; pull_forward
+    (arrival > stockout) is untouched.
     """
     from packages.tools.analyze_supply_order_timing_tool import AnalyzeSupplyOrderTimingTool
 
@@ -591,20 +597,23 @@ async def test_t589_pull_forward_results_unchanged_from_p95() -> None:
     out = result.output
     pull_orders = [o for o in out["orders"] if o["classification"] == "pull_forward_candidate"]
 
-    # P95 guarantees >= 1 pull_forward (P84 risk-band SKUs push supply to today+10)
-    assert len(pull_orders) >= 1, (
-        "Expected at least 1 pull_forward_candidate — P84 risk-band supply guarantee"
+    # T-590(c): seeded DB must yield exactly 8 pull_forward orders.
+    assert out["summary"]["pull_forward_count"] == 8, (
+        f"Expected pull_forward_count == 8 (P95 seed guarantee), "
+        f"got {out['summary']['pull_forward_count']}"
+    )
+    assert len(pull_orders) == 8, (
+        f"Expected 8 pull_forward rows, got {len(pull_orders)}"
     )
 
-    # SKU-001 must be pull_forward with positive days_misaligned (same as P95)
+    # SKU-001 must be pull_forward with days_misaligned == +9 (T-590(c)).
     sku001_pf = [o for o in pull_orders if o["sku_id"] == _PULL_FORWARD_SKU]
     assert len(sku001_pf) >= 1, (
         f"{_PULL_FORWARD_SKU} must appear as pull_forward_candidate"
     )
     for order in sku001_pf:
-        assert order["days_misaligned"] > 0, (
-            f"{_PULL_FORWARD_SKU}: expected positive days_misaligned, "
+        assert order["days_misaligned"] == 9, (
+            f"{_PULL_FORWARD_SKU} order {order['order_id']}: "
+            f"expected days_misaligned == 9 (T-590 P95 parity), "
             f"got {order['days_misaligned']}"
         )
-    # pull_forward summary count must be >= 1
-    assert out["summary"]["pull_forward_count"] >= 1

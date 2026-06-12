@@ -99,6 +99,7 @@ Full task history for P0–P23 is archived at `docs/archive/v3/TASKS.md`.
 | P93 — Daily Screening Job + Exceptions Surface | T-570–T-576 | 2026-06-12 |
 | P94 — Forecast Deviation Decomposition (SPEC Q5) | T-577–T-582 | 2026-06-12 |
 | P95 — Supply Order Timing Analysis (SPEC Q8) | T-583–T-588 | 2026-06-12 |
+| P96 — Supply Order Timing: push_out Signal Quality | T-589–T-590 | 2026-06-12 |
 
 > **Design Realignment Note (2026-06-05):** P29–P36 built Specialist Domain Agents (DemandAgent,
 > InventoryAgent, SupplyPlanningAgent, FinanceImpactAgent, SopAgent) as independent runtime units.
@@ -1350,7 +1351,7 @@ Dependencies: B-01
 
 ---
 
-## P96 — Supply Order Timing: push_out Signal Quality — Not Started
+## P96 — Supply Order Timing: push_out Signal Quality — Done (2026-06-12)
 
 **Goal:** Reduce push_out_candidate noise in `analyze_supply_order_timing`. P95 seed data
 yields 32/40 orders flagged push_out with the flat `days_of_cover_at_arrival >= 30`
@@ -1370,11 +1371,11 @@ Dependencies: P95 Done
 
 Dependencies: none
 
-### Batch B-02 — Tests + phase sign-off (Test/Review) — Not Started
+### Batch B-02 — Tests + phase sign-off (Test/Review) — Done
 
 | Task | Description | Status |
 |---|---|---|
-| T-590 | Update/extend integration tests: seeded DB assertions for the new threshold (SKU-027 flagged + first; push_out share ≤ 25%; pull_forward set unchanged vs P95). Unit boundary tests for the new rule. Phase sign-off: `make test-unit && make test-integration && make test-playwright && make build && make lint && make typecheck` — proof-of-execution per gate. | Not Started |
+| T-590 | Update/extend integration tests: seeded DB assertions for the new threshold (SKU-027 flagged + first; push_out share ≤ 25%; pull_forward set unchanged vs P95). Unit boundary tests for the new rule. Phase sign-off: `make test-unit && make test-integration && make test-playwright && make build && make lint && make typecheck` — proof-of-execution per gate. | Done |
 
 Dependencies: B-01
 

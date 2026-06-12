@@ -783,3 +783,109 @@ def test_push_out_thresholds_are_ordered() -> None:
     assert PUSH_OUT_K_FLOOR < PUSH_OUT_K_CEIL, (
         f"PUSH_OUT_K_FLOOR ({PUSH_OUT_K_FLOOR}) must be < PUSH_OUT_K_CEIL ({PUSH_OUT_K_CEIL})"
     )
+
+
+# ---------------------------------------------------------------------------
+# T-590(f): Floor boundary — just-below vs at/above PUSH_OUT_K_FLOOR × LT
+# ---------------------------------------------------------------------------
+
+
+async def test_floor_boundary_just_below_floor_is_on_track() -> None:
+    """doc_at_arrival = PUSH_OUT_K_FLOOR × LT - 1 → on_track (just below floor).
+
+    Setup (lt=10, floor=3×10=30, ceil=5×10=50):
+      on_hand=34, avg_daily=1 → DOC=34d, stockout=today+34
+      arrival=today+5 → doc_at_arrival=34-5=29
+      29 < floor=30 → NOT push_out → on_track.
+    """
+    from packages.tools.analyze_supply_order_timing_tool import AnalyzeSupplyOrderTimingTool, PUSH_OUT_K_FLOOR
+
+    today = datetime.date.today()
+    lt = 10.0
+    floor = int(PUSH_OUT_K_FLOOR * lt)  # 30
+    days_until = 5
+    doc_at_arr = floor - 1  # 29 — just below floor
+    on_hand = float(doc_at_arr + days_until)  # 34
+    orders = [_order("SKU-JBF", expected_arrival=today + datetime.timedelta(days=days_until))]
+    inv = [_inv("SKU-JBF", on_hand)]
+    demand = [_demand("SKU-JBF", 1.0)]
+    lt_rows = [_lead_time("SKU-JBF", lt)]
+
+    with patch(_PATCH, return_value=_make_pool(orders, inv, demand, lt_rows)):
+        result = await AnalyzeSupplyOrderTimingTool().handle({}, make_ctx())
+
+    row = result.output["orders"][0]
+    assert row["classification"] == "on_track", (
+        f"doc_at_arrival={row['days_of_cover_at_arrival']} (floor-1={doc_at_arr}) "
+        f"should be on_track but got {row['classification']!r}"
+    )
+    assert row["days_misaligned"] == 0
+
+
+async def test_floor_boundary_at_floor_is_push_out() -> None:
+    """doc_at_arrival = PUSH_OUT_K_FLOOR × LT exactly → push_out_candidate (at floor).
+
+    Setup (lt=10, floor=3×10=30, ceil=5×10=50):
+      on_hand=35, avg_daily=1 → DOC=35d, stockout=today+35
+      arrival=today+5 → doc_at_arrival=35-5=30
+      30 >= floor=30 AND 30 < ceil=50 AND days_until=5 >= 0 → push_out_candidate.
+      days_misaligned = -floor(30 - 30) = 0.
+    """
+    from packages.tools.analyze_supply_order_timing_tool import AnalyzeSupplyOrderTimingTool, PUSH_OUT_K_FLOOR
+
+    today = datetime.date.today()
+    lt = 10.0
+    floor = int(PUSH_OUT_K_FLOOR * lt)  # 30
+    days_until = 5
+    doc_at_arr = floor  # exactly at floor = 30
+    on_hand = float(doc_at_arr + days_until)  # 35
+    orders = [_order("SKU-ATF", expected_arrival=today + datetime.timedelta(days=days_until))]
+    inv = [_inv("SKU-ATF", on_hand)]
+    demand = [_demand("SKU-ATF", 1.0)]
+    lt_rows = [_lead_time("SKU-ATF", lt)]
+
+    with patch(_PATCH, return_value=_make_pool(orders, inv, demand, lt_rows)):
+        result = await AnalyzeSupplyOrderTimingTool().handle({}, make_ctx())
+
+    row = result.output["orders"][0]
+    assert row["classification"] == "push_out_candidate", (
+        f"doc_at_arrival={row['days_of_cover_at_arrival']} (exactly at floor={doc_at_arr}) "
+        f"should be push_out_candidate but got {row['classification']!r}"
+    )
+    # days_misaligned = -floor(30 - 30) = 0
+    assert row["days_misaligned"] == 0
+
+
+async def test_floor_boundary_above_floor_is_push_out() -> None:
+    """doc_at_arrival = PUSH_OUT_K_FLOOR × LT + 1 → push_out_candidate (above floor).
+
+    Setup (lt=10, floor=3×10=30, ceil=5×10=50):
+      on_hand=36, avg_daily=1 → DOC=36d, stockout=today+36
+      arrival=today+5 → doc_at_arrival=36-5=31
+      31 >= floor=30 AND 31 < ceil=50 AND days_until=5 >= 0 → push_out_candidate.
+      days_misaligned = -floor(31 - 30) = -1.
+    """
+    from packages.tools.analyze_supply_order_timing_tool import AnalyzeSupplyOrderTimingTool, PUSH_OUT_K_FLOOR
+
+    today = datetime.date.today()
+    lt = 10.0
+    floor = int(PUSH_OUT_K_FLOOR * lt)  # 30
+    days_until = 5
+    doc_at_arr = floor + 1  # 31 — just above floor
+    on_hand = float(doc_at_arr + days_until)  # 36
+    orders = [_order("SKU-ABF", expected_arrival=today + datetime.timedelta(days=days_until))]
+    inv = [_inv("SKU-ABF", on_hand)]
+    demand = [_demand("SKU-ABF", 1.0)]
+    lt_rows = [_lead_time("SKU-ABF", lt)]
+
+    with patch(_PATCH, return_value=_make_pool(orders, inv, demand, lt_rows)):
+        result = await AnalyzeSupplyOrderTimingTool().handle({}, make_ctx())
+
+    row = result.output["orders"][0]
+    assert row["classification"] == "push_out_candidate", (
+        f"doc_at_arrival={row['days_of_cover_at_arrival']} (floor+1={doc_at_arr}) "
+        f"should be push_out_candidate but got {row['classification']!r}"
+    )
+    assert row["days_misaligned"] == -1, (
+        f"Expected days_misaligned=-1 (excess=1), got {row['days_misaligned']}"
+    )
