@@ -40,16 +40,38 @@ See `docs/archive/v3/STATE.md` for P0–P23 per-phase details.
 
 ## Active Phase
 
-P100 — SPEC 10-Question Judge Evaluation Campaign (final phase of the P96–P100 MVP
-hardening programme).
+None
 
 ## Active Lease
 
-P100-B-01 (Judge — run + judge all 10 questions)
+None
 
 ## Last Completed
 
-P99 — Screening Scheduler Multi-Process Hardening (2026-06-12). New
+P100 — SPEC 10-Question Judge Evaluation Campaign (2026-06-12). All 10 SPEC questions run
+live (gemma4:12b) and judged: 7 PASS / 3 FAIL (report:
+docs/judge-reports/2026-06-12-spec10-campaign.md). The 3 FAILs produced four Defect Tasks,
+all Resolved same-day (commit fb29591): D-012 — campaign's 104–154% context readings were
+an operator.add SUM artifact (true per-call peaks 29–40%), but duplicate tool execution
+was real (D-011 guard fired post-execution) → pre-execution dedupe + `peak_input_tokens`
+as the authoritative saturation signal + minimal guard-synthesis prompt; D-013 — Q6 had
+no routing rule and `calculate_supply_gap` is per-SKU-only → prompt rule 2b routes bulk
+supply-shortage queries via nl_query; D-014 — goal-refinement concatenated degenerate
+first-run text → `text_reset` SSE + web client clears in-progress text (both SSE loops,
+vitest); D-015 — French bleed from goal nodes → English-only pinned in
+SET_GOAL/EVALUATE_GOAL prompts. Live re-verification: Q1/Q5/Q6/Q8 grounded, peaks ≤40% of
+num_ctx, no duplicates, no non-English fragments. Failure analysis: FP-011 Count→2
+(escalated: /harden-system applied AGENTS.md prohibition on SUM-signal saturation checks +
+2 pinning tests in test_peak_input_tokens_saturation_signal.py), FP-012/013/014 recorded.
+
+Programme summary (P96–P100, all Done 2026-06-12): push_out relative lead-time window
+(32/40→5/40 flagged), context saturation fixed at BOTH ends (synthesize payload slim
+14080→222 tokens + loop pre-exec dedupe + authoritative peak signal), Daily Exceptions
+persistent strip, scheduler advisory-lock hardening, judge campaign 7/10 PASS with all
+FAIL root causes fixed. Unit suite 1170→1234, playwright 42→45. Gate deviation: full
+integration suite skipped for P98–P100 sign-offs (user decision, DECISIONS.md 2026-06-12)
+— next phase touching packages/ or apps/api MUST run `make test-integration` full-DSN.
+Out of scope by user decision: auth, real ERP integration. New
 `_run_scheduled_tick(triggered_by)` in apps/api/screening.py wraps schedule/startup runs
 in `pg_try_advisory_lock(_SCREENING_ADVISORY_LOCK_KEY=0x73637265656E` — "screen" packed
 int64`)` on a dedicated pool connection (unlock in finally, same connection) +

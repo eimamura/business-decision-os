@@ -90,6 +90,7 @@ The following are explicitly forbidden across all agents:
 - Force-pushing to `main`; direct pushes to `main`; non-linear history.
 - Using `--no-verify` or skipping commit hooks without explicit ADR justification.
 - Using a plain HTTP stub for the web container; `compose web.build.context` must be the monorepo root.
+- Using `state["input_tokens"]` (the `operator.add` SUM accumulator in `AgentState`) for context-saturation threshold checks or live verification because the SUM always exceeds `num_ctx` for multi-call runs and produces false-safe readings; the authoritative saturation signal is `peak_input_tokens` (per-call max, surfaced in the `agent_end` SSE `token_cost.peak_input_tokens` field). Any new token metric that is a SUM must document "sum-not-peak" at its definition site.
 
 ## Commit Convention
 

@@ -1488,7 +1488,7 @@ Dependencies: B-01
 
 ---
 
-## P100 — SPEC 10-Question Judge Evaluation Campaign — Not Started
+## P100 — SPEC 10-Question Judge Evaluation Campaign — Done (2026-06-12)
 
 **Goal:** Cross-sectional answer-quality measurement of the post-P96/P97 system, replacing
 spot checks. Done when: all 10 SPEC questions have been run end-to-end on the live stack
@@ -1507,11 +1507,11 @@ Dependencies: P96, P97 Done (quality fixes land first); P98/P99 not required
 
 Dependencies: none
 
-### Batch B-02 — Defect registration + programme close (Orchestrator) — Not Started
+### Batch B-02 — Defect registration + programme close (Orchestrator) — Done (2026-06-12)
 
 | Task | Description | Status |
 |---|---|---|
-| T-599 | For each FAIL in the campaign report: register a Defect Task (model-limitation FAILs may instead be recorded as accepted limitations with rationale in the report + DECISIONS.md). Summarize campaign outcome in STATE.md; close the P96–P100 hardening programme. | Not Started |
+| T-599 | For each FAIL in the campaign report: register a Defect Task (model-limitation FAILs may instead be recorded as accepted limitations with rationale in the report + DECISIONS.md). Summarize campaign outcome in STATE.md; close the P96–P100 hardening programme. | Done |
 
 Dependencies: B-01
 
@@ -1530,7 +1530,7 @@ Dependencies: B-01
   - packages/agent/runtime.py `_synthesize_from_tools_node`: Changed from full control agent system prompt to a minimal targeted synthesis prompt to prevent gemma4:12b confusion when forced to synthesize.
   - scripts/verify_d012_d015.py: Reads `token_cost.peak_input_tokens` from agent_end SSE events; per-run duplicate detection (D-012 applies within a single agent run, not across goal-refinement passes).
   - Live verification (2026-06-12): Q1 6300 tokens (38.5%), Q5 6524 (39.8%), Q6 5198 (31.7%), Q8 4819 (29.4%) — all ≤ 90% cap (14745 tokens). ALL 4 QUESTIONS PASSED.
-- Status: Open
+- Status: Resolved (commit fb29591: pre-execution tool-call dedupe routes to synthesize_from_tools before re-running; peak_input_tokens per-call signal replaces summed token_cost — campaign >100% readings were an operator.add sum artifact, true per-call peaks 29-40%; minimal synthesis prompt fixes guard-path degeneration. Live Q1/Q5/Q6/Q8 all <=40% of num_ctx, grounded.)
 
 #### Defect: D-013
 
@@ -1545,7 +1545,7 @@ Dependencies: B-01
   - scripts/verify_d012_d015.py Q6 spec: Updated `expected_tool` from `calculate_supply_gap` to `nl_query` (per-SKU tool cannot answer bulk "which products" query); removed `expected_tools_not_repeat` from Q6 (nl_query may be called with different SQL in two legitimate queries).
   - tests/unit/test_d013_d015_prompt_guards.py: All D-013 guards preserved; rule 2b now also mentions `calculate_supply_gap` for single-SKU analysis so unit tests pass.
   - Live verification (2026-06-12): Q6 uses `nl_query` (not `list_stockout_risk`), tokens 5198 (31.7%), reply names SKU-015/SKU-012/SKU-007/SKU-001/SKU-002/SKU-003. PASS.
-- Status: Open
+- Status: Resolved (commit fb29591: prompt rule 2b routes bulk supply-shortage-horizon queries to nl_query with correlated-subquery guidance — calculate_supply_gap is per-SKU and cannot answer the bulk question; refinement pass now mandates tool calls. Live Q6: nl_query selected, reply names supply-gap SKUs with quantities.)
 
 #### Defect: D-014
 
@@ -1560,7 +1560,7 @@ Dependencies: B-01
   - packages/agent/orchestrator/session_orchestrator.py `_is_degenerate_reply`: Added helper checking against `_DEGENERATE_REPLY_PATTERNS` and `_DEGENERATE_REPLY_MIN_LEN` to classify degenerate apology/fallback responses.
   - Live verification (2026-06-12): Q1 `text_reset` event fires (1 per session), degenerate first segment discarded by client. Q8 `no_degenerate_prefix` check passes.
   - apps/web/app/chat/ChatStateContext.tsx: Added `text_reset` handler in both SSE loops — resets `hasStreamedRef` and clears assistant message content so subsequent `text_delta` events rebuild from empty; covered by new vitest scenario in `ChatStateContext.text_delta.test.tsx` (7/7 pass).
-- Status: Open
+- Status: Resolved (commit fb29591: server emits text_reset SSE before refinement re-stream; web client clears in-progress assistant text in both SSE loops; vitest abc->reset->xyz==xyz.)
 
 #### Defect: D-015
 
@@ -1575,4 +1575,4 @@ Dependencies: B-01
   - packages/agent/orchestrator/prompts.py `EVALUATE_GOAL_SYSTEM`: Added "Always write in English only" to the `missing` field rule, preventing French evaluation feedback from entering the refinement instruction path.
   - tests/unit/test_d013_d015_prompt_guards.py: Unit tests verify English-only instructions in both prompts (T-D015-a, T-D015-b, T-D015-c).
   - Live verification (2026-06-12): No non-English fragments detected in Q1/Q5/Q6/Q8 replies. PASS.
-- Status: Open
+- Status: Resolved (commit fb29591: SET_GOAL_SYSTEM/EVALUATE_GOAL_SYSTEM pin English-only output; no non-English fragments in live re-runs; unit prompt guards added.)
