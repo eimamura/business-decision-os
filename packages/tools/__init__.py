@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 from packages.prediction import DatabasePredictor
+from packages.tools.analyze_shipment_delay_causes_tool import AnalyzeShipmentDelayCausesTool
 from packages.tools.approval_tool import ApprovalTool
 from packages.tools.audit_tool import AuditLogTool
 from packages.tools.base import Tool, ToolContext, ToolRegistry, ToolResult
@@ -29,6 +30,7 @@ from packages.tools.inventory_stockout_risk_tool import CalculateStockoutRiskToo
 from packages.tools.job_dispatch_tool import JobDispatchTool
 from packages.tools.list_stockout_risk_tool import ListStockoutRiskTool
 from packages.tools.list_today_exceptions_tool import ListTodayExceptionsTool
+from packages.tools.list_unshipped_orders_tool import ListUnshippedOrdersTool
 from packages.tools.nl_query_tool import NlQueryTool
 from packages.tools.optimizer_tool import OptimizerTool
 from packages.tools.simulation_tool import SimulationTool
@@ -76,8 +78,10 @@ __all__ = [
     "CalculateDaysOfInventoryTool",
     "CalculateExcessInventoryRiskTool",
     "CalculateStockoutRiskTool",
+    "AnalyzeShipmentDelayCausesTool",
     "ListStockoutRiskTool",
     "ListTodayExceptionsTool",
+    "ListUnshippedOrdersTool",
     "TableSchemaReaderTool",
     "TrainForecastTool",
     "create_tool_registry",
@@ -120,6 +124,8 @@ def create_tool_registry(
     registry.register(CalculateStockoutRiskTool(db_session=db_session))
     registry.register(ListStockoutRiskTool(db_session=db_session))
     registry.register(ListTodayExceptionsTool(db_session=db_session))
+    registry.register(ListUnshippedOrdersTool(db_session=db_session))
+    registry.register(AnalyzeShipmentDelayCausesTool(db_session=db_session))
     registry.register(CalculateExcessInventoryRiskTool(db_session=db_session))
     registry.register(GetAvailableToPromiseTool(db_session=db_session))
     return registry

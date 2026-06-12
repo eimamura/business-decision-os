@@ -1018,13 +1018,13 @@ Dependencies: P86 Done (sequential execution; no technical coupling)
 
 Dependencies: none
 
-### Batch B-02 — Shipment delay tools + wiring (App Builder) — Not Started
+### Batch B-02 — Shipment delay tools + wiring (App Builder) — Done
 
 | Task | Description | Status |
 |---|---|---|
-| T-543 | New tool `list_unshipped_orders`: open/allocated customer orders past or near `requested_ship_date`, with per-order context (on_hand at ship-from location, open inbound supply for the SKU). Hybrid output contract (cap + `truncated`, `missing_data`). | Not Started |
-| T-544 | New tool `analyze_shipment_delay_causes`: cross-references customer_orders × shipments × inventory_snapshot × supply_orders to classify each delayed/unshipped order into root-cause candidates — inventory_shortage (insufficient on_hand), upstream_supply_delay (open delayed supply order for the SKU), warehouse_processing_delay (actual_ship_date > planned_ship_date), carrier_delay (shipped on time, delivered/projected late), unknown (facts insufficient → listed in `missing_data`). Returns per-cause counts + capped order details. Deterministic classification only — no LLM calls inside the tool. | Not Started |
-| T-545 | Layer 3 wiring: add both tools to `_INTENT_TOOL_SUBSET` (`supply_chain`, `domain_analysis`, `cross_domain_analysis`, `decision_support`; `list_unshipped_orders` also in `lookup`). System prompt priority rule for shipment-delay questions. ToolScenarioModal: one English shipment-delay scenario; `list_today_exceptions` (P86) gains unshipped-orders as a fifth exception domain. | Not Started |
+| T-543 | New tool `list_unshipped_orders`: open/allocated customer orders past or near `requested_ship_date`, with per-order context (on_hand at ship-from location, open inbound supply for the SKU). Hybrid output contract (cap + `truncated`, `missing_data`). | Done |
+| T-544 | New tool `analyze_shipment_delay_causes`: cross-references customer_orders × shipments × inventory_snapshot × supply_orders to classify each delayed/unshipped order into root-cause candidates — inventory_shortage (insufficient on_hand), upstream_supply_delay (open delayed supply order for the SKU), warehouse_processing_delay (actual_ship_date > planned_ship_date), carrier_delay (shipped on time, delivered/projected late), unknown (facts insufficient → listed in `missing_data`). Returns per-cause counts + capped order details. Deterministic classification only — no LLM calls inside the tool. | Done |
+| T-545 | Layer 3 wiring: add both tools to `_INTENT_TOOL_SUBSET` (`supply_chain`, `domain_analysis`, `cross_domain_analysis`, `decision_support`; `list_unshipped_orders` also in `lookup`). System prompt priority rule for shipment-delay questions. ToolScenarioModal: one English shipment-delay scenario; `list_today_exceptions` (P86) gains unshipped-orders as a fifth exception domain. | Done |
 
 Dependencies: B-01
 

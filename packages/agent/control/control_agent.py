@@ -37,9 +37,18 @@ _SYSTEM_PROMPT = (
     "3. Use a specialized tool (e.g. calculate_stockout_risk, calculate_days_of_inventory) "
     "when it directly covers a single-SKU question, including days-of-cover "
     "and when-do-we-run-out analysis.\n"
-    "4. Use nl_query for bulk or cross-product questions — pass the question in plain English; "
+    "4. For shipment-delay or unshipped-order root-cause questions — call "
+    "`analyze_shipment_delay_causes` ONCE. "
+    "Do NOT reconstruct causes by hand-joining customer_orders, shipments, "
+    "inventory_snapshot, and supply_orders yourself. "
+    "For a plain listing of unshipped orders (without root-cause analysis) call "
+    "`list_unshipped_orders` ONCE.\n"
+    "5. Use nl_query for bulk or cross-product questions — pass the question in plain English; "
     "nl_query generates schema-correct SQL internally.\n"
-    "5. Never fabricate column names or assume columns that are not confirmed by tool results.\n\n"
+    "6. Never fabricate column names or assume columns that are not confirmed by tool results.\n\n"
+    "Customer/region demand questions (SPEC Q9) are answered from customer_orders data, "
+    "not from demand_history. demand_history is the consumption series for forecast/stockout "
+    "tools only.\n\n"
     "Always ground recommendations in tool results. Do not fabricate quantities or risk scores.\n"
     "Once you have sufficient data from tools, stop calling tools"
     " and produce a final text response.\n"
@@ -77,6 +86,8 @@ _INTENT_TOOL_SUBSET: dict[str, list[str]] = {
         "nl_query",
         "list_today_exceptions",
         "list_stockout_risk",
+        "list_unshipped_orders",
+        "analyze_shipment_delay_causes",
         "get_delayed_supply_orders",
         "get_open_supply_orders",
         "calculate_supply_gap",
@@ -94,6 +105,7 @@ _INTENT_TOOL_SUBSET: dict[str, list[str]] = {
         "data_catalog_search",
         "list_today_exceptions",
         "list_stockout_risk",
+        "list_unshipped_orders",
         "get_open_supply_orders",
         "get_available_to_promise",
         "profile_demand_data",
@@ -102,6 +114,8 @@ _INTENT_TOOL_SUBSET: dict[str, list[str]] = {
     "domain_analysis": [
         "nl_query",
         "list_today_exceptions",
+        "list_unshipped_orders",
+        "analyze_shipment_delay_causes",
         "profile_demand_data",
         "analyze_demand_trend",
         "evaluate_forecast_accuracy",
@@ -129,6 +143,8 @@ _INTENT_TOOL_SUBSET: dict[str, list[str]] = {
     "cross_domain_analysis": [
         "nl_query",
         "list_today_exceptions",
+        "list_unshipped_orders",
+        "analyze_shipment_delay_causes",
         "data_catalog_search",
         "data_quality_checker",
         "table_schema_reader",
@@ -159,6 +175,8 @@ _INTENT_TOOL_SUBSET: dict[str, list[str]] = {
     "decision_support": [
         "nl_query",
         "list_today_exceptions",
+        "list_unshipped_orders",
+        "analyze_shipment_delay_causes",
         "list_stockout_risk",
         "calculate_stockout_risk",
         "calculate_excess_inventory_risk",

@@ -1,12 +1,14 @@
-"""list_today_exceptions — T-535
+"""list_today_exceptions — T-535 (extended T-545)
 
-Aggregates four existing detector screens into one severity-ranked exception list.
+Aggregates five detector screens into one severity-ranked exception list.
 
 Screens:
   (a) stockout_risk    — critical/high SKUs, shared query logic from list_stockout_risk_tool
   (b) supply_delays    — overdue inbound orders, shared query from supply_delayed_orders_tool
   (c) demand_anomalies — z-score anomalies in the last 7 days (cross-SKU)
   (d) data_quality     — null profiles for all ALLOWED_READ_TABLES
+  (e) unshipped_orders — open/allocated customer orders past their requested_ship_date
+                         (severity: critical if overdue by ≥1 day, high if ship date = today)
 
 No LLM calls, no new SQL surface. All queries are parameterized and restricted to
 ALLOWED_READ_TABLES. Output follows the hybrid tool output contract
@@ -23,6 +25,7 @@ from packages.persistence.catalog_repo import get_null_profile
 from packages.persistence.db import get_pool
 from packages.tools._shared import classify_stockout_risk, db_error_message
 from packages.tools.base import ToolContext, ToolResult
+from packages.tools.list_unshipped_orders_tool import fetch_unshipped_orders_for_exceptions
 from packages.tools.sql_allowlist import ALLOWED_READ_TABLES
 
 _log = logging.getLogger(__name__)
@@ -62,17 +65,19 @@ _STOCKOUT_RISK_ORDER: dict[str, int] = {
 class ListTodayExceptionsTool:
     """Aggregate all operational exceptions into one prioritized list for daily review.
 
-    Composes four screens in a single tool call — stockout risk, delayed inbound supply,
-    recent demand anomalies, and data quality issues — so the ControlAgent never needs to
-    loop the individual detector tools to answer "What exceptions need my attention today?".
+    Composes five screens in a single tool call — stockout risk, delayed inbound supply,
+    recent demand anomalies, data quality issues, and unshipped customer orders — so the
+    ControlAgent never needs to loop the individual detector tools to answer
+    "What exceptions need my attention today?".
     """
 
     name = "list_today_exceptions"
     description = (
         "Aggregate all operational exceptions (stockout risk, delayed supply orders, "
-        "demand anomalies, data quality issues) into one severity-ranked list for daily review. "
+        "demand anomalies, data quality issues, unshipped customer orders) into one "
+        "severity-ranked list for daily review. "
         "Call this once instead of looping list_stockout_risk, get_delayed_supply_orders, "
-        "detect_demand_anomalies, and data_quality_checker individually."
+        "detect_demand_anomalies, data_quality_checker, and list_unshipped_orders individually."
     )
     safety_level: Literal["read_only", "write", "hitl"] = "read_only"
     input_schema: dict[str, Any] = {
@@ -279,6 +284,56 @@ class ListTodayExceptionsTool:
                 })
         except Exception as exc:
             missing_data.append(f"data_quality screen unavailable: {db_error_message(exc)}")
+
+        # ------------------------------------------------------------------ #
+        # Screen (e): unshipped customer orders past requested_ship_date      #
+        # ------------------------------------------------------------------ #
+        try:
+            unshipped_rows = await fetch_unshipped_orders_for_exceptions(
+                within_days=0,
+                status_filter=["open", "allocated"],
+            )
+            today_for_unshipped = datetime.date.today()
+            for row in unshipped_rows:
+                order_id: str = str(row.get("order_id", ""))
+                sku_id_u: str = str(row.get("sku_id", ""))
+                region: str = str(row.get("region", ""))
+                quantity_u: int = int(row.get("quantity") or 0)
+                requested_ship_raw = row.get("requested_ship_date")
+                if isinstance(requested_ship_raw, datetime.datetime):
+                    requested_ship_date_u: datetime.date = requested_ship_raw.date()
+                elif isinstance(requested_ship_raw, datetime.date):
+                    requested_ship_date_u = requested_ship_raw
+                else:
+                    requested_ship_date_u = today_for_unshipped
+
+                days_overdue_u = (today_for_unshipped - requested_ship_date_u).days
+                # Only include orders that are already overdue (days_overdue >= 1)
+                # or due today (days_overdue = 0 → high severity)
+                # within_days=0 already limits to requested_ship_date <= today,
+                # so all returned rows are either today or overdue.
+                severity_u = "critical" if days_overdue_u >= 1 else "high"
+
+                all_exceptions.append({
+                    "domain": "unshipped_orders",
+                    "severity": severity_u,
+                    "sku_id": sku_id_u,
+                    "order_ref": order_id,
+                    "headline_metric": (
+                        f"unshipped {days_overdue_u} day(s) overdue"
+                        if days_overdue_u >= 1
+                        else "ship date today, order not yet shipped"
+                    ),
+                    "detail": (
+                        f"Order {order_id} for {sku_id_u} region {region}: "
+                        f"qty {quantity_u}, requested ship {requested_ship_date_u.isoformat()}, "
+                        f"overdue by {days_overdue_u} day(s)"
+                    ),
+                })
+        except Exception as exc:
+            missing_data.append(
+                f"unshipped_orders screen unavailable: {db_error_message(exc)}"
+            )
 
         # ------------------------------------------------------------------ #
         # Sort: critical > high > medium > low > info, then by domain         #

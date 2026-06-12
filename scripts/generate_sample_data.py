@@ -32,21 +32,39 @@ START_DATE = date.today() - timedelta(days=365)
 # The actual scenario is encoded in the data via status / shipment fields.
 # ---------------------------------------------------------------------------
 
-# Orders whose SKU is a P84 critical-risk SKU (SKU-001 or SKU-002) placed at
-# their warehouse (WH-001) so on_hand < quantity → inventory shortage.
+# SKUs that must have zero open supply orders (all supply rows are "delivered").
+# analyze_shipment_delay_causes requires that inventory_shortage orders reference
+# SKUs with NO open inbound supply — the presence of any open supply order
+# would instead trigger upstream_supply_delay classification.
+#
+# These are P84 risk-band SKUs; forcing their supply to delivered does NOT affect
+# list_stockout_risk because that tool only counts supply arriving within the
+# 7-day horizon (today+7).  P84 pushes all non-delivered risk-SKU supply to
+# today+10, which is already outside the horizon and counted as incoming_supply=0
+# by that tool — so the risk-band invariant (2 critical + 2 high + 3 medium)
+# is preserved regardless of whether those orders exist.
+NO_OPEN_SUPPLY_SKUS: frozenset[str] = frozenset({"SKU-002", "SKU-004"})
+
+# Orders whose SKU is in NO_OPEN_SUPPLY_SKUS so on_hand < quantity AND
+# no open supply at all → inventory_shortage.
+# SKU-002 and SKU-004 are both P84 risk-band SKUs (critical and high respectively)
+# with on_hand set by DOC override in generate_inventory so on_hand << 200.
 INVENTORY_SHORTAGE_ORDERS: list[dict[str, str]] = [
-    {"order_id": "CO-0001", "customer_id": "CUST-001", "sku_id": "SKU-001",
+    {"order_id": "CO-0001", "customer_id": "CUST-001", "sku_id": "SKU-002",
      "ship_from_location_id": "WH-001", "region": "Kanto"},
-    {"order_id": "CO-0002", "customer_id": "CUST-003", "sku_id": "SKU-002",
+    {"order_id": "CO-0002", "customer_id": "CUST-003", "sku_id": "SKU-004",
      "ship_from_location_id": "WH-001", "region": "Kansai"},
 ]
 
-# Orders whose SKU is a P84 critical-risk SKU with a pending inbound supply
-# order arriving at today+10 (set by P84 generate_supply) — upstream supply delay.
+# Orders whose SKU has a pending inbound supply order arriving at today+10
+# (set by P84 generate_supply) — the order is overdue (requested_ship_date=today-2)
+# and on_hand < quantity, so the root cause is upstream supply delay.
+# SKU-001 and SKU-003 are both P84 risk-band SKUs that always have open pending
+# supply at today+10 (guaranteed by the risk-band supply override in generate_supply).
 UPSTREAM_SUPPLY_DELAY_ORDERS: list[dict[str, str]] = [
     {"order_id": "CO-0003", "customer_id": "CUST-002", "sku_id": "SKU-001",
      "ship_from_location_id": "WH-001", "region": "Tohoku"},
-    {"order_id": "CO-0004", "customer_id": "CUST-004", "sku_id": "SKU-002",
+    {"order_id": "CO-0004", "customer_id": "CUST-004", "sku_id": "SKU-003",
      "ship_from_location_id": "WH-001", "region": "Kyushu"},
 ]
 
@@ -378,10 +396,18 @@ def generate_supply(
                 else:
                     status = "pending"
 
-                # For risk-band SKUs, push any non-delivered order to today+10 so the
-                # tool's incoming_supply window (horizon_days=7) never includes it,
-                # preserving the intended risk classification.
-                if sku_id in SKU_RISK_BANDS and status != "delivered":
+                # NO_OPEN_SUPPLY_SKUS: force all supply to delivered (past arrival) so
+                # analyze_shipment_delay_causes classifies CO-0001/CO-0002 as
+                # inventory_shortage (no open inbound supply at all).
+                # Use _delivered_cutoff - 1 to guarantee status=delivered regardless of
+                # the random arrival date.
+                if sku_id in NO_OPEN_SUPPLY_SKUS:
+                    arrival_date = _delivered_cutoff - timedelta(days=1)
+                    status = "delivered"
+                # For risk-band SKUs (not in NO_OPEN_SUPPLY_SKUS), push any non-delivered
+                # order to today+10 so the tool's incoming_supply window (horizon_days=7)
+                # never includes it, preserving the intended risk classification.
+                elif sku_id in SKU_RISK_BANDS and status != "delivered":
                     arrival_date = date.today() + timedelta(days=10)
                     status = "pending"
 
@@ -529,9 +555,12 @@ def generate_customer_orders_and_shipments(
         # No shipment row — unshipped
 
     # ---- Scenario 2: upstream supply delay (open, no shipment) ----
+    # requested_ship_date=today-2 makes these orders overdue so _fetch_unshipped_delayed
+    # picks them up.  The SKUs (SKU-001, SKU-003) have pending supply arriving at
+    # today+10 (today+10 > today-2) → upstream_supply_delay classification.
     for spec in UPSTREAM_SUPPLY_DELAY_ORDERS:
-        order_date = today - timedelta(days=3)
-        requested_ship_date = today + timedelta(days=2)
+        order_date = today - timedelta(days=5)
+        requested_ship_date = today - timedelta(days=2)
         orders.append({
             "order_id": spec["order_id"],
             "customer_id": spec["customer_id"],
@@ -543,7 +572,7 @@ def generate_customer_orders_and_shipments(
             "requested_ship_date": requested_ship_date.isoformat(),
             "status": "open",
         })
-        # No shipment row — unshipped, waiting on supply arriving today+10
+        # No shipment row — unshipped overdue, inbound supply arrives too late
 
     # ---- Scenario 3: warehouse processing delay (shipped late) ----
     for idx, spec in enumerate(WAREHOUSE_DELAY_ORDERS):

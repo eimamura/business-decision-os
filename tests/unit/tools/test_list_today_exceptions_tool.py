@@ -399,6 +399,10 @@ async def test_missing_data_populated_for_zero_demand_skus():
         patch("packages.tools.list_today_exceptions_tool._fetch_delayed_orders") as mock_supply,
         patch("packages.tools.list_today_exceptions_tool._fetch_skus_with_recent_anomalies") as mock_demand,
         patch("packages.tools.list_today_exceptions_tool._fetch_data_quality_issues") as mock_quality,
+        patch(
+            "packages.tools.list_today_exceptions_tool.fetch_unshipped_orders_for_exceptions",
+            return_value=[],
+        ),
     ):
         mock_stockout.return_value = stockout_rows
         mock_supply.return_value = []
@@ -427,6 +431,10 @@ async def test_missing_data_only_for_zero_demand_skus_not_valid_ones():
         patch("packages.tools.list_today_exceptions_tool._fetch_delayed_orders") as mock_supply,
         patch("packages.tools.list_today_exceptions_tool._fetch_skus_with_recent_anomalies") as mock_demand,
         patch("packages.tools.list_today_exceptions_tool._fetch_data_quality_issues") as mock_quality,
+        patch(
+            "packages.tools.list_today_exceptions_tool.fetch_unshipped_orders_for_exceptions",
+            return_value=[],
+        ),
     ):
         mock_stockout.return_value = stockout_rows
         mock_supply.return_value = []
@@ -789,7 +797,7 @@ async def test_stockout_risk_medium_and_low_excluded_from_exceptions():
 
 
 async def test_all_screens_fail_returns_valid_contract_with_all_missing():
-    """When all four screens raise errors, output still has valid contract shape."""
+    """When all five screens raise errors, output still has valid contract shape."""
     with (
         patch(
             "packages.tools.list_today_exceptions_tool._fetch_all_stockout_risk",
@@ -807,6 +815,10 @@ async def test_all_screens_fail_returns_valid_contract_with_all_missing():
             "packages.tools.list_today_exceptions_tool._fetch_data_quality_issues",
             side_effect=RuntimeError("database_url not set"),
         ),
+        patch(
+            "packages.tools.list_today_exceptions_tool.fetch_unshipped_orders_for_exceptions",
+            side_effect=RuntimeError("database_url not set"),
+        ),
     ):
         tool = ListTodayExceptionsTool()
         result = await tool.handle({}, make_ctx())
@@ -815,4 +827,4 @@ async def test_all_screens_fail_returns_valid_contract_with_all_missing():
     assert output["exceptions"] == []
     assert output["counts"] == {}
     assert output["truncated"] is False
-    assert len(output["missing_data"]) == 4
+    assert len(output["missing_data"]) == 5

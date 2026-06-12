@@ -186,6 +186,14 @@ const CATEGORIES: Category[] = [
         prompt:
           "Are there any delayed supply orders for SKU-001? Analyze the supply risk.",
       },
+      {
+        id: "sc-shipment-delay-causes",
+        title: "Shipment Delay Root Causes",
+        description:
+          "Cross-reference orders, shipments, inventory, and supply to classify root causes of shipment delays and unshipped orders",
+        prompt:
+          "What is causing shipment delays or unshipped orders? Classify each delayed order by root cause.",
+      },
     ],
   },
 ];
