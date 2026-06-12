@@ -40,15 +40,35 @@ See `docs/archive/v3/STATE.md` for P0–P23 per-phase details.
 
 ## Active Phase
 
-P87 — Order-to-Ship Data Domain: Shipment Delay Root Causes (SPEC Q4). Programme context:
+P88 — Demand Shift Detection by Customer / Region (SPEC Q9). Programme context:
 P86–P89 close the SPEC gaps (Q3 → Q4 → Q9 → Q7/Q10), planned 2026-06-11 via intake; ADR
 2026-06-11-order-to-ship-and-production-data-domains.md covers P87/P89 schemas.
 
 ## Active Lease
 
-P87 B-03 (Test/Review) — acquired 2026-06-11
+P88 B-01 (App Builder) — acquired 2026-06-11
 
 ## Last Completed
+
+P87 — Order-to-Ship Data Domain: Shipment Delay Root Causes (SPEC Q4) (2026-06-11). Alembic
+0019 adds `customer_orders` (26 seeded rows) + `shipments` (14 rows) per ADR
+2026-06-11-order-to-ship-and-production-data-domains.md; both in `ALLOWED_READ_TABLES`
+(+ legacy map "orders"→customer_orders, regex-safe vs supply_orders). Deterministic seeded
+scenarios: CO-0001/2 inventory_shortage (SKU-002/004 in new NO_OPEN_SUPPLY_SKUS), CO-0003/4
+upstream_supply_delay (overdue, supply at today+10), CO-0005/6 warehouse delay, CO-0007/8
+carrier delay, CO-DS01..08 demand-shift signal for P88 (CUST-009 Kanto growth / CUST-010
+Kansai decline; status=shipped, no shipments rows — excluded from delay tools by INNER JOIN).
+New tools `list_unshipped_orders` + `analyze_shipment_delay_causes` (precedence: no-snapshot
+unknown > stock-present unknown > upstream_supply_delay [open supply arriving late] >
+inventory_shortage [no open supply]); `list_today_exceptions` gained fifth screen
+unshipped_orders (registry 32→34). Mid-batch fix: original precedence made
+upstream_supply_delay unreachable + CO-0003/4 weren't overdue — seed and tool realigned, all
+four cause classes live-verified non-zero, P84 risk bands intact (2 critical/2 high/3
+medium). Sign-off PASS (proof-of-execution): unit 990 exit 0, canonical integration 16
+passed exit 0 (full-DSN run during B-03: 82 passed, 4 skipped, exit 0 — includes the 18 new
+P87 integration tests), playwright 33/33 exit 0, build 0, lint 0, typecheck 0.
+
+Previously:
 
 P86 — Today's Exceptions Screening Tool (SPEC Q3) (2026-06-11). New `list_today_exceptions`
 tool (read_only, deterministic) aggregates four screens — stockout risk critical/high,

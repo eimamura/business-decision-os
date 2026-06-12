@@ -994,7 +994,7 @@ Dependencies: B-01
 
 ---
 
-## P87 — Order-to-Ship Data Domain: Shipment Delay Root Causes (SPEC Q4) — In Progress
+## P87 — Order-to-Ship Data Domain: Shipment Delay Root Causes (SPEC Q4) — Done (2026-06-11)
 
 **Goal:** The system can answer SPEC Q4 "What is causing shipment delays or unshipped orders?" —
 an MVP validation question currently impossible because the data model has no customer orders or
