@@ -108,7 +108,8 @@ async def run_question(
                         if ev.get("type") == "text_reset":
                             text_reset_received = True
                             text_parts.clear()
-                            print(f"  INFO — text_reset received (reason={ev.get('reason')})", flush=True)
+                            reason = ev.get("reason")
+                            print(f"  INFO — text_reset received (reason={reason})", flush=True)
                         elif ev.get("type") == "text_delta":
                             text_parts.append(ev.get("delta", ""))
                         if ev.get("type") == "ask_user_required":
@@ -169,7 +170,11 @@ async def run_question(
                             if ev.get("type") == "text_reset":
                                 text_reset_received = True
                                 resume_text.clear()
-                                print(f"  INFO — text_reset received in resume (reason={ev.get('reason')})", flush=True)
+                                reason = ev.get("reason")
+                                print(
+                                    f"  INFO — text_reset received in resume (reason={reason})",
+                                    flush=True,
+                                )
                             elif ev.get("type") == "text_delta":
                                 resume_text.append(ev.get("delta", ""))
                             if ev.get("type") in ("done", "error"):
