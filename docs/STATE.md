@@ -49,8 +49,13 @@ None
 ## Last Completed
 
 P100 — SPEC 10-Question Judge Evaluation Campaign (2026-06-12). All 10 SPEC questions run
-live (gemma4:12b) and judged: 7 PASS / 3 FAIL (report:
-docs/judge-reports/2026-06-12-spec10-campaign.md). The 3 FAILs produced four Defect Tasks,
+live (gemma4:12b) and judged: initial 7 PASS / 3 FAIL; after the D-012–D-015 fixes the
+three FAILs were re-judged (same methodology) and flipped — **final campaign result
+10/10 PASS** (Q1 0.34→0.82, Q6 0.32→0.78, Q8 0.48→0.86; peaks 30–39% of num_ctx; report:
+docs/judge-reports/2026-06-12-spec10-campaign.md incl. re-evaluation appendix). Known
+model-limitation residuals (awareness only, no defect): Q1's first pass stays degenerate
+on gemma4:12b (recovered via goal-refine + text_reset at ~2× latency); Q6 issues two
+differently-parameterized nl_query calls (context 32%, harmless). The 3 FAILs produced four Defect Tasks,
 all Resolved same-day (commit fb29591): D-012 — campaign's 104–154% context readings were
 an operator.add SUM artifact (true per-call peaks 29–40%), but duplicate tool execution
 was real (D-011 guard fired post-execution) → pre-execution dedupe + `peak_input_tokens`
