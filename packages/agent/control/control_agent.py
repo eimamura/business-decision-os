@@ -137,21 +137,34 @@ def render_routing_policy(subset: dict[str, list[str]], routing_hint: str = "") 
     request_approval_tool = _pick(ds, "request_approval")
     evaluate_candidates_tool = _pick(ds, "evaluate_candidates")
 
+    # Build a flat set of all tools present in this subset for guarding optional rules.
+    all_tools: set[str] = {t for tools in subset.values() for t in tools}
+
     catalog = render_tool_catalog(subset)
 
     hint_prefix = f"→ {routing_hint}\n\n" if routing_hint else ""
 
-    return (
-        f"{hint_prefix}Tool availability by intent:\n{catalog}\n\n"
-        "Tool usage priority (follow this order):\n"
-        f"1. For questions about today's exceptions, what needs attention today, or what requires "
+    # Collect rule texts (without numbers) so they can be re-numbered sequentially.
+    rule_texts: list[str] = []
+
+    # Rule: today's exceptions — always present (list_today_exceptions in most subsets)
+    rule_texts.append(
+        f"For questions about today's exceptions, what needs attention today, or what requires "
         f"human judgment today — call `{exceptions_tool}` ONCE. "
         f"Do NOT loop {stockout_list_tool}, {delayed_orders_tool}, detect_demand_anomalies, "
-        f"and data_quality_checker separately to assemble the same picture.\n"
-        f"2. To enumerate stockout risk across all SKUs (non-exception context), call "
+        f"and data_quality_checker separately to assemble the same picture."
+    )
+
+    # Rule: stockout risk enumeration — always present
+    rule_texts.append(
+        f"To enumerate stockout risk across all SKUs (non-exception context), call "
         f"`{stockout_list_tool}(horizon_days=7)` once — "
-        f"do NOT loop `{stockout_calc_tool}` per SKU.\n"
-        f"3. For questions about supply shortages next week or next month "
+        f"do NOT loop `{stockout_calc_tool}` per SKU."
+    )
+
+    # Rule: supply shortage / nl_query — always present (nl_query in all subsets)
+    rule_texts.append(
+        f"For questions about supply shortages next week or next month "
         f"(e.g. 'which products may face supply shortages', 'supply gap over the next 30 days') "
         f"— DO NOT use `{stockout_list_tool}` (that tool measures on-hand stockout risk only, "
         f"NOT forward supply adequacy). "
@@ -161,53 +174,105 @@ def render_routing_policy(subset: dict[str, list[str]], routing_hint: str = "") 
         f"After {nl_tool} returns, synthesize immediately into your final answer — do NOT call "
         f"any tool again. "
         f"{{schema_example}}\n"
-        f"`{supply_gap_tool}` is for SINGLE-SKU deep-dive (requires sku_id parameter).\n"
-        f"4. Use a specialized tool (e.g. {stockout_calc_tool}, {doi_tool}) "
+        f"`{supply_gap_tool}` is for SINGLE-SKU deep-dive (requires sku_id parameter)."
+    )
+
+    # Rule: specialized single-SKU tools — always present
+    rule_texts.append(
+        f"Use a specialized tool (e.g. {stockout_calc_tool}, {doi_tool}) "
         f"when it directly covers a single-SKU question, including days-of-cover "
-        f"and when-do-we-run-out analysis.\n"
-        f"5. For shipment-delay or unshipped-order root-cause questions — call "
+        f"and when-do-we-run-out analysis."
+    )
+
+    # Rule: shipment-delay / unshipped — always present
+    rule_texts.append(
+        f"For shipment-delay or unshipped-order root-cause questions — call "
         f"`{delay_tool}` ONCE. "
         f"Do NOT reconstruct causes by hand-joining raw tables yourself. "
         f"For a plain listing of unshipped orders (without root-cause analysis) call "
-        f"`{unshipped_tool}` ONCE.\n"
-        f"6. For demand-shift questions by customer or region — call `{demand_shift_tool}` ONCE. "
-        f"{segment_tool} and {compare_tool} are SKU-axis tools (consumption series); "
-        f"they do NOT answer customer/region demand questions. "
-        f"Customer/region demand questions (customer/region demand shift) are answered from order "
-        f"transaction data, not from the consumption series. The consumption series is for "
-        f"forecast/stockout tools only.\n"
-        f"7. For forecast-vs-actual gap questions (forecast-vs-actual gap) — why is actual demand "
-        f"deviating from the forecast, over-forecast/under-forecast analysis — call "
-        f"`{forecast_dev_tool}` ONCE. "
-        f"`{forecast_acc_tool}` is the model-quality axis (MAPE/bias); "
-        f"pair with `{demand_shift_tool}` when the user asks which customer/region"
-        f" drives the gap.\n"
-        f"8. For production plan adjustment questions (production plan adjustment) — "
-        f"which products need production plan changes, overproduction/underproduction "
-        f"analysis — call "
-        f"`{prod_gap_tool}` ONCE. "
-        f"Do NOT reconstruct plan-vs-demand gaps by hand-joining "
-        f"production and demand tables yourself.\n"
-        f"9. For biggest-constraint or bottleneck-impact questions (bottleneck/binding constraint) "
-        f"— call `{constraint_tool}` ONCE. "
-        f"Do NOT separately evaluate capacity, supply-gap, and stockout risks "
-        f"by assembling your own ranking from individual tool results.\n"
-        f"10. For purchase-earlier/later or order-timing questions (supply order timing) — "
-        f"call `{order_timing_tool}` ONCE. "
-        f"`{delayed_orders_tool}` answers 'what is already late by status'; "
-        f"`{order_timing_tool}` answers 'which orders should arrive sooner or later'.\n"
-        f"11. For replenishment optimization, inventory simulation, or demand forecast generation "
-        f"— call each tool ONCE as needed: {optimize_tool} for optimization, "
-        f"{simulate_tool} for simulation, {forecast_tool_name} for demand forecast. "
-        f"Require human approval via {request_approval_tool} before executing any optimization. "
-        f"{evaluate_candidates_tool} compares alternatives after {optimize_tool} "
-        f"returns candidates.\n"
-        f"12. Use {nl_tool} for bulk or cross-product questions — "
+        f"`{unshipped_tool}` ONCE."
+    )
+
+    # Rule: demand shift — optional (detect_demand_shift not in lookup subset)
+    if demand_shift_tool in all_tools:
+        rule_texts.append(
+            f"For demand-shift questions by customer or region — call `{demand_shift_tool}` ONCE. "
+            f"{segment_tool} and {compare_tool} are SKU-axis tools (consumption series); "
+            f"they do NOT answer customer/region demand questions. "
+            f"Customer/region demand questions (customer/region demand shift) are answered from "
+            f"order transaction data, not from the consumption series. The consumption series is "
+            f"for forecast/stockout tools only."
+        )
+
+    # Rule: forecast deviation — optional (analyze_forecast_deviation not in lookup subset)
+    if forecast_dev_tool in all_tools:
+        rule_texts.append(
+            f"For forecast-vs-actual gap questions (forecast-vs-actual gap) — why is actual "
+            f"demand deviating from the forecast, over-forecast/under-forecast analysis — call "
+            f"`{forecast_dev_tool}` ONCE. "
+            f"`{forecast_acc_tool}` is the model-quality axis (MAPE/bias); "
+            f"pair with `{demand_shift_tool}` when the user asks which customer/region"
+            f" drives the gap."
+        )
+
+    # Rule: production plan gap — optional (analyze_production_plan_gap not in lookup/supply_chain)
+    if prod_gap_tool in all_tools:
+        rule_texts.append(
+            f"For production plan adjustment questions (production plan adjustment) — "
+            f"which products need production plan changes, overproduction/underproduction "
+            f"analysis — call "
+            f"`{prod_gap_tool}` ONCE. "
+            f"Do NOT reconstruct plan-vs-demand gaps by hand-joining "
+            f"production and demand tables yourself."
+        )
+
+    # Rule: binding constraint — optional (identify_binding_constraint not in lookup subset)
+    if constraint_tool in all_tools:
+        rule_texts.append(
+            f"For biggest-constraint or bottleneck-impact questions (bottleneck/binding "
+            f"constraint) — call `{constraint_tool}` ONCE. "
+            f"Do NOT separately evaluate capacity, supply-gap, and stockout risks "
+            f"by assembling your own ranking from individual tool results."
+        )
+
+    # Rule: order timing — optional (analyze_supply_order_timing not in lookup subset)
+    if order_timing_tool in all_tools:
+        rule_texts.append(
+            f"For purchase-earlier/later or order-timing questions (supply order timing) — "
+            f"call `{order_timing_tool}` ONCE. "
+            f"`{delayed_orders_tool}` answers 'what is already late by status'; "
+            f"`{order_timing_tool}` answers 'which orders should arrive sooner or later'."
+        )
+
+    # Rule: optimization / simulation / forecast — optional (optimize_replenishment not in lookup)
+    if optimize_tool in all_tools:
+        rule_texts.append(
+            f"For replenishment optimization, inventory simulation, or demand forecast generation "
+            f"— call each tool ONCE as needed: {optimize_tool} for optimization, "
+            f"{simulate_tool} for simulation, {forecast_tool_name} for demand forecast. "
+            f"Require human approval via {request_approval_tool} before executing any "
+            f"optimization. "
+            f"{evaluate_candidates_tool} compares alternatives after {optimize_tool} "
+            f"returns candidates."
+        )
+
+    # Rules: nl_query bulk questions and no-fabrication — always present
+    rule_texts.append(
+        f"Use {nl_tool} for bulk or cross-product questions — "
         f"pass the question in plain English; "
-        f"{nl_tool} generates schema-correct SQL internally.\n"
-        f"13. Never fabricate column names or assume columns"
-        f" that are not confirmed by tool results.\n\n"
-        f"Always ground recommendations in tool results."
+        f"{nl_tool} generates schema-correct SQL internally."
+    )
+
+    rule_texts.append(
+        "Never fabricate column names or assume columns"
+        " that are not confirmed by tool results."
+    )
+
+    # Sequentially number all rules that survived the guards.
+    numbered_rules = "\n".join(f"{i}. {text}" for i, text in enumerate(rule_texts, 1))
+
+    grounding_footer = (
+        f"\nAlways ground recommendations in tool results."
         f" Do not fabricate quantities or risk scores.\n"
         f"Once you have sufficient data from tools, stop calling tools"
         f" and produce a final text response.\n"
@@ -218,18 +283,33 @@ def render_routing_policy(subset: dict[str, list[str]], routing_hint: str = "") 
         f" into a final answer — do NOT call `{stockout_list_tool}` or any other tool again"
         f" in the same pass.\n"
         f"For exception/delay questions, call `{exceptions_tool}` to surface the full daily"
-        f" exception picture in one call.\n"
-        f"14. For heavy or long-running work — call `job_dispatch` with the appropriate job_type"
-        f" and await human approval before execution begins."
-        f" This is MANDATORY; never run these inline.\n"
-        f"    Trigger phrases that ALWAYS route to job_dispatch:\n"
-        f"    - 'as a background job', 'run in the background', 'notify me when it completes'\n"
-        f"    - 'train the forecast model', 'train_forecast'\n"
-        f"    - 'run a full ... simulation for all SKUs'\n"
-        f"    Job type mapping: train_forecast → job_type='train_forecast';"
-        f" inventory simulation → job_type='simulate';"
-        f" replenishment optimization → job_type='optimize';"
-        f" demand forecast → job_type='forecast'.\n"
+        f" exception picture in one call."
+    )
+
+    # Rule: job_dispatch — optional (not in lookup or domain_analysis subsets)
+    job_dispatch_rule = ""
+    if "job_dispatch" in all_tools:
+        job_dispatch_rule = (
+            f"\n{len(rule_texts) + 1}. For heavy or long-running work — call `job_dispatch` "
+            f"with the appropriate job_type"
+            f" and await human approval before execution begins."
+            f" This is MANDATORY; never run these inline.\n"
+            f"    Trigger phrases that ALWAYS route to job_dispatch:\n"
+            f"    - 'as a background job', 'run in the background', 'notify me when it completes'\n"
+            f"    - 'train the forecast model', 'train_forecast'\n"
+            f"    - 'run a full ... simulation for all SKUs'\n"
+            f"    Job type mapping: train_forecast → job_type='train_forecast';"
+            f" inventory simulation → job_type='simulate';"
+            f" replenishment optimization → job_type='optimize';"
+            f" demand forecast → job_type='forecast'.\n"
+        )
+
+    return (
+        f"{hint_prefix}Tool availability by intent:\n{catalog}\n\n"
+        f"Tool usage priority (follow this order):\n"
+        f"{numbered_rules}"
+        f"{grounding_footer}"
+        f"{job_dispatch_rule}"
     )
 
 
@@ -600,7 +680,7 @@ class ControlAgent(AgentBasedSpecialist):
             return task
         try:
             past_records = await store.search(
-                json.dumps({"session_id": session_id}), k=3
+                task.instruction or session_id, k=3
             )
             if past_records:
                 decision_lines: list[str] = []

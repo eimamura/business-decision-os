@@ -13,19 +13,28 @@ _log = logging.getLogger(__name__)
 # Keywords per use case for MVP classification.
 # Order matters — first match wins.  More specific keywords are listed first.
 _USE_CASE_KEYWORDS: dict[str, list[str]] = {
-    "Q3": ["exception", "today", "human judgment", "requires attention", "what needs"],
-    "Q6": ["supply shortage", "face shortage", "supply shortfall", "next week", "next month"],
-    "Q1": ["stockout", "at risk", "run out", "stock out"],
-    "Q2": ["excess", "overstock", "surplus", "too much inventory", "excess inventory"],
-    "Q4": ["delay", "unshipped", "late shipment", "shipment delay", "delivery delay"],
-    "Q5": ["forecast gap", "forecast deviation", "actual vs", "vs actual", "why is forecast"],
-    "Q7": ["production plan", "overproduction", "underproduction", "production adjustment"],
+    "Q3": ["exception", "today", "human judgment", "requires attention", "what needs",
+           "action required", "needs attention", "priority today", "alerts"],
+    "Q6": ["supply shortage", "face shortage", "supply shortfall", "next week", "next month",
+           "supply gap", "supply adequacy", "not enough supply", "future shortage"],
+    "Q1": ["stockout", "at risk", "run out", "stock out",
+           "running low", "inventory risk", "will we run out", "shortage risk"],
+    "Q2": ["excess", "overstock", "surplus", "too much inventory", "excess inventory",
+           "too much stock", "overstocked"],
+    "Q4": ["delay", "unshipped", "late shipment", "shipment delay", "delivery delay",
+           "behind schedule", "not shipped", "past due"],
+    "Q5": ["forecast gap", "forecast deviation", "actual vs", "vs actual", "why is forecast",
+           "actual vs forecast", "off vs", "over-forecast", "under-forecast", "forecast accuracy"],
+    "Q7": ["production plan", "overproduction", "underproduction", "production adjustment",
+           "plan adjustment", "capacity mismatch"],
     "Q8": [
         "purchase", "buy earlier", "push out", "order timing",
         "purchased earlier", "purchased later",
     ],
-    "Q9": ["demand shift", "customer demand", "region demand", "demand change"],
-    "Q10": ["constraint", "bottleneck", "binding", "biggest impact", "limiting"],
+    "Q9": ["demand shift", "customer demand", "region demand", "demand change",
+           "shift in demand", "regional demand", "customer sales"],
+    "Q10": ["constraint", "bottleneck", "binding", "biggest impact", "limiting",
+            "capacity constraint", "throughput"],
 }
 
 
