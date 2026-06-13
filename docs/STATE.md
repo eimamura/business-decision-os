@@ -34,7 +34,9 @@ None
 
 ## Last Completed
 
-P109 — Context Engineering Refactor (2026-06-13). Extracted `render_business_guidelines()`, `render_response_format()`, `render_schema_context()` from `_SYSTEM_PROMPT_TEMPLATE`; `_build_system_prompt()` updated to signature `(intent, user_role, schema_context)` assembling sections via `"\n\n".join(filter(None, [...]))`; 2 new unit tests added. Sign-off: unit 1300/15 skipped, integration 16/153 skipped, e2e 10 skipped, build OK, lint clean, typecheck clean (178 files) — all exit 0.
+P110 — control_agent.py Cleanup (2026-06-13). Fixed 6 issues: (1) duplicate tool catalog removed from _build_system_prompt; (2) _make_schema_example now accepts schema: str param; (3) rules 11–12 moved from render_response_format to render_routing_policy; (4) ControlAgent.run() refactored into 6 private methods; (5) DecisionMemoryStore consolidated to 1 instantiation per run(); (6) _SYSTEM_PROMPT_TEMPLATE stub deleted, _ = intent/user_role replaced with noqa. Sign-off: unit 1303/15 skipped, integration 16/153 skipped, e2e 10 skipped, build OK, lint clean, typecheck clean (178 files) — all exit 0.
+
+Previously: P109 — Context Engineering Refactor (2026-06-13). Extracted `render_business_guidelines()`, `render_response_format()`, `render_schema_context()` from `_SYSTEM_PROMPT_TEMPLATE`; `_build_system_prompt()` updated to signature `(intent, user_role, schema_context)` assembling sections via `"\n\n".join(filter(None, [...]))`; 2 new unit tests added. Sign-off: unit 1300/15 skipped, integration 16/153 skipped, e2e 10 skipped, build OK, lint clean, typecheck clean (178 files) — all exit 0.
 
 Previously: P108 — render_routing_policy (2026-06-13). Added `render_tool_catalog()` and `render_routing_policy()` to `control_agent.py`; `_SYSTEM_PROMPT_TEMPLATE` routing section replaced with `{routing_policy}` placeholder populated from `_INTENT_TOOL_SUBSET`; `_make_schema_example()` derives table names from `ALLOWED_READ_TABLES` (not literals); 2 new unit tests added in `test_control_prompt.py`. Sign-off: unit 1298/15 skipped, integration 16/153 skipped, e2e 10 skipped, build OK, lint clean, typecheck clean (178 files) — all exit 0.
 

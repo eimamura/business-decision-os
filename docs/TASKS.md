@@ -51,11 +51,11 @@ Tagged `v0.1.0` (commit 039c43a); merged to `main`; GitHub release published.
 
 ## Active Phases
 
-P110 — control_agent.py Cleanup (In Progress)
+None (next phase: P111)
 
 ---
 
-## P110 — control_agent.py Cleanup — In Progress (2026-06-13)
+## P110 — control_agent.py Cleanup — Done (2026-06-13)
 
 **Goal:** Fix 6 code-quality issues in `control_agent.py` identified after P107–P109: duplicate tool catalog in prompt output (bug), `render_schema_context` API lying about its parameter, tool names leaking into `render_response_format`, `ControlAgent.run()` over-long, `DecisionMemoryStore` triple-instantiation, and minor housekeeping.
 
