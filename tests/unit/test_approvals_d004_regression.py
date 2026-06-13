@@ -133,6 +133,9 @@ async def test_post_decision_with_uuid_row_returns_200_and_json_body() -> None:
     mock_orchestrator = MagicMock()
     mock_orchestrator.resume = AsyncMock()
 
+    mock_jobs_repo = MagicMock()
+    mock_jobs_repo.get_by_approval_id = AsyncMock(return_value=None)
+
     from apps.api.main import app
     import apps.api.routers.approvals as approvals_module
 
@@ -142,11 +145,15 @@ async def test_post_decision_with_uuid_row_returns_200_and_json_body() -> None:
     try:
         with (
             patch.object(approvals_module, "_approvals_repo", mock_approvals_repo),
-            patch.object(approvals_module, "can_execute", AsyncMock(return_value=True)),
             patch(
                 "packages.persistence.sessions_repo.DecisionSessionRepository.update_status",
                 AsyncMock(),
             ),
+            patch(
+                "packages.persistence.jobs_repo.JobsRepository",
+                return_value=mock_jobs_repo,
+            ),
+            patch("apps.api.state.broadcasters", {}),
         ):
             transport = ASGITransport(app=app)  # type: ignore[arg-type]
             async with AsyncClient(transport=transport, base_url="http://test") as client:

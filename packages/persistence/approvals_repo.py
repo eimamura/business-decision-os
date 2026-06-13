@@ -33,12 +33,15 @@ class ApprovalsRepository:
         pool = await get_pool()
         async with pool.acquire() as conn:
             row = await conn.fetchrow(
-                """UPDATE approvals SET status = $2, reason = $3, actor = $4, updated_at = now()
+                """UPDATE approvals
+                   SET status = $2, reason = $3, actor = $4,
+                       weight_override_json = $5, updated_at = now()
                    WHERE id = $1 RETURNING *""",
                 id,
                 kwargs.get("status"),
                 kwargs.get("reason"),
                 kwargs.get("actor"),
+                kwargs.get("weight_override_json"),
             )
         if row is None:
             raise ValueError(f"Approval {id} not found")

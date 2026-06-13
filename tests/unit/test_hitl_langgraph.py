@@ -297,7 +297,7 @@ async def test_hitl_resume_calls_execute_job() -> None:
 
     # job_dispatch tool input — matches the HITL path in prepare_hitl
     tool_input = {
-        "job_type": "simulation",
+        "job_type": "simulate",
         "description": "Run demand simulation",
         "params": {"sku": "A", "horizon": 30},
     }
@@ -452,7 +452,7 @@ async def test_hitl_handle_never_called_on_resume() -> None:
     approval_id = str(uuid.uuid4())
 
     tool_input = {
-        "job_type": "simulation",
+        "job_type": "simulate",
         "description": "Dangerous action",
         "params": {},
     }

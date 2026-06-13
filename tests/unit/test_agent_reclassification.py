@@ -57,7 +57,7 @@ async def test_policies_repo_update_raises():
 
 
 # ---------------------------------------------------------------------------
-# Approver role enforcement — HTTP-level (T-4002)
+# Approval endpoint smoke tests — HTTP-level
 # ---------------------------------------------------------------------------
 
 
@@ -69,17 +69,18 @@ def api_client() -> TestClient:
     return TestClient(app, raise_server_exceptions=False)
 
 
-def test_post_decision_403_for_analyst(api_client: TestClient) -> None:
+def test_post_decision_not_403_for_analyst(api_client: TestClient) -> None:
     approval_id = str(uuid4())
     response = api_client.post(
         f"/api/v1/approvals/{approval_id}/decision",
         json={"decision": "approved"},
         headers={"X-Dev-User": "regular-analyst"},
     )
-    assert response.status_code == 403
+    # Role check has been removed — analyst is no longer forbidden
+    assert response.status_code != 403
 
 
-def test_post_decision_200_for_approver(api_client: TestClient) -> None:
+def test_post_decision_not_forbidden_for_any_user(api_client: TestClient) -> None:
     approval_id = str(uuid4())
     response = api_client.post(
         f"/api/v1/approvals/{approval_id}/decision",

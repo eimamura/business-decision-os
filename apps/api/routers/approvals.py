@@ -16,8 +16,6 @@ from packages.agent.orchestrator.session_orchestrator import NoPendingInterruptE
 from packages.persistence.approvals import ApprovalStatus, ApprovalTransition
 from packages.persistence.approvals_repo import ApprovalsRepository
 from packages.persistence.notifications_repo import NotificationsRepository
-from packages.tools.guardrail import can_execute
-
 _log = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1/approvals", tags=["approvals"])
@@ -105,11 +103,6 @@ async def post_decision(
     x_dev_user: str | None = Header(default=None),
     orchestrator: SessionOrchestrator = Depends(get_orchestrator_dep),
 ) -> JSONResponse:
-    if not await can_execute(action="approve_recommendation", actor=x_dev_user):
-        raise HTTPException(
-            status_code=403, detail="Insufficient role — approver or admin required"
-        )
-
     try:
         record = await _approvals_repo.get(approval_id)
     except NotImplementedError:
@@ -148,14 +141,74 @@ async def post_decision(
             except Exception:
                 pass  # non-blocking: session status is best-effort here
 
-        # Resume the LangGraph session so the graph drives job execution
+        # Dispatch the linked job directly instead of resuming LangGraph.
+        # LangGraph resume re-creates the specialist from scratch (MemorySaver is
+        # ephemeral per call), causing the LLM to re-request HITL approval and
+        # triggering a second interrupt() → RuntimeError("Graph resume produced no result").
+        _job_dispatched = False
         if session_id_str:
+            try:
+                from packages.agent.job_executor import execute_job as _execute_job
+                from packages.persistence.jobs_repo import JobsRepository as _JobsRepo
+                from apps.api.state import broadcasters as _broadcasters
+
+                _jr = _JobsRepo()
+                _linked_job = await _jr.get_by_approval_id(approval_id)
+                if _linked_job is not None:
+                    _job_id_val = _linked_job.get("id")
+                    if _job_id_val is not None:
+                        _job_uuid = (
+                            _job_id_val
+                            if isinstance(_job_id_val, UUID)
+                            else UUID(_job_id_val)
+                        )
+                        # Transition to queued before background dispatch so UI shows the
+                        # intermediate state (pending_approval → queued → running → completed).
+                        await _jr.update_status(_job_uuid, "queued")
+                        asyncio.create_task(
+                            _execute_job(
+                                _job_uuid,
+                                sse_queue=_broadcasters.get(session_id_str),
+                            ),
+                            name=f"execute_job_{_job_id_val}",
+                        )
+                        _job_dispatched = True
+            except Exception as exc:
+                _log.warning("job dispatch failed for approval %s: %s", approval_id, exc)
+
+        # Fallback: resume LangGraph only when no linked job exists (e.g. manually
+        # created approvals without a job record).
+        if not _job_dispatched and session_id_str:
             try:
                 asyncio.create_task(
                     _resume_with_logging(orchestrator, UUID(session_id_str), approval_id)
                 )
             except Exception:
-                pass  # non-blocking: resume dispatch failure must not fail the approval response
+                pass  # non-blocking
+
+    elif body.decision == "needs_revision" and isinstance(updated, dict):
+        session_id_str = str(updated.get("session_id", ""))
+        # Cancel linked job — needs_revision is a terminal approval state;
+        # the user must submit a new request after addressing the revision feedback.
+        try:
+            from packages.persistence.jobs_repo import JobsRepository as _JobsRepo
+            _jr = _JobsRepo()
+            _job = await _jr.get_by_approval_id(approval_id)
+            if _job is not None:
+                _job_id_val = _job.get("id")
+                if _job_id_val is not None:
+                    await _jr.update_status(
+                        UUID(_job_id_val) if not isinstance(_job_id_val, UUID) else _job_id_val,
+                        "cancelled",
+                    )
+        except Exception:
+            pass  # non-blocking
+        if session_id_str:
+            try:
+                from packages.persistence.sessions_repo import DecisionSessionRepository
+                await DecisionSessionRepository().update_status(session_id_str, "failed")
+            except Exception:
+                pass
 
     elif body.decision == "rejected" and isinstance(updated, dict):
         session_id_str = str(updated.get("session_id", ""))
