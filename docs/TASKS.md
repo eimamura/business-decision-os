@@ -73,21 +73,21 @@ Dependencies: P102 Done
 
 Dependencies: none
 
-### Batch B-02 — Tool-side file generation (App Builder) — Not Started
+### Batch B-02 — Tool-side file generation (App Builder) — Done (2026-06-13)
 
 | Task | Description | Status |
 |---|---|---|
-| T-615 | `SimulationTool.handle()` が `generated_files` を返すよう実装。シミュレーション出力を CSV 化（行 = SKU またはシナリオ; 列 = 主要指標）。`file_name="simulation_result.csv"`, `mime_type="text/csv"`, `file_content=<bytes>` を含む dict を `output["generated_files"]` にセット。 | Not Started |
-| T-616 | `OptimizerTool.handle()` 同様。最適化計画を CSV 化。`file_name="optimization_plan.csv"`。 | Not Started |
-| T-617 | `ForecastTool.handle()` 同様。予測結果を CSV 化。`file_name="forecast_result.csv"`。 | Not Started |
+| T-615 | `SimulationTool.handle()` が `generated_files` を返すよう実装。シミュレーション出力を CSV 化（行 = SKU またはシナリオ; 列 = 主要指標）。`file_name="simulation_result.csv"`, `mime_type="text/csv"`, `file_content=<bytes>` を含む dict を `output["generated_files"]` にセット。 | Done |
+| T-616 | `OptimizerTool.handle()` 同様。最適化計画を CSV 化。`file_name="optimization_plan.csv"`。 | Done |
+| T-617 | `ForecastTool.handle()` 同様。予測結果を CSV 化。`file_name="forecast_result.csv"`。 | Done |
 
 Dependencies: B-01
 
-### Batch B-03 — Frontend file download UI (App Builder) — Not Started
+### Batch B-03 — Frontend file download UI (App Builder) — Done (2026-06-13)
 
 | Task | Description | Status |
 |---|---|---|
-| T-618 | `apps/web/components/JobStatusCard.tsx` に `generated_files` セクションを追加。ジョブ応答の `files[]` を使い、各ファイルを `<a href="/api/v1/jobs/files/{id}/download" download={file_name}>` リンクで表示。空の場合は非表示。`data-testid="job-file-link-{id}"` を付与。 | Not Started |
+| T-618 | `apps/web/components/JobStatusCard.tsx` に `generated_files` セクションを追加。ジョブ応答の `files[]` を使い、各ファイルを `<a href="/api/v1/jobs/files/{id}/download" download={file_name}>` リンクで表示。空の場合は非表示。`data-testid="job-file-link-{id}"` を付与。 | Done |
 
 Dependencies: B-01
 

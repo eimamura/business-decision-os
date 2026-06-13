@@ -26,7 +26,7 @@ P103 — Job File Generation
 
 ## Active Lease
 
-P103/B-02 + P103/B-03 (parallel)
+P103/B-04
 
 ## Blockers
 

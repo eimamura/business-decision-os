@@ -12,6 +12,12 @@ const TERMINAL_STATUSES = new Set(["completed", "failed", "cancelled"]);
 
 type JobStatus = "queued" | "running" | "completed" | "failed" | "cancelled";
 
+interface JobFile {
+  id: string;
+  file_name: string;
+  download_url: string;
+}
+
 const STATUS_LABELS: Record<JobStatus, string> = {
   queued: "Queued",
   running: "Running",
@@ -43,6 +49,7 @@ export default function JobStatusCard({
   onJobComplete,
 }: JobStatusCardProps): React.JSX.Element {
   const [status, setStatus] = useState<JobStatus>(initialStatus);
+  const [files, setFiles] = useState<readonly JobFile[]>([]);
   const onJobCompleteRef = useRef(onJobComplete);
   onJobCompleteRef.current = onJobComplete;
   const calledCompleteRef = useRef(false);
@@ -62,10 +69,13 @@ export default function JobStatusCard({
         try {
           const res = await fetch(`/api/v1/jobs/${jobId}`, { headers: DEV_HEADERS });
           if (!res.ok) break;
-          const data = await res.json() as { status?: string };
+          const data = await res.json() as { status?: string; generated_files?: JobFile[] };
           const next = (data.status ?? "queued") as JobStatus;
           if (!cancelled) {
             setStatus(next);
+            if (Array.isArray(data.generated_files) && data.generated_files.length > 0) {
+              setFiles(data.generated_files);
+            }
             if (TERMINAL_STATUSES.has(next)) {
               if (!calledCompleteRef.current) {
                 calledCompleteRef.current = true;
@@ -133,6 +143,28 @@ export default function JobStatusCard({
           {STATUS_LABELS[status]}
         </span>
       </div>
+
+      {files.length > 0 && (
+        <div className="mt-3 pt-3 border-t border-border">
+          <p className="text-xs font-semibold uppercase tracking-wider text-muted mb-1.5">
+            Generated Files
+          </p>
+          <ul className="flex flex-col gap-1">
+            {files.map((file) => (
+              <li key={file.id}>
+                <a
+                  href={file.download_url}
+                  download={file.file_name}
+                  data-testid={`job-file-link-${file.id}`}
+                  className="text-sm text-indigo-400 hover:text-indigo-300 underline underline-offset-2 truncate block"
+                >
+                  {file.file_name}
+                </a>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
     </div>
   );
 }
