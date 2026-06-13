@@ -134,13 +134,21 @@ class DecisionMemoryStore:
         Query format: a JSON string (or plain string) with at least a "session_id" key.
         Optionally a "record_type" key to filter by "decision" or "failure".
 
-        If session_id cannot be parsed from the query, returns [] without error.
+        Bare-string fallback (P120/T-687): when the query is not valid JSON (e.g. a
+        natural-language instruction passed by _inject_past_decisions()), session_id
+        cannot be extracted. In that case we return the k most recent records across
+        all sessions (recency fallback). This matches the MVP note in the module
+        docstring: search() uses recency-ordered fallback without pgvector.
+
+        If session_id cannot be parsed from a *valid-JSON* query, returns [] without
+        error (malformed-JSON guard unchanged).
 
         Returned dicts contain all column values:
           id, session_id, record_type, content_json, agent_role, created_at, outcome.
         """
         session_id: str | None = None
         record_type_filter: str | None = None
+        bare_string: bool = False
 
         try:
             parsed = json.loads(query)
@@ -148,9 +156,31 @@ class DecisionMemoryStore:
                 session_id = parsed.get("session_id")
                 record_type_filter = parsed.get("record_type")
         except (json.JSONDecodeError, ValueError):
-            pass
+            bare_string = True
 
         if not session_id:
+            if bare_string:
+                # Natural-language query (e.g. task.instruction) — use recency fallback
+                _log.debug(
+                    "DecisionMemoryStore.search: bare-string query %r"
+                    " — returning %d recent records",
+                    query,
+                    k,
+                )
+                pool = await self._get_pool()
+                async with pool.acquire() as conn:
+                    rows = await conn.fetch(
+                        """
+                        SELECT id, session_id, record_type, content_json, agent_role,
+                               created_at, outcome
+                        FROM decision_log
+                        ORDER BY created_at DESC
+                        LIMIT $1
+                        """,
+                        k,
+                    )
+                return [dict(row) for row in rows]
+            # JSON parsed but no session_id — malformed query; return empty
             _log.debug(
                 "DecisionMemoryStore.search: no session_id found in query %r — returning []",
                 query,

@@ -156,3 +156,19 @@ async def test_decision_memory_store_search_no_session_id_returns_empty() -> Non
     store = DecisionMemoryStore()
     results = await store.search(json.dumps({"foo": "bar"}), k=5)
     assert results == []
+
+
+@_SKIP_NO_DB
+async def test_decision_memory_bare_string_search_returns_recent() -> None:
+    """search() with a bare natural-language string returns the k most recent records."""
+    if not await _decision_log_exists():
+        pytest.skip("decision_log table not found — migration 0016 not applied")
+
+    session_id = str(uuid.uuid4())
+    store = DecisionMemoryStore()
+
+    await store.write({"session_id": session_id, "record_type": "decision", "content_json": {"decision": "test A"}})
+    await store.write({"session_id": session_id, "record_type": "decision", "content_json": {"decision": "test B"}})
+
+    results = await store.search("analyze supply chain risk", k=10)
+    assert len(results) >= 2
