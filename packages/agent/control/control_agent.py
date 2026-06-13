@@ -533,6 +533,158 @@ class ControlAgent(AgentBasedSpecialist):
             model_registry=model_registry,
         )
 
+    # ------------------------------------------------------------------
+    # Private pipeline helpers (extracted from run() for readability)
+    # ------------------------------------------------------------------
+
+    def _inject_skills(
+        self,
+        task: "SpecialistTask",
+        intent_category: str,
+    ) -> "SpecialistTask":
+        """Prepend skill block to task.instruction if skills exist for intent."""
+        skills = SkillLoader().load(intent_category)
+        if skills:
+            skill_block = _SKILL_HEADER + _SKILL_SEPARATOR.join(skills)
+            task = task.model_copy(
+                update={"instruction": skill_block + "\n\n" + task.instruction}
+            )
+        return task
+
+    async def _inject_past_decisions(
+        self,
+        task: "SpecialistTask",
+        session_id: str,
+        store: DecisionMemoryStore,
+    ) -> "SpecialistTask":
+        """Append past-decisions block from DecisionMemoryStore to task.instruction."""
+        if not session_id:
+            return task
+        try:
+            past_records = await store.search(
+                json.dumps({"session_id": session_id}), k=3
+            )
+            if past_records:
+                decision_lines: list[str] = []
+                for idx, record in enumerate(past_records, start=1):
+                    raw_content = record.get("content_json", "")
+                    if isinstance(raw_content, str):
+                        try:
+                            content_repr = json.dumps(json.loads(raw_content))
+                        except (json.JSONDecodeError, ValueError):
+                            content_repr = raw_content
+                    else:
+                        content_repr = json.dumps(raw_content)
+                    line = f"Decision {idx}: {content_repr}"
+                    outcome = record.get("outcome")
+                    if outcome == 1:
+                        line += " [user feedback: positive]"
+                    elif outcome == -1:
+                        line += " [user feedback: negative]"
+                    decision_lines.append(line)
+                past_block = _PAST_DECISIONS_HEADER + "\n".join(decision_lines)
+                task = task.model_copy(
+                    update={"instruction": task.instruction + past_block}
+                )
+        except Exception:
+            _log.exception(
+                "DecisionMemoryStore.search failed; continuing without past decisions",
+                extra={"session_id": session_id},
+            )
+        return task
+
+    async def _inject_domain_knowledge(
+        self,
+        task: "SpecialistTask",
+        intent_category: str,
+    ) -> "SpecialistTask":
+        """Append domain knowledge block from LongTermMemoryStore to task.instruction."""
+        if not intent_category:
+            return task
+        try:
+            domain_records = await LongTermMemoryStore().search(
+                f"scope:{intent_category}", k=3
+            )
+            if domain_records:
+                knowledge_lines: list[str] = [
+                    r.get("content", "") for r in domain_records if r.get("content")
+                ]
+                if knowledge_lines:
+                    knowledge_block = _DOMAIN_KNOWLEDGE_HEADER + "\n\n".join(knowledge_lines)
+                    task = task.model_copy(
+                        update={"instruction": task.instruction + knowledge_block}
+                    )
+        except Exception:
+            _log.exception(
+                "LongTermMemoryStore.search failed; continuing without domain knowledge",
+                extra={"intent_category": intent_category},
+            )
+        return task
+
+    def _narrow_tools(
+        self,
+        task: "SpecialistTask",
+        intent_category: str,
+    ) -> "SpecialistTask":
+        """Narrow allowed_tools to the intent-specific subset."""
+        if intent_category and intent_category in _INTENT_TOOL_SUBSET:
+            task = task.model_copy(
+                update={"allowed_tools": _INTENT_TOOL_SUBSET[intent_category]}
+            )
+        return task
+
+    async def _write_decision_record(
+        self,
+        session_id: str,
+        intent_category: str,
+        result: "SpecialistResult",
+        store: DecisionMemoryStore,
+    ) -> None:
+        """Write a success decision record to DecisionMemoryStore."""
+        try:
+            response_text: str = (result.output.get("text") or "") if result.output else ""
+            tool_calls_count: int = len(result.tool_calls_made)
+            await store.write({
+                "session_id": session_id,
+                "content_json": {
+                    "intent": intent_category,
+                    "response_summary": response_text[:500],
+                    "tool_calls_count": tool_calls_count,
+                },
+                "record_type": "decision",
+                "agent_role": "control",
+            })
+        except Exception:
+            _log.exception(
+                "DecisionMemoryStore.write (decision record) failed; result is still returned",
+                extra={"session_id": session_id},
+            )
+
+    async def _write_failure_record(
+        self,
+        session_id: str,
+        intent_category: str,
+        exc: Exception,
+        store: DecisionMemoryStore,
+    ) -> None:
+        """Write a failure record to DecisionMemoryStore."""
+        try:
+            await store.write({
+                "session_id": session_id,
+                "content_json": {
+                    "intent": intent_category,
+                    "error": str(exc),
+                    "error_type": type(exc).__name__,
+                },
+                "record_type": "failure",
+                "agent_role": "control",
+            })
+        except Exception:
+            _log.exception(
+                "DecisionMemoryStore.write (failure record) failed; re-raising original",
+                extra={"session_id": session_id},
+            )
+
     async def run(
         self,
         task: "SpecialistTask",
@@ -542,127 +694,25 @@ class ControlAgent(AgentBasedSpecialist):
         intent_category: str = (
             (task.context_payload.get("intent") or {}).get("category") or ""
         )
-
-        # T-299 — Pre-call: retrieve past decisions and append to context.
-        # session_id is available on ctx; also accept an override from context_payload
-        # for forward compatibility with callers that embed it there.
         session_id: str = (
-            task.context_payload.get("session_id")
-            or str(ctx.session_id)
+            task.context_payload.get("session_id") or str(ctx.session_id)
         )
+        store = DecisionMemoryStore()
 
-        # --- Skills block (prepended first, per P40) ---
-        skills = SkillLoader().load(intent_category)
-        if skills:
-            skill_block = _SKILL_HEADER + _SKILL_SEPARATOR.join(skills)
-            task = task.model_copy(
-                update={"instruction": skill_block + "\n\n" + task.instruction}
-            )
+        task = self._inject_skills(task, intent_category)
+        task = await self._inject_past_decisions(task, session_id, store)
+        task = await self._inject_domain_knowledge(task, intent_category)
+        task = self._narrow_tools(task, intent_category)
 
-        # --- Past Decisions block (appended after skills) ---
-        if session_id:
-            try:
-                past_records = await DecisionMemoryStore().search(
-                    json.dumps({"session_id": session_id}),
-                    k=3,
-                )
-                if past_records:
-                    decision_lines: list[str] = []
-                    for idx, record in enumerate(past_records, start=1):
-                        raw_content = record.get("content_json", "")
-                        if isinstance(raw_content, str):
-                            try:
-                                content_repr = json.dumps(json.loads(raw_content))
-                            except (json.JSONDecodeError, ValueError):
-                                content_repr = raw_content
-                        else:
-                            content_repr = json.dumps(raw_content)
-                        line = f"Decision {idx}: {content_repr}"
-                        outcome = record.get("outcome")
-                        if outcome == 1:
-                            line += " [user feedback: positive]"
-                        elif outcome == -1:
-                            line += " [user feedback: negative]"
-                        decision_lines.append(line)
-                    past_block = _PAST_DECISIONS_HEADER + "\n".join(decision_lines)
-                    task = task.model_copy(
-                        update={"instruction": task.instruction + past_block}
-                    )
-            except Exception:
-                _log.exception(
-                    "DecisionMemoryStore.search failed; continuing without past decisions",
-                    extra={"session_id": session_id},
-                )
-
-        # --- Domain Knowledge block (from LongTermMemoryStore, by intent scope) ---
-        if intent_category:
-            try:
-                domain_records = await LongTermMemoryStore().search(
-                    f"scope:{intent_category}", k=3
-                )
-                if domain_records:
-                    knowledge_lines: list[str] = [
-                        r.get("content", "") for r in domain_records if r.get("content")
-                    ]
-                    if knowledge_lines:
-                        knowledge_block = _DOMAIN_KNOWLEDGE_HEADER + "\n\n".join(knowledge_lines)
-                        task = task.model_copy(
-                            update={"instruction": task.instruction + knowledge_block}
-                        )
-            except Exception:
-                _log.exception(
-                    "LongTermMemoryStore.search failed; continuing without domain knowledge",
-                    extra={"intent_category": intent_category},
-                )
-
-        # --- Narrow allowed tools by intent (helps local models with many tool definitions) ---
-        if intent_category and intent_category in _INTENT_TOOL_SUBSET:
-            task = task.model_copy(update={"allowed_tools": _INTENT_TOOL_SUBSET[intent_category]})
-
-        # --- Delegate to base runtime ---
         result: "SpecialistResult | None" = None
         try:
             result = await super().run(task, ctx, agent_run_id=agent_run_id)
         except Exception as exc:
-            # T-301 — On failure: write failure record to DecisionMemoryStore.
             if session_id:
-                try:
-                    await DecisionMemoryStore().write({
-                        "session_id": session_id,
-                        "content_json": {
-                            "intent": intent_category,
-                            "error": str(exc),
-                            "error_type": type(exc).__name__,
-                        },
-                        "record_type": "failure",
-                        "agent_role": "control",
-                    })
-                except Exception:
-                    _log.exception(
-                        "DecisionMemoryStore.write (failure record) failed; re-raising original",
-                        extra={"session_id": session_id},
-                    )
+                await self._write_failure_record(session_id, intent_category, exc, store)
             raise
 
-        # T-300 — Post-call: write decision record to DecisionMemoryStore on success.
         if session_id and result is not None:
-            try:
-                response_text: str = (result.output.get("text") or "") if result.output else ""
-                tool_calls_count: int = len(result.tool_calls_made)
-                await DecisionMemoryStore().write({
-                    "session_id": session_id,
-                    "content_json": {
-                        "intent": intent_category,
-                        "response_summary": response_text[:500],
-                        "tool_calls_count": tool_calls_count,
-                    },
-                    "record_type": "decision",
-                    "agent_role": "control",
-                })
-            except Exception:
-                _log.exception(
-                    "DecisionMemoryStore.write (decision record) failed; result is still returned",
-                    extra={"session_id": session_id},
-                )
+            await self._write_decision_record(session_id, intent_category, result, store)
 
         return result

@@ -71,11 +71,11 @@ Dependencies: P109 Done
 
 Dependencies: none
 
-### Batch B-02 — Fix #4–#5: refactor ControlAgent.run() and consolidate DecisionMemoryStore (App Builder) — Not Started
+### Batch B-02 — Fix #4–#5: refactor ControlAgent.run() and consolidate DecisionMemoryStore (App Builder) — Done
 
 | Task | Description | Status |
 |---|---|---|
-| T-644 | In `packages/agent/control/control_agent.py`, extract the four pre-call steps and two post-call writes of `ControlAgent.run()` into private methods: `_inject_skills(task, intent_category) -> SpecialistTask`; `async _inject_past_decisions(task, session_id, store: DecisionMemoryStore) -> SpecialistTask`; `async _inject_domain_knowledge(task, intent_category) -> SpecialistTask`; `_narrow_tools(task, intent_category) -> SpecialistTask`; `async _write_decision_record(session_id, intent_category, result, store: DecisionMemoryStore) -> None`; `async _write_failure_record(session_id, intent_category, exc, store: DecisionMemoryStore) -> None`. In `run()`, instantiate `store = DecisionMemoryStore()` once and pass it to the three methods that need it. The `run()` body becomes a sequential call to these six helpers + `super().run()`. Behaviour must be identical to the current implementation. | Not Started |
+| T-644 | In `packages/agent/control/control_agent.py`, extract the four pre-call steps and two post-call writes of `ControlAgent.run()` into private methods: `_inject_skills(task, intent_category) -> SpecialistTask`; `async _inject_past_decisions(task, session_id, store: DecisionMemoryStore) -> SpecialistTask`; `async _inject_domain_knowledge(task, intent_category) -> SpecialistTask`; `_narrow_tools(task, intent_category) -> SpecialistTask`; `async _write_decision_record(session_id, intent_category, result, store: DecisionMemoryStore) -> None`; `async _write_failure_record(session_id, intent_category, exc, store: DecisionMemoryStore) -> None`. In `run()`, instantiate `store = DecisionMemoryStore()` once and pass it to the three methods that need it. The `run()` body becomes a sequential call to these six helpers + `super().run()`. Behaviour must be identical to the current implementation. | Done |
 
 Dependencies: B-01
 
