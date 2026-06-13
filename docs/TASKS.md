@@ -714,3 +714,31 @@ Dependencies: none
 | T-677 | Update `tests/unit/agent/test_control_agent_pipeline.py`: assert that `_build_system_prompt` is called with empty `schema_context`; assert that the injected `task.instruction` contains the schema example block after `_inject_schema_context()` is called. Ensure `make test-unit` exits 0. | Done |
 
 Dependencies: B-01 (documentation informs rationale comments)
+
+---
+
+## P118 — Failure Pattern Harness Hardening — Done
+
+### Batch B-01 — FP-NNN back-references in AGENTS.md §Prohibitions (Harness Engineering) — Done
+
+| Task | Description | Status |
+|---|---|---|
+| T-678 | Add `(← FP-NNN)` back-references to each Prohibition in `AGENTS.md §Prohibitions` that was derived from a recorded failure pattern (FP-003: sign-off without exit-code evidence; FP-003: omit make test-integration; FP-011: state["input_tokens"] SUM vs peak). | Done |
+
+Dependencies: none
+
+### Batch B-02 — Path-scoped watch rule for high-failure-density packages (Harness Engineering) — Done
+
+| Task | Description | Status |
+|---|---|---|
+| T-679 | Create `.claude/rules/design-contract-watch.md` with `paths` frontmatter scoping to `packages/agent/**`, `packages/tools/**`, `packages/persistence/**`. Body: concise reminders of Count=1 design-contract patterns most likely to recur in these areas (FP-004, FP-007, FP-008, FP-010, FP-016). | Done |
+
+Dependencies: none
+
+### Batch B-03 — Count=1 watch list in project memory (Harness Engineering) — Done
+
+| Task | Description | Status |
+|---|---|---|
+| T-680 | Create `/home/eimamura/.claude/projects/-home-eimamura-projects-business-decision-os/memory/project_failure_watchlist.md` listing Count=1 design-contract failure patterns with highest recurrence risk, and add entry to MEMORY.md index. | Done |
+
+Dependencies: none

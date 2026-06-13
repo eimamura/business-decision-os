@@ -85,12 +85,12 @@ The following are explicitly forbidden across all agents:
 - Fixing a test or quality gate failure that was discovered in a completed phase, or that persists after a specialist's first fix attempt, without first registering it as a D-NNN Defect Task in `docs/TASKS.md`. Ad-hoc `fix(...)` commits are not a substitute for the Defect Task workflow.
 - Marking a D-NNN Defect Task `Resolved` without immediately invoking `/analyze-failure D-NNN` to record the root cause in `docs/failure-patterns.md`.
 - Advancing to the next phase while any Defect Task in the current phase has `Status: Open`.
-- Signing off a quality gate as passed without capturing and reporting the command, exit code, and tail output in the Proof Output block — a claim of "passes" with no exit-code evidence is not a sign-off.
-- Omitting `make test-integration` from a phase sign-off gate list because no integration test was explicitly listed as a task in the phase — integration tests must run at every phase sign-off without exception, because any behavior-changing phase can silently break existing integration tests. A sign-off report that lacks a `make test-integration` gate row is invalid.
+- Signing off a quality gate as passed without capturing and reporting the command, exit code, and tail output in the Proof Output block — a claim of "passes" with no exit-code evidence is not a sign-off. (← FP-003)
+- Omitting `make test-integration` from a phase sign-off gate list because no integration test was explicitly listed as a task in the phase — integration tests must run at every phase sign-off without exception, because any behavior-changing phase can silently break existing integration tests. A sign-off report that lacks a `make test-integration` gate row is invalid. (← FP-003)
 - Force-pushing to `main`; direct pushes to `main`; non-linear history.
 - Using `--no-verify` or skipping commit hooks without explicit ADR justification.
 - Using a plain HTTP stub for the web container; `compose web.build.context` must be the monorepo root.
-- Using `state["input_tokens"]` (the `operator.add` SUM accumulator in `AgentState`) for context-saturation threshold checks or live verification because the SUM always exceeds `num_ctx` for multi-call runs and produces false-safe readings; the authoritative saturation signal is `peak_input_tokens` (per-call max, surfaced in the `agent_end` SSE `token_cost.peak_input_tokens` field). Any new token metric that is a SUM must document "sum-not-peak" at its definition site.
+- Using `state["input_tokens"]` (the `operator.add` SUM accumulator in `AgentState`) for context-saturation threshold checks or live verification because the SUM always exceeds `num_ctx` for multi-call runs and produces false-safe readings; the authoritative saturation signal is `peak_input_tokens` (per-call max, surfaced in the `agent_end` SSE `token_cost.peak_input_tokens` field). Any new token metric that is a SUM must document "sum-not-peak" at its definition site. (← FP-011)
 
 ## Commit Convention
 
