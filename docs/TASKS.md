@@ -10,7 +10,7 @@ execution process.
 phase detail archived at `docs/archive/v5/TASKS.md` (P24–P64 in `docs/archive/v4/`,
 P0–P23 in `docs/archive/v3/`).
 
-Numbering continues repository-wide: **next phase = P111, next task = T-647, next defect
+Numbering continues repository-wide: **next phase = P112, next task = T-653, next defect
 = D-018, next failure pattern = FP-017.**
 
 ---
@@ -51,7 +51,44 @@ Tagged `v0.1.0` (commit 039c43a); merged to `main`; GitHub release published.
 
 ## Active Phases
 
-None (next phase: P111)
+None (next phase: P112)
+
+---
+
+## P111 — control_agent.py System Prompt Improvements (Judge Report) — Done (2026-06-13)
+
+**Goal:** Apply 5 targeted improvements to `render_routing_policy()` and `_build_system_prompt()` based on the Judge Report: (1) add `decision_support` routing Rule 9b; (2) fix `{schema_example}` inline placement in Rule 2b; (3) promote Rule 2b to independent Rule 3 and renumber subsequent rules; (4) replace opaque SPEC Q# references with inline semantic labels; (5) activate the `intent` parameter in `_build_system_prompt()` for per-intent tool subset narrowing in `run()`.
+
+Done when: (1) Rule 9b appears in `render_routing_policy()` output after Rule 9 for `decision_support` tools; (2) `{schema_example}` placeholder follows the "do NOT call any tool again" sentence in the nl_query supply-shortage rule; (3) rules are numbered 1–13 sequentially with no 2b; (4) all SPEC Q5/Q7/Q8/Q9/Q10 references replaced with inline labels; (5) `_build_system_prompt(intent=...)` narrows `_INTENT_TOOL_SUBSET` to `{intent: ...}` when intent is non-None, and `ControlAgent.run()` rebuilds/applies the intent-narrowed prompt after intent is resolved; (6) all mandatory gates exit 0.
+
+Dependencies: P110 Done
+
+### Batch B-01 — Fixes #1–#4: routing policy prose corrections (App Builder) — Done
+
+| Task | Description | Status |
+|---|---|---|
+| T-647 | In `packages/agent/control/control_agent.py`, add Rule 9b to `render_routing_policy()` immediately after Rule 9 (order-timing). Rule 9b covers `decision_support` intent: "For replenishment optimization, inventory simulation, or demand forecast generation — call each tool (optimize_replenishment / simulate_inventory / forecast) ONCE as needed. Require human approval via request_approval before executing any optimization. evaluate_candidates compares alternatives after optimize_replenishment returns candidates." Use the same f-string pattern as existing rules; derive tool names from the `decision_support` subset using `_pick()` or direct subset lookup. | Done |
+| T-648 | In `render_routing_policy()`, move the `{schema_example}` placeholder so it appears after "do NOT call any tool again." rather than between the CORRELATED SUBQUERIES sentence and the synthesis instruction. The corrected order: (a) supply-shortage rule intro; (b) call nl_query ONCE; (c) nl_query must use CORRELATED SUBQUERIES; (d) "After nl_query returns, synthesize immediately — do NOT call any tool again."; (e) `{schema_example}\n`; (f) supply_gap_tool single-SKU note. | Done |
+| T-649 | In `render_routing_policy()`, rename Rule 2b to Rule 3 and shift all subsequent rule numbers up by 1: old Rule 3 → 4, 4 → 5, 5 → 6, 6 → 7, 7 → 8, 8 → 9, 9 → 10, 9b (new) → 11, 10 → 12, 11 → 13, 12 → 14. Update all f-string rule-number prefixes in the return string. (Note: 9b added in T-647 becomes Rule 11 after renumbering.) | Done |
+| T-650 | In `render_routing_policy()`, replace each `(SPEC Q#)` reference with an inline semantic label: `(SPEC Q5)` → `(forecast-vs-actual gap)`, `(SPEC Q7)` → `(production plan adjustment)`, `(SPEC Q8)` → `(supply order timing)`, `(SPEC Q9)` → `(customer/region demand shift)`, `(SPEC Q10)` → `(bottleneck/binding constraint)`. | Done |
+
+Dependencies: none
+
+### Batch B-02 — Fix #5: activate `intent` parameter in `_build_system_prompt()` (App Builder) — Done
+
+| Task | Description | Status |
+|---|---|---|
+| T-651 | In `packages/agent/control/control_agent.py`: (a) remove the `# noqa: ARG001` comment from the `intent` parameter of `_build_system_prompt()` and implement narrowing: when `intent` is a non-None string present in `_INTENT_TOOL_SUBSET`, pass `{intent: _INTENT_TOOL_SUBSET[intent]}` to `render_routing_policy()` instead of the full `_INTENT_TOOL_SUBSET`; when `intent is None` or not in the dict, fall back to the full `_INTENT_TOOL_SUBSET` as before. (b) In `ControlAgent.run()`, after `intent_category` is resolved from `task.context_payload`, call `_build_system_prompt(intent=intent_category, schema_context=get_schema_context())` and assign the result to `self.system_prompt` (the AgentBasedSpecialist attribute used by the base run). This means each `run()` invocation rebuilds the system prompt with the correct intent-narrowed routing policy. (c) Add a module-level docstring comment above `_build_system_prompt()` updating the Args section to reflect that `intent` is now active. (d) Verify `make lint` and `make typecheck` pass. | Done |
+
+Dependencies: B-01
+
+### Batch B-03 — Tests + phase sign-off (Test/Review) — Done
+
+| Task | Description | Status |
+|---|---|---|
+| T-652 | In `tests/unit/test_control_prompt.py`: (a) add `test_render_routing_policy_contains_rule_9b_for_decision_support`: call `render_routing_policy(_INTENT_TOOL_SUBSET)` and assert it contains "optimize_replenishment" and "request_approval" and "evaluate_candidates" in the same block after "Rule 9" content; (b) add `test_render_routing_policy_schema_example_after_synthesis_instruction`: assert that in the rendered string, "schema_example" placeholder text (or the rendered schema text when a real schema is passed) appears after "do NOT call any tool again"; (c) add `test_render_routing_policy_no_spec_q_references`: assert the rendered output of `render_routing_policy(_INTENT_TOOL_SUBSET)` does not contain "(SPEC Q5)", "(SPEC Q7)", "(SPEC Q8)", "(SPEC Q9)", "(SPEC Q10)" — confirms inline label replacement; (d) add `test_build_system_prompt_intent_narrows_tool_subset`: call `_build_system_prompt(intent="lookup")` and assert that tools exclusive to "supply_chain" (e.g. "analyze_shipment_delay_causes") do NOT appear in the returned prompt, while "nl_query" (common) does appear; (e) add `test_build_system_prompt_intent_none_includes_all_intents`: call `_build_system_prompt(intent=None)` and assert all intent keys from `_INTENT_TOOL_SUBSET` appear in the rendered routing section. Then run full mandatory gate set: `make test-unit && make test-integration && make test-e2e && make build && make lint && make typecheck` — all six must exit 0. | Done |
+
+Dependencies: B-01, B-02
 
 ---
 
