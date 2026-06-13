@@ -163,16 +163,61 @@ When two agents disagree or a handoff is rejected:
 
 ---
 
+## Structured Handoff Format
+
+All Orchestrator → specialist handoffs must use this format. Prose-only handoffs are rejected.
+
+```
+### Handoff: <batch-id> → <agent-role>
+
+batch: <B-NN>
+tasks: [T-NNN, T-NNN, ...]
+scope: <one sentence describing the deliverable>
+mode: implementation | stub | infra | batch-check | phase-sign-off
+design_sections:
+  - docs/DESIGN.md §<section name>   # list only what this batch needs
+adr_dependencies:
+  - docs/adr/YYYY-MM-DD-<slug>.md    # or: none
+known_risks:
+  - <optional: edge cases, blockers the specialist should know about>
+```
+
+**Rules:**
+- Include only the `docs/DESIGN.md` sections the batch touches. Do not paste full docs.
+- `mode` determines how Test/Review runs: `batch-check` = unit+lint+typecheck only; `phase-sign-off` = full Quality Gates.
+- If `adr_dependencies` is non-empty, specialist must read those ADRs before coding.
+
+---
+
 ## Handoff Rules
 
 ### Handing off to specialist agents
 
-- **App Builder**: include task IDs, relevant `docs/DESIGN.md` sections (Public Interfaces, Stub Behavior), phase scope, ADR dependencies
-- **Infra/DevOps**: include task IDs, relevant `docs/DESIGN.md §Deployment Design` sections, phase scope
-- **Test/Review**: include task IDs, list of components to test, phase scope, which stubs are expected vs. real, and the check mode (`batch check` or `phase sign-off`)
+Use the Structured Handoff Format above for every handoff. Quick reference for which `design_sections` to include:
+
+| Specialist | design_sections to include |
+|---|---|
+| App Builder | `§Public Interfaces` (when touching an interface), `§Stub Behavior` (stub tasks), `§Monorepo Layout` (new files) |
+| Infra/DevOps | `§Deployment Design` |
+| Test/Review | list of components to test + stub-vs-real status; set `mode` appropriately |
 
 ### Failure handling
 
 - If a specialist reports a blocker (missing ADR, unresolved dependency): pause the phase, resolve the blocker first, then re-issue the task
 - If Test/Review reports failing Quality Gates: do not advance the phase; return the specific issues to the responsible agent (App Builder or Infra)
 - If two phases have a dependency conflict under reordering: resolve via ADR before proceeding; document the resolution in `docs/DECISIONS.md`
+
+---
+
+## Phase Sign-Off Checklist
+
+Run during phase sign-off (after all batches are `Done`, before marking phase `Done`):
+
+1. All mandatory Quality Gates pass (see SKILL.md §Run Mode step 8).
+2. **DECISIONS.md promotion scan**: read `docs/DECISIONS.md` and check for entries that:
+   - Mention a public interface, technology swap, or schema change, **AND**
+   - Have no corresponding file under `docs/adr/`.
+   For each match, emit: `"WARNING: DECISIONS.md entry '<date>: <summary>' mentions a public interface but has no ADR. Promote to docs/adr/ in the next phase intake."`
+   This is a non-blocking warning — it does not halt sign-off but MUST be resolved before the next phase's intake proceeds.
+3. No `Defect Task` in the current phase has `Status: Open`.
+4. `docs/STATE.md` Active Lease is `None`.

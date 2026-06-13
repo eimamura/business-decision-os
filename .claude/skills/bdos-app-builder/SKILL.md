@@ -54,21 +54,25 @@ Implement application code: FastAPI backend, Next.js frontend, and all Python pa
 
 ## Required Reading (before every session)
 
-Always read:
+**Always load** (short; load every session without exception):
 1. `AGENTS.md` — working rules and prohibitions
-2. `docs/DESIGN.md §Public Interfaces` — normative signatures; never change without ADR
-3. `docs/DESIGN.md §Stub Behavior` — Day-1 stub contracts
-4. `docs/DESIGN.md §Monorepo Layout` — what goes where
-5. `docs/TASKS.md` — current phase tasks
+2. `docs/TASKS.md` — current phase tasks
 
-Read when relevant:
+**Load once per session if unfamiliar** (skip if already in context from this session):
+3. `docs/DESIGN.md §Monorepo Layout` — what goes where
 
-| Task type | Also read |
+**Deferred — load only when the task type requires it:**
+
+| Task type | Load |
 |---|---|
+| Implementing or changing any public interface | `docs/DESIGN.md §Public Interfaces` — normative signatures; never change without ADR |
+| Implementing or replacing any stub | `docs/DESIGN.md §Stub Behavior` — Day-1 stub contracts |
 | Implementing or changing any tool | `docs/TOOLS.md` — tool specs, failure handling, audit payload |
 | Touching layer boundaries (agent ↔ tool ↔ persistence) | `docs/DESIGN.md §Architecture Constraints` — MUST/MUST NOT rules per layer |
-| Changing any public interface | `docs/DESIGN.md §Architecture Constraints — Cross-cutting` and `docs/adr/` |
+| Changing any public interface | also load `docs/DESIGN.md §Architecture Constraints — Cross-cutting` and `docs/adr/` |
 | Writing or modifying any test | `.claude/rules/testing.md` — test tiers, naming conventions, zero-network rule |
+
+Rationale: `docs/DESIGN.md` is large. Loading it unconditionally on every session inflates context cost and crowds out task-relevant content. Load sections only when the task type demands them.
 
 ## Tool Usage Rules
 

@@ -96,13 +96,21 @@ Each Orchestrator turn follows this sequence:
 1. **Read state**: Read `docs/TASKS.md` and `docs/STATE.md`
 2. **Check for completion**: If all target-phase batches are `Done` → emit proof output and stop
 3. **Check for escalation**: If any batch has `Blocked Count` = 2 in `docs/TASKS.md` → escalate to human and stop
-4. **Select next batch**: Pick the first `Not Started` batch whose dependencies are all `Done`
-5. **Acquire lease**: Set `docs/STATE.md` Active Lease = selected batch ID
-6. **Scoped handoff**: Send to one specialist — batch task IDs + relevant `docs/DESIGN.md` interface section only (not full docs)
+4. **Select next batch(es)**:
+   - Pick all `Not Started` batches whose dependencies are all `Done`.
+   - **Serial (default)**: take the first candidate only.
+   - **Parallel option**: if two or more candidates share no data dependencies (neither reads what the other writes), they may be spawned concurrently — see §Parallel Batch Pattern below.
+5. **Acquire lease** (optimistic concurrency):
+   1. Re-read `docs/STATE.md` immediately before writing.
+   2. Confirm Active Lease is `None` (or that the listed batch is already `Done`).
+   3. Write Active Lease = selected batch ID (or `[B-XX, B-YY]` for parallel batches).
+   4. **Immediately re-read** `docs/STATE.md` and verify your lease is still present and unchanged.
+   5. If another session overwrote the lease between steps 3 and 4: log "Lease conflict detected", wait one turn, and return to step 1.
+6. **Scoped handoff**: use the structured format in `docs/ORCHESTRATOR.md §Structured Handoff Format`
 7. **Await specialist result**: Receive completion report or structured blocker
 8. **Run Test/Review** (two modes):
    - **Batch check** (every batch): Spawn `bdos-test-review` for lightweight validation — `uv run pytest tests/unit -q && make lint && make typecheck`. Must pass before marking batch `Done`.
-   - **Phase sign-off** (once, when all batches are `Done`): Spawn `bdos-test-review` for full Quality Gates. Phase does not advance until sign-off received.
+   - **Phase sign-off** (once, when all batches are `Done`): Spawn `bdos-test-review` for full Quality Gates. Phase does not advance until sign-off received. Also run the `docs/ORCHESTRATOR.md §Phase Sign-Off Checklist` (DECISIONS.md promotion scan + open defect check).
    - **Mandatory gate set (non-negotiable — applies to every phase sign-off without exception):**
      ```
      make test-unit
@@ -135,6 +143,27 @@ Each Orchestrator turn follows this sequence:
 - 1 batch = 1 deliverable (scaffold, migration, CI pipeline, etc.)
 - Too small: individual files or folder creation → merge into batch
 - Too large: entire phase → split into batches with clear dependencies
+
+## Parallel Batch Pattern
+
+Use when two or more `Not Started` batches are simultaneously eligible (dependencies all `Done`) and have no data dependency on each other (neither writes what the other reads).
+
+**Eligibility check:**
+1. Both batches are `Not Started`.
+2. All their listed dependencies are `Done`.
+3. Their output files do not overlap (check `docs/TASKS.md` task descriptions and `docs/DESIGN.md §Monorepo Layout`).
+
+**Execution:**
+1. Set `docs/STATE.md` Active Leases = `[B-XX, B-YY]` (plural).
+2. Spawn both specialists in a single `Agent()` call with `run_in_background: true` where possible; otherwise spawn sequentially and await both.
+3. Await all results before updating state.
+4. On completion, clear all leases atomically in a single STATE.md write.
+5. If one batch fails and the other succeeds: mark the failed batch `Blocked`; mark the succeeded batch `Done`; clear both leases.
+
+**When NOT to parallelize:**
+- One batch depends on a schema or file the other batch creates (even if not listed as an explicit dependency).
+- The phase has only one eligible batch.
+- A prior batch is `Blocked` — resolve blockers before adding parallel work.
 
 ## Pre-flight Ambiguity Check
 
