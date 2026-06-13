@@ -236,3 +236,73 @@ def test_build_system_prompt_intent_none_includes_all_intents() -> None:
         assert intent_key in result, (
             f"Intent key {intent_key!r} not found in prompt built with intent=None"
         )
+
+
+# ---------------------------------------------------------------------------
+# P116 B-02/B-03 — render_routing_policy() subset filtering and routing_hint
+# ---------------------------------------------------------------------------
+
+
+def test_render_routing_policy_lookup_subset_omits_detect_demand_shift() -> None:
+    """P116 B-03: render_routing_policy with lookup subset must not mention detect_demand_shift
+    in a demand-shift rule, because that tool is absent from the lookup subset.
+
+    The guard `if demand_shift_tool in all_tools` in render_routing_policy() prevents the
+    demand-shift rule from being emitted when detect_demand_shift is not in the subset.
+    """
+    lookup_subset = {"lookup": _INTENT_TOOL_SUBSET["lookup"]}
+    result = render_routing_policy(lookup_subset)
+    # detect_demand_shift should not appear as a call instruction in the lookup prompt
+    assert "detect_demand_shift" not in result, (
+        "detect_demand_shift must not appear in routing policy for the lookup subset"
+    )
+
+
+def test_render_routing_policy_supply_chain_subset_includes_delay_tool_rule() -> None:
+    """P116 B-03: render_routing_policy with supply_chain subset must mention
+    analyze_shipment_delay_causes because that tool is present in the supply_chain subset.
+
+    Rule 5 ('For shipment-delay or unshipped-order root-cause questions') is always
+    emitted, and its text references analyze_shipment_delay_causes.
+    """
+    supply_chain_subset = {"supply_chain": _INTENT_TOOL_SUBSET["supply_chain"]}
+    result = render_routing_policy(supply_chain_subset)
+    assert "analyze_shipment_delay_causes" in result, (
+        "analyze_shipment_delay_causes (delay_tool) must appear in supply_chain routing policy"
+    )
+
+
+def test_build_system_prompt_routing_hint_appears_in_output() -> None:
+    """P116 B-02: _build_system_prompt(routing_hint=...) must prepend the hint text
+    before the tool catalog in the routing policy section.
+
+    render_routing_policy() formats the hint as '→ <hint>' when non-empty.
+    _build_system_prompt() passes context_pack.routing_hint through to render_routing_policy().
+    """
+    from packages.agent.control.control_agent import _build_system_prompt
+
+    hint = "Call list_stockout_risk ONCE."
+    result = _build_system_prompt(routing_hint=hint)
+    assert hint in result, (
+        f"routing_hint {hint!r} not found in _build_system_prompt output"
+    )
+    assert f"→ {hint}" in result, (
+        f"routing_hint must appear as '→ {hint}' in output"
+    )
+
+
+def test_render_routing_policy_lookup_subset_omits_optimize_and_constraint_tools() -> None:
+    """P116 B-03: render_routing_policy with lookup subset must not mention
+    optimize_replenishment or identify_binding_constraint.
+
+    These tools are absent from the lookup subset; their rules are guarded by
+    `if optimize_tool in all_tools` and `if constraint_tool in all_tools` respectively.
+    """
+    lookup_subset = {"lookup": _INTENT_TOOL_SUBSET["lookup"]}
+    result = render_routing_policy(lookup_subset)
+    assert "optimize_replenishment" not in result, (
+        "optimize_replenishment must not appear in routing policy for the lookup subset"
+    )
+    assert "identify_binding_constraint" not in result, (
+        "identify_binding_constraint must not appear in routing policy for the lookup subset"
+    )

@@ -51,7 +51,7 @@ Tagged `v0.1.0` (commit 039c43a); merged to `main`; GitHub release published.
 
 ## Active Phases
 
-P116 — Context Engineering Pipeline: Bug Fixes & Field Activation (In Progress)
+P116 — Context Engineering Pipeline: Bug Fixes & Field Activation (Done 2026-06-13)
 
 ---
 
@@ -92,11 +92,11 @@ Dependencies: B-01
 
 Dependencies: B-01, B-02
 
-### Batch B-04 — Tests + phase sign-off (Test/Review) — Not Started
+### Batch B-04 — Tests + phase sign-off (Test/Review) — Done (2026-06-13)
 
 | Task | Description | Status |
 |---|---|---|
-| T-674 | Write/update unit tests for all P116 changes. Required: (a) `test_control_prompt.py` — test `render_routing_policy()` with `lookup` subset does NOT contain rule text referencing `detect_demand_shift`; test `_build_system_prompt(routing_hint="Call list_stockout_risk ONCE.")` includes the hint. (b) `test_context_builder.py` — test Q1 keyword `"running low"` → Q1; test Q6 keyword `"supply gap"` → Q6; test Q9 keyword `"demand change"` → Q9. (c) `test_skill_loader.py` or `test_control_agent_pipeline.py` — test `SkillLoader().load_by_keys(["stockout_risk_analysis"])` returns a list with exactly 1 item. (d) test `_narrow_tools(task, ["list_stockout_risk"])` sets `task.allowed_tools = ["list_stockout_risk"]`; test `_narrow_tools(task, [])` leaves task unchanged. Run full mandatory gate set: `make test-unit && make test-integration && make test-e2e && make build && make lint && make typecheck` — all six must exit 0. | Not Started |
+| T-674 | Write/update unit tests for all P116 changes. Required: (a) `test_control_prompt.py` — test `render_routing_policy()` with `lookup` subset does NOT contain rule text referencing `detect_demand_shift`; test `_build_system_prompt(routing_hint="Call list_stockout_risk ONCE.")` includes the hint. (b) `test_context_builder.py` — test Q1 keyword `"running low"` → Q1; test Q6 keyword `"supply gap"` → Q6; test Q9 keyword `"demand change"` → Q9. (c) `test_skill_loader.py` or `test_control_agent_pipeline.py` — test `SkillLoader().load_by_keys(["stockout_risk_analysis"])` returns a list with exactly 1 item. (d) test `_narrow_tools(task, ["list_stockout_risk"])` sets `task.allowed_tools = ["list_stockout_risk"]`; test `_narrow_tools(task, [])` leaves task unchanged. Run full mandatory gate set: `make test-unit && make test-integration && make test-e2e && make build && make lint && make typecheck` — all six must exit 0. | Done |
 
 Dependencies: B-01, B-02, B-03
 

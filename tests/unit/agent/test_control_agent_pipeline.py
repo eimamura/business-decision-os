@@ -300,3 +300,42 @@ async def test_control_agent_all_three_skills_injected_for_supply_chain() -> Non
     assert "stockout_risk_analysis" in injected_instruction
     assert "exception_detection" in injected_instruction
     assert "shipment_delay_root_cause" in injected_instruction
+
+
+# ---------------------------------------------------------------------------
+# P116 B-01 — _narrow_tools() unit tests
+# ---------------------------------------------------------------------------
+
+
+def test_narrow_tools_non_empty_list_sets_allowed_tools() -> None:
+    """P116 B-01: _narrow_tools with a non-empty list must set task.allowed_tools
+    to exactly that list.
+
+    ControlAgent._narrow_tools() accepts a pre-filtered list (allowed_tools) and
+    calls model_copy to update the task.  This replaces the previous behaviour that
+    re-read _INTENT_TOOL_SUBSET internally.
+    """
+    task = _make_supply_chain_task()
+    agent = ControlAgent(llm_client=MagicMock(), tool_registry=MagicMock())
+    narrowed = ["list_stockout_risk", "nl_query"]
+    result = agent._narrow_tools(task, narrowed)
+    assert result.allowed_tools == narrowed
+
+
+def test_narrow_tools_empty_list_leaves_allowed_tools_unchanged() -> None:
+    """P116 B-01: _narrow_tools with an empty list must return the task unchanged.
+
+    When allowed_tools is [] (e.g. unknown intent or no prohibition narrowing),
+    _narrow_tools must fall back to the task's original allowed_tools without
+    modification, preserving the full unrestricted tool set.
+    """
+    original_tools = ["nl_query", "list_today_exceptions"]
+    task = SpecialistTask(
+        task_id=uuid.uuid4(),
+        instruction="What are today's supply chain exceptions?",
+        context_payload={"intent": {"category": "supply_chain"}, "session_id": str(uuid.uuid4())},
+        allowed_tools=original_tools,
+    )
+    agent = ControlAgent(llm_client=MagicMock(), tool_registry=MagicMock())
+    result = agent._narrow_tools(task, [])
+    assert result.allowed_tools == original_tools

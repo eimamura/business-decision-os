@@ -18,6 +18,55 @@ async def test_build_q1_keywords_return_q1_pack() -> None:
     assert pack.use_case_id == "Q1"
 
 
+async def test_build_q1_keyword_running_low_returns_q1_pack() -> None:
+    """P116 B-03: 'running low' paraphrase must classify as Q1 stockout risk.
+
+    'running low' was added to _USE_CASE_KEYWORDS['Q1'] in B-03 to cover
+    paraphrases of the stockout-risk question.
+    """
+    pack = await ContextBuilder().build(
+        "supply_chain", "which products are running low on inventory"
+    )
+    assert pack.use_case_id == "Q1"
+
+
+async def test_build_q5_keyword_actual_vs_forecast_returns_q5_pack() -> None:
+    """P116 B-03: 'actual vs forecast' must classify as Q5 forecast gap analysis.
+
+    'actual vs forecast' was added to _USE_CASE_KEYWORDS['Q5'] to cover
+    the paraphrase where the user places 'actual' before 'forecast'.
+    """
+    pack = await ContextBuilder().build(
+        "domain_analysis", "show me the actual vs forecast for last month"
+    )
+    assert pack.use_case_id == "Q5"
+
+
+async def test_build_q6_keyword_supply_gap_returns_q6_pack() -> None:
+    """P116 B-03: 'supply gap' must classify as Q6 forward supply shortage.
+
+    'supply gap' was added to _USE_CASE_KEYWORDS['Q6'] so users asking about
+    supply adequacy without using the word 'shortage' still route to Q6.
+    """
+    pack = await ContextBuilder().build(
+        "supply_chain", "what is the supply gap over the next 30 days"
+    )
+    assert pack.use_case_id == "Q6"
+
+
+async def test_build_q9_keyword_demand_change_returns_q9_pack() -> None:
+    """P116 B-03: 'demand change' (singular, no 's') must classify as Q9.
+
+    'demand change' was added to _USE_CASE_KEYWORDS['Q9'] as a paraphrase for
+    demand shift by customer/region; the existing keyword 'demand changes' already
+    covered the plural form.
+    """
+    pack = await ContextBuilder().build(
+        "domain_analysis", "has there been a demand change from any key customer"
+    )
+    assert pack.use_case_id == "Q9"
+
+
 async def test_build_q3_keyword_exception_returns_q3_pack() -> None:
     pack = await ContextBuilder().build(
         "supply_chain", "what exceptions require attention today"
