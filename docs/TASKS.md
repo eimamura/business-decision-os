@@ -10,7 +10,7 @@ execution process.
 phase detail archived at `docs/archive/v5/TASKS.md` (P24–P64 in `docs/archive/v4/`,
 P0–P23 in `docs/archive/v3/`).
 
-Numbering continues repository-wide: **next phase = P109, next task = T-640, next defect
+Numbering continues repository-wide: **next phase = P110, next task = T-643, next defect
 = D-018, next failure pattern = FP-017.**
 
 ---
@@ -51,7 +51,41 @@ Tagged `v0.1.0` (commit 039c43a); merged to `main`; GitHub release published.
 
 ## Active Phases
 
-None (next phase: P109)
+None (next phase: P110)
+
+---
+
+## P109 — Context Engineering Refactor — Done (2026-06-13)
+
+**Goal:** Rebuild `_build_system_prompt()` as a conceptual-module assembler so each concern (business guidelines, routing policy, tool catalog, schema context, response format) is an independently maintainable function.
+
+Done when: (1) `render_business_guidelines()` and `render_response_format()` exist and are pure fixed-text functions with no tool names or schema; (2) `render_schema_context(schema: str) -> str` wraps `_make_schema_example()` with the same fail-open behaviour; (3) `_build_system_prompt(intent, user_role, schema_context)` assembles all sections via `"\n\n".join(filter(None, [...]))`; (4) `ControlAgent.__init__` calls the updated signature; (5) existing tool-name validation test continues to pass; (6) new tests for `render_business_guidelines` and `render_response_format` pass; (7) all mandatory gates exit 0.
+
+Dependencies: P108 Done
+
+### Batch B-01 — Extract render_business_guidelines / render_response_format / render_schema_context; update _build_system_prompt (App Builder) — Done
+
+| Task | Description | Status |
+|---|---|---|
+| T-640 | In `packages/agent/control/control_agent.py`: (a) extract the role/responsibilities/domain-scope preamble of `_SYSTEM_PROMPT_TEMPLATE` into `render_business_guidelines() -> str` (pure fixed text, no tool names, no schema); (b) extract the `## Response Format` section into `render_response_format() -> str` (pure fixed text); (c) add `render_schema_context(schema: str) -> str` that calls `_make_schema_example()` with the provided schema string and returns its result (empty string → empty string, fail-open maintained); (d) update `_build_system_prompt(intent: str \| None = None, user_role: str = "analyst", schema_context: str = "") -> str` to assemble: `"\n\n".join(filter(None, [render_business_guidelines(), render_routing_policy(intent), render_tool_catalog(intent), render_schema_context(schema_context), render_response_format()]))` — `user_role` is accepted but unused (reserved for future `render_user_permissions`); (e) update `ControlAgent.__init__` to call `_build_system_prompt(intent=None, schema_context=get_schema_context())`. | Done |
+
+Dependencies: none
+
+### Batch B-02 — Update tests (App Builder) — Done
+
+| Task | Description | Status |
+|---|---|---|
+| T-641 | In `tests/unit/test_control_prompt.py`: (a) ensure `test_system_prompt_tool_names_all_registered` and `test_render_routing_policy_contains_all_tool_names` still pass after the refactor; (b) add `test_render_business_guidelines_contains_no_tool_names`: call `render_business_guidelines()` and assert no backtick-quoted tool names from `_INTENT_TOOL_SUBSET` appear in the output; (c) add `test_render_response_format_contains_required_sections`: call `render_response_format()` and assert it contains "Situation", "Root Cause", "Recommended Actions", and "Confidence Level". No network, no DB. | Done |
+
+Dependencies: B-01
+
+### Batch B-03 — Phase sign-off (Test/Review) — Done
+
+| Task | Description | Status |
+|---|---|---|
+| T-642 | Phase sign-off — full mandatory gate set (NO skips): `make test-unit && make test-integration && make test-e2e && make build && make lint && make typecheck`. All six gates exit 0 (2026-06-13): unit 1300/15 skipped, integration 16/153 skipped, e2e 10 skipped, build OK, lint clean, typecheck clean (178 files). | Done |
+
+Dependencies: B-01, B-02
 
 ---
 
