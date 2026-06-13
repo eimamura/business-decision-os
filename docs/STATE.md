@@ -34,7 +34,9 @@ None
 
 ## Last Completed
 
-P119 — Evaluation-Driven Hardening (2026-06-13). (B-01) ADR docs/adr/2026-06-13-memory-store-async-split.md — documents sync base / async implementation split decision. (B-02) _build_system_prompt() dead parameter schema_context removed. (B-03) ORCHESTRATOR.md DECISIONS.md scan → blocking gate; AGENTS.md + SKILL.md Orchestrator write boundary expanded to docs/ new files. (B-04) lint-test.yml python-integration-test job added (postgres:16 service + alembic + pytest tests/integration/). Sign-off: unit 1428/15 skipped, integration 16/153 skipped, e2e 10 skipped, build OK, lint clean, typecheck 185 files — all exit 0.
+P120 — RAG Verification: DecisionMemoryStore Recency Fallback Fix (2026-06-13). B-01: DecisionMemoryStore.search() bare-string recency fallback implemented (non-JSON queries now return k most recent records); 3 new unit tests (test_decision_memory_store.py); integration test appended to test_memory_stores.py. Sign-off: unit 1431/15 skipped, integration 16/154 skipped, e2e 10 skipped, build OK, lint clean, typecheck 185 files — all exit 0.
+
+Previously: P119 — Evaluation-Driven Hardening (2026-06-13). (B-01) ADR docs/adr/2026-06-13-memory-store-async-split.md — documents sync base / async implementation split decision. (B-02) _build_system_prompt() dead parameter schema_context removed. (B-03) ORCHESTRATOR.md DECISIONS.md scan → blocking gate; AGENTS.md + SKILL.md Orchestrator write boundary expanded to docs/ new files. (B-04) lint-test.yml python-integration-test job added (postgres:16 service + alembic + pytest tests/integration/). Sign-off: unit 1428/15 skipped, integration 16/153 skipped, e2e 10 skipped, build OK, lint clean, typecheck 185 files — all exit 0.
 
 Previously: P118 — Failure Pattern Harness Hardening (2026-06-13). B-01: FP-NNN back-references added to AGENTS.md §Prohibitions (FP-003 × 2, FP-011). B-02: .claude/rules/design-contract-watch.md created (FP-004/007/008/010/016 watch points, path-scoped to packages/agent/**, packages/tools/**, packages/persistence/**). B-03: memory/project_failure_watchlist.md created with 9 high-risk Count=1 patterns; MEMORY.md indexed.
 

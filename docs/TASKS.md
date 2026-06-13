@@ -10,7 +10,7 @@ execution process.
 phase detail archived at `docs/archive/v5/TASKS.md` (P24–P64 in `docs/archive/v4/`,
 P0–P23 in `docs/archive/v3/`).
 
-Numbering continues repository-wide: **next phase = P120, next task = T-687, next defect
+Numbering continues repository-wide: **next phase = P121, next task = T-691, next defect
 = D-018, next failure pattern = FP-017.**
 
 ---
@@ -51,7 +51,28 @@ Tagged `v0.1.0` (commit 039c43a); merged to `main`; GitHub release published.
 
 ## Active Phases
 
-None (next phase: P120)
+None (next phase: P121)
+
+---
+
+## P120 — RAG Verification: DecisionMemoryStore Recency Fallback Fix
+
+**Goal:** Fix the P116-B-03 regression where `DecisionMemoryStore.search()` always returns `[]` for natural-language queries. After P116-B-03, `_inject_past_decisions()` passes `task.instruction` (a natural-language string) as the search key, but `DecisionMemoryStore.search()` still expects a JSON string with a `session_id` key — plain strings fail JSON parse → `session_id = None` → `return []`. Past decisions are never retrieved.
+
+Done when: `DecisionMemoryStore.search()` returns k most recent records for non-JSON queries; `_inject_past_decisions()` correctly injects past decisions for natural-language instructions; unit tests cover the fix; integration test added; all mandatory gates exit 0.
+
+Dependencies: P119 Done
+
+### Batch B-01 — Fix DecisionMemoryStore.search() recency fallback + tests (App Builder + Test/Review) — Done
+
+| Task | Description | Status |
+|---|---|---|
+| T-687 | In `packages/memory/decision.py` `DecisionMemoryStore.search()`: when `json.loads(query)` raises `JSONDecodeError` or `ValueError` (i.e. query is a natural-language string), set `natural_language = True` and fall through to return the `k` most recent rows from `decision_log` (no WHERE filter). Existing branch: JSON with `session_id` → session-filtered (unchanged); JSON without `session_id` → `[]` (unchanged). Add logging: `"DecisionMemoryStore.search: bare-string query %r — returning %d recent records"`. | Done |
+| T-688 | Add unit test `test_decision_memory_search_bare_string_returns_recent_records` in `tests/unit/test_long_term_memory_store.py`-equivalent file (create `tests/unit/test_decision_memory_store.py`): patch asyncpg pool, call `store.search("What are today's supply chain exceptions?", k=3)`, assert `conn.fetch` is called (no WHERE clause). Also add `test_decision_memory_search_json_without_session_id_returns_empty` (existing behavior preserved). | Done |
+| T-689 | Add integration test `test_decision_memory_bare_string_search_returns_recent` in `tests/integration/test_memory_stores.py`: write 2 decision records, then call `store.search("analyze supply chain", k=5)`, assert len >= 2. Requires `decision_log` table (migration 0016). | Done |
+| T-690 | Verify end-to-end in `test_control_agent_memory.py`: add `test_control_agent_inject_past_decisions_via_natural_language_query` that patches `DecisionMemoryStore` to return a real record when called with `task.instruction`, and asserts `## Past Decisions` appears in forwarded instruction. This test already exists for mock — new test confirms the query argument is the instruction, not a JSON. (Check if `test_control_agent_run_queries_decision_memory_before_llm_call` already covers this; if yes, skip T-690.) | Done (covered by existing test) |
+
+Dependencies: none
 
 ---
 
