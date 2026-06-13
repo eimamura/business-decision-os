@@ -154,3 +154,85 @@ def test_make_schema_example_uses_provided_schema() -> None:
     )
     result = _make_schema_example(minimal_schema)
     assert "sku_master" in result
+
+
+def test_render_routing_policy_contains_rule_11_for_decision_support() -> None:
+    """Rule 11 must cover decision_support optimization/approval tools."""
+    result = render_routing_policy(_INTENT_TOOL_SUBSET)
+    for tool in ("optimize_replenishment", "request_approval", "evaluate_candidates", "forecast", "simulate_inventory"):
+        assert tool in result, f"Rule 11 (decision_support) is missing tool: {tool}"
+    # Rule 11 must appear in the output (after renumbering)
+    assert "11." in result, "render_routing_policy output is missing Rule 11"
+
+
+def test_render_routing_policy_schema_example_after_synthesis_instruction() -> None:
+    """{schema_example} placeholder must appear after 'do NOT call any tool again'."""
+    raw = render_routing_policy(_INTENT_TOOL_SUBSET)
+    synthesis_phrase = "do NOT call any tool again"
+    schema_placeholder = "{schema_example}"
+    assert synthesis_phrase in raw, f"Synthesis instruction not found in routing policy"
+    assert schema_placeholder in raw, f"{{schema_example}} placeholder not found in routing policy"
+    synthesis_pos = raw.index(synthesis_phrase)
+    schema_pos = raw.index(schema_placeholder)
+    assert schema_pos > synthesis_pos, (
+        f"{{schema_example}} appears at position {schema_pos} but synthesis instruction "
+        f"appears at position {synthesis_pos}; schema_example must come AFTER synthesis"
+    )
+
+
+def test_render_routing_policy_no_spec_q_references() -> None:
+    """render_routing_policy must not contain any (SPEC Q#) references."""
+    result = render_routing_policy(_INTENT_TOOL_SUBSET)
+    for label in ("(SPEC Q5)", "(SPEC Q7)", "(SPEC Q8)", "(SPEC Q9)", "(SPEC Q10)"):
+        assert label not in result, (
+            f"Found obsolete SPEC reference {label!r} in render_routing_policy output. "
+            "Replace with inline semantic label."
+        )
+
+
+def test_build_system_prompt_intent_narrows_tool_subset() -> None:
+    """_build_system_prompt(intent='lookup') must omit supply_chain-exclusive tools from the
+    tool availability catalog section.
+
+    render_routing_policy() emits a 'Tool availability by intent:' catalog at the top that
+    lists exactly which tools are available per intent.  When called with intent='lookup',
+    _build_system_prompt narrows render_routing_policy() to the lookup subset only, so
+    supply_chain-exclusive tools must not appear in that catalog line.
+    """
+    from packages.agent.control.control_agent import _build_system_prompt, _INTENT_TOOL_SUBSET
+
+    # Tools that exist in supply_chain but NOT in lookup
+    supply_chain_only = [
+        t for t in _INTENT_TOOL_SUBSET["supply_chain"]
+        if t not in _INTENT_TOOL_SUBSET["lookup"]
+    ]
+    assert supply_chain_only, "Test precondition: supply_chain must have tools not in lookup"
+
+    result = _build_system_prompt(intent="lookup")
+
+    # Extract the tool-availability catalog line (format: "lookup: tool1, tool2, ...")
+    catalog_line = ""
+    for line in result.splitlines():
+        if line.startswith("lookup:"):
+            catalog_line = line
+            break
+    assert catalog_line, "No 'lookup:' catalog line found in prompt built for intent='lookup'"
+
+    for tool in supply_chain_only:
+        assert tool not in catalog_line, (
+            f"Tool {tool!r} (supply_chain-exclusive) appears in 'lookup:' catalog line "
+            f"of prompt built for intent='lookup'"
+        )
+    # nl_query must still appear (common to both)
+    assert "nl_query" in catalog_line, "nl_query must appear in lookup-intent catalog line"
+
+
+def test_build_system_prompt_intent_none_includes_all_intents() -> None:
+    """_build_system_prompt(intent=None) must include routing section for every intent."""
+    from packages.agent.control.control_agent import _build_system_prompt, _INTENT_TOOL_SUBSET
+
+    result = _build_system_prompt(intent=None)
+    for intent_key in _INTENT_TOOL_SUBSET:
+        assert intent_key in result, (
+            f"Intent key {intent_key!r} not found in prompt built with intent=None"
+        )

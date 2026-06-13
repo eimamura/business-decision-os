@@ -99,6 +99,7 @@ def render_routing_policy(subset: dict[str, list[str]]) -> str:
     """
     sc = subset.get("supply_chain", [])
     da = subset.get("domain_analysis", [])
+    ds = subset.get("decision_support", [])
 
     # Helper: pick first matching name from subset list, or fall back to literal
     def _pick(tools: list[str], *candidates: str) -> str:
@@ -124,6 +125,11 @@ def render_routing_policy(subset: dict[str, list[str]]) -> str:
     constraint_tool = _pick(da, "identify_binding_constraint")
     order_timing_tool = _pick(da, "analyze_supply_order_timing")
     delayed_orders_tool = _pick(sc, "get_delayed_supply_orders")
+    optimize_tool = _pick(ds, "optimize_replenishment")
+    simulate_tool = _pick(ds, "simulate_inventory")
+    forecast_tool_name = _pick(ds, "forecast")
+    request_approval_tool = _pick(ds, "request_approval")
+    evaluate_candidates_tool = _pick(ds, "evaluate_candidates")
 
     catalog = render_tool_catalog(subset)
 
@@ -137,54 +143,61 @@ def render_routing_policy(subset: dict[str, list[str]]) -> str:
         f"2. To enumerate stockout risk across all SKUs (non-exception context), call "
         f"`{stockout_list_tool}(horizon_days=7)` once — "
         f"do NOT loop `{stockout_calc_tool}` per SKU.\n"
-        f"2b. For questions about supply shortages next week or next month "
+        f"3. For questions about supply shortages next week or next month "
         f"(e.g. 'which products may face supply shortages', 'supply gap over the next 30 days') "
         f"— DO NOT use `{stockout_list_tool}` (that tool measures on-hand stockout risk only, "
         f"NOT forward supply adequacy). "
         f"Call `{nl_tool}` EXACTLY ONCE — "
         f"do NOT call {nl_tool} a second time after the first result. "
         f"The {nl_tool} must use CORRELATED SUBQUERIES (not JOINs) for each metric. "
-        f"{{schema_example}}"
         f"After {nl_tool} returns, synthesize immediately into your final answer — do NOT call "
         f"any tool again. "
+        f"{{schema_example}}\n"
         f"`{supply_gap_tool}` is for SINGLE-SKU deep-dive (requires sku_id parameter).\n"
-        f"3. Use a specialized tool (e.g. {stockout_calc_tool}, {doi_tool}) "
+        f"4. Use a specialized tool (e.g. {stockout_calc_tool}, {doi_tool}) "
         f"when it directly covers a single-SKU question, including days-of-cover "
         f"and when-do-we-run-out analysis.\n"
-        f"4. For shipment-delay or unshipped-order root-cause questions — call "
+        f"5. For shipment-delay or unshipped-order root-cause questions — call "
         f"`{delay_tool}` ONCE. "
         f"Do NOT reconstruct causes by hand-joining raw tables yourself. "
         f"For a plain listing of unshipped orders (without root-cause analysis) call "
         f"`{unshipped_tool}` ONCE.\n"
-        f"5. For demand-shift questions by customer or region — call `{demand_shift_tool}` ONCE. "
+        f"6. For demand-shift questions by customer or region — call `{demand_shift_tool}` ONCE. "
         f"{segment_tool} and {compare_tool} are SKU-axis tools (consumption series); "
         f"they do NOT answer customer/region demand questions. "
-        f"Customer/region demand questions (SPEC Q9) are answered from order transaction data, "
-        f"not from the consumption series. The consumption series is for forecast/stockout "
-        f"tools only.\n"
-        f"6. For forecast-vs-actual gap questions (SPEC Q5) — why is actual demand deviating "
-        f"from the forecast, over-forecast/under-forecast analysis — call "
+        f"Customer/region demand questions (customer/region demand shift) are answered from order "
+        f"transaction data, not from the consumption series. The consumption series is for "
+        f"forecast/stockout tools only.\n"
+        f"7. For forecast-vs-actual gap questions (forecast-vs-actual gap) — why is actual demand "
+        f"deviating from the forecast, over-forecast/under-forecast analysis — call "
         f"`{forecast_dev_tool}` ONCE. "
         f"`{forecast_acc_tool}` is the model-quality axis (MAPE/bias); "
         f"pair with `{demand_shift_tool}` when the user asks which customer/region"
         f" drives the gap.\n"
-        f"7. For production plan adjustment questions (SPEC Q7) — which products need production "
-        f"plan changes, overproduction/underproduction analysis — call "
+        f"8. For production plan adjustment questions (production plan adjustment) — "
+        f"which products need production plan changes, overproduction/underproduction "
+        f"analysis — call "
         f"`{prod_gap_tool}` ONCE. "
         f"Do NOT reconstruct plan-vs-demand gaps by hand-joining "
         f"production and demand tables yourself.\n"
-        f"8. For biggest-constraint or bottleneck-impact questions (SPEC Q10) — "
-        f"call `{constraint_tool}` ONCE. "
+        f"9. For biggest-constraint or bottleneck-impact questions (bottleneck/binding constraint) "
+        f"— call `{constraint_tool}` ONCE. "
         f"Do NOT separately evaluate capacity, supply-gap, and stockout risks "
         f"by assembling your own ranking from individual tool results.\n"
-        f"9. For purchase-earlier/later or order-timing questions (SPEC Q8) — "
+        f"10. For purchase-earlier/later or order-timing questions (supply order timing) — "
         f"call `{order_timing_tool}` ONCE. "
         f"`{delayed_orders_tool}` answers 'what is already late by status'; "
         f"`{order_timing_tool}` answers 'which orders should arrive sooner or later'.\n"
-        f"10. Use {nl_tool} for bulk or cross-product questions — "
+        f"11. For replenishment optimization, inventory simulation, or demand forecast generation "
+        f"— call each tool ONCE as needed: {optimize_tool} for optimization, "
+        f"{simulate_tool} for simulation, {forecast_tool_name} for demand forecast. "
+        f"Require human approval via {request_approval_tool} before executing any optimization. "
+        f"{evaluate_candidates_tool} compares alternatives after {optimize_tool} "
+        f"returns candidates.\n"
+        f"12. Use {nl_tool} for bulk or cross-product questions — "
         f"pass the question in plain English; "
         f"{nl_tool} generates schema-correct SQL internally.\n"
-        f"11. Never fabricate column names or assume columns"
+        f"13. Never fabricate column names or assume columns"
         f" that are not confirmed by tool results.\n\n"
         f"Always ground recommendations in tool results."
         f" Do not fabricate quantities or risk scores.\n"
@@ -198,7 +211,7 @@ def render_routing_policy(subset: dict[str, list[str]]) -> str:
         f" in the same pass.\n"
         f"For exception/delay questions, call `{exceptions_tool}` to surface the full daily"
         f" exception picture in one call.\n"
-        f"12. For heavy or long-running work — call `job_dispatch` with the appropriate job_type"
+        f"14. For heavy or long-running work — call `job_dispatch` with the appropriate job_type"
         f" and await human approval before execution begins."
         f" This is MANDATORY; never run these inline.\n"
         f"    Trigger phrases that ALWAYS route to job_dispatch:\n"
@@ -442,7 +455,7 @@ def _make_schema_example(schema: str) -> str:
 
 
 def _build_system_prompt(
-    intent: str | None = None,  # noqa: ARG001 — reserved for future render_user_permissions
+    intent: str | None = None,
     user_role: str = "analyst",  # noqa: ARG001 — reserved for future render_user_permissions
     schema_context: str = "",
 ) -> str:
@@ -459,8 +472,10 @@ def _build_system_prompt(
     gracefully when schema context is not yet loaded (e.g. at import time).
 
     Args:
-        intent:         Reserved for future per-intent routing-policy narrowing.
-                        Currently unused — full _INTENT_TOOL_SUBSET is always passed.
+        intent:         When provided and present in _INTENT_TOOL_SUBSET, narrows
+                        render_routing_policy() to only the tools for that intent.
+                        Pass None to include all intents (default behaviour for the
+                        class-level _SYSTEM_PROMPT constant).
         user_role:      Reserved for future render_user_permissions(user_role) section.
                         Currently unused.
         schema_context: Schema context string from get_schema_context().  Pass ""
@@ -468,7 +483,12 @@ def _build_system_prompt(
     """
     # inject schema_example into the {schema_example} placeholder that
     # render_routing_policy embeds inside its rule-2b text.
-    routing_section = render_routing_policy(_INTENT_TOOL_SUBSET).format(
+    tool_subset = (
+        {intent: _INTENT_TOOL_SUBSET[intent]}
+        if intent is not None and intent in _INTENT_TOOL_SUBSET
+        else _INTENT_TOOL_SUBSET
+    )
+    routing_section = render_routing_policy(tool_subset).format(
         schema_example=render_schema_context(schema_context)
     )
     return "\n\n".join(
@@ -686,6 +706,14 @@ class ControlAgent(AgentBasedSpecialist):
             task.context_payload.get("session_id") or str(ctx.session_id)
         )
         store = DecisionMemoryStore()
+
+        # Rebuild system prompt with intent-narrowed tool subset so local models
+        # only see tools relevant to this request, reducing context size.
+        if intent_category:
+            self.system_prompt = _build_system_prompt(
+                intent=intent_category,
+                schema_context=get_schema_context(),
+            )
 
         task = self._inject_skills(task, intent_category)
         task = await self._inject_past_decisions(task, session_id, store)
