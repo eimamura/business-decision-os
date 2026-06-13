@@ -91,13 +91,13 @@ Dependencies: B-01
 
 Dependencies: B-01
 
-### Batch B-04 — Tests + sign-off (Test/Review) — Not Started
+### Batch B-04 — Tests + sign-off (Test/Review) — In Progress
 
 | Task | Description | Status |
 |---|---|---|
-| T-619 | Unit tests: SimulationTool, OptimizerTool, ForecastTool の各 `handle()` が `generated_files` キーを返すこと、`file_content` が有効な CSV bytes であることを検証。 | Not Started |
-| T-620 | Integration test: `jobs_repo.add_file()` に `file_content` を渡して保存し、`GET /api/v1/jobs/files/{file_id}/download` が 200 + 正しい CSV bytes を返すことを検証。 | Not Started |
-| T-621 | Phase sign-off — full mandatory gate set (NO skips): `make test-unit && make test-integration && make test-e2e && make build && make lint && make typecheck`。gate, exit_code, output_tail を報告。 | Not Started |
+| T-619 | Unit tests: SimulationTool, OptimizerTool, ForecastTool の各 `handle()` が `generated_files` キーを返すこと、`file_content` が有効な CSV bytes であることを検証。 | Done |
+| T-620 | Integration test: `jobs_repo.add_file()` に `file_content` を渡して保存し、`GET /api/v1/jobs/files/{file_id}/download` が 200 + 正しい CSV bytes を返すことを検証。 | Done |
+| T-621 | Phase sign-off — full mandatory gate set (NO skips): `make test-unit && make test-integration && make test-e2e && make build && make lint && make typecheck`。gate, exit_code, output_tail を報告。 | Blocked — 2 pre-existing failures (see below) |
 
 Dependencies: B-02, B-03
 
