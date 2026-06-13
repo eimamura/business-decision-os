@@ -1,0 +1,69 @@
+from __future__ import annotations
+
+import logging
+
+from packages.schemas.context_packs import GENERIC_PACK, USE_CASE_PACKS, ContextPack
+
+_log = logging.getLogger(__name__)
+
+# Keywords per use case for MVP classification.
+# Order matters — first match wins.  More specific keywords are listed first.
+_USE_CASE_KEYWORDS: dict[str, list[str]] = {
+    "Q3": ["exception", "today", "human judgment", "requires attention", "what needs"],
+    "Q6": ["supply shortage", "face shortage", "supply shortfall", "next week", "next month"],
+    "Q1": ["stockout", "at risk", "run out", "stock out"],
+    "Q2": ["excess", "overstock", "surplus", "too much inventory", "excess inventory"],
+    "Q4": ["delay", "unshipped", "late shipment", "shipment delay", "delivery delay"],
+    "Q5": ["forecast gap", "forecast deviation", "actual vs", "vs actual", "why is forecast"],
+    "Q7": ["production plan", "overproduction", "underproduction", "production adjustment"],
+    "Q8": [
+        "purchase", "buy earlier", "push out", "order timing",
+        "purchased earlier", "purchased later",
+    ],
+    "Q9": ["demand shift", "customer demand", "region demand", "demand change"],
+    "Q10": ["constraint", "bottleneck", "binding", "biggest impact", "limiting"],
+}
+
+
+class ContextBuilder:
+    """Classify user input to a SPEC use case and return the appropriate ContextPack.
+
+    MVP: keyword-based classification.  First-match-wins over _USE_CASE_KEYWORDS.
+    Falls back to GENERIC_PACK when no keyword matches.
+    """
+
+    async def build(
+        self,
+        intent: str,
+        user_input: str,
+        session_id: str | None = None,
+    ) -> ContextPack:
+        """Return the ContextPack for the given intent and user input.
+
+        Args:
+            intent: Resolved intent category (e.g. "supply_chain", "domain_analysis").
+            user_input: The user's raw message text.
+            session_id: Optional session ID for future logging (unused in MVP).
+
+        Returns:
+            ContextPack with required_tools, prohibited_tools, skill_keys, routing_hint.
+        """
+        lowered = user_input.lower()
+        use_case_id = self._classify(lowered)
+        pack = USE_CASE_PACKS.get(use_case_id, GENERIC_PACK)
+
+        _log.debug(
+            "ContextBuilder: use_case=%s intent=%s required_tools=%s prohibited_tools=%s",
+            pack.use_case_id,
+            intent,
+            pack.required_tools,
+            pack.prohibited_tools,
+        )
+        return pack
+
+    def _classify(self, lowered_input: str) -> str:
+        """Return the use_case_id (Q1–Q10) or 'GENERIC' for the given lowercased input."""
+        for use_case_id, keywords in _USE_CASE_KEYWORDS.items():
+            if any(kw in lowered_input for kw in keywords):
+                return use_case_id
+        return "GENERIC"

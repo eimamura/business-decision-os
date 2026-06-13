@@ -22,11 +22,11 @@ FP-011 hardened). Per-phase detail: `docs/archive/v5/STATE.md`.
 
 ## Active Phase
 
-P113 — Context Architecture: ContextPack Schemas + ContextBuilder
+P114 — Observability: Context Trace Logging
 
 ## Active Lease
 
-P113-B-01
+P114-B-01
 
 ## Blockers
 

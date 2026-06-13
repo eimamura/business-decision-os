@@ -51,7 +51,7 @@ Tagged `v0.1.0` (commit 039c43a); merged to `main`; GitHub release published.
 
 ## Active Phases
 
-P113 — Context Architecture: ContextPack Schemas + ContextBuilder (In Progress)
+P114 — Observability: Context Trace Logging (In Progress)
 
 ---
 
@@ -82,7 +82,7 @@ Dependencies: B-01
 
 ---
 
-## P113 — Context Architecture: ContextPack Schemas + ContextBuilder — Not Started
+## P113 — Context Architecture: ContextPack Schemas + ContextBuilder — Done (2026-06-13)
 
 **Goal:** Define typed data structures (ContextPack) for what each SPEC use case needs in context, and implement ContextBuilder that classifies the user input to a specific use case and returns the minimal tool set. This replaces static `_INTENT_TOOL_SUBSET` lookup with dynamic, use-case-aware context selection, reducing context pollution and duplicate tool calls.
 
@@ -92,35 +92,35 @@ ADR required: `docs/adr/2026-06-13-eval-driven-context-engineering.md` — super
 
 Dependencies: P112 Done
 
-### Batch B-01 — ContextPack schemas (App Builder) — Not Started
+### Batch B-01 — ContextPack schemas (App Builder) — Done
 
 | Task | Description | Status |
 |---|---|---|
-| T-656 | Create `packages/schemas/context_packs.py`. Define `ContextPack(BaseModel)` with: `use_case_id: str`, `intent: str`, `required_tools: list[str]` (must call at least one), `preferred_tools: list[str]` (call if relevant), `prohibited_tools: list[str]` (must NOT call for this use case — confusion risk), `skill_keys: list[str]` (skill filenames to load from packages/knowledge/skills/), `routing_hint: str` (one-line hint injected into routing policy). Define `USE_CASE_PACKS: dict[str, ContextPack]` mapping Q1–Q10. Sources: required_tools + prohibited_tools from data/evals/spec10_golden_cases.yaml; skill_keys from existing packages/knowledge/skills/ filenames. Define `GENERIC_PACK: ContextPack` as fallback (all tools permitted, empty prohibited_tools, empty skill_keys). | Not Started |
+| T-656 | Create `packages/schemas/context_packs.py`. Define `ContextPack(BaseModel)` with: `use_case_id: str`, `intent: str`, `required_tools: list[str]` (must call at least one), `preferred_tools: list[str]` (call if relevant), `prohibited_tools: list[str]` (must NOT call for this use case — confusion risk), `skill_keys: list[str]` (skill filenames to load from packages/knowledge/skills/), `routing_hint: str` (one-line hint injected into routing policy). Define `USE_CASE_PACKS: dict[str, ContextPack]` mapping Q1–Q10. Sources: required_tools + prohibited_tools from data/evals/spec10_golden_cases.yaml; skill_keys from existing packages/knowledge/skills/ filenames. Define `GENERIC_PACK: ContextPack` as fallback (all tools permitted, empty prohibited_tools, empty skill_keys). | Done |
 
 Dependencies: P112 Done
 
-### Batch B-02 — ContextBuilder implementation (App Builder) — Not Started
+### Batch B-02 — ContextBuilder implementation (App Builder) — Done
 
 | Task | Description | Status |
 |---|---|---|
-| T-657 | Create `packages/agent/control/context_builder.py`. Implement `ContextBuilder` class with `async build(intent: str, user_input: str, session_id: str \| None = None) -> ContextPack`. MVP implementation: keyword-based use-case classification — match `user_input.lower()` against representative keywords for each Q1–Q10; return the first matching `USE_CASE_PACKS[q_id]`; fall back to `GENERIC_PACK` when no keyword matches. Classification keywords: Q1=["stockout", "at risk", "run out"], Q2=["excess", "overstock", "surplus"], Q3=["exceptions", "today", "human judgment", "attention"], Q4=["delay", "unshipped", "late shipment"], Q5=["forecast gap", "forecast deviation", "actual vs"], Q6=["supply shortage", "next week", "next month", "face shortage"], Q7=["production plan", "overproduction", "underproduction"], Q8=["purchase", "buy earlier", "push out", "order timing"], Q9=["demand shift", "customer demand", "region demand"], Q10=["constraint", "bottleneck", "binding"]. Add DEBUG log: "ContextBuilder: matched use_case=<id> required_tools=<list> prohibited_tools=<list>". | Not Started |
+| T-657 | Create `packages/agent/control/context_builder.py`. Implement `ContextBuilder` class with `async build(intent: str, user_input: str, session_id: str \| None = None) -> ContextPack`. MVP implementation: keyword-based use-case classification — match `user_input.lower()` against representative keywords for each Q1–Q10; return the first matching `USE_CASE_PACKS[q_id]`; fall back to `GENERIC_PACK` when no keyword matches. Classification keywords: Q1=["stockout", "at risk", "run out"], Q2=["excess", "overstock", "surplus"], Q3=["exceptions", "today", "human judgment", "attention"], Q4=["delay", "unshipped", "late shipment"], Q5=["forecast gap", "forecast deviation", "actual vs"], Q6=["supply shortage", "next week", "next month", "face shortage"], Q7=["production plan", "overproduction", "underproduction"], Q8=["purchase", "buy earlier", "push out", "order timing"], Q9=["demand shift", "customer demand", "region demand"], Q10=["constraint", "bottleneck", "binding"]. Add DEBUG log: "ContextBuilder: matched use_case=<id> required_tools=<list> prohibited_tools=<list>". | Done |
 
 Dependencies: B-01
 
-### Batch B-03 — Integrate ContextBuilder into control_agent.py (App Builder) — Not Started
+### Batch B-03 — Integrate ContextBuilder into control_agent.py (App Builder) — Done
 
 | Task | Description | Status |
 |---|---|---|
-| T-658 | In `packages/agent/control/control_agent.py`: (a) import `ContextBuilder` from `packages.agent.control.context_builder` and `USE_CASE_PACKS`, `GENERIC_PACK` from `packages.schemas.context_packs`; (b) add `tool_subset_override: dict[str, list[str]] \| None = None` parameter to `_build_system_prompt()` — when set, pass it instead of `_INTENT_TOOL_SUBSET` to `render_routing_policy()` and `render_tool_catalog()`; (c) in `_run_core()` (or the post-intent private method), after `intent_category` is resolved, call `context_pack = await ContextBuilder().build(intent=intent_category, user_input=user_input_text)` and build the narrowed subset: take `_INTENT_TOOL_SUBSET.get(intent_category, [])`, remove tools in `context_pack.prohibited_tools`, then call `_build_system_prompt(intent=intent_category, schema_context=get_schema_context(), tool_subset_override={intent_category: narrowed_list})`; (d) add `_log.debug("ContextBuilder selected use_case=%s narrowed_tools=%s", context_pack.use_case_id, narrowed_list)`. | Not Started |
+| T-658 | In `packages/agent/control/control_agent.py`: (a) import `ContextBuilder` from `packages.agent.control.context_builder` and `USE_CASE_PACKS`, `GENERIC_PACK` from `packages.schemas.context_packs`; (b) add `tool_subset_override: dict[str, list[str]] \| None = None` parameter to `_build_system_prompt()` — when set, pass it instead of `_INTENT_TOOL_SUBSET` to `render_routing_policy()` and `render_tool_catalog()`; (c) in `_run_core()` (or the post-intent private method), after `intent_category` is resolved, call `context_pack = await ContextBuilder().build(intent=intent_category, user_input=user_input_text)` and build the narrowed subset: take `_INTENT_TOOL_SUBSET.get(intent_category, [])`, remove tools in `context_pack.prohibited_tools`, then call `_build_system_prompt(intent=intent_category, schema_context=get_schema_context(), tool_subset_override={intent_category: narrowed_list})`; (d) add `_log.debug("ContextBuilder selected use_case=%s narrowed_tools=%s", context_pack.use_case_id, narrowed_list)`. | Done |
 
 Dependencies: B-01, B-02
 
-### Batch B-04 — ADR + tests + phase sign-off (Test/Review) — Not Started
+### Batch B-04 — ADR + tests + phase sign-off (Test/Review) — Done
 
 | Task | Description | Status |
 |---|---|---|
-| T-659 | (a) Create `docs/adr/2026-06-13-eval-driven-context-engineering.md`: document the decision to activate ContextBuilder now, superseding the deferral in `docs/adr/2026-06-13-context-engineering-prompt-builder.md`; rationale = Eval-driven CE requires use-case-level context selection as the primary mechanism for reducing context pollution (duplicate tool calls observed in 7/10 SPEC questions, context overflow in 8/10 questions per P100 judge campaign). (b) In `tests/unit/test_context_builder.py`: test Q1 keywords ("stockout", "at risk") → Q1 ContextPack; test Q6 keywords ("supply shortage", "next week") → Q6 ContextPack; test unrelated input ("hello") → GENERIC_PACK; test each USE_CASE_PACKS[q_id].required_tools is a non-empty list; test prohibited_tools in Q1 does not include "list_stockout_risk". (c) Run full mandatory gate set: `make test-unit && make test-integration && make test-e2e && make build && make lint && make typecheck`. | Not Started |
+| T-659 | (a) Create `docs/adr/2026-06-13-eval-driven-context-engineering.md`: document the decision to activate ContextBuilder now, superseding the deferral in `docs/adr/2026-06-13-context-engineering-prompt-builder.md`; rationale = Eval-driven CE requires use-case-level context selection as the primary mechanism for reducing context pollution (duplicate tool calls observed in 7/10 SPEC questions, context overflow in 8/10 questions per P100 judge campaign). (b) In `tests/unit/test_context_builder.py`: test Q1 keywords ("stockout", "at risk") → Q1 ContextPack; test Q6 keywords ("supply shortage", "next week") → Q6 ContextPack; test unrelated input ("hello") → GENERIC_PACK; test each USE_CASE_PACKS[q_id].required_tools is a non-empty list; test prohibited_tools in Q1 does not include "list_stockout_risk". (c) Run full mandatory gate set. Sign-off: unit 1397/15 skipped, integration 16/153 skipped, e2e 10 skipped, build OK, lint clean, typecheck clean (182 files) — all exit 0. | Done |
 
 Dependencies: B-01, B-02, B-03
 

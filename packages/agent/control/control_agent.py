@@ -5,6 +5,7 @@ import logging
 from typing import TYPE_CHECKING, Any
 
 from packages.agent.base import AgentBasedSpecialist
+from packages.agent.control.context_builder import ContextBuilder
 from packages.knowledge import SkillLoader
 from packages.memory.decision import DecisionMemoryStore
 from packages.memory.long_term import LongTermMemoryStore
@@ -458,6 +459,7 @@ def _build_system_prompt(
     intent: str | None = None,
     user_role: str = "analyst",  # noqa: ARG001 — reserved for future render_user_permissions
     schema_context: str = "",
+    tool_subset_override: dict[str, list[str]] | None = None,
 ) -> str:
     """Assemble the system prompt from discrete conceptual-module sections.
 
@@ -472,22 +474,29 @@ def _build_system_prompt(
     gracefully when schema context is not yet loaded (e.g. at import time).
 
     Args:
-        intent:         When provided and present in _INTENT_TOOL_SUBSET, narrows
-                        render_routing_policy() to only the tools for that intent.
-                        Pass None to include all intents (default behaviour for the
-                        class-level _SYSTEM_PROMPT constant).
-        user_role:      Reserved for future render_user_permissions(user_role) section.
-                        Currently unused.
-        schema_context: Schema context string from get_schema_context().  Pass ""
-                        to suppress the SQL example (fail-open behaviour).
+        intent:               When provided and present in _INTENT_TOOL_SUBSET, narrows
+                              render_routing_policy() to only the tools for that intent.
+                              Pass None to include all intents (default behaviour for the
+                              class-level _SYSTEM_PROMPT constant).
+        user_role:            Reserved for future render_user_permissions(user_role) section.
+                              Currently unused.
+        schema_context:       Schema context string from get_schema_context().  Pass ""
+                              to suppress the SQL example (fail-open behaviour).
+        tool_subset_override: When provided, replaces the intent-derived tool subset
+                              entirely.  Produced by ContextBuilder to further narrow the
+                              tool list beyond what _INTENT_TOOL_SUBSET already specifies.
+                              When None, the existing _INTENT_TOOL_SUBSET behaviour is used.
     """
     # inject schema_example into the {schema_example} placeholder that
     # render_routing_policy embeds inside its rule-2b text.
-    tool_subset = (
-        {intent: _INTENT_TOOL_SUBSET[intent]}
-        if intent is not None and intent in _INTENT_TOOL_SUBSET
-        else _INTENT_TOOL_SUBSET
-    )
+    if tool_subset_override is not None:
+        tool_subset = tool_subset_override
+    else:
+        tool_subset = (
+            {intent: _INTENT_TOOL_SUBSET[intent]}
+            if intent is not None and intent in _INTENT_TOOL_SUBSET
+            else _INTENT_TOOL_SUBSET
+        )
     routing_section = render_routing_policy(tool_subset).format(
         schema_example=render_schema_context(schema_context)
     )
@@ -707,12 +716,33 @@ class ControlAgent(AgentBasedSpecialist):
         )
         store = DecisionMemoryStore()
 
+        # Build minimal tool subset for the specific use case via ContextBuilder,
+        # then further narrow the intent subset by removing prohibited tools.
+        context_pack = await ContextBuilder().build(
+            intent=intent_category or "",
+            user_input=task.instruction or "",
+            session_id=None,
+        )
+        # Narrow: start from intent subset, remove prohibited tools
+        base_tools = list(_INTENT_TOOL_SUBSET.get(intent_category or "", []))
+        narrowed = [t for t in base_tools if t not in set(context_pack.prohibited_tools)]
+        tool_subset_override = (
+            {intent_category or "supply_chain": narrowed} if intent_category else None
+        )
+
+        _log.debug(
+            "ContextBuilder selected use_case=%s narrowed_tools=%s",
+            context_pack.use_case_id,
+            narrowed,
+        )
+
         # Rebuild system prompt with intent-narrowed tool subset so local models
         # only see tools relevant to this request, reducing context size.
         if intent_category:
             self.system_prompt = _build_system_prompt(
                 intent=intent_category,
                 schema_context=get_schema_context(),
+                tool_subset_override=tool_subset_override,
             )
 
         task = self._inject_skills(task, intent_category)
