@@ -3,6 +3,7 @@ paths:
   - "packages/agent/**"
   - "packages/tools/**"
   - "packages/persistence/**"
+  - "packages/schemas/**"
 ---
 # Design Contract Watch List
 
@@ -33,3 +34,13 @@ A lazy dict/mapping that overrides only `__getitem__` and `.get` leaves `.items(
 
 Migration 0003 established a cascade convention for all session-child tables. Any new FK pointing at `decision_sessions(id)` must include `ON DELETE CASCADE`. Missing CASCADE forces caller code to manually delete child rows before deleting the session, leaking that responsibility outside the schema.
 **Check:** does the new FK reference `decision_sessions(id) ON DELETE CASCADE`?
+
+## FP-013 — SSE streaming protocol must include retraction semantics (packages/schemas/, packages/agent/)
+
+The SSE protocol is append-only by default: once text is streamed, the client cannot distinguish a corrected second-invocation reply from the original degenerate text. When a second agent invocation produces a grounded reply, both segments appear sequentially with no signal to the client to discard the earlier one.
+**Check:** if a new flow can trigger a second agent invocation that replaces earlier streamed content, add a `text_reset` event type (or equivalent retraction signal) to `packages/schemas/sse_events.py` before streaming the corrected segment.
+
+## FP-014 — Language constraint must be enforced at every LLM output site (packages/agent/)
+
+The English-only constraint was specified at the UI display boundary but not propagated to upstream LLM node prompts (set_goal, evaluate_goal). When those nodes produce non-English output, the strings flow into the control agent's context and leak into user-facing replies.
+**Check:** every new or modified LangGraph node that produces text for the control agent's context or for user-visible output must include an explicit English-only instruction in its prompt.

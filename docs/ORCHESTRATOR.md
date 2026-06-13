@@ -62,7 +62,8 @@ Do **not** use this loop for: runtime bugs (use Defect Task), new product featur
 6. **Await result and run Test/Review**
 
    Same quality gate as the standard loop:
-   `uv run pytest tests/unit/ -q && make lint && make typecheck && make build`
+   `uv run pytest tests/unit -q && make lint && make typecheck && make test-integration`
+   Note: includes `make test-integration` because design improvements amend completed phases where integration regressions carry higher risk (see FP-003).
 
 7. **Update state**
 

@@ -1,5 +1,5 @@
 ---
-name: prevention-architect
+name: harden-system
 description: Use this agent to escalate a recurring failure pattern to a durable prevention mechanism (structural change, test, or AGENTS.md prohibition).
 model: sonnet
 tools: ["Read", "Write", "Edit", "Grep", "Glob"]
