@@ -521,6 +521,49 @@ Train the demand forecasting model for a SKU.
 
 ---
 
+### Current job_type Registry
+
+| job_type | Tool class | SpecialistRole |
+|---|---|---|
+| `simulate` | `SimulationTool` | `simulation_optimizer` |
+| `inventory_simulation` | `SimulationTool` (alias) | `simulation_optimizer` |
+| `optimize` | `OptimizerTool` | `simulation_optimizer` |
+| `forecast` | `ForecastTool` | `data_engineer` |
+| `train_forecast` | `TrainForecastTool` | `data_engineer` |
+
+`VALID_JOB_TYPES` in `packages/agent/job_executor.py` is the authoritative set. The runtime validates against it before creating DB rows, so an unrecognised `job_type` is rejected before human approval is shown.
+
+---
+
+### How to Add a New job_type
+
+Touch these six locations in order. All must be consistent or the runtime will reject the job at `_prepare_hitl_node`.
+
+1. **`packages/agent/job_executor.py` — `VALID_JOB_TYPES`**
+   Add the new string to the `frozenset`. This is the validation gate.
+
+2. **`packages/agent/job_executor.py` — `_build_tool_routes()`**
+   Import your new tool class and add `"<job_type>": YourTool` to the returned dict.
+
+3. **`packages/agent/job_executor.py` — `_role_by_type`**
+   Add `"<job_type>": "<specialist_role>"` so the executor constructs the correct `ToolContext`.
+   Valid roles: `simulation_optimizer`, `data_engineer`.
+
+4. **`packages/tools/job_dispatch_tool.py` — `input_schema` enum**
+   Add the new string to `"enum": [...]` so the LLM sees it as a valid choice.
+   Update `description` to mention it.
+
+5. **`packages/agent/control/control_agent.py` — system prompt**
+   Add a line to the "Job type mapping" block (around line 107) so the LLM knows which
+   phrase triggers which `job_type`.
+
+6. **`docs/TOOLS.md` — job_type registry table above**
+   Add a row describing the new type and its tool class.
+
+No DB migration is needed — `job_type` is a free-form `VARCHAR(50)`.
+
+---
+
 ## Schema Context
 
 `packages/tools/schema_context.py` is the single source of DB schema information for LLM prompts.

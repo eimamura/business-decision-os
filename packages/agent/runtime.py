@@ -786,12 +786,19 @@ class AgentRuntime:
         _job_id: str | None = None
         _job_description: str = ""
         if hitl_call["name"] == "job_dispatch":
+            from packages.agent.job_executor import VALID_JOB_TYPES as _VALID_JOB_TYPES
             from packages.persistence.jobs_repo import JobsRepository as _JobsRepo
+            raw_job_type: str = tool_input.get("job_type", "")
+            if raw_job_type not in _VALID_JOB_TYPES:
+                raise ValueError(
+                    f"job_dispatch rejected: invalid job_type={raw_job_type!r}. "
+                    f"Valid types: {sorted(_VALID_JOB_TYPES)}"
+                )
             _jr = _JobsRepo()
             try:
                 _job = await _jr.create(
                     session_id=ctx.session_id,
-                    job_type=tool_input.get("job_type", "unknown"),
+                    job_type=raw_job_type,
                     params=tool_input.get("params", {}),
                     approval_id=_UUID(_approval_id),
                 )

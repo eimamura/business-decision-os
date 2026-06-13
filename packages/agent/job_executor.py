@@ -12,6 +12,14 @@ from packages.persistence.jobs_repo import JobsRepository
 
 _log = structlog.get_logger(__name__)
 
+VALID_JOB_TYPES: frozenset[str] = frozenset({
+    "simulate",
+    "inventory_simulation",
+    "optimize",
+    "forecast",
+    "train_forecast",
+})
+
 
 async def _persist_report_message(session_id: Any | None, content: str) -> None:
     """Persist an assistant report message into the originating session (T-602).
@@ -66,6 +74,7 @@ def _build_tool_routes() -> dict[str, Any]:
 
     return {
         "simulate": SimulationTool,
+        "inventory_simulation": SimulationTool,
         "optimize": OptimizerTool,
         "forecast": ForecastTool,
         "train_forecast": TrainForecastTool,
@@ -190,6 +199,7 @@ async def execute_job(
 
     _role_by_type: dict[str, SpecialistRole] = {
         "simulate": "simulation_optimizer",  # type: ignore[dict-item]
+        "inventory_simulation": "simulation_optimizer",  # type: ignore[dict-item]
         "optimize": "simulation_optimizer",  # type: ignore[dict-item]
         "forecast": "data_engineer",  # type: ignore[dict-item]
         "train_forecast": "data_engineer",  # type: ignore[dict-item]
