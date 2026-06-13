@@ -5,6 +5,8 @@ import re
 from packages.agent.control.control_agent import (
     _INTENT_TOOL_SUBSET,
     _SYSTEM_PROMPT,
+    render_business_guidelines,
+    render_response_format,
     render_routing_policy,
     render_tool_catalog,
 )
@@ -85,3 +87,29 @@ def test_render_tool_catalog_format() -> None:
             f"render_tool_catalog output contains intent {intent!r} "
             f"but none of its tools appear: {tools}"
         )
+
+
+def test_render_business_guidelines_contains_no_tool_names() -> None:
+    """render_business_guidelines must not contain backtick-quoted tool names.
+
+    The function describes what the agent IS, not how it routes.  Embedding
+    tool names there would couple the role description to the tool registry and
+    cause prompt rot when tools are renamed.
+    """
+    result = render_business_guidelines()
+    all_tool_names = {name for names in _INTENT_TOOL_SUBSET.values() for name in names}
+    for tool_name in all_tool_names:
+        assert f"`{tool_name}`" not in result, (
+            f"Tool name `{tool_name}` found in render_business_guidelines()"
+        )
+
+
+def test_render_response_format_contains_required_sections() -> None:
+    """render_response_format must contain all four required response-format section headers.
+
+    These section headers are load-bearing: they shape how the agent structures
+    every response.  Missing one means a section silently disappears from the prompt.
+    """
+    result = render_response_format()
+    for section in ["Situation", "Root Cause", "Recommended Actions", "Confidence Level"]:
+        assert section in result, f"Section '{section}' missing from render_response_format()"

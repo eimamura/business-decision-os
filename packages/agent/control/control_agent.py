@@ -18,6 +18,90 @@ if TYPE_CHECKING:
 _log = logging.getLogger(__name__)
 
 
+def render_business_guidelines() -> str:
+    """Return the fixed role/responsibilities/domains-in-scope preamble.
+
+    Pure fixed text — no backtick-quoted tool names and no table/column names.
+    This section describes what the agent IS, not how it routes or responds.
+    """
+    return (
+        "You are a cross-domain operational judgment center for supply chain decisions.\n\n"
+        "Responsibilities:\n"
+        "- Assess stockout risk across demand, inventory, and supply signals\n"
+        "- Prioritize exceptions and escalations spanning logistics, finance, and operations\n"
+        "- Identify root causes of shipment delays through logistics and supply data\n"
+        "- Analyze supply gaps relative to demand forecasts and inventory positions\n"
+        "- Recommend prioritized actions that account for cost impact, "
+        "lead times, and service levels\n\n"
+        "Domains in scope: demand forecasting and trend analysis, inventory positioning and risk,\n"
+        "supply order status and lead time, logistics execution and delay diagnosis,\n"
+        "and finance impact quantification (holding costs, stockout costs, expedite costs)."
+    )
+
+
+def render_response_format() -> str:
+    """Return the grounding rules and response-format section.
+
+    Pure fixed text — no dynamic placeholders.  Includes the operational
+    grounding constraints that follow the routing policy (rules 11–12) as well
+    as the four-section response format and the past-decisions annotation note.
+    """
+    return (
+        "11. Never fabricate column names or assume columns"
+        " that are not confirmed by tool results.\n\n"
+        "Always ground recommendations in tool results."
+        " Do not fabricate quantities or risk scores.\n"
+        "Once you have sufficient data from tools, stop calling tools"
+        " and produce a final text response.\n"
+        "Never call the same tool twice in one analysis pass. "
+        "If you have not yet called any tool in this pass, you MUST call the appropriate tool "
+        "before answering — never produce a final answer without tool data. "
+        "After receiving results from list_stockout_risk, synthesise them immediately"
+        " into a final answer — do NOT call list_stockout_risk or any other tool again"
+        " in the same pass.\n"
+        "For exception/delay questions, call list_today_exceptions to surface the full daily"
+        " exception picture in one call.\n"
+        "12. For heavy or long-running work — call `job_dispatch` with the appropriate job_type"
+        " and await human approval before execution begins."
+        " This is MANDATORY; never run these inline.\n"
+        "    Trigger phrases that ALWAYS route to job_dispatch:\n"
+        "    - 'as a background job', 'run in the background', 'notify me when it completes'\n"
+        "    - 'train the forecast model', 'train_forecast'\n"
+        "    - 'run a full ... simulation for all SKUs'\n"
+        "    Job type mapping: train_forecast → job_type='train_forecast';"
+        " inventory simulation → job_type='simulate';"
+        " replenishment optimization → job_type='optimize';"
+        " demand forecast → job_type='forecast'.\n"
+        "\n"
+        "## Response Format\n\n"
+        "Structure every response using the following four sections:\n\n"
+        "**Situation:** [summary of what the data shows]\n"
+        "**Root Cause:** [identified cause(s) with data evidence]\n"
+        "**Recommended Actions:**\n"
+        "1. [action] — [data rationale]\n"
+        "2. ...\n"
+        "**Confidence Level:** [High / Medium / Low] — [one sentence justification]\n"
+        "\n"
+        "When past decisions are annotated with [user feedback: negative], treat those approaches"
+        " as ineffective and avoid repeating them in your current response."
+    )
+
+
+def render_schema_context(schema: str) -> str:
+    """Return the correlated-subquery SQL example for the given schema string.
+
+    Delegates to _make_schema_example() when schema is non-empty.  Returns ""
+    (fail-open) when schema is empty so callers need not handle None.
+
+    Args:
+        schema: The schema context string (as returned by get_schema_context()).
+                Pass "" to suppress the schema example entirely.
+    """
+    if not schema:
+        return ""
+    return _make_schema_example()
+
+
 def render_tool_catalog(subset: dict[str, list[str]]) -> str:
     """Return a readable per-intent catalog string from _INTENT_TOOL_SUBSET.
 
@@ -275,65 +359,13 @@ _INTENT_TOOL_SUBSET: dict[str, list[str]] = {
 }
 
 
-# Template for the system prompt.  The {schema_example} placeholder is replaced
-# at prompt-assembly time via _build_system_prompt().  When schema context is not
-# yet loaded (e.g. at import time before the DB is ready) the placeholder is
-# replaced with an empty string so the prompt degrades gracefully.
-# The {routing_policy} placeholder is replaced by render_routing_policy(_INTENT_TOOL_SUBSET)
-# so that tool-name enumerations in rules 1–10 are derived from _INTENT_TOOL_SUBSET
-# rather than hand-typed literals.  NOTE: {schema_example} is nested inside the
-# rendered routing policy string — _build_system_prompt() performs a two-pass
-# format: first inject routing_policy (which carries the {schema_example} literal),
-# then inject schema_example into the result.
-_SYSTEM_PROMPT_TEMPLATE = (
-    "You are a cross-domain operational judgment center for supply chain decisions.\n\n"
-    "Responsibilities:\n"
-    "- Assess stockout risk across demand, inventory, and supply signals\n"
-    "- Prioritize exceptions and escalations spanning logistics, finance, and operations\n"
-    "- Identify root causes of shipment delays through logistics and supply data\n"
-    "- Analyze supply gaps relative to demand forecasts and inventory positions\n"
-    "- Recommend prioritized actions that account for cost impact, "
-    "lead times, and service levels\n\n"
-    "Domains in scope: demand forecasting and trend analysis, inventory positioning and risk,\n"
-    "supply order status and lead time, logistics execution and delay diagnosis,\n"
-    "and finance impact quantification (holding costs, stockout costs, expedite costs).\n\n"
-    "{routing_policy}"
-    "11. Never fabricate column names or assume columns that are not confirmed by tool results.\n\n"
-    "Always ground recommendations in tool results. Do not fabricate quantities or risk scores.\n"
-    "Once you have sufficient data from tools, stop calling tools"
-    " and produce a final text response.\n"
-    "Never call the same tool twice in one analysis pass. "
-    "If you have not yet called any tool in this pass, you MUST call the appropriate tool "
-    "before answering — never produce a final answer without tool data. "
-    "After receiving results from list_stockout_risk, synthesise them immediately"
-    " into a final answer — do NOT call list_stockout_risk or any other tool again"
-    " in the same pass.\n"
-    "For exception/delay questions, call list_today_exceptions to surface the full daily"
-    " exception picture in one call.\n"
-    "12. For heavy or long-running work — call `job_dispatch` with the appropriate job_type"
-    " and await human approval before execution begins."
-    " This is MANDATORY; never run these inline.\n"
-    "    Trigger phrases that ALWAYS route to job_dispatch:\n"
-    "    - 'as a background job', 'run in the background', 'notify me when it completes'\n"
-    "    - 'train the forecast model', 'train_forecast'\n"
-    "    - 'run a full ... simulation for all SKUs'\n"
-    "    Job type mapping: train_forecast → job_type='train_forecast';"
-    " inventory simulation → job_type='simulate';"
-    " replenishment optimization → job_type='optimize';"
-    " demand forecast → job_type='forecast'.\n"
-    "\n"
-    "## Response Format\n\n"
-    "Structure every response using the following four sections:\n\n"
-    "**Situation:** [summary of what the data shows]\n"
-    "**Root Cause:** [identified cause(s) with data evidence]\n"
-    "**Recommended Actions:**\n"
-    "1. [action] — [data rationale]\n"
-    "2. ...\n"
-    "**Confidence Level:** [High / Medium / Low] — [one sentence justification]\n"
-    "\n"
-    "When past decisions are annotated with [user feedback: negative], treat those approaches"
-    " as ineffective and avoid repeating them in your current response.\n"
-)
+# _SYSTEM_PROMPT_TEMPLATE is kept as a legacy alias so that any external code that
+# imported this constant before P109 continues to work without changes.  The prompt
+# is now assembled by _build_system_prompt() from discrete render_* functions.
+# At import time get_schema_context() returns "" (DB not yet ready), which is fine —
+# ControlAgent.__init__ calls _build_system_prompt(schema_context=get_schema_context())
+# at instance-creation time so every new agent gets the fully-loaded prompt.
+_SYSTEM_PROMPT_TEMPLATE = ""  # deprecated; use _build_system_prompt() instead
 
 
 def _make_schema_example() -> str:
@@ -415,21 +447,50 @@ def _make_schema_example() -> str:
     return example
 
 
-def _build_system_prompt() -> str:
-    """Assemble the system prompt, injecting routing policy and schema example.
+def _build_system_prompt(
+    intent: str | None = None,
+    user_role: str = "analyst",
+    schema_context: str = "",
+) -> str:
+    """Assemble the system prompt from discrete conceptual-module sections.
 
-    Two-pass format:
-    1. Inject {routing_policy} from render_routing_policy(_INTENT_TOOL_SUBSET) — this
-       expands per-intent tool lists from the SSoT dict and embeds a {schema_example}
-       literal inside the rendered text.
-    2. Inject {schema_example} from _make_schema_example() into the result of pass 1.
+    Each section is an independently maintainable render_* function:
+      - render_business_guidelines(): role/responsibilities/domains (pure fixed text)
+      - render_routing_policy():      per-intent tool-routing rules (P108)
+      - render_tool_catalog():        readable intent→tool catalog (P108)
+      - render_schema_context():      optional correlated-subquery SQL example
+      - render_response_format():     grounding rules + four-section response format
+
+    Sections that return "" are excluded from the join so the prompt degrades
+    gracefully when schema context is not yet loaded (e.g. at import time).
+
+    Args:
+        intent:         Reserved for future per-intent routing-policy narrowing.
+                        Currently unused — full _INTENT_TOOL_SUBSET is always passed.
+        user_role:      Reserved for future render_user_permissions(user_role) section.
+                        Currently unused.
+        schema_context: Schema context string from get_schema_context().  Pass ""
+                        to suppress the SQL example (fail-open behaviour).
     """
-    routing_policy = render_routing_policy(_INTENT_TOOL_SUBSET)
-    # Pass 1: inject routing_policy (which contains a literal "{schema_example}" placeholder)
-    partial = _SYSTEM_PROMPT_TEMPLATE.format(routing_policy=routing_policy)
-    # Pass 2: inject schema_example into the placeholder left by render_routing_policy
-    schema_example = _make_schema_example()
-    return partial.format(schema_example=schema_example)
+    # intent and user_role are accepted but unused — reserved for future sections.
+    _ = intent
+    _ = user_role
+    # inject schema_example into the {schema_example} placeholder that
+    # render_routing_policy embeds inside its rule-2b text.
+    routing_section = render_routing_policy(_INTENT_TOOL_SUBSET).format(
+        schema_example=render_schema_context(schema_context)
+    )
+    return "\n\n".join(
+        filter(
+            None,
+            [
+                render_business_guidelines(),
+                routing_section,
+                render_tool_catalog(_INTENT_TOOL_SUBSET),
+                render_response_format(),
+            ],
+        )
+    )
 
 
 # Module-level constant preserved for backward compatibility (e.g. existing unit tests
@@ -466,7 +527,7 @@ class ControlAgent(AgentBasedSpecialist):
             llm_client=llm_client,
             tool_registry=tool_registry,
             sse_queue=sse_queue,
-            system_prompt=_build_system_prompt(),
+            system_prompt=_build_system_prompt(intent=None, schema_context=get_schema_context()),
             model_registry=model_registry,
         )
 
