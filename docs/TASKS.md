@@ -742,3 +742,52 @@ Dependencies: none
 | T-680 | Create `/home/eimamura/.claude/projects/-home-eimamura-projects-business-decision-os/memory/project_failure_watchlist.md` listing Count=1 design-contract failure patterns with highest recurrence risk, and add entry to MEMORY.md index. | Done |
 
 Dependencies: none
+
+---
+
+## P119 — Evaluation-Driven Hardening — Not Started
+
+**Goal:** Apply 4 improvements from the post-P118 evaluation: dead parameter removal, MemoryStore async/sync ADR (authored), CI integration-test gate, and process-doc improvements.
+
+Dependencies: P118 Done
+
+### Batch B-01 — MemoryStore async ADR (Orchestrator — complete) — Done
+
+| Task | Description | Status |
+|---|---|---|
+| T-681 | Author `docs/adr/2026-06-13-memory-store-async-split.md` documenting the sync abstract base / async implementation split, rationale, trade-offs, and consequences. No code change required. | Done |
+
+Dependencies: none
+
+### Batch B-02 — Dead parameter removal in _build_system_prompt (App Builder) — Not Started
+
+| Task | Description | Status |
+|---|---|---|
+| T-682 | Remove `schema_context: str = ""` from `_build_system_prompt()` signature in `packages/agent/control/control_agent.py`. Update the two explicit call sites (`__init__` and `run()`) to not pass the argument. Update the docstring. Update any unit tests in `tests/unit/agent/` that reference `schema_context` in `_build_system_prompt` assertions. Ensure `make test-unit` exits 0. | Not Started |
+
+Dependencies: none
+
+### Batch B-03 — Process doc improvements: DECISIONS.md scan + Orchestrator write boundary (App Builder) — Not Started
+
+| Task | Description | Status |
+|---|---|---|
+| T-683 | In `docs/ORCHESTRATOR.md §Phase Sign-Off Checklist` step 2, change the DECISIONS.md promotion scan from "non-blocking warning" to a **blocking** gate: "Phase MUST NOT be marked Done if any DECISIONS.md entry mentions a public interface without a corresponding ADR." Remove "non-blocking" qualifier. | Not Started |
+| T-684 | Expand Orchestrator writable targets in three places: (1) `docs/ORCHESTRATOR.md §Tool Usage Rules` — add `docs/` (new files only, excluding TASKS.md/STATE.md/DECISIONS.md which have sole-writer rules); (2) `AGENTS.md §Prohibitions` — update the Orchestrator write boundary prohibition to list the expanded targets; (3) `.claude/skills/bdos-orchestrator/SKILL.md` — update the HARD STOP box and Tool Usage Rules to match. Purpose: remove friction where trivial doc files (e.g. RAG.md) require an App Builder call. | Not Started |
+
+Dependencies: none
+
+### Batch B-04 — CI: add integration test gate (Infra) — Not Started
+
+| Task | Description | Status |
+|---|---|---|
+| T-685 | Add a `python-integration-test` job to `.github/workflows/lint-test.yml`. The job must: spin up a `postgres:16` service with `POSTGRES_DB=bdos_test`, `POSTGRES_USER=bdos`, `POSTGRES_PASSWORD=bdos`; run `uv sync`; run Alembic migrations (`uv run alembic upgrade head`); run `uv run pytest tests/integration/ -x -q` with `DATABASE_URL=postgresql://bdos:bdos@localhost:5432/bdos_test`. Gate must be non-blocking for branches where Docker services are unavailable (add `continue-on-error: false` explicitly so failures are visible). | Done |
+
+Dependencies: none
+
+### Batch B-05 — Sign-off (Test/Review) — Not Started
+
+| Task | Description | Status |
+|---|---|---|
+| T-686 | Full phase sign-off: `make test-unit`, `make test-integration`, `make test-e2e`, `make build`, `make lint`, `make typecheck`. Report exit codes and output tails. | Not Started |
+
+Dependencies: B-02, B-03, B-04
