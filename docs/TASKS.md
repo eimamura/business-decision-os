@@ -51,7 +51,7 @@ Tagged `v0.1.0` (commit 039c43a); merged to `main`; GitHub release published.
 
 ## Active Phases
 
-P114 — Observability: Context Trace Logging (In Progress)
+P115 — Continuous Eval Runner (In Progress)
 
 ---
 
@@ -126,7 +126,7 @@ Dependencies: B-01, B-02, B-03
 
 ---
 
-## P114 — Observability: Context Trace Logging — Not Started
+## P114 — Observability: Context Trace Logging — Done (2026-06-13)
 
 **Goal:** Log what ContextPack was selected per agent invocation so failures can be diagnosed post-hoc (was the right use case identified? were the right tools selected? were prohibited tools excluded?).
 
@@ -134,27 +134,27 @@ Done when: (1) migration 0024 adds `context_log` table with ON DELETE CASCADE to
 
 Dependencies: P113 Done
 
-### Batch B-01 — Migration 0024 + ContextLog schemas (App Builder) — Not Started
+### Batch B-01 — Migration 0024 + ContextLog schemas (App Builder) — Done
 
 | Task | Description | Status |
 |---|---|---|
-| T-660 | Create migration 0024 in `packages/persistence/migrations/`. Add `context_log` table: `id UUID PK DEFAULT gen_random_uuid()`, `session_id UUID NOT NULL REFERENCES decision_sessions(id) ON DELETE CASCADE`, `use_case_id VARCHAR(8) NOT NULL`, `intent VARCHAR(64) NOT NULL`, `required_tools JSONB NOT NULL DEFAULT '[]'`, `prohibited_tools JSONB NOT NULL DEFAULT '[]'`, `context_pack_json JSONB NOT NULL DEFAULT '{}'`, `created_at TIMESTAMPTZ NOT NULL DEFAULT now()`. Add `ContextLogCreate(BaseModel)` and `ContextLogRead(BaseModel)` in `packages/schemas/context_packs.py`. | Not Started |
+| T-660 | Create migration 0024 in `packages/persistence/migrations/`. Add `context_log` table: `id UUID PK DEFAULT gen_random_uuid()`, `session_id UUID NOT NULL REFERENCES decision_sessions(id) ON DELETE CASCADE`, `use_case_id VARCHAR(8) NOT NULL`, `intent VARCHAR(64) NOT NULL`, `required_tools JSONB NOT NULL DEFAULT '[]'`, `prohibited_tools JSONB NOT NULL DEFAULT '[]'`, `context_pack_json JSONB NOT NULL DEFAULT '{}'`, `created_at TIMESTAMPTZ NOT NULL DEFAULT now()`. Add `ContextLogCreate(BaseModel)` and `ContextLogRead(BaseModel)` in `packages/schemas/context_packs.py`. | Done |
 
 Dependencies: none
 
-### Batch B-02 — ContextLogRepository + logging in ContextBuilder (App Builder) — Not Started
+### Batch B-02 — ContextLogRepository + logging in ContextBuilder (App Builder) — Done
 
 | Task | Description | Status |
 |---|---|---|
-| T-661 | (a) Create `packages/persistence/context_log.py` with `ContextLogRepository` class: `async create(session_id: str, use_case_id: str, intent: str, required_tools: list[str], prohibited_tools: list[str], context_pack_json: dict, conn: asyncpg.Connection) -> ContextLogRead`. (b) In `packages/agent/control/context_builder.py`, add `conn: asyncpg.Connection \| None = None` parameter to `build()`. After ContextPack is selected, if `conn is not None and session_id is not None`, call `await ContextLogRepository().create(session_id=session_id, use_case_id=pack.use_case_id, intent=pack.intent, required_tools=pack.required_tools, prohibited_tools=pack.prohibited_tools, context_pack_json=pack.model_dump(), conn=conn)`. Fail-open on DB errors (log WARNING, do not raise). | Not Started |
+| T-661 | (a) Create `packages/persistence/context_log.py` with `ContextLogRepository` class: `async create(session_id: str, use_case_id: str, intent: str, required_tools: list[str], prohibited_tools: list[str], context_pack_json: dict, conn: asyncpg.Connection) -> ContextLogRead`. (b) In `packages/agent/control/context_builder.py`, add `conn: asyncpg.Connection \| None = None` parameter to `build()`. After ContextPack is selected, if `conn is not None and session_id is not None`, call `await ContextLogRepository().create(...)`. Fail-open on DB errors (log WARNING, do not raise). JSONB handled with `_load_json_field()` helper for asyncpg dual-decode pattern. | Done |
 
 Dependencies: B-01
 
-### Batch B-03 — Admin API endpoint + sign-off (Test/Review) — Not Started
+### Batch B-03 — Admin API endpoint + sign-off (Test/Review) — Done
 
 | Task | Description | Status |
 |---|---|---|
-| T-662 | (a) Add or extend `apps/api/routers/admin.py` with `GET /api/v1/admin/context-logs` endpoint. Query params: `session_id: UUID \| None = None`, `use_case_id: str \| None = None`, `limit: int = Query(default=50, le=200)`. Returns `list[ContextLogRead]`. Requires `get_db_conn` dependency from `apps/api/dependencies.py`. (b) Register router in `apps/api/main.py` if not already present. (c) Run full mandatory gate set: `make test-unit && make test-integration && make test-e2e && make build && make lint && make typecheck`. | Not Started |
+| T-662 | (a) Modified `apps/api/routers/admin.py`: add `GET /api/v1/admin/context-logs` endpoint with `session_id`, `use_case_id`, `limit` query params; routes to list_by_session / list_by_use_case / list_recent. (b) Added list_by_use_case and list_recent methods to ContextLogRepository. (c) Router already registered in main.py. (d) 6 unit tests in test_p114_b03_context_logs_endpoint.py. Sign-off: unit 1403/15 skipped, integration 16/153 skipped, e2e 10 skipped, build OK, lint clean, typecheck clean (184 files) — all exit 0. | Done |
 
 Dependencies: B-01, B-02
 

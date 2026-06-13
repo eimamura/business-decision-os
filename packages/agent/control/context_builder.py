@@ -2,6 +2,9 @@ from __future__ import annotations
 
 import logging
 
+import asyncpg
+
+from packages.persistence.context_log import ContextLogRepository
 from packages.schemas.context_packs import GENERIC_PACK, USE_CASE_PACKS, ContextPack
 
 _log = logging.getLogger(__name__)
@@ -37,13 +40,15 @@ class ContextBuilder:
         intent: str,
         user_input: str,
         session_id: str | None = None,
+        conn: asyncpg.Connection | None = None,
     ) -> ContextPack:
         """Return the ContextPack for the given intent and user input.
 
         Args:
             intent: Resolved intent category (e.g. "supply_chain", "domain_analysis").
             user_input: The user's raw message text.
-            session_id: Optional session ID for future logging (unused in MVP).
+            session_id: Optional session ID; when provided together with conn, the
+                selected ContextPack is logged to the context_log table.
 
         Returns:
             ContextPack with required_tools, prohibited_tools, skill_keys, routing_hint.
@@ -59,6 +64,21 @@ class ContextBuilder:
             pack.required_tools,
             pack.prohibited_tools,
         )
+
+        if conn is not None and session_id is not None:
+            try:
+                await ContextLogRepository().create(
+                    session_id=session_id,
+                    use_case_id=pack.use_case_id,
+                    intent=intent,
+                    required_tools=pack.required_tools,
+                    prohibited_tools=pack.prohibited_tools,
+                    context_pack_json=pack.model_dump(),
+                    conn=conn,
+                )
+            except Exception:
+                _log.warning("ContextBuilder: failed to log context pack", exc_info=True)
+
         return pack
 
     def _classify(self, lowered_input: str) -> str:

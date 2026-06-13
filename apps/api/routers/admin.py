@@ -5,8 +5,9 @@ import io
 import logging
 from pathlib import Path
 from typing import Any, Literal
+from uuid import UUID
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, Query, status
 from pydantic import BaseModel, Field
 
 from apps.api.state import sessions as _sessions_cache
@@ -397,3 +398,36 @@ async def save_ground_truth(body: GroundTruthResponse) -> GroundTruthResponse:
         _log.exception("save_ground_truth failed")
         raise HTTPException(status_code=500, detail="Internal error") from e
     return await get_ground_truth()
+
+
+@router.get(
+    "/context-logs",
+    response_model=list[Any],
+    status_code=status.HTTP_200_OK,
+)
+async def list_context_logs(
+    session_id: UUID | None = None,
+    use_case_id: str | None = None,
+    limit: int = Query(default=50, le=200),
+) -> list[Any]:
+    """Retrieve context_log entries, optionally filtered by session or use-case."""
+    from packages.persistence.context_log import ContextLogRepository
+
+    repo = ContextLogRepository()
+    try:
+        pool = await get_pool()
+        async with pool.acquire() as conn:
+            if session_id is not None:
+                rows = await repo.list_by_session(str(session_id), limit=limit, conn=conn)
+            elif use_case_id is not None:
+                rows = await repo.list_by_use_case(use_case_id, limit=limit, conn=conn)
+            else:
+                rows = await repo.list_recent(limit=limit, conn=conn)
+        return [r.model_dump(mode="json") for r in rows]
+    except RuntimeError as e:
+        if "DATABASE_URL" in str(e):
+            return []
+        raise HTTPException(status_code=500, detail="Internal error") from e
+    except Exception:
+        _log.exception("list_context_logs failed")
+        raise HTTPException(status_code=500, detail="Internal error")

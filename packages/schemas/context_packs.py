@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+import uuid
+from datetime import datetime
+from typing import Any
+
 from pydantic import BaseModel, ConfigDict
 
 
@@ -217,3 +221,34 @@ GENERIC_PACK: ContextPack = ContextPack(
     skill_keys=[],
     routing_hint="",
 )
+
+
+# ---------------------------------------------------------------------------
+# ContextLog schemas — observability for ContextPack selection (P114)
+# ---------------------------------------------------------------------------
+
+
+class ContextLogCreate(BaseModel):
+    """Schema for inserting a new context_log row."""
+
+    session_id: uuid.UUID
+    use_case_id: str
+    intent: str
+    required_tools: list[str]
+    prohibited_tools: list[str]
+    context_pack_json: dict[str, Any]  # JSON blob — schema is open by design
+
+
+class ContextLogRead(BaseModel):
+    """Schema for reading a context_log row."""
+
+    model_config = ConfigDict(frozen=True)
+
+    id: uuid.UUID
+    session_id: uuid.UUID
+    use_case_id: str
+    intent: str
+    required_tools: list[str]
+    prohibited_tools: list[str]
+    context_pack_json: dict[str, Any]  # JSON blob — schema is open by design
+    created_at: datetime

@@ -22,11 +22,11 @@ FP-011 hardened). Per-phase detail: `docs/archive/v5/STATE.md`.
 
 ## Active Phase
 
-P114 — Observability: Context Trace Logging
+P115 — Continuous Eval Runner
 
 ## Active Lease
 
-P114-B-01
+P115-B-01
 
 ## Blockers
 
