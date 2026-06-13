@@ -454,7 +454,14 @@ async def post_message(
                         specs = extract_chart_specs(response.agent_results)
                         for spec in specs:
                             chart_json = json.dumps(spec, ensure_ascii=False)
-                            reply = reply + "\n\n```chart\n" + chart_json + "\n```\n"
+                            chart_fence = "\n\n```chart\n" + chart_json + "\n```\n"
+                            reply = reply + chart_fence
+                            await queue.put({
+                                "type": "text_delta",
+                                "session_id": session_id,
+                                "delta": chart_fence,
+                                "timestamp": _iso_now(),
+                            })
                     except Exception:
                         pass  # chart extraction is non-fatal
                 session.setdefault("messages", []).append({
