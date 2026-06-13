@@ -27,7 +27,13 @@ full integration gate mandatory — recovers the P98–P100 skip debt).
 
 ## Active Lease
 
-P101-B-01 (App Builder — job dispatch HITL backend + completion report)
+P101 D-016/D-017 fixes (App Builder)
+
+## Blockers
+
+D-016 (web-origin streaming burst: next dev gzip rebuffers SSE) and D-017 (2 Playwright
+regressions vs P100 close: chat_flow clear-sessions, daily_exceptions toggle) — sign-off
+rejected (playwright exit 1).
 
 ## Last Completed
 
