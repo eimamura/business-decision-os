@@ -10,7 +10,7 @@ execution process.
 phase detail archived at `docs/archive/v5/TASKS.md` (P24–P64 in `docs/archive/v4/`,
 P0–P23 in `docs/archive/v3/`).
 
-Numbering continues repository-wide: **next phase = P105, next task = T-629, next defect
+Numbering continues repository-wide: **next phase = P106, next task = T-630, next defect
 = D-018, next failure pattern = FP-017.**
 
 ---
@@ -51,7 +51,25 @@ Tagged `v0.1.0` (commit 039c43a); merged to `main`; GitHub release published.
 
 ## Active Phases
 
-None (next phase: P105)
+None (next phase: P106)
+
+---
+
+## P105 — Chart Scenarios in ToolScenarioModal — Done (2026-06-13)
+
+**Goal:** Add a "Charts" category to ToolScenarioModal with scenarios that reliably trigger `list_stockout_risk` (bar chart) and `analyze_demand_trend` (line chart), so users can test inline charts with one click.
+
+Done when: "Charts" category renders in ToolScenarioModal with ≥2 scenarios; prompts are phrased to guarantee the respective tool is called; `make build` and `make lint` pass.
+
+Dependencies: P104 Done
+
+### Batch B-01 — Add "Charts" category to ToolScenarioModal (App Builder) — Done
+
+| Task | Description | Status |
+|---|---|---|
+| T-629 | Add `{ id: "charts", label: "Charts", icon: "◈" }` category to the CATEGORIES array in `apps/web/components/ToolScenarioModal.tsx`. Include ≥2 scenarios: (1) one that reliably calls `list_stockout_risk` — prompt must explicitly ask for all SKUs at risk of stockout with days-of-cover values; (2) one that reliably calls `analyze_demand_trend` for a specific SKU — prompt must explicitly ask for trend direction and period-over-period demand changes. Add `data-testid="category-charts"` on the nav button. Place the category between "Job Dispatch" and "Ask User (HITL)". | Done |
+
+Dependencies: none
 
 ---
 
