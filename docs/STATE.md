@@ -22,20 +22,37 @@ FP-011 hardened). Per-phase detail: `docs/archive/v5/STATE.md`.
 
 ## Active Phase
 
-P101 — Async Job Execution Validation (HITL) + Streaming UX (first post-MVP phase;
-full integration gate mandatory — recovers the P98–P100 skip debt).
+None
 
 ## Active Lease
 
-P101 D-016/D-017 fixes (App Builder)
+None
 
 ## Blockers
 
-D-016 (web-origin streaming burst: next dev gzip rebuffers SSE) and D-017 (2 Playwright
-regressions vs P100 close: chat_flow clear-sessions, daily_exceptions toggle) — sign-off
-rejected (playwright exit 1).
+None
 
 ## Last Completed
+
+P101 — Async Job Execution Validation (HITL) + Streaming UX (2026-06-12). First post-MVP
+phase (user-defined technical validation). Proven end-to-end: agent dispatches heavy work
+via `job_dispatch` (re-registered LLM-callable behind HITL approval); approved jobs run as
+background asyncio tasks (session turn returned 0.11s, second message answered mid-run);
+job rows queued→running→completed/failed; completion/failure report persisted as an
+assistant message (reload-visible) + `job_report` SSE live append; JobStatusCard in chat.
+Streaming: backend already chunked — bottleneck was the Next.js layer (rewrite proxy, then
+`next dev` gzip rebuffering after the new SSE route handler). Fixed (route handler +
+`compress: false`): web-origin measured 90 deltas / 1.855s spread vs 0.000s burst before.
+Defects: D-016 (gzip negated inner fix — FP-015, verify at the wire not by inspection) and
+D-017 (B-01 regression: jobs.session_id FK without CASCADE broke session deletes — FP-016;
+repo-layer fix, schema cascade migration is carried over) both Resolved. Sign-off PASS
+(independent re-run, NO skips): unit 1249 exit 0, full-DSN integration 161 exit 0,
+playwright 48+1-flaky exit 0, build 0, lint 0, typecheck 0 — P98–P100 integration debt
+recovered. Known: gemma4:12b did not route to job_dispatch from natural language in 2
+attempts (approval-resume path driven directly; model-limitation, consistent with P100
+residuals).
+
+Previously:
 
 v0.1.0 release closure (2026-06-12): P96–P100 MVP hardening programme Done; judge
 campaign re-evaluation flipped Q1/Q6/Q8 to PASS (final 10/10); tag v0.1.0 created,

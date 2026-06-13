@@ -10,8 +10,8 @@ execution process.
 phase detail archived at `docs/archive/v5/TASKS.md` (P24–P64 in `docs/archive/v4/`,
 P0–P23 in `docs/archive/v3/`).
 
-Numbering continues repository-wide: **next phase = P101, next task = T-600, next defect
-= D-016, next failure pattern = FP-015.**
+Numbering continues repository-wide: **next phase = P102, next task = T-608, next defect
+= D-018, next failure pattern = FP-017.**
 
 ---
 
@@ -45,16 +45,17 @@ Tagged `v0.1.0` (commit 039c43a); merged to `main`; GitHub release published.
 | Anthropic cost computation | Tokens recorded, `total_cost_usd` 0.0 (P83 deferral) |
 | npm audit | 18 known vulnerabilities (4 high) in web dependencies, pre-existing |
 | SPEC Agent Catalog runtime agents | Deliberately not instantiated; promotion governed by DESIGN.md §Domain Capability Maturity Model |
+| jobs.session_id FK lacks ON DELETE CASCADE | FP-016 residual: repo-layer delete ordering compensates; next migration-touching phase should add the CASCADE (0003 convention) |
 
 ---
 
 ## Active Phases
 
-None — awaiting re-planning (next phase: P101).
+None (next phase: P102).
 
 ---
 
-## P101 — Async Job Execution Validation (HITL) + Streaming UX — Not Started
+## P101 — Async Job Execution Validation (HITL) + Streaming UX — Done (2026-06-12)
 
 **Goal:** Technical validation before business-domain work: prove that heavy processing
 works asynchronously end-to-end — the agent requests job execution via HITL, the user
@@ -79,7 +80,7 @@ InProcessJobRunner is the validation runner; JobRunner protocol unchanged.
 
 Dependencies: v0.1.0 baseline (all prior phases Done)
 
-### Batch B-01 — Job dispatch HITL backend + completion report (App Builder) — Not Started
+### Batch B-01 — Job dispatch HITL backend + completion report (App Builder) — Done (2026-06-12)
 
 | Task | Description | Status |
 |---|---|---|
@@ -125,7 +126,7 @@ Dependencies: B-02
 - Area: apps/web (next.config.js compression / SSE route headers)
 - Owner: App Builder
 - Acceptance: `curl -N` through 3002 shows ≥5 deltas with spread comparable to 8002 during a live generation (next dev mode — the dev stack must demonstrate it, not only `next start`).
-- Status: Open
+- Status: Resolved (commit 9616ab1: next.config.js compress:false — next dev gzip was rebuffering after the route handler; measured post-fix 3002: 90 deltas / 84 HTTP chunks / 1.855s spread)
 - Fix note (2026-06-13): Added `compress: false` to `apps/web/next.config.js`. Root cause: Next.js dev-server `compression` middleware applies gzip at the HTTP layer after the route handler returns a ReadableStream, coalescing all SSE chunks into a single gzip body. `compress: false` disables the middleware globally — acceptable for this dev-oriented stack (the production standalone build uses `next start` which does not apply this compression). Trade-off documented inline. Before: web origin port 3002 delivered all text_delta events as 1 gzip chunk (spread 0.000s). After: 90 text_delta events, 84 HTTP chunks, spread 1.855s (compared with 595 events over 63.264s from direct API port 8002) — INCREMENTAL PASS ≥5 deltas, spread comparable to 8002.
 
 #### Defect: D-017
@@ -135,7 +136,7 @@ Dependencies: B-02
 - Area: apps/web (B-02 changes) or test expectations invalidated by intended new behavior
 - Owner: App Builder
 - Acceptance: `make test-playwright` exit 0 with all specs passing; if a spec's expectation is invalidated by INTENDED new behavior, the spec fix must be justified in the task note.
-- Status: Open
+- Status: Resolved (commit 9616ab1: failure 1 was a B-01 persistence regression — jobs.session_id FK lacks ON DELETE CASCADE so session deletes 500'd; sessions_repo deletes jobs rows first. failure 2 was test-state pollution — locator scoped to the panel testid, justified. Playwright 49 passed, independent re-run exit 0)
 - Fix note (2026-06-13): Two root causes identified and fixed.
   1. `chat_flow.spec.ts:97` — `DELETE /api/v1/sessions` returned HTTP 500 due to `asyncpg.exceptions.ForeignKeyViolationError`: the `jobs` table (added in P101-B-01 migration 0012) has `session_id REFERENCES decision_sessions(id)` WITHOUT `ON DELETE CASCADE`. This FK was created after the 0003 cascade-pass migration and was never included in it. Fix: `packages/persistence/sessions_repo.py` `delete_all_sessions()` now issues `DELETE FROM jobs` before deleting sessions; same guard added to `delete_session()`. This is NOT caused by B-02 — it is a P101-B-01 persistence regression surfaced by the test. Application code fix is in `packages/persistence/sessions_repo.py`.
   2. `daily_exceptions_panel.spec.ts:354` — `page.getByText("SKU-001")` resolved to 5 elements (strict-mode violation): sidebar session titles from accumulated prior test runs ("Train forecast for SKU-001", etc.) polluted the page. Playwright strict mode requires a unique match. Fix: scoped the locator to `page.locator('[data-testid="daily-exceptions-panel"]').getByText("SKU-001")`. Justified spec fix: the assertion intends to verify SKU-001 in the exceptions panel, not sidebar titles; scoping is more precise and correct.
