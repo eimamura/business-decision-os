@@ -1,13 +1,10 @@
-"""T-416: Assert that write_audit_log, job_dispatch, and train_forecast are NOT
-in create_tool_registry() (Gap 5 — P64 B-02, T-408).
+"""T-416 (updated in P101-T-600): Registry presence tests for gap-5 tools.
 
-Also asserts that the three tool classes can still be instantiated directly,
-confirming the class files remain intact even though the tools are no longer
-LLM-callable.
+write_audit_log and train_forecast remain non-LLM-callable.
+job_dispatch was re-registered as LLM-callable in P101-T-600 (safety_level="hitl");
+the old "not in registry" assertion is replaced by a "present with hitl" assertion.
 """
 from __future__ import annotations
-
-import pytest
 
 from packages.tools import AuditLogTool, JobDispatchTool, TrainForecastTool, create_tool_registry
 
@@ -20,11 +17,19 @@ def test_write_audit_log_not_in_registry() -> None:
     )
 
 
-def test_job_dispatch_not_in_registry() -> None:
-    """job_dispatch must not be registered as an LLM-callable tool."""
+def test_job_dispatch_in_registry_with_hitl_safety_level() -> None:
+    """job_dispatch must be LLM-callable with safety_level='hitl' (P101-T-600).
+
+    P64 removed it; P81 deferred re-registration; P101-T-600 re-registers it.
+    The HITL gate in AgentRuntime.prepare_hitl intercepts before handle() is called.
+    """
     registry = create_tool_registry()
-    assert "job_dispatch" not in registry._tools, (
-        "job_dispatch must not be LLM-callable (removed by P64 T-408)"
+    assert "job_dispatch" in registry._tools, (
+        "job_dispatch must be re-registered as LLM-callable (P101-T-600)"
+    )
+    tool = registry._tools["job_dispatch"]
+    assert tool.safety_level == "hitl", (
+        f"job_dispatch safety_level must be 'hitl', got {tool.safety_level!r}"
     )
 
 

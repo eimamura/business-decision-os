@@ -382,15 +382,15 @@ async def test_doi_happy_path_missing_data_is_empty():
 # ===========================================================================
 
 
-def test_tool_registry_count_is_39_after_p95_b01() -> None:
-    """Registry count must reflect current tools; updated in P95-B-01 (analyze_supply_order_timing added)."""
+def test_tool_registry_count_is_40_after_p101_b01() -> None:
+    """Registry count must reflect current tools; updated in P101-B-01 (job_dispatch re-registered)."""
     from packages.tools import create_tool_registry
 
     registry = create_tool_registry()
     count = len(registry._tools)
-    assert count == 39, (
-        f"Expected 39 registered tools after P95-B-01 "
-        "(analyze_supply_order_timing added), got {count}. "
+    assert count == 40, (
+        f"Expected 40 registered tools after P101-B-01 "
+        "(job_dispatch re-registered as LLM-callable), got {count}. "
         "Update this test if tools are intentionally added/removed."
     )
 

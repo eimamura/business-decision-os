@@ -97,6 +97,9 @@ _SYSTEM_PROMPT = (
     " in the same pass.\n"
     "For exception/delay questions, call list_today_exceptions to surface the full daily"
     " exception picture in one call.\n"
+    "12. For heavy or long-running work (model training, large simulations — e.g. train_forecast),"
+    " call job_dispatch with the appropriate job_type and await human approval"
+    " before execution begins.\n"
     "\n"
     "## Response Format\n\n"
     "Structure every response using the following four sections:\n\n"
@@ -140,6 +143,7 @@ _INTENT_TOOL_SUBSET: dict[str, list[str]] = {
         "analyze_forecast_deviation",
         "identify_binding_constraint",
         "analyze_supply_order_timing",
+        "job_dispatch",
     ],
     # lookup: lightweight read-only tools for factual questions (max_tool_calls=5)
     "lookup": [
@@ -255,6 +259,7 @@ _INTENT_TOOL_SUBSET: dict[str, list[str]] = {
         "analyze_forecast_deviation",
         "identify_binding_constraint",
         "analyze_supply_order_timing",
+        "job_dispatch",
     ],
 }
 

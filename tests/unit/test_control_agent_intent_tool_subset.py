@@ -27,7 +27,7 @@ def test_intent_tool_subset_tool_names_all_registered() -> None:
 
 
 def test_intent_tool_subset_supply_chain_list_is_unchanged() -> None:
-    """The supply_chain subset must exactly match its specification (updated in P95-T-584)."""
+    """The supply_chain subset must exactly match its specification (updated in P101-T-600)."""
     expected = [
         "nl_query",
         "list_today_exceptions",
@@ -46,6 +46,7 @@ def test_intent_tool_subset_supply_chain_list_is_unchanged() -> None:
         "analyze_forecast_deviation",
         "identify_binding_constraint",
         "analyze_supply_order_timing",
+        "job_dispatch",
     ]
     assert _INTENT_TOOL_SUBSET["supply_chain"] == expected
 

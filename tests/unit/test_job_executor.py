@@ -78,7 +78,12 @@ async def test_execute_job_routes_to_correct_tool_simulate() -> None:
 
 
 async def test_execute_job_calls_update_status_completed_on_success() -> None:
-    """On a successful tool call execute_job must update the job to status='completed'."""
+    """On a successful tool call execute_job must update the job to status='completed'.
+
+    Updated in P101-T-601: execute_job now also sets status='running' before the
+    tool call, so update_status is called at least twice; assert_called_once()
+    is replaced with a check that the LAST call used status='completed'.
+    """
     from packages.agent.job_executor import execute_job
 
     job_id = uuid4()
@@ -94,13 +99,27 @@ async def test_execute_job_calls_update_status_completed_on_success() -> None:
     ):
         await execute_job(job_id)
 
-    mock_update_status.assert_called_once()
-    _, kwargs = mock_update_status.call_args
-    assert kwargs.get("status") == "completed"
+    assert mock_update_status.call_count >= 2, (
+        "update_status must be called at least twice: once for 'running', once for 'completed'"
+    )
+    # The last call must be for the terminal status 'completed'
+    last_call_kwargs = mock_update_status.call_args
+    # call_args is a (args, kwargs) pair; status may be positional or keyword
+    last_status = (
+        last_call_kwargs.kwargs.get("status")
+        or (last_call_kwargs.args[1] if len(last_call_kwargs.args) > 1 else None)
+    )
+    assert last_status == "completed", (
+        f"Last update_status call must use status='completed', got {last_status!r}"
+    )
 
 
 async def test_execute_job_calls_update_status_failed_on_exception() -> None:
-    """When the tool raises, execute_job must update the job to status='failed' with the error."""
+    """When the tool raises, execute_job must update the job to status='failed' with the error.
+
+    Updated in P101-T-601: execute_job now also sets status='running' before the
+    tool call, so update_status is called at least twice.
+    """
     from packages.agent.job_executor import execute_job
 
     job_id = uuid4()
@@ -116,10 +135,20 @@ async def test_execute_job_calls_update_status_failed_on_exception() -> None:
     ):
         await execute_job(job_id)
 
-    mock_update_status.assert_called_once()
-    _, kwargs = mock_update_status.call_args
-    assert kwargs.get("status") == "failed"
-    assert kwargs.get("error") == "boom"
+    assert mock_update_status.call_count >= 2, (
+        "update_status must be called at least twice: once for 'running', once for 'failed'"
+    )
+    # The last call must be for the terminal status 'failed'
+    last_call_kwargs = mock_update_status.call_args
+    last_status = (
+        last_call_kwargs.kwargs.get("status")
+        or (last_call_kwargs.args[1] if len(last_call_kwargs.args) > 1 else None)
+    )
+    assert last_status == "failed", (
+        f"Last update_status call must use status='failed', got {last_status!r}"
+    )
+    last_error = last_call_kwargs.kwargs.get("error")
+    assert last_error == "boom", f"Expected error='boom', got {last_error!r}"
 
 
 async def test_execute_job_pushes_sse_job_completed_on_success() -> None:

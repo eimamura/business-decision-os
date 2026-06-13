@@ -138,14 +138,14 @@ class JobsRepository:
                 """
                 UPDATE jobs
                 SET
-                    status        = $2,
+                    status        = $2::varchar,
                     result_json   = $3::jsonb,
                     error         = $4,
                     input_tokens  = $5,
                     output_tokens = $6,
                     cost_usd      = $7,
                     completed_at  = CASE
-                        WHEN $2 = ANY('{completed,failed,cancelled}'::text[])
+                        WHEN $2::varchar = ANY(ARRAY['completed'::varchar,'failed','cancelled'])
                         THEN now()
                         ELSE completed_at
                     END

@@ -13,6 +13,51 @@ from packages.persistence.jobs_repo import JobsRepository
 _log = structlog.get_logger(__name__)
 
 
+async def _persist_report_message(session_id: Any | None, content: str) -> None:
+    """Persist an assistant report message into the originating session (T-602).
+
+    Uses DecisionSessionRepository.add_message — the same mechanism as normal
+    replies in apps/api/routers/sessions.py — so the report renders on session reload.
+
+    Silently skips if session_id is None or the DB write fails (best-effort).
+    """
+    if session_id is None:
+        return
+    try:
+        from packages.persistence.sessions_repo import DecisionSessionRepository  # noqa: PLC0415
+        await DecisionSessionRepository().add_message(
+            str(session_id), role="assistant", content=content
+        )
+    except Exception as exc:  # noqa: BLE001 — soft-fail: report is best-effort
+        _log.warning(
+            "job report message persist failed (non-fatal)",
+            session_id=str(session_id),
+            error=str(exc),
+        )
+
+
+async def _push_report_event(sse_queue: Any, session_id: Any | None, report: str) -> None:
+    """Push a job_report SSE event so a live subscriber gets the report immediately (T-602).
+
+    The event type ``job_report`` is a new additive type — it carries the assistant
+    report text and session_id so the client can render it as an assistant message
+    without waiting for the next page reload.
+    """
+    try:
+        await sse_queue.put({
+            "type": "job_report",
+            "session_id": str(session_id) if session_id is not None else None,
+            "content": report,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        })
+    except Exception as exc:  # noqa: BLE001 — soft-fail: SSE push is best-effort
+        _log.warning(
+            "job report SSE push failed (non-fatal)",
+            session_id=str(session_id) if session_id is not None else None,
+            error=str(exc),
+        )
+
+
 def _build_tool_routes() -> dict[str, Any]:
     from packages.tools.forecast_tool import ForecastTool
     from packages.tools.optimizer_tool import OptimizerTool
@@ -71,6 +116,36 @@ def _parse_params(raw: Any) -> dict[str, Any]:
     return {}
 
 
+def _build_completion_report(job_type: str, status: str, result: dict[str, Any] | None) -> str:
+    """Build a short assistant report message for a completed or failed job.
+
+    For a completed ``train_forecast`` job the report includes the trained model
+    version and horizon so the human can verify what was trained.  Other job types
+    get a generic success summary.  Failure reports include the error excerpt.
+    """
+    if status == "failed":
+        error = result.get("error", "unknown error") if result else "unknown error"
+        return (
+            f"**Job report — {job_type} failed.**\n\n"
+            f"The background job could not complete: {str(error)[:300]}"
+        )
+    # Completed
+    if job_type == "train_forecast" and result:
+        sku = result.get("sku_id", "unknown")
+        model_ver = result.get("model_version", "unknown")
+        horizon = result.get("horizon_days", "?")
+        return (
+            f"**Job report — train_forecast completed.**\n\n"
+            f"SKU: {sku} | Model version: {model_ver} | Horizon: {horizon} days.\n"
+            "Predictions have been updated in the database."
+        )
+    summary = str(result)[:200] if result else "no result data"
+    return (
+        f"**Job report — {job_type} completed.**\n\n"
+        f"Result summary: {summary}"
+    )
+
+
 async def execute_job(
     job_id: UUID,
     sse_queue: Any | None = None,
@@ -79,12 +154,18 @@ async def execute_job(
 
     Steps:
     1. Load the job row from the DB.
-    2. Route by ``job_type`` to the appropriate tool class.
-    3. Build a minimal ``ToolContext`` and call ``tool.handle(params, ctx)``.
-    4. On success: update status to ``"completed"`` with the result, attach any
-       output files, and push a ``job_completed`` SSE event.
-    5. On failure: update status to ``"failed"`` with the error message and push
-       a ``job_failed`` SSE event.
+    2. Transition status: pending_approval/queued → running.
+    3. Route by ``job_type`` to the appropriate tool class.
+    4. Build a minimal ``ToolContext`` and call ``tool.handle(params, ctx)``.
+    5. On success: update status to ``"completed"`` with the result, attach any
+       output files, push a ``job_completed`` SSE event, and persist an assistant
+       report message into the originating session (T-602).
+    6. On failure: update status to ``"failed"`` with the error message, push a
+       ``job_failed`` SSE event, and persist an assistant failure report (T-602).
+
+    The ``sse_queue`` parameter accepts either an ``asyncio.Queue`` or any object
+    with a compatible ``put(event: dict) -> Awaitable`` method (e.g. a
+    ``Broadcaster`` instance from ``apps.api.state``).
 
     Returns the updated job row dict.
     """
@@ -95,11 +176,15 @@ async def execute_job(
 
     job_type: str = job["job_type"]
     params: dict[str, Any] = _parse_params(job.get("params_json"))
+    session_id_val = job.get("session_id")
 
     routes = _build_tool_routes()
     tool_cls = routes.get(job_type)
     if tool_cls is None:
         raise ValueError(f"Unknown job_type: {job_type!r}")
+
+    # Transition to running so monitoring can observe progress.
+    await repo.update_status(job_id=job_id, status="running")
 
     from packages.tools.base import ToolContext
 
@@ -110,8 +195,9 @@ async def execute_job(
         "train_forecast": "data_engineer",  # type: ignore[dict-item]
     }
     _specialist_role: SpecialistRole = _role_by_type.get(job_type, "simulation_optimizer")  # type: ignore[arg-type]
+    effective_session_id = session_id_val if session_id_val is not None else uuid4()
     ctx = ToolContext(
-        session_id=job["session_id"] if job.get("session_id") else uuid4(),
+        session_id=effective_session_id,
         agent_step_id=uuid4(),
         specialist_role=_specialist_role,
         actor="system",
@@ -158,6 +244,12 @@ async def execute_job(
                 }
             )
 
+        # T-602: persist assistant report message into the originating session
+        report = _build_completion_report(job_type, "completed", output)
+        await _persist_report_message(session_id_val, report)
+        if sse_queue is not None:
+            await _push_report_event(sse_queue, session_id_val, report)
+
         _log.info("job completed", job_id=str(job_id), job_type=job_type)
         return updated
 
@@ -178,4 +270,11 @@ async def execute_job(
                     "timestamp": datetime.now(timezone.utc).isoformat(),
                 }
             )
+
+        # T-602: persist failure report message into the originating session
+        fail_report = _build_completion_report(job_type, "failed", {"error": str(exc)})
+        await _persist_report_message(session_id_val, fail_report)
+        if sse_queue is not None:
+            await _push_report_event(sse_queue, session_id_val, fail_report)
+
         return updated

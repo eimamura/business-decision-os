@@ -1092,7 +1092,9 @@ class AgentRuntime:
             tool_call_id = call["id"]
             tool_input = call.get("input", {})
 
-            # If this call has an approved HITL job, execute via execute_job (no duplicate rows)
+            # If this call has an approved HITL job, dispatch via background task (T-601).
+            # The session turn must return while the job runs; a completion report
+            # is persisted by execute_job and pushed via the sse_queue when done.
             if (
                 pending_job_id is not None
                 and getattr(tool, "safety_level", None) == "hitl"
@@ -1101,6 +1103,18 @@ class AgentRuntime:
 
                 from packages.agent.job_executor import execute_job
 
+                _job_uuid = _UUID(pending_job_id)
+
+                # Transition the row to "queued" immediately so monitoring can see it.
+                try:
+                    from packages.persistence.jobs_repo import (  # noqa: PLC0415
+                        JobsRepository as _JobsRepoRT,
+                    )
+                    await _JobsRepoRT().update_status(_job_uuid, status="queued")
+                except Exception:
+                    pass  # non-blocking; status update is best-effort
+
+                # Emit a graph_node start event so the UI trace shows the dispatch.
                 tool_t0 = time.monotonic()
                 await _emit({
                     "type": "graph_node", "event": "start",
@@ -1110,43 +1124,38 @@ class AgentRuntime:
                     "input_summary": str(tool_input)[:200],
                     "status": "ok", "meta": {},
                 }, sse_queue, persister)
-                try:
-                    job_result = await execute_job(_UUID(pending_job_id), sse_queue=sse_queue)
-                    tool_duration_ms = int((time.monotonic() - tool_t0) * 1000)
-                    result_output: dict[str, Any] = job_result.get("result_json") or {}
-                    if isinstance(result_output, str):
-                        import json as _json
-                        result_output = _json.loads(result_output)
-                    new_tool_results.append({call["name"]: result_output})
-                    await _emit({
-                        "type": "graph_node", "event": "end",
-                        "kind": "tool", "name": call["name"],
-                        "run_id": tool_call_id, "parent_run_id": agent_run_id,
-                        "timestamp": datetime.now(timezone.utc).isoformat(),
-                        "duration_ms": tool_duration_ms,
-                        "status": "ok", "output": result_output, "meta": {},
-                    }, sse_queue, persister)
-                    hitl_raw = json.dumps(json_safe(result_output))
-                    if len(hitl_raw) > _LOOP_TOOL_RESULT_MESSAGE_MAX_CHARS:
-                        hitl_raw = (
-                            hitl_raw[:_LOOP_TOOL_RESULT_MESSAGE_MAX_CHARS] + " ...[truncated]"
-                        )
-                    new_messages.append(LLMMessage(
-                        role="tool",
-                        content=hitl_raw,
-                        tool_call_id=call["id"],
-                    ))
-                except Exception as exc:
-                    tool_duration_ms = int((time.monotonic() - tool_t0) * 1000)
-                    await _emit({
-                        "type": "graph_node", "event": "end",
-                        "kind": "tool", "name": call["name"],
-                        "run_id": tool_call_id, "parent_run_id": agent_run_id,
-                        "timestamp": datetime.now(timezone.utc).isoformat(),
-                        "duration_ms": tool_duration_ms,
-                        "status": "error", "error": str(exc), "meta": {},
-                    }, sse_queue, persister)
-                    raise
+
+                # Launch execute_job as a background asyncio task so the session turn
+                # returns immediately — the chat stays responsive while the job runs.
+                asyncio.create_task(
+                    execute_job(_job_uuid, sse_queue=sse_queue),
+                    name=f"execute_job_{pending_job_id}",
+                )
+
+                tool_duration_ms = int((time.monotonic() - tool_t0) * 1000)
+                dispatched_output: dict[str, Any] = {
+                    "job_id": pending_job_id,
+                    "status": "queued",
+                    "message": (
+                        "Job dispatched and running in the background. "
+                        "A completion report will be added to this chat when done."
+                    ),
+                }
+                new_tool_results.append({call["name"]: dispatched_output})
+                await _emit({
+                    "type": "graph_node", "event": "end",
+                    "kind": "tool", "name": call["name"],
+                    "run_id": tool_call_id, "parent_run_id": agent_run_id,
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                    "duration_ms": tool_duration_ms,
+                    "status": "ok", "output": dispatched_output, "meta": {},
+                }, sse_queue, persister)
+                dispatch_raw = json.dumps(json_safe(dispatched_output))
+                new_messages.append(LLMMessage(
+                    role="tool",
+                    content=dispatch_raw,
+                    tool_call_id=call["id"],
+                ))
                 # Clear HITL job id after use
                 pending_job_id = None
                 continue
