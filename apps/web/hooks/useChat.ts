@@ -17,6 +17,7 @@ export function useChat(
   sendAskUserAnswer: (answer: string) => Promise<void>;
   submitFeedback: (messageId: string, feedback: 1 | -1) => Promise<void>;
   appendAssistantReply: (reply: string) => void;
+  appendJobStatus: (jobId: string, jobType: string) => void;
 } {
   const {
     getSessionState,
@@ -25,6 +26,7 @@ export function useChat(
     sendAskUserAnswer: ctxSendAskUserAnswer,
     submitFeedback: ctxSubmitFeedback,
     appendAssistantReply: ctxAppendReply,
+    appendJobStatus: ctxAppendJobStatus,
   } = useChatStateContext();
 
   const state = getSessionState(sessionId);
@@ -54,6 +56,11 @@ export function useChat(
     [ctxAppendReply, sessionId],
   );
 
+  const appendJobStatus = useCallback(
+    (jobId: string, jobType: string) => ctxAppendJobStatus(sessionId, jobId, jobType),
+    [ctxAppendJobStatus, sessionId],
+  );
+
   return {
     messages: state.messages,
     isSending: state.isSending,
@@ -64,5 +71,6 @@ export function useChat(
     sendAskUserAnswer,
     submitFeedback,
     appendAssistantReply,
+    appendJobStatus,
   };
 }

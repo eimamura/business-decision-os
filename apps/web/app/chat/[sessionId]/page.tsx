@@ -38,7 +38,17 @@ export default function ChatPage({ params }: ChatPageProps) {
     [sessionId, setSessions],
   );
 
-  const { messages, isSending, usage, isLoadingMessages, loadMessages, sendMessage, sendAskUserAnswer, submitFeedback, appendAssistantReply } = useChat(
+  const {
+    messages,
+    isSending,
+    usage,
+    isLoadingMessages,
+    loadMessages,
+    sendMessage,
+    sendAskUserAnswer,
+    submitFeedback,
+    appendJobStatus,
+  } = useChat(
     sessionId,
     onTitleGenerated,
   );
@@ -198,6 +208,8 @@ export default function ChatPage({ params }: ChatPageProps) {
                       sessionId={sessionId}
                       onFeedback={submitFeedback}
                       onAskUserAnswered={sendAskUserAnswer}
+                      onJobComplete={loadMessages}
+                      onJobApproved={appendJobStatus}
                     />
                   ))}
                   <ExecutionProgressPanel sessionId={sessionId} />
