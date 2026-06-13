@@ -40,39 +40,13 @@ def render_business_guidelines() -> str:
 
 
 def render_response_format() -> str:
-    """Return the grounding rules and response-format section.
+    """Return the response-format section and past-decisions annotation note.
 
-    Pure fixed text — no dynamic placeholders.  Includes the operational
-    grounding constraints that follow the routing policy (rules 11–12) as well
-    as the four-section response format and the past-decisions annotation note.
+    Pure fixed text — no dynamic placeholders.  Contains only the four-section
+    response format and the past-decisions annotation note.  Operational
+    grounding constraints (rules 11–12) now live in render_routing_policy().
     """
     return (
-        "11. Never fabricate column names or assume columns"
-        " that are not confirmed by tool results.\n\n"
-        "Always ground recommendations in tool results."
-        " Do not fabricate quantities or risk scores.\n"
-        "Once you have sufficient data from tools, stop calling tools"
-        " and produce a final text response.\n"
-        "Never call the same tool twice in one analysis pass. "
-        "If you have not yet called any tool in this pass, you MUST call the appropriate tool "
-        "before answering — never produce a final answer without tool data. "
-        "After receiving results from list_stockout_risk, synthesise them immediately"
-        " into a final answer — do NOT call list_stockout_risk or any other tool again"
-        " in the same pass.\n"
-        "For exception/delay questions, call list_today_exceptions to surface the full daily"
-        " exception picture in one call.\n"
-        "12. For heavy or long-running work — call `job_dispatch` with the appropriate job_type"
-        " and await human approval before execution begins."
-        " This is MANDATORY; never run these inline.\n"
-        "    Trigger phrases that ALWAYS route to job_dispatch:\n"
-        "    - 'as a background job', 'run in the background', 'notify me when it completes'\n"
-        "    - 'train the forecast model', 'train_forecast'\n"
-        "    - 'run a full ... simulation for all SKUs'\n"
-        "    Job type mapping: train_forecast → job_type='train_forecast';"
-        " inventory simulation → job_type='simulate';"
-        " replenishment optimization → job_type='optimize';"
-        " demand forecast → job_type='forecast'.\n"
-        "\n"
         "## Response Format\n\n"
         "Structure every response using the following four sections:\n\n"
         "**Situation:** [summary of what the data shows]\n"
@@ -90,7 +64,7 @@ def render_response_format() -> str:
 def render_schema_context(schema: str) -> str:
     """Return the correlated-subquery SQL example for the given schema string.
 
-    Delegates to _make_schema_example() when schema is non-empty.  Returns ""
+    Delegates to _make_schema_example(schema) when schema is non-empty.  Returns ""
     (fail-open) when schema is empty so callers need not handle None.
 
     Args:
@@ -99,7 +73,7 @@ def render_schema_context(schema: str) -> str:
     """
     if not schema:
         return ""
-    return _make_schema_example()
+    return _make_schema_example(schema)
 
 
 def render_tool_catalog(subset: dict[str, list[str]]) -> str:
@@ -210,6 +184,31 @@ def render_routing_policy(subset: dict[str, list[str]]) -> str:
         f"10. Use {nl_tool} for bulk or cross-product questions — "
         f"pass the question in plain English; "
         f"{nl_tool} generates schema-correct SQL internally.\n"
+        f"11. Never fabricate column names or assume columns"
+        f" that are not confirmed by tool results.\n\n"
+        f"Always ground recommendations in tool results."
+        f" Do not fabricate quantities or risk scores.\n"
+        f"Once you have sufficient data from tools, stop calling tools"
+        f" and produce a final text response.\n"
+        f"Never call the same tool twice in one analysis pass. "
+        f"If you have not yet called any tool in this pass, you MUST call the appropriate tool "
+        f"before answering — never produce a final answer without tool data. "
+        f"After receiving results from `{stockout_list_tool}`, synthesise them immediately"
+        f" into a final answer — do NOT call `{stockout_list_tool}` or any other tool again"
+        f" in the same pass.\n"
+        f"For exception/delay questions, call `{exceptions_tool}` to surface the full daily"
+        f" exception picture in one call.\n"
+        f"12. For heavy or long-running work — call `job_dispatch` with the appropriate job_type"
+        f" and await human approval before execution begins."
+        f" This is MANDATORY; never run these inline.\n"
+        f"    Trigger phrases that ALWAYS route to job_dispatch:\n"
+        f"    - 'as a background job', 'run in the background', 'notify me when it completes'\n"
+        f"    - 'train the forecast model', 'train_forecast'\n"
+        f"    - 'run a full ... simulation for all SKUs'\n"
+        f"    Job type mapping: train_forecast → job_type='train_forecast';"
+        f" inventory simulation → job_type='simulate';"
+        f" replenishment optimization → job_type='optimize';"
+        f" demand forecast → job_type='forecast'.\n"
     )
 
 
@@ -368,14 +367,18 @@ _INTENT_TOOL_SUBSET: dict[str, list[str]] = {
 _SYSTEM_PROMPT_TEMPLATE = ""  # deprecated; use _build_system_prompt() instead
 
 
-def _make_schema_example() -> str:
-    """Build a correlated-subquery SQL example from live schema context.
+def _make_schema_example(schema: str) -> str:
+    """Build a correlated-subquery SQL example from the given schema context string.
 
-    Returns an empty string when schema context has not yet been loaded (i.e.
-    before API startup calls load_schema_context()).  This keeps the prompt
-    valid at import time without requiring a DB connection.
+    Returns an empty string when schema is empty (i.e. before API startup calls
+    load_schema_context()).  This keeps the prompt valid at import time without
+    requiring a DB connection.
+
+    Args:
+        schema: The schema context string (as returned by get_schema_context()).
+                Callers that previously relied on the global read must now pass
+                get_schema_context() explicitly.
     """
-    schema = get_schema_context()
     if not schema:
         return ""
 
@@ -456,10 +459,10 @@ def _build_system_prompt(
 
     Each section is an independently maintainable render_* function:
       - render_business_guidelines(): role/responsibilities/domains (pure fixed text)
-      - render_routing_policy():      per-intent tool-routing rules (P108)
-      - render_tool_catalog():        readable intent→tool catalog (P108)
+      - render_routing_policy():      per-intent tool-routing rules + grounding rules 11–12
+                                      (includes render_tool_catalog() output at the top)
       - render_schema_context():      optional correlated-subquery SQL example
-      - render_response_format():     grounding rules + four-section response format
+      - render_response_format():     four-section response format + past-decisions note
 
     Sections that return "" are excluded from the join so the prompt degrades
     gracefully when schema context is not yet loaded (e.g. at import time).
@@ -486,7 +489,6 @@ def _build_system_prompt(
             [
                 render_business_guidelines(),
                 routing_section,
-                render_tool_catalog(_INTENT_TOOL_SUBSET),
                 render_response_format(),
             ],
         )

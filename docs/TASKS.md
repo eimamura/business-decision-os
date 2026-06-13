@@ -10,7 +10,7 @@ execution process.
 phase detail archived at `docs/archive/v5/TASKS.md` (P24–P64 in `docs/archive/v4/`,
 P0–P23 in `docs/archive/v3/`).
 
-Numbering continues repository-wide: **next phase = P110, next task = T-643, next defect
+Numbering continues repository-wide: **next phase = P111, next task = T-647, next defect
 = D-018, next failure pattern = FP-017.**
 
 ---
@@ -51,7 +51,49 @@ Tagged `v0.1.0` (commit 039c43a); merged to `main`; GitHub release published.
 
 ## Active Phases
 
-None (next phase: P110)
+P110 — control_agent.py Cleanup (In Progress)
+
+---
+
+## P110 — control_agent.py Cleanup — In Progress (2026-06-13)
+
+**Goal:** Fix 6 code-quality issues in `control_agent.py` identified after P107–P109: duplicate tool catalog in prompt output (bug), `render_schema_context` API lying about its parameter, tool names leaking into `render_response_format`, `ControlAgent.run()` over-long, `DecisionMemoryStore` triple-instantiation, and minor housekeeping.
+
+Done when: (1) tool catalog no longer appears twice in assembled prompt; (2) `_make_schema_example(schema)` takes the schema string as a parameter and uses it instead of calling `get_schema_context()` internally; (3) `render_response_format()` contains no backtick-quoted tool names — grounding rules 11–12 moved to `render_routing_policy()`; (4) `ControlAgent.run()` delegates to 6 private methods; (5) `DecisionMemoryStore` instantiated once per `run()` call; (6) `_SYSTEM_PROMPT_TEMPLATE = ""` stub and `_ = intent/user_role` patterns cleaned up; (7) all mandatory gates exit 0.
+
+Dependencies: P109 Done
+
+### Batch B-01 — Fix #1–#3: prompt assembly bugs and render_* contract violations (App Builder) — Done
+
+| Task | Description | Status |
+|---|---|---|
+| T-643 | In `packages/agent/control/control_agent.py`: (a) remove the standalone `render_tool_catalog(_INTENT_TOOL_SUBSET)` call from `_build_system_prompt()`'s join list — it is already embedded at the top of `render_routing_policy()`'s output; (b) add a `schema: str` parameter to `_make_schema_example(schema: str) -> str` and use it instead of calling `get_schema_context()` internally — `render_schema_context(schema)` passes the string through; callers that previously relied on the global read must now pass `get_schema_context()` explicitly; (c) move Rules 11–12 (grounding constraint "Never fabricate column names", the "Always ground recommendations" block, the `list_stockout_risk` synthesis rule, the `list_today_exceptions` exception rule, and the `job_dispatch` Rule 12 block) from `render_response_format()` to the end of `render_routing_policy()` (after rule 10); `render_response_format()` must then contain only the `## Response Format` section and the past-decisions annotation note — verified by the existing `test_render_response_format_contains_required_sections` and the `test_render_business_guidelines_contains_no_tool_names` logic extended to `render_response_format`. | Done |
+
+Dependencies: none
+
+### Batch B-02 — Fix #4–#5: refactor ControlAgent.run() and consolidate DecisionMemoryStore (App Builder) — Not Started
+
+| Task | Description | Status |
+|---|---|---|
+| T-644 | In `packages/agent/control/control_agent.py`, extract the four pre-call steps and two post-call writes of `ControlAgent.run()` into private methods: `_inject_skills(task, intent_category) -> SpecialistTask`; `async _inject_past_decisions(task, session_id, store: DecisionMemoryStore) -> SpecialistTask`; `async _inject_domain_knowledge(task, intent_category) -> SpecialistTask`; `_narrow_tools(task, intent_category) -> SpecialistTask`; `async _write_decision_record(session_id, intent_category, result, store: DecisionMemoryStore) -> None`; `async _write_failure_record(session_id, intent_category, exc, store: DecisionMemoryStore) -> None`. In `run()`, instantiate `store = DecisionMemoryStore()` once and pass it to the three methods that need it. The `run()` body becomes a sequential call to these six helpers + `super().run()`. Behaviour must be identical to the current implementation. | Not Started |
+
+Dependencies: B-01
+
+### Batch B-03 — Fix #6: housekeeping (App Builder) — Not Started
+
+| Task | Description | Status |
+|---|---|---|
+| T-645 | In `packages/agent/control/control_agent.py`: (a) delete the `_SYSTEM_PROMPT_TEMPLATE = ""` stub line and its preceding comment block (lines ~362–368); (b) replace `_ = intent` and `_ = user_role` in `_build_system_prompt()` with `# noqa: ARG001` inline comments on the parameter definitions, or use `intent: str \| None = None,  # noqa: ARG001` style — whichever `ruff` accepts without warning; (c) confirm `make lint` still passes after removal of the stub. | Not Started |
+
+Dependencies: B-02
+
+### Batch B-04 — Update tests + phase sign-off (Test/Review) — Not Started
+
+| Task | Description | Status |
+|---|---|---|
+| T-646 | In `tests/unit/test_control_prompt.py`: (a) update `test_render_response_format_contains_required_sections` if any of its assertions need adjustment after Rules 11–12 are moved; (b) add `test_render_response_format_contains_no_tool_names`: call `render_response_format()` and assert no backtick-quoted identifiers from `_INTENT_TOOL_SUBSET` appear in the output; (c) add `test_make_schema_example_uses_provided_schema`: call `_make_schema_example("")` and assert it returns `""`; call `_make_schema_example("sku_master(sku_id TEXT)\ndemand_history(sku_id TEXT, quantity NUMERIC)\ninventory_snapshot(sku_id TEXT, on_hand NUMERIC)\nsupply_orders(sku_id TEXT, quantity NUMERIC)")` and assert the result contains "sku_master". No network, no DB. Then run full mandatory gate set: `make test-unit && make test-integration && make test-e2e && make build && make lint && make typecheck` — all six must exit 0. | Not Started |
+
+Dependencies: B-01, B-02, B-03
 
 ---
 
