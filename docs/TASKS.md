@@ -83,15 +83,15 @@ Dependencies: B-01
 
 | Task | Description | Status |
 |---|---|---|
-| T-645 | In `packages/agent/control/control_agent.py`: (a) delete the `_SYSTEM_PROMPT_TEMPLATE = ""` stub line and its preceding comment block (lines ~362–368); (b) replace `_ = intent` and `_ = user_role` in `_build_system_prompt()` with `# noqa: ARG001` inline comments on the parameter definitions, or use `intent: str \| None = None,  # noqa: ARG001` style — whichever `ruff` accepts without warning; (c) confirm `make lint` still passes after removal of the stub. | Not Started |
+| T-645 | In `packages/agent/control/control_agent.py`: (a) delete the `_SYSTEM_PROMPT_TEMPLATE = ""` stub line and its preceding comment block (lines ~362–368); (b) replace `_ = intent` and `_ = user_role` in `_build_system_prompt()` with `# noqa: ARG001` inline comments on the parameter definitions, or use `intent: str \| None = None,  # noqa: ARG001` style — whichever `ruff` accepts without warning; (c) confirm `make lint` still passes after removal of the stub. | Done |
 
 Dependencies: B-02
 
-### Batch B-04 — Update tests + phase sign-off (Test/Review) — Not Started
+### Batch B-04 — Update tests + phase sign-off (Test/Review) — Done
 
 | Task | Description | Status |
 |---|---|---|
-| T-646 | In `tests/unit/test_control_prompt.py`: (a) update `test_render_response_format_contains_required_sections` if any of its assertions need adjustment after Rules 11–12 are moved; (b) add `test_render_response_format_contains_no_tool_names`: call `render_response_format()` and assert no backtick-quoted identifiers from `_INTENT_TOOL_SUBSET` appear in the output; (c) add `test_make_schema_example_uses_provided_schema`: call `_make_schema_example("")` and assert it returns `""`; call `_make_schema_example("sku_master(sku_id TEXT)\ndemand_history(sku_id TEXT, quantity NUMERIC)\ninventory_snapshot(sku_id TEXT, on_hand NUMERIC)\nsupply_orders(sku_id TEXT, quantity NUMERIC)")` and assert the result contains "sku_master". No network, no DB. Then run full mandatory gate set: `make test-unit && make test-integration && make test-e2e && make build && make lint && make typecheck` — all six must exit 0. | Not Started |
+| T-646 | In `tests/unit/test_control_prompt.py`: (a) update `test_render_response_format_contains_required_sections` if any of its assertions need adjustment after Rules 11–12 are moved; (b) add `test_render_response_format_contains_no_tool_names`: call `render_response_format()` and assert no backtick-quoted identifiers from `_INTENT_TOOL_SUBSET` appear in the output; (c) add `test_make_schema_example_uses_provided_schema`: call `_make_schema_example("")` and assert it returns `""`; call `_make_schema_example("sku_master(sku_id TEXT)\ndemand_history(sku_id TEXT, quantity NUMERIC)\ninventory_snapshot(sku_id TEXT, on_hand NUMERIC)\nsupply_orders(sku_id TEXT, quantity NUMERIC)")` and assert the result contains "sku_master". No network, no DB. Then run full mandatory gate set: `make test-unit && make test-integration && make test-e2e && make build && make lint && make typecheck` — all six must exit 0. | Done |
 
 Dependencies: B-01, B-02, B-03
 

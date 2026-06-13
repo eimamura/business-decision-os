@@ -113,3 +113,44 @@ def test_render_response_format_contains_required_sections() -> None:
     result = render_response_format()
     for section in ["Situation", "Root Cause", "Recommended Actions", "Confidence Level"]:
         assert section in result, f"Section '{section}' missing from render_response_format()"
+
+
+def test_render_response_format_contains_no_tool_names() -> None:
+    """render_response_format must not contain backtick-quoted tool names.
+
+    Rules 11-12 (grounding constraints) were moved to render_routing_policy() by B-01.
+    The response format section must remain free of tool name references to prevent
+    prompt rot when tools are renamed.
+    """
+    result = render_response_format()
+    all_tool_names = {name for names in _INTENT_TOOL_SUBSET.values() for name in names}
+    for tool_name in all_tool_names:
+        assert f"`{tool_name}`" not in result, (
+            f"Tool name `{tool_name}` found in render_response_format()"
+        )
+
+
+def test_make_schema_example_empty_string_returns_empty() -> None:
+    """_make_schema_example('') must return '' without raising or hitting the DB."""
+    from packages.agent.control.control_agent import _make_schema_example
+
+    assert _make_schema_example("") == ""
+
+
+def test_make_schema_example_uses_provided_schema() -> None:
+    """_make_schema_example must use the schema string passed as argument.
+
+    Passing a minimal schema containing the four required tables must produce
+    output that references 'sku_master'.  This confirms the function reads the
+    supplied string rather than calling get_schema_context() internally.
+    """
+    from packages.agent.control.control_agent import _make_schema_example
+
+    minimal_schema = (
+        "sku_master(sku_id TEXT)\n"
+        "demand_history(sku_id TEXT, quantity NUMERIC)\n"
+        "inventory_snapshot(sku_id TEXT, on_hand NUMERIC)\n"
+        "supply_orders(sku_id TEXT, quantity NUMERIC)"
+    )
+    result = _make_schema_example(minimal_schema)
+    assert "sku_master" in result
