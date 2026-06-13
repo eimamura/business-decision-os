@@ -358,15 +358,6 @@ _INTENT_TOOL_SUBSET: dict[str, list[str]] = {
 }
 
 
-# _SYSTEM_PROMPT_TEMPLATE is kept as a legacy alias so that any external code that
-# imported this constant before P109 continues to work without changes.  The prompt
-# is now assembled by _build_system_prompt() from discrete render_* functions.
-# At import time get_schema_context() returns "" (DB not yet ready), which is fine —
-# ControlAgent.__init__ calls _build_system_prompt(schema_context=get_schema_context())
-# at instance-creation time so every new agent gets the fully-loaded prompt.
-_SYSTEM_PROMPT_TEMPLATE = ""  # deprecated; use _build_system_prompt() instead
-
-
 def _make_schema_example(schema: str) -> str:
     """Build a correlated-subquery SQL example from the given schema context string.
 
@@ -451,8 +442,8 @@ def _make_schema_example(schema: str) -> str:
 
 
 def _build_system_prompt(
-    intent: str | None = None,
-    user_role: str = "analyst",
+    intent: str | None = None,  # noqa: ARG001 — reserved for future render_user_permissions
+    user_role: str = "analyst",  # noqa: ARG001 — reserved for future render_user_permissions
     schema_context: str = "",
 ) -> str:
     """Assemble the system prompt from discrete conceptual-module sections.
@@ -475,9 +466,6 @@ def _build_system_prompt(
         schema_context: Schema context string from get_schema_context().  Pass ""
                         to suppress the SQL example (fail-open behaviour).
     """
-    # intent and user_role are accepted but unused — reserved for future sections.
-    _ = intent
-    _ = user_role
     # inject schema_example into the {schema_example} placeholder that
     # render_routing_policy embeds inside its rule-2b text.
     routing_section = render_routing_policy(_INTENT_TOOL_SUBSET).format(
