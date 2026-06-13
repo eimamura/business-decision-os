@@ -545,7 +545,6 @@ def _make_schema_example(schema: str) -> str:
 def _build_system_prompt(
     intent: str | None = None,
     user_role: str = "analyst",  # noqa: ARG001 — reserved for future render_user_permissions
-    schema_context: str = "",
     tool_subset_override: dict[str, list[str]] | None = None,
     routing_hint: str = "",
 ) -> str:
@@ -561,6 +560,9 @@ def _build_system_prompt(
     Sections that return "" are excluded from the join so the prompt degrades
     gracefully when schema context is not yet loaded (e.g. at import time).
 
+    Schema context is injected at request time via ``_inject_schema_context()`` rather
+    than at prompt-build time; this parameter was removed in P119/T-682.
+
     Args:
         intent:               When provided and present in _INTENT_TOOL_SUBSET, narrows
                               render_routing_policy() to only the tools for that intent.
@@ -568,8 +570,6 @@ def _build_system_prompt(
                               class-level _SYSTEM_PROMPT constant).
         user_role:            Reserved for future render_user_permissions(user_role) section.
                               Currently unused.
-        schema_context:       Schema context string from get_schema_context().  Pass ""
-                              to suppress the SQL example (fail-open behaviour).
         tool_subset_override: When provided, replaces the intent-derived tool subset
                               entirely.  Produced by ContextBuilder to further narrow the
                               tool list beyond what _INTENT_TOOL_SUBSET already specifies.
@@ -589,7 +589,7 @@ def _build_system_prompt(
             else _INTENT_TOOL_SUBSET
         )
     routing_section = render_routing_policy(tool_subset, routing_hint=routing_hint).format(
-        schema_example=render_schema_context(schema_context)
+        schema_example=render_schema_context("")
     )
     return "\n\n".join(
         filter(
@@ -637,7 +637,7 @@ class ControlAgent(AgentBasedSpecialist):
             llm_client=llm_client,
             tool_registry=tool_registry,
             sse_queue=sse_queue,
-            system_prompt=_build_system_prompt(intent=None, schema_context=""),
+            system_prompt=_build_system_prompt(intent=None),
             model_registry=model_registry,
         )
 
@@ -870,7 +870,6 @@ class ControlAgent(AgentBasedSpecialist):
         if intent_category:
             self._runtime._system_prompt = _build_system_prompt(
                 intent=intent_category,
-                schema_context="",
                 tool_subset_override=tool_subset_override,
                 routing_hint=context_pack.routing_hint,
             )

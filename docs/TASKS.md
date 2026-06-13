@@ -10,7 +10,7 @@ execution process.
 phase detail archived at `docs/archive/v5/TASKS.md` (P24–P64 in `docs/archive/v4/`,
 P0–P23 in `docs/archive/v3/`).
 
-Numbering continues repository-wide: **next phase = P118, next task = T-678, next defect
+Numbering continues repository-wide: **next phase = P120, next task = T-687, next defect
 = D-018, next failure pattern = FP-017.**
 
 ---
@@ -51,7 +51,7 @@ Tagged `v0.1.0` (commit 039c43a); merged to `main`; GitHub release published.
 
 ## Active Phases
 
-None (next phase: P118)
+None (next phase: P120)
 
 ---
 
@@ -745,7 +745,7 @@ Dependencies: none
 
 ---
 
-## P119 — Evaluation-Driven Hardening — Not Started
+## P119 — Evaluation-Driven Hardening — Done (2026-06-13)
 
 **Goal:** Apply 4 improvements from the post-P118 evaluation: dead parameter removal, MemoryStore async/sync ADR (authored), CI integration-test gate, and process-doc improvements.
 
@@ -763,7 +763,7 @@ Dependencies: none
 
 | Task | Description | Status |
 |---|---|---|
-| T-682 | Remove `schema_context: str = ""` from `_build_system_prompt()` signature in `packages/agent/control/control_agent.py`. Update the two explicit call sites (`__init__` and `run()`) to not pass the argument. Update the docstring. Update any unit tests in `tests/unit/agent/` that reference `schema_context` in `_build_system_prompt` assertions. Ensure `make test-unit` exits 0. | Not Started |
+| T-682 | Remove `schema_context: str = ""` from `_build_system_prompt()` signature in `packages/agent/control/control_agent.py`. Update the two explicit call sites (`__init__` and `run()`) to not pass the argument. Update the docstring. Update any unit tests in `tests/unit/agent/` that reference `schema_context` in `_build_system_prompt` assertions. Ensure `make test-unit` exits 0. | Done |
 
 Dependencies: none
 
@@ -771,8 +771,8 @@ Dependencies: none
 
 | Task | Description | Status |
 |---|---|---|
-| T-683 | In `docs/ORCHESTRATOR.md §Phase Sign-Off Checklist` step 2, change the DECISIONS.md promotion scan from "non-blocking warning" to a **blocking** gate: "Phase MUST NOT be marked Done if any DECISIONS.md entry mentions a public interface without a corresponding ADR." Remove "non-blocking" qualifier. | Not Started |
-| T-684 | Expand Orchestrator writable targets in three places: (1) `docs/ORCHESTRATOR.md §Tool Usage Rules` — add `docs/` (new files only, excluding TASKS.md/STATE.md/DECISIONS.md which have sole-writer rules); (2) `AGENTS.md §Prohibitions` — update the Orchestrator write boundary prohibition to list the expanded targets; (3) `.claude/skills/bdos-orchestrator/SKILL.md` — update the HARD STOP box and Tool Usage Rules to match. Purpose: remove friction where trivial doc files (e.g. RAG.md) require an App Builder call. | Not Started |
+| T-683 | In `docs/ORCHESTRATOR.md §Phase Sign-Off Checklist` step 2, change the DECISIONS.md promotion scan from "non-blocking warning" to a **blocking** gate: "Phase MUST NOT be marked Done if any DECISIONS.md entry mentions a public interface without a corresponding ADR." Remove "non-blocking" qualifier. | Done |
+| T-684 | Expand Orchestrator writable targets in three places: (1) `docs/ORCHESTRATOR.md §Tool Usage Rules` — add `docs/` (new files only, excluding TASKS.md/STATE.md/DECISIONS.md which have sole-writer rules); (2) `AGENTS.md §Prohibitions` — update the Orchestrator write boundary prohibition to list the expanded targets; (3) `.claude/skills/bdos-orchestrator/SKILL.md` — update the HARD STOP box and Tool Usage Rules to match. Purpose: remove friction where trivial doc files (e.g. RAG.md) require an App Builder call. | Done |
 
 Dependencies: none
 

@@ -17,7 +17,7 @@ description: Orchestrator for Business Decision OS. Use for any BDOS work — tr
 > The Orchestrator MUST NOT write to `packages/`, `apps/`, `tests/`, or `infra/`.
 > Implementation → delegate to `bdos-app-builder`.
 > Tests → delegate to `bdos-test-review`.
-> Writable targets: `docs/TASKS.md`, `docs/STATE.md`, `docs/DECISIONS.md`, `docs/adr/` only.
+> Writable targets: `docs/TASKS.md`, `docs/STATE.md`, `docs/DECISIONS.md`, `docs/adr/`, and new reference/design files under `docs/` (must not overwrite existing files).
 > Writing code directly = task failure; revert and re-delegate.
 
 ## Purpose
@@ -276,7 +276,7 @@ Specialists update only their own assigned task rows. They MUST NOT change batch
 ## Tool Usage Rules
 
 - **Read-only** on all code and infra directories: `apps/`, `packages/`, `infra/`, `tests/`, `.github/`
-- May write to: `docs/TASKS.md` (status updates only), `docs/DECISIONS.md` (append only), `docs/adr/` (new files only)
+- May write to: `docs/TASKS.md` (status updates only), `docs/STATE.md` (Orchestrator is the sole writer), `docs/DECISIONS.md` (append only), `docs/adr/` (new files only), `docs/` (new reference/design files only — must not overwrite existing docs files)
 - Tools: Read, Write, Edit, Grep, Glob, Agent (to spawn bdos-app-builder / bdos-infra / bdos-test-review)
 
 ## Constraints

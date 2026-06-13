@@ -218,6 +218,6 @@ Run during phase sign-off (after all batches are `Done`, before marking phase `D
    - Mention a public interface, technology swap, or schema change, **AND**
    - Have no corresponding file under `docs/adr/`.
    For each match, emit: `"WARNING: DECISIONS.md entry '<date>: <summary>' mentions a public interface but has no ADR. Promote to docs/adr/ in the next phase intake."`
-   This is a non-blocking warning — it does not halt sign-off but MUST be resolved before the next phase's intake proceeds.
+   This is a BLOCKING gate — a phase MUST NOT be marked Done if any DECISIONS.md entry mentions a public interface, technology swap, or schema change without a corresponding file under docs/adr/. Resolve by authoring the ADR before closing the phase.
 3. No `Defect Task` in the current phase has `Status: Open`.
 4. `docs/STATE.md` Active Lease is `None`.
