@@ -34,6 +34,14 @@ None
 
 ## Last Completed
 
+P102 — Job Dispatch Modal + Routing Reliability (2026-06-12). Restored "Job Dispatch (HITL)"
+modal category (P81 clean-up gap); tightened ControlAgent system prompt rule 12 with explicit
+trigger phrases for gemma4:12b. Sign-off: unit 1249, integration 161 (full-DSN), playwright
+52+1-flaky — all exit 0. New Playwright spec: 4 tests (category tab, 2 prompt injection,
+1 full mock E2E).
+
+Previously:
+
 P101 — Async Job Execution Validation (HITL) + Streaming UX (2026-06-12). First post-MVP
 phase (user-defined technical validation). Proven end-to-end: agent dispatches heavy work
 via `job_dispatch` (re-registered LLM-callable behind HITL approval); approved jobs run as

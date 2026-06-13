@@ -51,7 +51,54 @@ Tagged `v0.1.0` (commit 039c43a); merged to `main`; GitHub release published.
 
 ## Active Phases
 
-None (next phase: P102).
+None (next phase: P103).
+
+---
+
+## P102 — Job Dispatch Modal + Routing Reliability — Done (2026-06-12)
+
+**Goal:** Restore the "Job Dispatch (HITL)" category in `ToolScenarioModal.tsx` (removed in
+P81 when `job_dispatch` was deregistered; P101 re-registered `job_dispatch` as LLM-callable
+but did not restore the modal — this is a P81 clean-up gap). Also harden the ControlAgent
+system prompt routing rule so gemma4:12b reliably dispatches to `job_dispatch` from natural
+language (P101 live verification: model failed to route in 2 consecutive attempts — rule 12
+lacked the explicit trigger phrases the model needs).
+
+Done when: (1) ToolScenarioModal has a "Job Dispatch (HITL)" category with ≥3 scenarios whose
+prompts include "as a background job / notify me in chat when it completes" phrasing;
+(2) system prompt rule 12 includes explicit trigger phrases and example phrasings that guide
+gemma4:12b to `job_dispatch`; (3) Playwright spec verifies the category renders and scenario
+click injects the correct prompt; (4) live E2E via modal confirms HITL approval card → approve
+→ completion report in chat.
+
+Context: `DECISIONS.md` 2026-06-10 entry says "The [Job Dispatch] category will be restored
+when `job_dispatch` is re-registered as LLM-callable." P101 re-registered (T-600) but omitted
+the modal restore. gemma4:12b routing weakness is a known model limitation (TASKS.md
+§Carry-Over); the prompt-rule fix is the available mitigation without a model upgrade.
+
+Dependencies: P101 Done (job_dispatch re-registered, HITL approval flow verified)
+
+### Batch B-01 — Modal restoration + routing rule (App Builder) — Done (2026-06-12)
+
+| Task | Description | Status |
+|---|---|---|
+| T-608 | Restore "Job Dispatch (HITL)" category in `apps/web/components/ToolScenarioModal.tsx`. Add ≥3 scenarios with prompts explicitly phrased to trigger job_dispatch routing: include "as a background job" and "notify me in chat when it completes" in each prompt (P101 finding: explicit phrasing required — natural language alone fails on gemma4:12b). Suggested scenarios: (a) Train Forecast Model, (b) Run Full Inventory Simulation, (c) Batch Supply Chain Analysis. Icon: use "⬗" or similar to distinguish from the Ask User (HITL) category. data-testid: add `data-testid="category-job-dispatch"` on the category nav button and `data-testid="scenario-job-dispatch-{id}"` on each scenario card. | Done |
+| T-609 | Tighten system prompt rule 12 in `packages/agent/control/control_agent.py`. Current rule (2 lines) lacks the trigger phrases gemma4:12b needs to route reliably. The new rule must: (a) enumerate the explicit trigger phrases ("as a background job", "run in the background", "train the forecast model", "notify me when it completes"); (b) list the job_types this maps to (`train_forecast`, `simulate`, `batch_supply_analysis`); (c) state that these requests MUST go through `job_dispatch` — never executed inline. Keep the total added text ≤8 lines to respect the context budget. Also add `batch_supply_analysis` intent to `_INTENT_TOOL_SUBSET` under `supply_chain` and `decision_support` if not already present. | Done |
+
+Dependencies: none
+
+### Batch B-02 — Tests + live verification + sign-off (Test/Review) — Done (2026-06-12)
+
+| Task | Description | Status |
+|---|---|---|
+| T-610 | Playwright spec `tests/e2e/playwright/p102_job_dispatch_modal.spec.ts`: (1) modal opens and "Job Dispatch (HITL)" category tab is visible (`data-testid="category-job-dispatch"`); (2) clicking a scenario card injects the correct prompt into the chat composer (check textarea value); (3) live E2E scenario: open modal → click "Train Forecast Model" → send → HITL approval card renders → click Approve → `job-status-card` appears → eventually a completion report assistant message appears. The live E2E test may require `test.setTimeout(120_000)`. | Done |
+| T-611 | Phase sign-off — full mandatory gate set (NO skips): `make test-unit && make test-integration && make test-playwright && make build && make lint && make typecheck`. Report gate, exit_code, and output_tail for each. | Done |
+
+**B-01 implementation notes:** T-608: "Job Dispatch" category inserted at index 3 in CATEGORIES array (`icon="⬗"`); 3 scenarios with explicit "as a background job / notify me in chat when it completes" phrasing; `data-testid="category-job-dispatch"` on nav button; `data-testid="scenario-job-dispatch-{id}"` on scenario cards. T-609: Rule 12 expanded from 2 lines to 8 — adds MANDATORY marker, trigger phrase enumeration ("as a background job", "run in the background", "train the forecast model", "notify me when it completes"), and job_type mapping (`train_forecast`/`simulate`/`batch_supply_analysis`); `job_dispatch` was already present in `_INTENT_TOOL_SUBSET` for both `supply_chain` and `decision_support` (no change needed).
+
+**B-02 implementation notes:** T-610: `tests/e2e/playwright/p102_job_dispatch_modal.spec.ts` — 4 tests (T-610-PW-1: category tab visible; T-610-PW-2: Train Forecast prompt injection; T-610-PW-3: Inventory Simulation prompt injection; T-610-PW-4: full modal→approval→job-status-card→report flow using page.route() mocks). T-611: all gates exit 0 — unit 1249, integration 161 (full-DSN), playwright 52+1-flaky, build OK, lint clean, typecheck clean.
+
+Dependencies: B-01
 
 ---
 
