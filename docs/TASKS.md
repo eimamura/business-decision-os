@@ -51,7 +51,7 @@ Tagged `v0.1.0` (commit 039c43a); merged to `main`; GitHub release published.
 
 ## Active Phases
 
-P116 — Context Engineering Pipeline: Bug Fixes & Field Activation (Done 2026-06-13)
+None (next phase: P117)
 
 ---
 
