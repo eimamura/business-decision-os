@@ -228,46 +228,13 @@ If PhaseX is already planned, prefer `run <PhaseX>` directly.
 
 ---
 
-## Proof Output (for `/goal` evaluator)
-
-The `/goal` evaluator reads only what appears in the conversation transcript. Every turn must end with this block so the evaluator has evidence to judge:
-
-```
 ## Proof Output
 
-**Batch completed:** <batch ID and name>
-**Validation:**
-  - command: <e.g. make test>
-  - exit code: <0 or non-zero>
-  - output: <relevant lines>
-
-**Phase progress:**
-<paste batch status rows from docs/TASKS.md — exclude "Not Started" rows>
-
-**STATE.md snapshot:**
-  - Active Lease: None
-  - Last Completed: <batch>
-  - Blockers: <None or list>
-```
-
-When all batches are Done, also emit:
-```
-**Phase complete evidence:**
-  - All batches Done: <grep proof>
-  - make build: exit 0
-  - git diff --stat: <output>
-  - No Blocked or In Progress remaining: <grep proof>
-```
+→ See `docs/ORCHESTRATOR.md §Proof Output` for the required format block (batch evidence + phase complete evidence).
 
 ## TASKS.md and STATE.md Write Authority
 
-| File | Who writes | What they write |
-|---|---|---|
-| `docs/TASKS.md` — phase/batch status | **Orchestrator only** | `Not Started → Done / Blocked`; new Defect Task rows |
-| `docs/TASKS.md` — individual task rows | Specialists | `In Progress / Done`; blocking notes on their assigned rows |
-| `docs/STATE.md` | **Orchestrator only** | Active lease, last completed batch, validation results, blockers |
-
-Specialists update only their own assigned task rows. They MUST NOT change batch-level status, mark a batch `Blocked`, or write to `docs/STATE.md` — report blockers to Orchestrator instead.
+→ See `docs/ORCHESTRATOR.md §TASKS.md and STATE.md Write Authority` for the full authority table.
 
 ## ADR Triggers
 
@@ -308,22 +275,7 @@ A planning session is done when:
 
 ## Planning Output Format — Plan Mode
 
-```
-## Phase X — [Name]
-
-### Batch 1 — [Topic] (Agent: App Builder | Infra | Test/Review)
-- T-XXXX: description
-- T-XXXX: description
-Dependencies: none | Batch N
-
-### Batch 2 ...
-
-### Blockers
-- [any known blockers]
-
-### ADRs needed
-- [any decisions requiring an ADR]
-```
+→ See `docs/ORCHESTRATOR.md §Planning Output Format — Plan Mode` for the required template.
 
 ## User Escalation Criteria
 
