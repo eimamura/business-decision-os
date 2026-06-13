@@ -10,7 +10,7 @@ execution process.
 phase detail archived at `docs/archive/v5/TASKS.md` (P24–P64 in `docs/archive/v4/`,
 P0–P23 in `docs/archive/v3/`).
 
-Numbering continues repository-wide: **next phase = P121, next task = T-691, next defect
+Numbering continues repository-wide: **next phase = P122, next task = T-700, next defect
 = D-018, next failure pattern = FP-017.**
 
 ---
@@ -52,6 +52,53 @@ Tagged `v0.1.0` (commit 039c43a); merged to `main`; GitHub release published.
 ## Active Phases
 
 None (next phase: P121)
+
+---
+
+## P121 — Harness Defect Fixes (Audit 2026-06-13)
+
+**Goal:** Fix 9 harness defects identified in the 2026-06-13 context architecture audit — 3 critical (Bash tool gaps in subagent definitions, integration gate missing from Design Improvement Loop), 5 moderate (name slug mismatches, agent description drift, watch list incomplete, failure-patterns language violation, prevention-policy ambiguity), and 1 minor.
+
+Done when: all agent subagent tool declarations corrected; ORCHESTRATOR.md Design Improvement Loop gate includes `make test-integration`; all agent name slugs match SKILL.md; design-contract-watch.md covers FP-013 + FP-014; `docs/failure-patterns.md` Pattern column is English; `docs/prevention-policy.md` FP-011 lever log is unambiguous; all mandatory gates exit 0.
+
+Dependencies: P120 Done
+
+### Batch B-01 — Critical: Bash tool declarations + integration gate (Infra/DevOps) — Done
+
+| Task | Description | Status |
+|---|---|---|
+| T-691 | Add `"Bash"` to the `tools` array in `.claude/agents/bdos-orchestrator.md`. Current: `["Read","Write","Edit","Grep","Glob","Agent"]`. After: `["Read","Write","Edit","Bash","Grep","Glob","Agent"]`. This allows the Orchestrator subagent to run `git add`, `git commit`, `git diff` as required by SKILL.md step 9a. | Done |
+| T-692 | Add `"Bash"` to the `tools` array in `.claude/agents/analyze-failure.md`. Current: `["Read","Write","Edit","Grep","Glob"]`. After: `["Read","Write","Edit","Bash","Grep","Glob"]`. This allows the failure-analyst subagent to run `git log` and `git show` as required by SKILL.md step 2. | Done |
+| T-693 | In `docs/ORCHESTRATOR.md §Design Improvement Loop` step 6, replace the quality gate line `uv run pytest tests/unit/ -q && make lint && make typecheck && make build` with `uv run pytest tests/unit -q && make lint && make typecheck && make test-integration`. Rationale: aligns the gate with SKILL.md step 8 batch check format, removes `make build` (already covered at phase sign-off), and adds `make test-integration` to prevent FP-003-class regressions in design amendments (which touch completed phases at higher risk). | Done |
+
+Dependencies: none
+
+### Batch B-02 — Moderate: name slugs + agent descriptions (Infra/DevOps) — Done
+
+| Task | Description | Status |
+|---|---|---|
+| T-694 | Fix name slug mismatches between agent files and SKILL.md frontmatter: (1) `.claude/agents/analyze-failure.md` — change `name: failure-analyst` to `name: analyze-failure` to match SKILL.md `name: analyze-failure`; (2) `.claude/agents/harden-system.md` — change `name: prevention-architect` to `name: harden-system` to match SKILL.md `name: harden-system`. | Done |
+| T-695 | Expand `.claude/agents/bdos-orchestrator.md` description field to match the SKILL.md frontmatter description: replace the current short description `"Use this agent to plan BDOS work, decompose tasks, and route work to specialized BDOS subagents."` with the full text from SKILL.md: `"Orchestrator for Business Decision OS. Use for any BDOS work — translating requirements into tasks, planning phases, executing autonomously, routing to specialist agents (app-builder, infra, test-review), updating docs/TASKS.md, or authoring ADRs. When the user describes a requirement or feature, use intake mode to define tasks and run end-to-end without waiting for human prompts between steps."` | Done |
+
+Dependencies: none (parallel with B-01)
+
+### Batch B-03 — Moderate/Minor: watch list expansion + failure-patterns English + prevention-policy (Infra/DevOps) — Done
+
+| Task | Description | Status |
+|---|---|---|
+| T-696 | Add FP-013 and FP-014 to `design-contract-watch.md` and expand `paths` to include `packages/schemas/**` (needed for FP-013). FP-013: "SSE streaming protocol has no retraction semantics — if a second invocation produces a corrected reply, the client sees both the degenerate first-invocation text and the correct second-invocation text with no way to distinguish them. Check: does the new SSE event sequence include a `text_reset` event when grounded text replaces an earlier degenerate segment?" FP-014: "Language constraint must be enforced at every LLM output site, not only at UI display boundaries. If a new LangGraph node produces text that flows into the control agent's context or into user-facing content, add explicit English-only instructions to that node's prompt. Check: does the new node prompt include an English-only instruction?" | Done |
+| T-697 | Translate all Pattern-column entries in `docs/failure-patterns.md` from Japanese to English. Every row (FP-001 through FP-016) currently has its Pattern field written in Japanese, violating AGENTS.md §Language Convention ("docs/ — English"). Translate each Pattern text to clear English while preserving the meaning. Do not change ID, Date, Defect, Root Cause Class, Count, or Lever Applied columns. | Done |
+| T-698 | Clarify the `docs/prevention-policy.md` Applied Lever Log FP-011 entry. Current entry says "Handed off to Test/Review: two unit tests required..." — this describes a delegation, not a completed action. Update to state whether those tests were actually implemented (and reference the test file and T-NNN if they were), or replace with a concrete description of what was actually committed. | Done |
+
+Dependencies: none (parallel with B-01 and B-02)
+
+### Batch B-04 — Sign-off (Test/Review) — Done
+
+| Task | Description | Status |
+|---|---|---|
+| T-699 | Full phase sign-off: `make test-unit`, `make test-integration`, `make test-e2e`, `make build`, `make lint`, `make typecheck`. Report exit codes and output tails for each gate. | Done |
+
+Dependencies: B-01, B-02, B-03
 
 ---
 
