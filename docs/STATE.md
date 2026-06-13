@@ -22,11 +22,11 @@ FP-011 hardened). Per-phase detail: `docs/archive/v5/STATE.md`.
 
 ## Active Phase
 
-P115 — Continuous Eval Runner
+None
 
 ## Active Lease
 
-P115-B-01
+None
 
 ## Blockers
 
@@ -34,7 +34,9 @@ None
 
 ## Last Completed
 
-P111 — control_agent.py System Prompt Improvements (Judge Report) (2026-06-13). Applied 5 Judge-Report fixes: (1) Rule 11 added for decision_support tools (optimize_replenishment/simulate_inventory/forecast/request_approval/evaluate_candidates); (2) {schema_example} moved to after synthesis instruction in Rule 3; (3) rules renumbered 1–14 sequentially (no 2b); (4) SPEC Q5/Q7/Q8/Q9/Q10 replaced with inline semantic labels; (5) _build_system_prompt(intent=...) now narrows render_routing_policy() subset; ControlAgent.run() rebuilds system_prompt after intent_category resolved. 5 new tests in test_control_prompt.py. Sign-off: unit 1308/15 skipped, integration 16/153 skipped, e2e 10 skipped, build OK, lint clean, typecheck clean (178 files) — all exit 0.
+P115 — Continuous Eval Runner (2026-06-13). Eval-driven Context Engineering refactor complete (P112–P115): golden cases dataset for SPEC Q1–Q10 (data/evals/spec10_golden_cases.yaml), EvalCase schema (packages/agent/evals/eval_case.py), ContextPack schemas + USE_CASE_PACKS (packages/schemas/context_packs.py), ContextBuilder with keyword-based use-case classification (packages/agent/control/context_builder.py), integrated into control_agent.py via tool_subset_override, context trace logging (context_log table migration 0024 + ContextLogRepository + GET /api/v1/admin/context-logs), EvalRunner with failure taxonomy (packages/agent/evals/runner.py), CLI runner script (scripts/run_evals.py) + make eval target. Sign-off: unit 1413/15 skipped, integration 16/153 skipped, e2e 10 skipped, build OK, lint clean, typecheck clean — all exit 0. ADR: docs/adr/2026-06-13-eval-driven-context-engineering.md.
+
+Previously: P111 — control_agent.py System Prompt Improvements (Judge Report) (2026-06-13). Applied 5 Judge-Report fixes: (1) Rule 11 added for decision_support tools (optimize_replenishment/simulate_inventory/forecast/request_approval/evaluate_candidates); (2) {schema_example} moved to after synthesis instruction in Rule 3; (3) rules renumbered 1–14 sequentially (no 2b); (4) SPEC Q5/Q7/Q8/Q9/Q10 replaced with inline semantic labels; (5) _build_system_prompt(intent=...) now narrows render_routing_policy() subset; ControlAgent.run() rebuilds system_prompt after intent_category resolved. 5 new tests in test_control_prompt.py. Sign-off: unit 1308/15 skipped, integration 16/153 skipped, e2e 10 skipped, build OK, lint clean, typecheck clean (178 files) — all exit 0.
 
 Previously: P110 — control_agent.py Cleanup (2026-06-13). Fixed 6 issues: (1) duplicate tool catalog removed from _build_system_prompt; (2) _make_schema_example now accepts schema: str param; (3) rules 11–12 moved from render_response_format to render_routing_policy; (4) ControlAgent.run() refactored into 6 private methods; (5) DecisionMemoryStore consolidated to 1 instantiation per run(); (6) _SYSTEM_PROMPT_TEMPLATE stub deleted, _ = intent/user_role replaced with noqa. Sign-off: unit 1303/15 skipped, integration 16/153 skipped, e2e 10 skipped, build OK, lint clean, typecheck clean (178 files) — all exit 0.
 

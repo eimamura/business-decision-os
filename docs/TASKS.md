@@ -51,7 +51,7 @@ Tagged `v0.1.0` (commit 039c43a); merged to `main`; GitHub release published.
 
 ## Active Phases
 
-P115 — Continuous Eval Runner (In Progress)
+None (next phase: P116)
 
 ---
 
@@ -160,7 +160,7 @@ Dependencies: B-01, B-02
 
 ---
 
-## P115 — Continuous Eval Runner — Not Started
+## P115 — Continuous Eval Runner — Done (2026-06-13)
 
 **Goal:** Automated evaluation script that runs all 10 golden cases against the live dev API, validates tool calls and response assertions, classifies failures by type (retrieval/selection/pollution/routing/reasoning/output), and writes a timestamped report to `docs/eval-reports/`. Makes quality measurement repeatable instead of one-shot judge campaigns.
 
@@ -168,27 +168,27 @@ Done when: (1) `packages/agent/evals/runner.py` implements `EvalRunner` with `ru
 
 Dependencies: P114 Done
 
-### Batch B-01 — EvalRunner implementation (App Builder) — Not Started
+### Batch B-01 — EvalRunner implementation (App Builder) — Done
 
 | Task | Description | Status |
 |---|---|---|
-| T-663 | Create `packages/agent/evals/runner.py`. Define `EvalResult(BaseModel)`: `case_id: str`, `passed: bool`, `tools_called: list[str]`, `missing_required_tools: list[str]`, `prohibited_tools_called: list[str]`, `response_text: str`, `assertion_hits: list[str]`, `assertion_misses: list[str]`, `failure_type: str \| None`. Implement `EvalRunner` class: `load_cases(yaml_path: Path) -> list[EvalCase]`, `async run_case(case: EvalCase, api_base_url: str, httpx_client: httpx.AsyncClient) -> EvalResult` (POST /api/v1/sessions → POST /api/v1/sessions/{id}/messages → GET /api/v1/sessions/{id}/events to extract tool_calls and reply_text), `classify_failure(result: EvalResult) -> str \| None` returning type from {routing, pollution, retrieval, reasoning, output, None}. Failure classification logic: "routing" if required tool absent + prohibited tool present; "pollution" if prohibited tool called; "retrieval" if required tool absent but no prohibited tool; "reasoning" if tools correct but response assertions miss; "output" if assertion_misses non-empty; None if passed. | Not Started |
+| T-663 | Created `packages/agent/evals/runner.py`: `EvalResult` Pydantic model (10 fields including must_not_contain_violations), `check_assertions()`, `classify_failure()` module-level function (routing→pollution→retrieval→reasoning→output taxonomy), `EvalRunner` with `run_case()` (POST sessions → POST messages → poll events until done/timeout) and `run_all()`. Dry-run mode catches ConnectError/TimeoutException fail-open. | Done |
 
 Dependencies: P114 Done
 
-### Batch B-02 — CLI script + Makefile target (App Builder) — Not Started
+### Batch B-02 — CLI script + Makefile target (App Builder) — Done
 
 | Task | Description | Status |
 |---|---|---|
-| T-664 | (a) Create `scripts/run_evals.py`: argparse CLI with `--api-url` (default `http://localhost:8002`), `--cases-path` (default `data/evals/spec10_golden_cases.yaml`), `--output-dir` (default `docs/eval-reports`), `--dry-run` (print cases without running). Runs `EvalRunner` asynchronously over all cases. Produces a markdown report: header with run date/model, per-case table (id, passed, tools_called, failure_type), summary section (N passed / 10, failure breakdown by type). Saves to `docs/eval-reports/YYYY-MM-DD-HH-eval-run.md`. (b) Add `eval` target to Makefile: `eval: ## Run evaluation suite against the dev API` / `\tuv run python scripts/run_evals.py --api-url $$(API_URL) --cases-path data/evals/spec10_golden_cases.yaml --output-dir docs/eval-reports`. | Not Started |
+| T-664 | Created `scripts/run_evals.py`: argparse CLI (--api-url, --cases-path, --output-dir, --dry-run), async main(), build_report() producing per-case markdown table + failure breakdown. Saves to docs/eval-reports/YYYY-MM-DD-HHMM-eval-run.md. Added `eval` Makefile target. Created docs/eval-reports/.gitkeep. | Done |
 
 Dependencies: B-01
 
-### Batch B-03 — Tests + phase sign-off (Test/Review) — Not Started
+### Batch B-03 — Tests + phase sign-off (Test/Review) — Done
 
 | Task | Description | Status |
 |---|---|---|
-| T-665 | In `tests/unit/evals/test_runner.py`: (a) test `EvalResult` schema validates; (b) test `classify_failure` returns "routing" when required tool absent AND prohibited tool present in tools_called; (c) test `classify_failure` returns "pollution" when prohibited tool called but required tools present; (d) test `classify_failure` returns "reasoning" when tools correct but assertion_misses non-empty; (e) test `classify_failure` returns None when passed=True. Run full mandatory gate set: `make test-unit && make test-integration && make test-e2e && make build && make lint && make typecheck`. | Not Started |
+| T-665 | Created `tests/unit/evals/test_runner.py` (10 tests): EvalResult schema, classify_failure taxonomy for all 5 types + None, check_assertions hits/misses/violations, load_cases returns 10. Sign-off: unit 1413/15 skipped, integration 16/153 skipped, e2e 10 skipped, build OK, lint clean, typecheck clean (185 files) — all exit 0. | Done |
 
 Dependencies: B-01, B-02
 

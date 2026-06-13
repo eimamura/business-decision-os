@@ -1,4 +1,4 @@
-.PHONY: migrate seed seed-all generate-data codegen build test test-unit test-integration test-e2e test-playwright lint typecheck dev dev-api dev-web dev-up dev-down dev-logs dev-ps dev-smoke check-llm
+.PHONY: migrate seed seed-all generate-data codegen build test test-unit test-integration test-e2e test-playwright lint typecheck dev dev-api dev-web dev-up dev-down dev-logs dev-ps dev-smoke check-llm eval
 
 WEB_PORT ?= 3002
 API_PORT ?= 8002
@@ -80,6 +80,12 @@ typecheck:
 
 check-llm:
 	OLLAMA_BASE_URL=$${OLLAMA_BASE_URL:-http://localhost:11434} uv run python scripts/check_llm.py
+
+eval: ## Run eval suite against the dev API (set API_URL to override default)
+	uv run python scripts/run_evals.py \
+		--api-url $${API_URL:-http://localhost:8002} \
+		--cases-path data/evals/spec10_golden_cases.yaml \
+		--output-dir docs/eval-reports
 
 codegen:
 	uv run python scripts/generate_schemas.py
