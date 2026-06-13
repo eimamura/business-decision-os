@@ -641,13 +641,18 @@ class ControlAgent(AgentBasedSpecialist):
     def _narrow_tools(
         self,
         task: "SpecialistTask",
-        intent_category: str,
+        allowed_tools: list[str],
     ) -> "SpecialistTask":
-        """Narrow allowed_tools to the intent-specific subset."""
-        if intent_category and intent_category in _INTENT_TOOL_SUBSET:
-            task = task.model_copy(
-                update={"allowed_tools": _INTENT_TOOL_SUBSET[intent_category]}
-            )
+        """Narrow allowed_tools to the provided list.
+
+        When ``allowed_tools`` is non-empty, the task is updated with that list so
+        that only the explicitly permitted tools are exposed to the LLM call.  When
+        ``allowed_tools`` is empty (e.g. unknown intent → no base tools), the task
+        is returned unchanged so the caller receives the full unrestricted tool set
+        as a safe fallback.
+        """
+        if allowed_tools:
+            task = task.model_copy(update={"allowed_tools": allowed_tools})
         return task
 
     async def _write_decision_record(
@@ -738,8 +743,11 @@ class ControlAgent(AgentBasedSpecialist):
 
         # Rebuild system prompt with intent-narrowed tool subset so local models
         # only see tools relevant to this request, reducing context size.
+        # Write directly to self._runtime._system_prompt — AgentRuntime reads that
+        # attribute at call time (runtime.py:371, 500, 1654).  Setting self.system_prompt
+        # on the ControlAgent instance would be silently ignored by the runtime.
         if intent_category:
-            self.system_prompt = _build_system_prompt(
+            self._runtime._system_prompt = _build_system_prompt(
                 intent=intent_category,
                 schema_context=get_schema_context(),
                 tool_subset_override=tool_subset_override,
@@ -748,7 +756,7 @@ class ControlAgent(AgentBasedSpecialist):
         task = self._inject_skills(task, intent_category)
         task = await self._inject_past_decisions(task, session_id, store)
         task = await self._inject_domain_knowledge(task, intent_category)
-        task = self._narrow_tools(task, intent_category)
+        task = self._narrow_tools(task, narrowed)
 
         result: "SpecialistResult | None" = None
         try:

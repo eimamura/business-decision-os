@@ -51,7 +51,54 @@ Tagged `v0.1.0` (commit 039c43a); merged to `main`; GitHub release published.
 
 ## Active Phases
 
-None (next phase: P116)
+P116 — Context Engineering Pipeline: Bug Fixes & Field Activation (In Progress)
+
+---
+
+## P116 — Context Engineering Pipeline: Bug Fixes & Field Activation
+
+**Goal:** Fix 7 identified bugs and gaps in the ContextBuilder → ContextPack → ControlAgent pipeline so that: (1) per-request system prompt rebuild actually reaches the LLM, (2) `prohibited_tools` filters the model's actual tool list, (3) context trace logging writes in production, (4) `ContextPack.routing_hint` and `skill_keys` are consumed, (5) routing rule prose omits rules for absent tools, (6) keyword classifier covers common paraphrases, (7) past-decisions search uses semantic query.
+
+Done when: all 7 bug categories addressed with code changes; unit tests cover each fix; all mandatory gates exit 0.
+
+Dependencies: P115 Done
+
+### Batch B-01 — Core bugs: system_prompt propagation + prohibited_tools (App Builder) — Done
+
+| Task | Description | Status |
+|---|---|---|
+| T-666 | Fix system prompt propagation. In `ControlAgent.run()` at L742, replace `self.system_prompt = _build_system_prompt(...)` with `self._runtime._system_prompt = _build_system_prompt(...)`. The per-intent system prompt currently sets `self.system_prompt` on the `ControlAgent` instance, but `AgentRuntime` reads `self._runtime._system_prompt` (runtime.py:1654). After the fix, the narrowed per-intent prompt with `tool_subset_override` applied will reach the LLM call. | Done |
+| T-667 | Fix prohibited_tools enforcement. Change `_narrow_tools(self, task, intent_category: str)` signature to `_narrow_tools(self, task, allowed_tools: list[str])`. Body: set `task.allowed_tools = allowed_tools` when `allowed_tools` is non-empty; return unchanged task otherwise. In `run()`, call `task = self._narrow_tools(task, narrowed)` using the already-computed `narrowed` list (from prohibited_tools filtering at L728). Previously `_narrow_tools()` re-read `_INTENT_TOOL_SUBSET[intent_category]` (unfiltered), discarding the prohibited_tools filtering. | Done |
+
+Dependencies: none
+
+### Batch B-02 — ContextPack field activation: routing_hint + skill_keys + context logging (App Builder) — Not Started
+
+| Task | Description | Status |
+|---|---|---|
+| T-668 | Inject `routing_hint` from ContextPack into system prompt. Add `routing_hint: str = ""` parameter to `_build_system_prompt()` and `render_routing_policy()`. In `render_routing_policy()`, when `routing_hint` is non-empty, prepend `f"→ {routing_hint}\n\n"` before the tool catalog. In `ControlAgent.run()`, pass `context_pack.routing_hint` to `_build_system_prompt()`. | Not Started |
+| T-669 | Use `ContextPack.skill_keys` in `_inject_skills()`. Add `load_by_keys(keys: list[str]) -> list[str]` method to `SkillLoader` that loads skills by stem name (e.g., `["stockout_risk_analysis"]` → reads `stockout_risk_analysis.md` from `_SKILLS_DIR`). Change `_inject_skills()` signature to `_inject_skills(self, task, intent_category: str, skill_keys: list[str] | None = None)`: when `skill_keys` is non-empty, use `SkillLoader().load_by_keys(skill_keys)` instead of `SkillLoader().load(intent_category)`. In `run()`, pass `context_pack.skill_keys`. | Not Started |
+| T-670 | Fix context trace logging. In `ContextBuilder.build()`, when `session_id is not None` and `conn is None`: import `get_pool` from `packages.persistence.db`; acquire `async with (await get_pool()).acquire() as _conn`; call `await ContextLogRepository().create(session_id=session_id, use_case_id=pack.use_case_id, intent=intent, required_tools=pack.required_tools, prohibited_tools=pack.prohibited_tools, context_pack_json=pack.model_dump(), conn=_conn)`. Wrap in try/except — log WARNING on failure, never raise. In `ControlAgent.run()`, change `ContextBuilder().build(session_id=None)` to pass `session_id=session_id`. The `conn` parameter stays for test injection but callers no longer need to provide it. | Not Started |
+
+Dependencies: B-01
+
+### Batch B-03 — Routing prose filtering + classifier improvement + semantic past-decisions (App Builder) — Not Started
+
+| Task | Description | Status |
+|---|---|---|
+| T-671 | Filter routing rule prose by active tool subset. In `render_routing_policy()`, build `all_tools: set[str] = {t for tools in subset.values() for t in tools}` at the top. Before adding each numbered rule f-string segment, guard with: if the primary tool variable for that rule is not in `all_tools`, skip the rule entirely. This prevents `lookup`-intent calls from receiving rules about tools (`detect_demand_shift`, `analyze_production_plan_gap`, etc.) that are not in the lookup subset. | Not Started |
+| T-672 | Expand `_USE_CASE_KEYWORDS` in `context_builder.py` with paraphrase coverage: Q1 add `"running low"`, `"inventory risk"`, `"will we run out"`, `"shortage risk"`; Q2 add `"too much stock"`, `"overstocked"`; Q3 add `"action required"`, `"needs attention"`, `"priority today"`, `"alerts"`; Q4 add `"delivery delay"`, `"behind schedule"`, `"not shipped"`, `"past due"`; Q5 add `"actual vs forecast"`, `"off vs"`, `"over-forecast"`, `"under-forecast"`, `"forecast accuracy"`; Q6 add `"supply gap"`, `"supply adequacy"`, `"not enough supply"`, `"future shortage"`; Q7 add `"production adjustment"`, `"plan adjustment"`, `"capacity mismatch"`; Q9 add `"shift in demand"`, `"demand change"`, `"regional demand"`, `"customer sales"`; Q10 add `"biggest impact"`, `"capacity constraint"`, `"throughput"`. | Not Started |
+| T-673 | Change past-decisions search key. In `ControlAgent._inject_past_decisions()`, replace `json.dumps({"session_id": session_id})` with `task.instruction` as the search query argument to `DecisionMemoryStore.search()`. This makes the vector store return semantically relevant past decisions rather than session-ID-keyed documents. | Not Started |
+
+Dependencies: B-01, B-02
+
+### Batch B-04 — Tests + phase sign-off (Test/Review) — Not Started
+
+| Task | Description | Status |
+|---|---|---|
+| T-674 | Write/update unit tests for all P116 changes. Required: (a) `test_control_prompt.py` — test `render_routing_policy()` with `lookup` subset does NOT contain rule text referencing `detect_demand_shift`; test `_build_system_prompt(routing_hint="Call list_stockout_risk ONCE.")` includes the hint. (b) `test_context_builder.py` — test Q1 keyword `"running low"` → Q1; test Q6 keyword `"supply gap"` → Q6; test Q9 keyword `"demand change"` → Q9. (c) `test_skill_loader.py` or `test_control_agent_pipeline.py` — test `SkillLoader().load_by_keys(["stockout_risk_analysis"])` returns a list with exactly 1 item. (d) test `_narrow_tools(task, ["list_stockout_risk"])` sets `task.allowed_tools = ["list_stockout_risk"]`; test `_narrow_tools(task, [])` leaves task unchanged. Run full mandatory gate set: `make test-unit && make test-integration && make test-e2e && make build && make lint && make typecheck` — all six must exit 0. | Not Started |
+
+Dependencies: B-01, B-02, B-03
 
 ---
 
