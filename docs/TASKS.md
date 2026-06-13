@@ -51,11 +51,11 @@ Tagged `v0.1.0` (commit 039c43a); merged to `main`; GitHub release published.
 
 ## Active Phases
 
-P103 — Job File Generation (In Progress)
+None (next phase: P104)
 
 ---
 
-## P103 — Job File Generation — In Progress
+## P103 — Job File Generation — Done (2026-06-13)
 
 **Goal:** `simulate`/`optimize`/`forecast` ジョブがバックグラウンド実行後にダウンロード可能なファイル（CSV）を生成し、`job_files` テーブルに保存してダウンロードエンドポイント経由で取得できるようにする。フロントエンドの JobStatusCard にダウンロードリンクを表示。
 
@@ -91,13 +91,13 @@ Dependencies: B-01
 
 Dependencies: B-01
 
-### Batch B-04 — Tests + sign-off (Test/Review) — In Progress
+### Batch B-04 — Tests + sign-off (Test/Review) — Done (2026-06-13)
 
 | Task | Description | Status |
 |---|---|---|
 | T-619 | Unit tests: SimulationTool, OptimizerTool, ForecastTool の各 `handle()` が `generated_files` キーを返すこと、`file_content` が有効な CSV bytes であることを検証。 | Done |
 | T-620 | Integration test: `jobs_repo.add_file()` に `file_content` を渡して保存し、`GET /api/v1/jobs/files/{file_id}/download` が 200 + 正しい CSV bytes を返すことを検証。 | Done |
-| T-621 | Phase sign-off — full mandatory gate set (NO skips): `make test-unit && make test-integration && make test-e2e && make build && make lint && make typecheck`。gate, exit_code, output_tail を報告。 | Blocked — 2 pre-existing failures (see below) |
+| T-621 | Phase sign-off — full mandatory gate set (NO skips): `make test-unit && make test-integration && make test-e2e && make build && make lint && make typecheck`。gate, exit_code, output_tail を報告。 | Done |
 
 Dependencies: B-02, B-03
 

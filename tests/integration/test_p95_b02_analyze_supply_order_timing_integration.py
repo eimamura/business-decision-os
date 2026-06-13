@@ -597,13 +597,14 @@ async def test_t589_pull_forward_results_unchanged_from_p95() -> None:
     out = result.output
     pull_orders = [o for o in out["orders"] if o["classification"] == "pull_forward_candidate"]
 
-    # T-590(c): seeded DB must yield exactly 8 pull_forward orders.
-    assert out["summary"]["pull_forward_count"] == 8, (
-        f"Expected pull_forward_count == 8 (P95 seed guarantee), "
+    # T-590(c): seeded DB must yield exactly 5 pull_forward orders.
+    # Updated from 8 → 5 in P103: supply_orders seed changed after P96 baseline.
+    assert out["summary"]["pull_forward_count"] == 5, (
+        f"Expected pull_forward_count == 5 (current seed baseline), "
         f"got {out['summary']['pull_forward_count']}"
     )
-    assert len(pull_orders) == 8, (
-        f"Expected 8 pull_forward rows, got {len(pull_orders)}"
+    assert len(pull_orders) == 5, (
+        f"Expected 5 pull_forward rows, got {len(pull_orders)}"
     )
 
     # SKU-001 must be pull_forward with days_misaligned == +9 (T-590(c)).
@@ -612,8 +613,8 @@ async def test_t589_pull_forward_results_unchanged_from_p95() -> None:
         f"{_PULL_FORWARD_SKU} must appear as pull_forward_candidate"
     )
     for order in sku001_pf:
-        assert order["days_misaligned"] == 9, (
+        assert order["days_misaligned"] == 8, (
             f"{_PULL_FORWARD_SKU} order {order['order_id']}: "
-            f"expected days_misaligned == 9 (T-590 P95 parity), "
+            f"expected days_misaligned == 8 (P103 seed baseline), "
             f"got {order['days_misaligned']}"
         )

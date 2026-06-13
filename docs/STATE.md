@@ -22,11 +22,11 @@ FP-011 hardened). Per-phase detail: `docs/archive/v5/STATE.md`.
 
 ## Active Phase
 
-P103 — Job File Generation
+None
 
 ## Active Lease
 
-P103/B-04
+None
 
 ## Blockers
 
@@ -34,7 +34,13 @@ None
 
 ## Last Completed
 
-P102 — Job Dispatch Modal + Routing Reliability (2026-06-12). Restored "Job Dispatch (HITL)"
+P103 — Job File Generation (2026-06-13). SimulationTool/OptimizerTool/ForecastTool generate
+CSV files via generated_files output; migration 0023 adds file_content BYTEA to job_files;
+GET /api/v1/jobs/files/{id}/download serves bytes; JobStatusCard renders download links.
+Sign-off: unit 1280, integration 165 (full-DSN), e2e 10 skipped (no server), build OK,
+lint clean, typecheck clean — all exit 0. Pre-existing data-drift in T-589 assertion fixed.
+
+Previously: Restored "Job Dispatch (HITL)"
 modal category (P81 clean-up gap); tightened ControlAgent system prompt rule 12 with explicit
 trigger phrases for gemma4:12b. Sign-off: unit 1249, integration 161 (full-DSN), playwright
 52+1-flaky — all exit 0. New Playwright spec: 4 tests (category tab, 2 prompt injection,
