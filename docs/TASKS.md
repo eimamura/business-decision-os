@@ -10,7 +10,7 @@ execution process.
 phase detail archived at `docs/archive/v5/TASKS.md` (P24–P64 in `docs/archive/v4/`,
 P0–P23 in `docs/archive/v3/`).
 
-Numbering continues repository-wide: **next phase = P112, next task = T-653, next defect
+Numbering continues repository-wide: **next phase = P116, next task = T-666, next defect
 = D-018, next failure pattern = FP-017.**
 
 ---
@@ -51,7 +51,146 @@ Tagged `v0.1.0` (commit 039c43a); merged to `main`; GitHub release published.
 
 ## Active Phases
 
-None (next phase: P112)
+P113 — Context Architecture: ContextPack Schemas + ContextBuilder (In Progress)
+
+---
+
+## P112 — Eval Foundation: Golden Cases & EvalCase Schema — Done (2026-06-13)
+
+**Goal:** Establish the test-first foundation by defining formal golden evaluation cases for all 10 SPEC questions. Each case defines which tools must be called, which tools must NOT be called, what the response must contain, and which failure modes to watch for. This is the authoritative definition of correct behavior and drives all subsequent context engineering work.
+
+Done when: (1) `data/evals/spec10_golden_cases.yaml` exists with 10 cases (Q1–Q10), each containing `required_tools`, `must_not_use_tools`, `response_assertions` (must_contain/must_not_contain), `expected_behavior` list, and `failure_modes` list with typed entries; (2) `packages/agent/evals/eval_case.py` defines `EvalCase`, `FailureMode`, `ResponseAssertions` Pydantic models and `load_eval_cases(path)` loader; (3) unit tests validate all 10 cases; (4) all mandatory gates exit 0.
+
+Dependencies: none
+
+### Batch B-01 — Golden cases YAML + EvalCase schema (App Builder) — Done
+
+| Task | Description | Status |
+|---|---|---|
+| T-653 | Create `data/evals/spec10_golden_cases.yaml` with 10 cases for SPEC Q1–Q10. Each case: `id` (Q1–Q10), `spec_question` (exact wording from SPEC.md), `intent` (supply_chain / domain_analysis / decision_support), `required_tools` (list — tools that must be called for this question), `must_not_use_tools` (list — tools that are explicitly wrong for this question), `response_assertions` (dict with `must_contain: list[str]` and `must_not_contain: list[str]`), `expected_behavior` (list of English assertion strings), `failure_modes` (list of dicts with `type` from {retrieval, selection, pollution, routing, reasoning, output} and `description`). Derive from SPEC.md, judge-reports/2026-06-12-spec10-campaign.md, and failure-patterns.md. | Done |
+| T-654 | Create `packages/agent/evals/__init__.py` and `packages/agent/evals/eval_case.py`. Define `FailureMode(BaseModel)` with `type: Literal["retrieval", "selection", "pollution", "routing", "reasoning", "output"]` and `description: str`. Define `ResponseAssertions(BaseModel)` with `must_contain: list[str]` and `must_not_contain: list[str]`. Define `EvalCase(BaseModel)` with `id: str`, `spec_question: str`, `intent: str`, `required_tools: list[str]`, `must_not_use_tools: list[str]`, `response_assertions: ResponseAssertions`, `expected_behavior: list[str]`, `failure_modes: list[FailureMode]`. Implement `load_eval_cases(path: Path) -> list[EvalCase]` using `yaml.safe_load`. | Done |
+
+Dependencies: none
+
+### Batch B-02 — Tests + phase sign-off (Test/Review) — Done
+
+| Task | Description | Status |
+|---|---|---|
+| T-655 | In `tests/unit/evals/test_eval_case.py`: (a) test `load_eval_cases` returns 10 EvalCase instances; (b) test each case has `len(required_tools) >= 1`; (c) test each case has `len(response_assertions.must_contain) >= 1`; (d) test each case has `len(failure_modes) >= 1`; (e) test all failure_modes.type values are from the valid enum; (f) test Q1 has "list_stockout_risk" in required_tools; (g) test Q3 has "list_today_exceptions" in required_tools; (h) test Q4 has "analyze_shipment_delay_causes" in required_tools; (i) test must_not_contain in Q1 includes a degenerate-response pattern (e.g. "I don't have"). Then run full mandatory gate set: `make test-unit && make test-integration && make test-e2e && make build && make lint && make typecheck` — all six must exit 0. Sign-off: unit 1377/15 skipped, integration 16/153 skipped, e2e 10 skipped, build OK, lint clean, typecheck clean (180 files) — all exit 0. | Done |
+
+Dependencies: B-01
+
+---
+
+## P113 — Context Architecture: ContextPack Schemas + ContextBuilder — Not Started
+
+**Goal:** Define typed data structures (ContextPack) for what each SPEC use case needs in context, and implement ContextBuilder that classifies the user input to a specific use case and returns the minimal tool set. This replaces static `_INTENT_TOOL_SUBSET` lookup with dynamic, use-case-aware context selection, reducing context pollution and duplicate tool calls.
+
+Done when: (1) `packages/schemas/context_packs.py` defines `ContextPack` Pydantic model and `USE_CASE_PACKS: dict[str, ContextPack]` for Q1–Q10 plus `GENERIC_PACK` fallback; (2) `packages/agent/control/context_builder.py` implements `ContextBuilder` with `async build(intent, user_input, session_id) -> ContextPack` using keyword-based use-case classification; (3) `control_agent.py` calls ContextBuilder in the post-intent step and narrows the tool subset to exclude `prohibited_tools`; (4) ADR created superseding the ContextBuilder deferral; (5) all mandatory gates exit 0.
+
+ADR required: `docs/adr/2026-06-13-eval-driven-context-engineering.md` — supersedes deferral in `docs/adr/2026-06-13-context-engineering-prompt-builder.md`
+
+Dependencies: P112 Done
+
+### Batch B-01 — ContextPack schemas (App Builder) — Not Started
+
+| Task | Description | Status |
+|---|---|---|
+| T-656 | Create `packages/schemas/context_packs.py`. Define `ContextPack(BaseModel)` with: `use_case_id: str`, `intent: str`, `required_tools: list[str]` (must call at least one), `preferred_tools: list[str]` (call if relevant), `prohibited_tools: list[str]` (must NOT call for this use case — confusion risk), `skill_keys: list[str]` (skill filenames to load from packages/knowledge/skills/), `routing_hint: str` (one-line hint injected into routing policy). Define `USE_CASE_PACKS: dict[str, ContextPack]` mapping Q1–Q10. Sources: required_tools + prohibited_tools from data/evals/spec10_golden_cases.yaml; skill_keys from existing packages/knowledge/skills/ filenames. Define `GENERIC_PACK: ContextPack` as fallback (all tools permitted, empty prohibited_tools, empty skill_keys). | Not Started |
+
+Dependencies: P112 Done
+
+### Batch B-02 — ContextBuilder implementation (App Builder) — Not Started
+
+| Task | Description | Status |
+|---|---|---|
+| T-657 | Create `packages/agent/control/context_builder.py`. Implement `ContextBuilder` class with `async build(intent: str, user_input: str, session_id: str \| None = None) -> ContextPack`. MVP implementation: keyword-based use-case classification — match `user_input.lower()` against representative keywords for each Q1–Q10; return the first matching `USE_CASE_PACKS[q_id]`; fall back to `GENERIC_PACK` when no keyword matches. Classification keywords: Q1=["stockout", "at risk", "run out"], Q2=["excess", "overstock", "surplus"], Q3=["exceptions", "today", "human judgment", "attention"], Q4=["delay", "unshipped", "late shipment"], Q5=["forecast gap", "forecast deviation", "actual vs"], Q6=["supply shortage", "next week", "next month", "face shortage"], Q7=["production plan", "overproduction", "underproduction"], Q8=["purchase", "buy earlier", "push out", "order timing"], Q9=["demand shift", "customer demand", "region demand"], Q10=["constraint", "bottleneck", "binding"]. Add DEBUG log: "ContextBuilder: matched use_case=<id> required_tools=<list> prohibited_tools=<list>". | Not Started |
+
+Dependencies: B-01
+
+### Batch B-03 — Integrate ContextBuilder into control_agent.py (App Builder) — Not Started
+
+| Task | Description | Status |
+|---|---|---|
+| T-658 | In `packages/agent/control/control_agent.py`: (a) import `ContextBuilder` from `packages.agent.control.context_builder` and `USE_CASE_PACKS`, `GENERIC_PACK` from `packages.schemas.context_packs`; (b) add `tool_subset_override: dict[str, list[str]] \| None = None` parameter to `_build_system_prompt()` — when set, pass it instead of `_INTENT_TOOL_SUBSET` to `render_routing_policy()` and `render_tool_catalog()`; (c) in `_run_core()` (or the post-intent private method), after `intent_category` is resolved, call `context_pack = await ContextBuilder().build(intent=intent_category, user_input=user_input_text)` and build the narrowed subset: take `_INTENT_TOOL_SUBSET.get(intent_category, [])`, remove tools in `context_pack.prohibited_tools`, then call `_build_system_prompt(intent=intent_category, schema_context=get_schema_context(), tool_subset_override={intent_category: narrowed_list})`; (d) add `_log.debug("ContextBuilder selected use_case=%s narrowed_tools=%s", context_pack.use_case_id, narrowed_list)`. | Not Started |
+
+Dependencies: B-01, B-02
+
+### Batch B-04 — ADR + tests + phase sign-off (Test/Review) — Not Started
+
+| Task | Description | Status |
+|---|---|---|
+| T-659 | (a) Create `docs/adr/2026-06-13-eval-driven-context-engineering.md`: document the decision to activate ContextBuilder now, superseding the deferral in `docs/adr/2026-06-13-context-engineering-prompt-builder.md`; rationale = Eval-driven CE requires use-case-level context selection as the primary mechanism for reducing context pollution (duplicate tool calls observed in 7/10 SPEC questions, context overflow in 8/10 questions per P100 judge campaign). (b) In `tests/unit/test_context_builder.py`: test Q1 keywords ("stockout", "at risk") → Q1 ContextPack; test Q6 keywords ("supply shortage", "next week") → Q6 ContextPack; test unrelated input ("hello") → GENERIC_PACK; test each USE_CASE_PACKS[q_id].required_tools is a non-empty list; test prohibited_tools in Q1 does not include "list_stockout_risk". (c) Run full mandatory gate set: `make test-unit && make test-integration && make test-e2e && make build && make lint && make typecheck`. | Not Started |
+
+Dependencies: B-01, B-02, B-03
+
+---
+
+## P114 — Observability: Context Trace Logging — Not Started
+
+**Goal:** Log what ContextPack was selected per agent invocation so failures can be diagnosed post-hoc (was the right use case identified? were the right tools selected? were prohibited tools excluded?).
+
+Done when: (1) migration 0024 adds `context_log` table with ON DELETE CASCADE to decision_sessions; (2) `ContextLogRepository.create()` in `packages/persistence/context_log.py` inserts rows; (3) `ContextBuilder.build()` calls the repo when `session_id` is provided; (4) `GET /api/v1/admin/context-logs` returns logs filterable by session_id; (5) all mandatory gates exit 0.
+
+Dependencies: P113 Done
+
+### Batch B-01 — Migration 0024 + ContextLog schemas (App Builder) — Not Started
+
+| Task | Description | Status |
+|---|---|---|
+| T-660 | Create migration 0024 in `packages/persistence/migrations/`. Add `context_log` table: `id UUID PK DEFAULT gen_random_uuid()`, `session_id UUID NOT NULL REFERENCES decision_sessions(id) ON DELETE CASCADE`, `use_case_id VARCHAR(8) NOT NULL`, `intent VARCHAR(64) NOT NULL`, `required_tools JSONB NOT NULL DEFAULT '[]'`, `prohibited_tools JSONB NOT NULL DEFAULT '[]'`, `context_pack_json JSONB NOT NULL DEFAULT '{}'`, `created_at TIMESTAMPTZ NOT NULL DEFAULT now()`. Add `ContextLogCreate(BaseModel)` and `ContextLogRead(BaseModel)` in `packages/schemas/context_packs.py`. | Not Started |
+
+Dependencies: none
+
+### Batch B-02 — ContextLogRepository + logging in ContextBuilder (App Builder) — Not Started
+
+| Task | Description | Status |
+|---|---|---|
+| T-661 | (a) Create `packages/persistence/context_log.py` with `ContextLogRepository` class: `async create(session_id: str, use_case_id: str, intent: str, required_tools: list[str], prohibited_tools: list[str], context_pack_json: dict, conn: asyncpg.Connection) -> ContextLogRead`. (b) In `packages/agent/control/context_builder.py`, add `conn: asyncpg.Connection \| None = None` parameter to `build()`. After ContextPack is selected, if `conn is not None and session_id is not None`, call `await ContextLogRepository().create(session_id=session_id, use_case_id=pack.use_case_id, intent=pack.intent, required_tools=pack.required_tools, prohibited_tools=pack.prohibited_tools, context_pack_json=pack.model_dump(), conn=conn)`. Fail-open on DB errors (log WARNING, do not raise). | Not Started |
+
+Dependencies: B-01
+
+### Batch B-03 — Admin API endpoint + sign-off (Test/Review) — Not Started
+
+| Task | Description | Status |
+|---|---|---|
+| T-662 | (a) Add or extend `apps/api/routers/admin.py` with `GET /api/v1/admin/context-logs` endpoint. Query params: `session_id: UUID \| None = None`, `use_case_id: str \| None = None`, `limit: int = Query(default=50, le=200)`. Returns `list[ContextLogRead]`. Requires `get_db_conn` dependency from `apps/api/dependencies.py`. (b) Register router in `apps/api/main.py` if not already present. (c) Run full mandatory gate set: `make test-unit && make test-integration && make test-e2e && make build && make lint && make typecheck`. | Not Started |
+
+Dependencies: B-01, B-02
+
+---
+
+## P115 — Continuous Eval Runner — Not Started
+
+**Goal:** Automated evaluation script that runs all 10 golden cases against the live dev API, validates tool calls and response assertions, classifies failures by type (retrieval/selection/pollution/routing/reasoning/output), and writes a timestamped report to `docs/eval-reports/`. Makes quality measurement repeatable instead of one-shot judge campaigns.
+
+Done when: (1) `packages/agent/evals/runner.py` implements `EvalRunner` with `run_case()` and `classify_failure()`; (2) `scripts/run_evals.py` CLI loads golden cases, runs them, and writes a markdown report; (3) `make eval` target in Makefile runs the script; (4) unit tests cover `EvalResult` schema and failure classifier logic; (5) all mandatory gates exit 0.
+
+Dependencies: P114 Done
+
+### Batch B-01 — EvalRunner implementation (App Builder) — Not Started
+
+| Task | Description | Status |
+|---|---|---|
+| T-663 | Create `packages/agent/evals/runner.py`. Define `EvalResult(BaseModel)`: `case_id: str`, `passed: bool`, `tools_called: list[str]`, `missing_required_tools: list[str]`, `prohibited_tools_called: list[str]`, `response_text: str`, `assertion_hits: list[str]`, `assertion_misses: list[str]`, `failure_type: str \| None`. Implement `EvalRunner` class: `load_cases(yaml_path: Path) -> list[EvalCase]`, `async run_case(case: EvalCase, api_base_url: str, httpx_client: httpx.AsyncClient) -> EvalResult` (POST /api/v1/sessions → POST /api/v1/sessions/{id}/messages → GET /api/v1/sessions/{id}/events to extract tool_calls and reply_text), `classify_failure(result: EvalResult) -> str \| None` returning type from {routing, pollution, retrieval, reasoning, output, None}. Failure classification logic: "routing" if required tool absent + prohibited tool present; "pollution" if prohibited tool called; "retrieval" if required tool absent but no prohibited tool; "reasoning" if tools correct but response assertions miss; "output" if assertion_misses non-empty; None if passed. | Not Started |
+
+Dependencies: P114 Done
+
+### Batch B-02 — CLI script + Makefile target (App Builder) — Not Started
+
+| Task | Description | Status |
+|---|---|---|
+| T-664 | (a) Create `scripts/run_evals.py`: argparse CLI with `--api-url` (default `http://localhost:8002`), `--cases-path` (default `data/evals/spec10_golden_cases.yaml`), `--output-dir` (default `docs/eval-reports`), `--dry-run` (print cases without running). Runs `EvalRunner` asynchronously over all cases. Produces a markdown report: header with run date/model, per-case table (id, passed, tools_called, failure_type), summary section (N passed / 10, failure breakdown by type). Saves to `docs/eval-reports/YYYY-MM-DD-HH-eval-run.md`. (b) Add `eval` target to Makefile: `eval: ## Run evaluation suite against the dev API` / `\tuv run python scripts/run_evals.py --api-url $$(API_URL) --cases-path data/evals/spec10_golden_cases.yaml --output-dir docs/eval-reports`. | Not Started |
+
+Dependencies: B-01
+
+### Batch B-03 — Tests + phase sign-off (Test/Review) — Not Started
+
+| Task | Description | Status |
+|---|---|---|
+| T-665 | In `tests/unit/evals/test_runner.py`: (a) test `EvalResult` schema validates; (b) test `classify_failure` returns "routing" when required tool absent AND prohibited tool present in tools_called; (c) test `classify_failure` returns "pollution" when prohibited tool called but required tools present; (d) test `classify_failure` returns "reasoning" when tools correct but assertion_misses non-empty; (e) test `classify_failure` returns None when passed=True. Run full mandatory gate set: `make test-unit && make test-integration && make test-e2e && make build && make lint && make typecheck`. | Not Started |
+
+Dependencies: B-01, B-02
 
 ---
 

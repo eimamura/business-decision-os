@@ -22,11 +22,11 @@ FP-011 hardened). Per-phase detail: `docs/archive/v5/STATE.md`.
 
 ## Active Phase
 
-None
+P113 — Context Architecture: ContextPack Schemas + ContextBuilder
 
 ## Active Lease
 
-None
+P113-B-01
 
 ## Blockers
 

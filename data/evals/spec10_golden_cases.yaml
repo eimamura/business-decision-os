@@ -1,0 +1,310 @@
+# SPEC 10-Question Evaluation Dataset
+# Golden cases for evaluating Control Agent responses to Q1–Q10.
+# Source: docs/SPEC.md (question text), packages/agent/control/control_agent.py
+# (_INTENT_TOOL_SUBSET + routing policy), docs/judge-reports/2026-06-12-spec10-campaign.md
+# (observed tools and failure modes), docs/failure-patterns.md (failure taxonomy).
+
+- id: Q1
+  spec_question: "Which products are at risk of stockout?"
+  intent: supply_chain
+  required_tools:
+    - list_stockout_risk
+  must_not_use_tools:
+    - list_today_exceptions
+    - calculate_supply_gap
+  response_assertions:
+    must_contain:
+      - "stockout"
+      - "SKU"
+    must_not_contain:
+      - "I don't have that information"
+      - "I'm sorry"
+      - "je"
+      - "Désolé"
+  expected_behavior:
+    - "Names specific SKUs with risk levels (critical/high/medium)"
+    - "Provides on_hand or projected_ending values from tool results"
+    - "Provides estimated stockout dates for critical-risk SKUs"
+    - "Does not fabricate risk scores or quantities"
+  failure_modes:
+    - type: routing
+      description: "Calls list_today_exceptions instead of list_stockout_risk, conflating daily exceptions with stockout risk enumeration"
+    - type: pollution
+      description: "Calls list_stockout_risk multiple times (duplicate calls) inflating context and causing overflow"
+    - type: reasoning
+      description: "Produces degenerate fallback ('I don't have that information') despite tool returning SKU-001/002 data — caused by context overflow truncating tool results from model view"
+    - type: output
+      description: "Response in a non-English language (French) due to goal-injection language drift from set_goal/evaluate_goal nodes"
+
+- id: Q2
+  spec_question: "Which products have excess inventory?"
+  intent: supply_chain
+  required_tools:
+    - nl_query
+  must_not_use_tools:
+    - list_today_exceptions
+    - list_stockout_risk
+  response_assertions:
+    must_contain:
+      - "SKU"
+      - "excess"
+    must_not_contain:
+      - "I don't have that information"
+      - "I'm sorry"
+      - "je"
+  expected_behavior:
+    - "Names specific SKUs with excess ratios or days-of-cover figures from nl_query results"
+    - "Uses nl_query for bulk cross-SKU scan (calculate_excess_inventory_risk requires single sku_id and is wrong here)"
+    - "Provides on_hand quantities and daily demand figures grounded in tool data"
+    - "Does not fabricate excess ratios"
+  failure_modes:
+    - type: routing
+      description: "Calls calculate_excess_inventory_risk (single-SKU tool) instead of nl_query for bulk scan, missing the multi-product picture"
+    - type: pollution
+      description: "Calls nl_query twice (duplicate) inflating context unnecessarily"
+    - type: output
+      description: "Missing days-of-cover or on_hand/demand comparison that would make the excess finding actionable"
+
+- id: Q3
+  spec_question: "What exceptions require human judgment today?"
+  intent: supply_chain
+  required_tools:
+    - list_today_exceptions
+  must_not_use_tools:
+    - list_stockout_risk
+    - analyze_shipment_delay_causes
+    - detect_demand_anomalies
+    - data_quality_checker
+  response_assertions:
+    must_contain:
+      - "exception"
+    must_not_contain:
+      - "I don't have that information"
+      - "I'm sorry"
+      - "je"
+  expected_behavior:
+    - "Calls list_today_exceptions ONCE — not a loop assembling separate stockout/delay/anomaly tool calls"
+    - "Names specific exception categories (critical stockouts, supplier delays, logistics backlog)"
+    - "References specific SKU IDs and supplier or order IDs grounded in tool results"
+    - "Does not reassemble the exception picture by hand-joining individual tool results"
+  failure_modes:
+    - type: routing
+      description: "Loops list_stockout_risk, get_delayed_supply_orders, and detect_demand_anomalies separately instead of calling list_today_exceptions once"
+    - type: pollution
+      description: "Calls list_today_exceptions twice (duplicate) — context overhead pushes past num_ctx even when grounded reply eventually appears"
+    - type: output
+      description: "Missing financial impact or urgency ranking that would enable human prioritization"
+
+- id: Q4
+  spec_question: "What is causing shipment delays or unshipped orders?"
+  intent: supply_chain
+  required_tools:
+    - analyze_shipment_delay_causes
+  must_not_use_tools:
+    - list_today_exceptions
+    - list_unshipped_orders
+  response_assertions:
+    must_contain:
+      - "delay"
+      - "SKU"
+    must_not_contain:
+      - "I don't have that information"
+      - "I'm sorry"
+      - "je"
+  expected_behavior:
+    - "Calls analyze_shipment_delay_causes ONCE — does not hand-join raw tables to reconstruct causes"
+    - "Identifies root cause categories (inventory shortage, upstream supply delay, warehouse, carrier)"
+    - "Names specific SKUs or order IDs associated with each delay cause"
+    - "Does not call list_unshipped_orders instead — that tool lists orders without root-cause analysis"
+  failure_modes:
+    - type: routing
+      description: "Calls list_unshipped_orders (listing tool) instead of analyze_shipment_delay_causes (root-cause analysis tool)"
+    - type: pollution
+      description: "Calls analyze_shipment_delay_causes twice (duplicate) inflating context beyond num_ctx while a grounded reply still emerges"
+    - type: output
+      description: "Merges distinct cause categories (e.g., warehouse + carrier into 'logistics') losing the per-category specificity needed for action"
+
+- id: Q5
+  spec_question: "Why is there a gap between demand forecast and actual demand?"
+  intent: domain_analysis
+  required_tools:
+    - analyze_forecast_deviation
+  must_not_use_tools:
+    - list_stockout_risk
+    - segment_demand
+  response_assertions:
+    must_contain:
+      - "forecast"
+      - "deviation"
+    must_not_contain:
+      - "I don't have that information"
+      - "I'm sorry"
+      - "je"
+  expected_behavior:
+    - "Calls analyze_forecast_deviation as the primary tool — does not substitute list_stockout_risk"
+    - "Names specific SKUs where over-forecast or under-forecast was detected"
+    - "Grounds the gap explanation in tool-returned deviation percentages or magnitudes"
+    - "Stops calling tools after analyze_forecast_deviation returns — does not chain list_stockout_risk calls that bloat context to 154% of num_ctx"
+  failure_modes:
+    - type: pollution
+      description: "Calls list_stockout_risk twice after analyze_forecast_deviation returns, pushing context to 154% of num_ctx and degrading completeness"
+    - type: reasoning
+      description: "Over-confident diagnosis ('data pipeline failure') not confirmed by tool data — actual cause may be genuine zero demand in sparse forecast data"
+    - type: output
+      description: "Fails to name primary seeded SKUs (SKU-028/SKU-029) when they are the expected signal SKUs in tool results"
+
+- id: Q6
+  spec_question: "Which products may face supply shortages next week or next month?"
+  intent: supply_chain
+  required_tools:
+    - nl_query
+  must_not_use_tools:
+    - list_stockout_risk
+    - calculate_supply_gap
+  response_assertions:
+    must_contain:
+      - "supply"
+      - "SKU"
+      - "shortage"
+    must_not_contain:
+      - "I don't have that information"
+      - "I'm sorry"
+      - "I cannot provide"
+      - "je"
+  expected_behavior:
+    - "Calls nl_query ONCE with a correlated-subquery pattern projecting demand vs (on_hand + incoming supply) over a 30-day horizon"
+    - "Does NOT call list_stockout_risk — that tool measures current on-hand stockout risk, not forward supply adequacy"
+    - "Does NOT call calculate_supply_gap — that tool requires a single sku_id parameter and cannot answer the bulk 'which products' question"
+    - "Names specific SKUs with demand, on_hand, and incoming supply quantities from nl_query results"
+    - "Synthesizes immediately after nl_query returns — does not call any additional tool"
+  failure_modes:
+    - type: routing
+      description: "Routes to list_stockout_risk (current on-hand axis) instead of nl_query with supply-shortage-forward correlated subquery — Q6 is semantically different from Q1 despite surface similarity"
+    - type: pollution
+      description: "Calls nl_query twice with different SQL arguments; D-012 fingerprint guard misses this because the two calls have distinct args"
+    - type: reasoning
+      description: "Produces degenerate fallback ('I cannot provide information') despite having supply gap data — caused by context overflow from wrong-tool duplicate calls at 117% of num_ctx"
+
+- id: Q7
+  spec_question: "Which products require production plan adjustments?"
+  intent: domain_analysis
+  required_tools:
+    - analyze_production_plan_gap
+  must_not_use_tools:
+    - list_today_exceptions
+    - nl_query
+  response_assertions:
+    must_contain:
+      - "production"
+      - "SKU"
+    must_not_contain:
+      - "I don't have that information"
+      - "I'm sorry"
+      - "je"
+  expected_behavior:
+    - "Calls analyze_production_plan_gap ONCE — does not hand-join production and demand tables"
+    - "Identifies both overproduced and underproduced SKUs with specific IDs"
+    - "Provides percentage deficits or surpluses grounded in tool results"
+    - "Recommends capacity reallocation from overproduced to underproduced SKUs"
+  failure_modes:
+    - type: routing
+      description: "Attempts to reconstruct plan-vs-demand gaps by hand-joining production and demand tables using nl_query instead of calling analyze_production_plan_gap"
+    - type: pollution
+      description: "Calls analyze_production_plan_gap twice (duplicate) — context inflates to 114% of num_ctx but grounded reply still emerges because the tool result is compact"
+    - type: output
+      description: "Omits SKU-001 underproduction when it is a ground-truth anchor — tool ranking may surface other SKUs higher but ground-truth expectation must be met"
+
+- id: Q8
+  spec_question: "Which materials or items should be purchased earlier or later?"
+  intent: domain_analysis
+  required_tools:
+    - analyze_supply_order_timing
+  must_not_use_tools:
+    - get_delayed_supply_orders
+    - list_today_exceptions
+  response_assertions:
+    must_contain:
+      - "purchase"
+      - "SKU"
+    must_not_contain:
+      - "I don't have that information"
+      - "I'm sorry"
+      - "I don't have access"
+      - "Please provide details"
+      - "je"
+  expected_behavior:
+    - "Calls analyze_supply_order_timing ONCE — does not substitute get_delayed_supply_orders"
+    - "Explicitly categorizes SKUs as pull-forward (purchase earlier) or push-out (purchase later)"
+    - "Names SKU-001 as a pull-forward candidate with stockout-date vs delivery-date gap"
+    - "Names an overstock SKU (e.g., SKU-027) as a push-out candidate"
+    - "Does not produce a degenerate apology as the first or only reply segment"
+  failure_modes:
+    - type: routing
+      description: "Calls get_delayed_supply_orders (late-by-status axis) instead of analyze_supply_order_timing (timing optimization axis) — the two tools answer different questions"
+    - type: pollution
+      description: "Adds unnecessary nl_query calls after analyze_supply_order_timing returns, pushing context to 107% of num_ctx"
+    - type: reasoning
+      description: "Two-invocation pattern (first degenerate, second grounded) produces concatenated reply with degenerate apology paragraph preceding the grounded analysis"
+    - type: output
+      description: "Missing explicit pull-forward/push-out framing — lists SKUs without the categorization the SPEC expects"
+
+- id: Q9
+  spec_question: "Are there demand changes by customer or region?"
+  intent: domain_analysis
+  required_tools:
+    - detect_demand_shift
+  must_not_use_tools:
+    - segment_demand
+    - compare_demand_periods
+    - list_today_exceptions
+  response_assertions:
+    must_contain:
+      - "demand"
+      - "customer"
+      - "region"
+    must_not_contain:
+      - "I don't have that information"
+      - "I'm sorry"
+      - "je"
+  expected_behavior:
+    - "Calls detect_demand_shift ONCE — does not substitute segment_demand or compare_demand_periods"
+    - "segment_demand and compare_demand_periods are SKU-axis consumption-series tools and do NOT answer customer/region demand questions"
+    - "Names specific customers (e.g., CUST-010 decline) and regions (e.g., Kanto growth) with percentage changes"
+    - "Grounds findings in order transaction data, not in the consumption series"
+  failure_modes:
+    - type: routing
+      description: "Calls segment_demand or compare_demand_periods (SKU-axis tools) instead of detect_demand_shift for a customer/region demand question"
+    - type: pollution
+      description: "Calls detect_demand_shift twice (duplicate); context stays at 59% of num_ctx so no overflow, but the extra call is unnecessary"
+    - type: output
+      description: "Omits specific customer IDs (e.g., CUST-009 growth) named in ground-truth expectations"
+
+- id: Q10
+  spec_question: "Which constraint is having the biggest negative impact on sales or profit?"
+  intent: domain_analysis
+  required_tools:
+    - identify_binding_constraint
+  must_not_use_tools:
+    - list_today_exceptions
+    - calculate_supply_gap
+    - list_stockout_risk
+  response_assertions:
+    must_contain:
+      - "constraint"
+      - "SKU"
+    must_not_contain:
+      - "I don't have that information"
+      - "I'm sorry"
+      - "je"
+  expected_behavior:
+    - "Calls identify_binding_constraint ONCE — does not assemble ranking by hand-joining capacity, supply-gap, and stockout results"
+    - "Names the top-ranked constraint (e.g., WH-001 at 123% capacity utilization)"
+    - "Provides estimated financial impact (e.g., stockout cost) grounded in tool results"
+    - "Explains why the top constraint outranks other candidates"
+  failure_modes:
+    - type: routing
+      description: "Separately evaluates capacity, supply-gap, and stockout risks by calling multiple individual tools to assemble a ranking rather than calling identify_binding_constraint"
+    - type: pollution
+      description: "Calls identify_binding_constraint twice (duplicate) — context reaches 104% of num_ctx but grounded reply still emerges because the tool result is compact"
+    - type: output
+      description: "States the top constraint without ranking other candidates or explaining the comparative basis — conclusion is correct but reasoning is opaque"
