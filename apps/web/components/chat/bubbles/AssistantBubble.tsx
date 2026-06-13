@@ -10,6 +10,7 @@ import AnalysisCard, { isAnalysisCard } from "@/components/analysis/AnalysisCard
 import FeedbackBar from "@/components/FeedbackBar";
 import BubbleShell from "./BubbleShell";
 import DynamicSyntaxHighlighter from "./DynamicSyntaxHighlighter";
+import InlineChart, { parseChartSpec } from "@/components/chat/InlineChart";
 
 const markdownComponents: Components = {
   p: ({ children }) => <p className="mb-3 last:mb-0">{children}</p>,
@@ -36,6 +37,16 @@ const markdownComponents: Components = {
     </blockquote>
   ),
   code: ({ children, className, node }) => {
+    // Inline chart: code fences with language="chart" render as a recharts component
+    if (/language-chart/.test(className ?? "")) {
+      const raw = String(children).replace(/\n$/, "");
+      const spec = parseChartSpec(raw);
+      if (spec !== null) {
+        return <InlineChart spec={spec} />;
+      }
+      // Fall through to syntax highlighter if parse fails
+    }
+
     const language = /language-(\w+)/.exec(className ?? "")?.[1];
     const code = String(children).replace(/\n$/, "");
     const spansMultipleLines =
