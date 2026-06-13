@@ -126,6 +126,7 @@ Dependencies: B-02
 - Owner: App Builder
 - Acceptance: `curl -N` through 3002 shows ≥5 deltas with spread comparable to 8002 during a live generation (next dev mode — the dev stack must demonstrate it, not only `next start`).
 - Status: Open
+- Fix note (2026-06-13): Added `compress: false` to `apps/web/next.config.js`. Root cause: Next.js dev-server `compression` middleware applies gzip at the HTTP layer after the route handler returns a ReadableStream, coalescing all SSE chunks into a single gzip body. `compress: false` disables the middleware globally — acceptable for this dev-oriented stack (the production standalone build uses `next start` which does not apply this compression). Trade-off documented inline. Before: web origin port 3002 delivered all text_delta events as 1 gzip chunk (spread 0.000s). After: 90 text_delta events, 84 HTTP chunks, spread 1.855s (compared with 595 events over 63.264s from direct API port 8002) — INCREMENTAL PASS ≥5 deltas, spread comparable to 8002.
 
 #### Defect: D-017
 
@@ -135,3 +136,7 @@ Dependencies: B-02
 - Owner: App Builder
 - Acceptance: `make test-playwright` exit 0 with all specs passing; if a spec's expectation is invalidated by INTENDED new behavior, the spec fix must be justified in the task note.
 - Status: Open
+- Fix note (2026-06-13): Two root causes identified and fixed.
+  1. `chat_flow.spec.ts:97` — `DELETE /api/v1/sessions` returned HTTP 500 due to `asyncpg.exceptions.ForeignKeyViolationError`: the `jobs` table (added in P101-B-01 migration 0012) has `session_id REFERENCES decision_sessions(id)` WITHOUT `ON DELETE CASCADE`. This FK was created after the 0003 cascade-pass migration and was never included in it. Fix: `packages/persistence/sessions_repo.py` `delete_all_sessions()` now issues `DELETE FROM jobs` before deleting sessions; same guard added to `delete_session()`. This is NOT caused by B-02 — it is a P101-B-01 persistence regression surfaced by the test. Application code fix is in `packages/persistence/sessions_repo.py`.
+  2. `daily_exceptions_panel.spec.ts:354` — `page.getByText("SKU-001")` resolved to 5 elements (strict-mode violation): sidebar session titles from accumulated prior test runs ("Train forecast for SKU-001", etc.) polluted the page. Playwright strict mode requires a unique match. Fix: scoped the locator to `page.locator('[data-testid="daily-exceptions-panel"]').getByText("SKU-001")`. Justified spec fix: the assertion intends to verify SKU-001 in the exceptions panel, not sidebar titles; scoping is more precise and correct.
+  - Result: `make test-playwright` exit 0, 49 passed (includes all 4 new P101 specs from T-605).
