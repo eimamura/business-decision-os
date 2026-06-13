@@ -51,11 +51,11 @@ Tagged `v0.1.0` (commit 039c43a); merged to `main`; GitHub release published.
 
 ## Active Phases
 
-P107 — _SYSTEM_PROMPT Maintainability
+None (next phase: P108)
 
 ---
 
-## P107 — _SYSTEM_PROMPT Maintainability — In Progress (2026-06-13)
+## P107 — _SYSTEM_PROMPT Maintainability — Done (2026-06-13)
 
 **Goal:** Remove hardcoded schema strings from `_SYSTEM_PROMPT` in `control_agent.py` (AGENTS.md prohibition) and add a tool-name validation test that fails fast when the prompt references a tool that no longer exists.
 
@@ -71,19 +71,19 @@ Dependencies: none
 
 Dependencies: none
 
-### Batch B-02 — Add tool-name validation test (App Builder) — Not Started
+### Batch B-02 — Add tool-name validation test (App Builder) — Done
 
 | Task | Description | Status |
 |---|---|---|
-| T-634 | Create `tests/unit/test_control_prompt.py`. Test `test_system_prompt_tool_names_all_registered`: import `_SYSTEM_PROMPT` from `packages.agent.control.control_agent`; extract all backtick-quoted identifiers via regex; filter to identifiers that look like tool names (contain at least one underscore, not in the reserved-words set `{"None", "True", "False", "list", "dict", "str", "int", "bool", "float"}`); assert every extracted name exists as a registered tool name in `ToolRegistry` (instantiate `ToolRegistry` with the default empty `ToolContext`; check with `registry.get(name)` or iterate `registry.all()`). No network, no DB. | Not Started |
+| T-634 | Create `tests/unit/test_control_prompt.py`. Test `test_system_prompt_tool_names_all_registered`: import `_SYSTEM_PROMPT` from `packages.agent.control.control_agent`; extract all backtick-quoted identifiers via regex; filter to identifiers that look like tool names (contain at least one underscore, not in the reserved-words set `{"None", "True", "False", "list", "dict", "str", "int", "bool", "float"}`); assert every extracted name exists as a registered tool name in `ToolRegistry` (instantiate `ToolRegistry` with the default empty `ToolContext`; check with `registry.get(name)` or iterate `registry.all()`). No network, no DB. | Done |
 
 Dependencies: none
 
-### Batch B-03 — Phase sign-off (Test/Review) — Not Started
+### Batch B-03 — Phase sign-off (Test/Review) — Done
 
 | Task | Description | Status |
 |---|---|---|
-| T-635 | Phase sign-off — full mandatory gate set (NO skips): `make test-unit && make test-integration && make test-e2e && make build && make lint && make typecheck`. All six gates must exit 0. | Not Started |
+| T-635 | Phase sign-off — full mandatory gate set (NO skips): `make test-unit && make test-integration && make test-e2e && make build && make lint && make typecheck`. All six gates exit 0 (2026-06-13): unit 1296/15 skipped, integration 16/153 skipped, e2e 10 skipped, build OK, lint clean, typecheck clean (178 files). | Done |
 
 Dependencies: B-01, B-02
 

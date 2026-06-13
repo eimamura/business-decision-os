@@ -34,7 +34,9 @@ None
 
 ## Last Completed
 
-P106 — Fix Inline Chart Streaming (2026-06-13). Emits chart code fences as text_delta SSE events in _run_and_signal() so inline charts appear during streaming sessions, not only on page reload. 5 new unit tests in test_sessions_chart_streaming.py. Sign-off: unit 1295/15 skipped, integration 16/153 skipped, e2e 10 skipped, build OK, lint clean, typecheck clean (178 files) — all exit 0.
+P107 — _SYSTEM_PROMPT Maintainability (2026-06-13). Hardcoded SQL schema strings removed from `_SYSTEM_PROMPT` in `control_agent.py`; replaced with `_make_schema_example()` / `_build_system_prompt()` using `get_schema_context()`. Table/column prose references genericized. New unit test `test_control_prompt.py` validates all backtick-quoted tool names in the prompt exist in `ToolRegistry`. Sign-off: unit 1296/15 skipped, integration 16/153 skipped, e2e 10 skipped, build OK, lint clean, typecheck clean (178 files) — all exit 0.
+
+Previously: P106 — Fix Inline Chart Streaming (2026-06-13). Emits chart code fences as text_delta SSE events in _run_and_signal() so inline charts appear during streaming sessions, not only on page reload. 5 new unit tests in test_sessions_chart_streaming.py. Sign-off: unit 1295/15 skipped, integration 16/153 skipped, e2e 10 skipped, build OK, lint clean, typecheck clean (178 files) — all exit 0.
 
 Previously: P105 — Chart Scenarios in ToolScenarioModal (2026-06-13). Added "Charts" category with Stockout Risk Chart and Demand Trend Chart scenarios. Sign-off: unit 1290, integration 16 passed/153 skipped, e2e 10 skipped, build OK, lint clean, typecheck clean — all exit 0.
 
