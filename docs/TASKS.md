@@ -10,7 +10,7 @@ execution process.
 phase detail archived at `docs/archive/v5/TASKS.md` (P24–P64 in `docs/archive/v4/`,
 P0–P23 in `docs/archive/v3/`).
 
-Numbering continues repository-wide: **next phase = P108, next task = T-636, next defect
+Numbering continues repository-wide: **next phase = P109, next task = T-640, next defect
 = D-018, next failure pattern = FP-017.**
 
 ---
@@ -51,7 +51,42 @@ Tagged `v0.1.0` (commit 039c43a); merged to `main`; GitHub release published.
 
 ## Active Phases
 
-None (next phase: P108)
+None (next phase: P109)
+
+---
+
+## P108 — render_routing_policy — Done (2026-06-13)
+
+**Goal:** Eliminate "prompt rot" by replacing hardcoded tool-name lists in `_SYSTEM_PROMPT_TEMPLATE` with `render_routing_policy(_INTENT_TOOL_SUBSET)`, and fix `_make_schema_example()` to derive table names from `ALLOWED_READ_TABLES` instead of string literals.
+
+Done when: (1) `render_routing_policy` and `render_tool_catalog` functions exist in `control_agent.py`; (2) hardcoded tool names in the routing-policy section of `_SYSTEM_PROMPT_TEMPLATE` are replaced by the rendered output; (3) `_make_schema_example()` derives the four table names from `ALLOWED_READ_TABLES` (not literals); (4) `render_routing_policy` unit test passes; (5) existing `test_system_prompt_tool_names_all_registered` continues to pass; (6) all mandatory gates exit 0.
+
+Dependencies: P107 Done
+
+### Batch B-01 — Implement render_routing_policy / render_tool_catalog and refactor _SYSTEM_PROMPT_TEMPLATE (App Builder) — Done
+
+| Task | Description | Status |
+|---|---|---|
+| T-636 | In `packages/agent/control/control_agent.py`, add `render_tool_catalog(subset: dict[str, list[str]]) -> str` that formats `_INTENT_TOOL_SUBSET` as a readable catalog string (e.g. `"supply_chain: nl_query, list_stockout_risk, ..."`), and `render_routing_policy(subset: dict[str, list[str]]) -> str` that generates the routing-instruction text currently hard-coded in `_SYSTEM_PROMPT_TEMPLATE` (rules 1–11 tool-name enumerations). Replace the hardcoded tool-name enumerations in `_SYSTEM_PROMPT_TEMPLATE` with the output of `render_routing_policy(_INTENT_TOOL_SUBSET)`. Business policy prose (safety rules, response format, job_dispatch triggers) stays hand-written. | Done |
+| T-637 | In `packages/agent/control/control_agent.py`, update `_make_schema_example()` to derive the four table-name constants (`sku_master`, `demand_history`, `inventory_snapshot`, `supply_orders`) from `ALLOWED_READ_TABLES` (imported from `packages/tools/sql_allowlist.py`) instead of string literals. Use the allowlist as a lookup set: if the expected canonical name is not present, fall back gracefully (return empty string). | Done |
+
+Dependencies: none
+
+### Batch B-02 — Add render_routing_policy unit tests (App Builder) — Done
+
+| Task | Description | Status |
+|---|---|---|
+| T-638 | In `tests/unit/test_control_prompt.py`, add `test_render_routing_policy_contains_all_tool_names`: call `render_routing_policy(_INTENT_TOOL_SUBSET)` and assert that every tool name present in `_INTENT_TOOL_SUBSET` values appears in the rendered output string. Add `test_render_tool_catalog_format`: call `render_tool_catalog(_INTENT_TOOL_SUBSET)` and assert each intent key appears as a section header and at least one associated tool name appears under it. Both tests: no network, no DB. | Not Started |
+
+Dependencies: B-01
+
+### Batch B-03 — Phase sign-off (Test/Review) — Done
+
+| Task | Description | Status |
+|---|---|---|
+| T-639 | Phase sign-off — full mandatory gate set (NO skips): `make test-unit && make test-integration && make test-e2e && make build && make lint && make typecheck`. All six gates exit 0 (2026-06-13): unit 1298/15 skipped, integration 16/153 skipped, e2e 10 skipped, build OK, lint clean, typecheck clean (178 files). | Done |
+
+Dependencies: B-01, B-02
 
 ---
 

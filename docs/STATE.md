@@ -34,7 +34,9 @@ None
 
 ## Last Completed
 
-P107 — _SYSTEM_PROMPT Maintainability (2026-06-13). Hardcoded SQL schema strings removed from `_SYSTEM_PROMPT` in `control_agent.py`; replaced with `_make_schema_example()` / `_build_system_prompt()` using `get_schema_context()`. Table/column prose references genericized. New unit test `test_control_prompt.py` validates all backtick-quoted tool names in the prompt exist in `ToolRegistry`. Sign-off: unit 1296/15 skipped, integration 16/153 skipped, e2e 10 skipped, build OK, lint clean, typecheck clean (178 files) — all exit 0.
+P108 — render_routing_policy (2026-06-13). Added `render_tool_catalog()` and `render_routing_policy()` to `control_agent.py`; `_SYSTEM_PROMPT_TEMPLATE` routing section replaced with `{routing_policy}` placeholder populated from `_INTENT_TOOL_SUBSET`; `_make_schema_example()` derives table names from `ALLOWED_READ_TABLES` (not literals); 2 new unit tests added in `test_control_prompt.py`. Sign-off: unit 1298/15 skipped, integration 16/153 skipped, e2e 10 skipped, build OK, lint clean, typecheck clean (178 files) — all exit 0.
+
+Previously: P107 — _SYSTEM_PROMPT Maintainability (2026-06-13). Hardcoded SQL schema strings removed from `_SYSTEM_PROMPT` in `control_agent.py`; replaced with `_make_schema_example()` / `_build_system_prompt()` using `get_schema_context()`. Table/column prose references genericized. New unit test `test_control_prompt.py` validates all backtick-quoted tool names in the prompt exist in `ToolRegistry`. Sign-off: unit 1296/15 skipped, integration 16/153 skipped, e2e 10 skipped, build OK, lint clean, typecheck clean (178 files) — all exit 0.
 
 Previously: P106 — Fix Inline Chart Streaming (2026-06-13). Emits chart code fences as text_delta SSE events in _run_and_signal() so inline charts appear during streaming sessions, not only on page reload. 5 new unit tests in test_sessions_chart_streaming.py. Sign-off: unit 1295/15 skipped, integration 16/153 skipped, e2e 10 skipped, build OK, lint clean, typecheck clean (178 files) — all exit 0.
 
