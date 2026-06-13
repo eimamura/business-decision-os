@@ -5,6 +5,7 @@ import logging
 import asyncpg
 
 from packages.persistence.context_log import ContextLogRepository
+from packages.persistence.db import get_pool
 from packages.schemas.context_packs import GENERIC_PACK, USE_CASE_PACKS, ContextPack
 
 _log = logging.getLogger(__name__)
@@ -65,19 +66,39 @@ class ContextBuilder:
             pack.prohibited_tools,
         )
 
-        if conn is not None and session_id is not None:
-            try:
-                await ContextLogRepository().create(
-                    session_id=session_id,
-                    use_case_id=pack.use_case_id,
-                    intent=intent,
-                    required_tools=pack.required_tools,
-                    prohibited_tools=pack.prohibited_tools,
-                    context_pack_json=pack.model_dump(),
-                    conn=conn,
-                )
-            except Exception:
-                _log.warning("ContextBuilder: failed to log context pack", exc_info=True)
+        if session_id is not None:
+            if conn is not None:
+                # Test injection path: use the provided connection directly.
+                try:
+                    await ContextLogRepository().create(
+                        session_id=session_id,
+                        use_case_id=pack.use_case_id,
+                        intent=intent,
+                        required_tools=pack.required_tools,
+                        prohibited_tools=pack.prohibited_tools,
+                        context_pack_json=pack.model_dump(),
+                        conn=conn,
+                    )
+                except Exception:
+                    _log.warning("ContextBuilder: failed to log context pack", exc_info=True)
+            else:
+                # Production path: acquire a connection from the pool.
+                # The pool may not be initialized in unit tests — catch all exceptions,
+                # log WARNING, and never raise (fail-open).
+                try:
+                    pool = await get_pool()
+                    async with pool.acquire() as _acquired:
+                        await ContextLogRepository().create(
+                            session_id=session_id,
+                            use_case_id=pack.use_case_id,
+                            intent=intent,
+                            required_tools=pack.required_tools,
+                            prohibited_tools=pack.prohibited_tools,
+                            context_pack_json=pack.model_dump(),
+                            conn=_acquired,
+                        )
+                except Exception:
+                    _log.warning("ContextBuilder: failed to log context pack", exc_info=True)
 
         return pack
 

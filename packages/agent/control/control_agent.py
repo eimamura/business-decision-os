@@ -90,13 +90,18 @@ def render_tool_catalog(subset: dict[str, list[str]]) -> str:
     return "\n".join(lines)
 
 
-def render_routing_policy(subset: dict[str, list[str]]) -> str:
+def render_routing_policy(subset: dict[str, list[str]], routing_hint: str = "") -> str:
     """Generate the routing-instruction text for _SYSTEM_PROMPT_TEMPLATE.
 
     Produces a section that lists which tools are available per intent, replacing
     the hand-written tool-name enumerations in the template.  Business policy
     prose (safety rules, job_dispatch triggers, response format) is NOT generated
     here — it remains hand-written in the template.
+
+    Args:
+        subset:       Per-intent tool availability mapping.
+        routing_hint: One-line use-case routing hint from ContextPack.  When non-empty,
+                      prepended (as "→ <hint>") before the tool catalog block.
     """
     sc = subset.get("supply_chain", [])
     da = subset.get("domain_analysis", [])
@@ -134,8 +139,10 @@ def render_routing_policy(subset: dict[str, list[str]]) -> str:
 
     catalog = render_tool_catalog(subset)
 
+    hint_prefix = f"→ {routing_hint}\n\n" if routing_hint else ""
+
     return (
-        f"Tool availability by intent:\n{catalog}\n\n"
+        f"{hint_prefix}Tool availability by intent:\n{catalog}\n\n"
         "Tool usage priority (follow this order):\n"
         f"1. For questions about today's exceptions, what needs attention today, or what requires "
         f"human judgment today — call `{exceptions_tool}` ONCE. "
@@ -460,6 +467,7 @@ def _build_system_prompt(
     user_role: str = "analyst",  # noqa: ARG001 — reserved for future render_user_permissions
     schema_context: str = "",
     tool_subset_override: dict[str, list[str]] | None = None,
+    routing_hint: str = "",
 ) -> str:
     """Assemble the system prompt from discrete conceptual-module sections.
 
@@ -486,6 +494,9 @@ def _build_system_prompt(
                               entirely.  Produced by ContextBuilder to further narrow the
                               tool list beyond what _INTENT_TOOL_SUBSET already specifies.
                               When None, the existing _INTENT_TOOL_SUBSET behaviour is used.
+        routing_hint:         One-line use-case routing hint from ContextPack.  When
+                              non-empty, prepended before the tool catalog in the routing
+                              policy section.  Pass "" to suppress (default behaviour).
     """
     # inject schema_example into the {schema_example} placeholder that
     # render_routing_policy embeds inside its rule-2b text.
@@ -497,7 +508,7 @@ def _build_system_prompt(
             if intent is not None and intent in _INTENT_TOOL_SUBSET
             else _INTENT_TOOL_SUBSET
         )
-    routing_section = render_routing_policy(tool_subset).format(
+    routing_section = render_routing_policy(tool_subset, routing_hint=routing_hint).format(
         schema_example=render_schema_context(schema_context)
     )
     return "\n\n".join(
@@ -558,9 +569,19 @@ class ControlAgent(AgentBasedSpecialist):
         self,
         task: "SpecialistTask",
         intent_category: str,
+        skill_keys: list[str] | None = None,
     ) -> "SpecialistTask":
-        """Prepend skill block to task.instruction if skills exist for intent."""
-        skills = SkillLoader().load(intent_category)
+        """Prepend skill block to task.instruction if skills exist for intent.
+
+        When ``skill_keys`` is a non-empty list, loads skills by stem name via
+        ``SkillLoader.load_by_keys()`` (use-case-level granularity from ContextPack).
+        When ``skill_keys`` is None or empty, falls back to the intent-level lookup
+        via ``SkillLoader.load(intent_category)`` (existing behaviour).
+        """
+        if skill_keys:
+            skills = SkillLoader().load_by_keys(skill_keys)
+        else:
+            skills = SkillLoader().load(intent_category)
         if skills:
             skill_block = _SKILL_HEADER + _SKILL_SEPARATOR.join(skills)
             task = task.model_copy(
@@ -723,10 +744,11 @@ class ControlAgent(AgentBasedSpecialist):
 
         # Build minimal tool subset for the specific use case via ContextBuilder,
         # then further narrow the intent subset by removing prohibited tools.
+        # Pass session_id so ContextBuilder can log the selected ContextPack to DB.
         context_pack = await ContextBuilder().build(
             intent=intent_category or "",
             user_input=task.instruction or "",
-            session_id=None,
+            session_id=session_id,
         )
         # Narrow: start from intent subset, remove prohibited tools
         base_tools = list(_INTENT_TOOL_SUBSET.get(intent_category or "", []))
@@ -751,9 +773,10 @@ class ControlAgent(AgentBasedSpecialist):
                 intent=intent_category,
                 schema_context=get_schema_context(),
                 tool_subset_override=tool_subset_override,
+                routing_hint=context_pack.routing_hint,
             )
 
-        task = self._inject_skills(task, intent_category)
+        task = self._inject_skills(task, intent_category, context_pack.skill_keys)
         task = await self._inject_past_decisions(task, session_id, store)
         task = await self._inject_domain_knowledge(task, intent_category)
         task = self._narrow_tools(task, narrowed)

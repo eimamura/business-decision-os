@@ -266,9 +266,16 @@ async def test_control_agent_pipeline_does_not_raise_for_supply_chain_intent() -
 
 
 async def test_control_agent_all_three_skills_injected_for_supply_chain() -> None:
-    """For supply_chain intent, all three MVP skills must appear in the instruction:
-    stockout_risk_analysis, exception_detection, and shipment_delay_root_cause."""
-    task = _make_supply_chain_task()
+    """For supply_chain intent with GENERIC ContextPack (no skill_keys override),
+    the intent-level fallback must inject all three MVP skills:
+    stockout_risk_analysis, exception_detection, and shipment_delay_root_cause.
+
+    The instruction must NOT match any Q1–Q10 keyword so that ContextBuilder returns
+    GENERIC_PACK (skill_keys=[]), causing _inject_skills() to fall back to the
+    intent-level SkillLoader.load("supply_chain") path.
+    """
+    # "Provide a supply chain overview" matches no Q1–Q10 keywords → GENERIC_PACK.
+    task = _make_supply_chain_task("Provide a supply chain overview and analysis.")
     ctx = _make_ctx()
 
     captured: list[SpecialistTask] = []
