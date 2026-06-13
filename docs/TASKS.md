@@ -51,7 +51,7 @@ Tagged `v0.1.0` (commit 039c43a); merged to `main`; GitHub release published.
 
 ## Active Phases
 
-P104 — Inline Charts in Chat Messages (Done)
+None (next phase: P105)
 
 ---
 

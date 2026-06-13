@@ -34,7 +34,9 @@ None
 
 ## Last Completed
 
-P103 — Job File Generation (2026-06-13). SimulationTool/OptimizerTool/ForecastTool generate
+P104 — Inline Charts in Chat Messages (2026-06-13). extract_chart_specs() builds ChartSpec dicts from list_stockout_risk and analyze_demand_trend tool outputs; sessions.py appends chart code fences to assistant reply; InlineChart.tsx renders recharts BarChart/LineChart inline in AssistantBubble. Sign-off: unit 1290, integration 16 passed/153 skipped, e2e 10 skipped, build OK, lint clean, typecheck clean — all exit 0.
+
+Previously: P103 — Job File Generation (2026-06-13). SimulationTool/OptimizerTool/ForecastTool generate
 CSV files via generated_files output; migration 0023 adds file_content BYTEA to job_files;
 GET /api/v1/jobs/files/{id}/download serves bytes; JobStatusCard renders download links.
 Sign-off: unit 1280, integration 165 (full-DSN), e2e 10 skipped (no server), build OK,
