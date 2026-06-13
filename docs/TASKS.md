@@ -10,7 +10,7 @@ execution process.
 phase detail archived at `docs/archive/v5/TASKS.md` (P24–P64 in `docs/archive/v4/`,
 P0–P23 in `docs/archive/v3/`).
 
-Numbering continues repository-wide: **next phase = P106, next task = T-630, next defect
+Numbering continues repository-wide: **next phase = P107, next task = T-633, next defect
 = D-018, next failure pattern = FP-017.**
 
 ---
@@ -51,7 +51,34 @@ Tagged `v0.1.0` (commit 039c43a); merged to `main`; GitHub release published.
 
 ## Active Phases
 
-None (next phase: P106)
+None (next phase: P107)
+
+---
+
+## P106 — Fix Inline Chart Streaming — Done (2026-06-13)
+
+**Goal:** Emit chart code fences as `text_delta` SSE events during streaming so inline charts appear during live sessions, not only on page reload.
+
+Done when: chart fences are emitted via `queue.put({"type":"text_delta",...})` in `_run_and_signal()` immediately after construction; chart appears in the chat UI during the live streaming session (not only on reload); all mandatory gates exit 0.
+
+Dependencies: P105 Done
+
+### Batch B-01 — Emit chart fences as text_delta SSE in sessions.py (App Builder) — Done
+
+| Task | Description | Status |
+|---|---|---|
+| T-630 | In `apps/api/routers/sessions.py` `_run_and_signal()`: after constructing `chart_fence = "\n\n` ` ` `chart\n" + chart_json + "\n` ` ` `\n"` and appending to `reply`, also emit `await queue.put({"type": "text_delta", "session_id": session_id, "delta": chart_fence, "timestamp": _iso_now()})`. The `reply` append is preserved for reload. Chart extraction remains non-fatal (`except Exception: pass`). | Done |
+
+Dependencies: none
+
+### Batch B-02 — Tests + phase sign-off (Test/Review) — Done
+
+| Task | Description | Status |
+|---|---|---|
+| T-631 | Unit test `tests/unit/test_sessions_chart_streaming.py`: 5 tests covering chart-fence SSE emission — single spec emits text_delta, delta field contains exact fence string, N specs emit N events, empty specs emit no events, event has session_id field. All via Broadcaster subscription pattern; `asyncio_mode = "auto"`. | Done |
+| T-632 | Phase sign-off — full mandatory gate set (NO skips): `make test-unit && make test-integration && make test-e2e && make build && make lint && make typecheck`. All six gates exit 0 (2026-06-13): unit 1295/15 skipped, integration 16/153 skipped, e2e 10 skipped, build OK, lint clean, typecheck clean (178 files). | Done |
+
+Dependencies: B-01
 
 ---
 
