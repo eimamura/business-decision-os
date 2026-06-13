@@ -10,7 +10,7 @@ execution process.
 phase detail archived at `docs/archive/v5/TASKS.md` (P24–P64 in `docs/archive/v4/`,
 P0–P23 in `docs/archive/v3/`).
 
-Numbering continues repository-wide: **next phase = P116, next task = T-666, next defect
+Numbering continues repository-wide: **next phase = P118, next task = T-678, next defect
 = D-018, next failure pattern = FP-017.**
 
 ---
@@ -51,7 +51,7 @@ Tagged `v0.1.0` (commit 039c43a); merged to `main`; GitHub release published.
 
 ## Active Phases
 
-None (next phase: P117)
+None (next phase: P118)
 
 ---
 
@@ -687,3 +687,30 @@ Dependencies: B-02
   1. `chat_flow.spec.ts:97` — `DELETE /api/v1/sessions` returned HTTP 500 due to `asyncpg.exceptions.ForeignKeyViolationError`: the `jobs` table (added in P101-B-01 migration 0012) has `session_id REFERENCES decision_sessions(id)` WITHOUT `ON DELETE CASCADE`. This FK was created after the 0003 cascade-pass migration and was never included in it. Fix: `packages/persistence/sessions_repo.py` `delete_all_sessions()` now issues `DELETE FROM jobs` before deleting sessions; same guard added to `delete_session()`. This is NOT caused by B-02 — it is a P101-B-01 persistence regression surfaced by the test. Application code fix is in `packages/persistence/sessions_repo.py`.
   2. `daily_exceptions_panel.spec.ts:354` — `page.getByText("SKU-001")` resolved to 5 elements (strict-mode violation): sidebar session titles from accumulated prior test runs ("Train forecast for SKU-001", etc.) polluted the page. Playwright strict mode requires a unique match. Fix: scoped the locator to `page.locator('[data-testid="daily-exceptions-panel"]').getByText("SKU-001")`. Justified spec fix: the assertion intends to verify SKU-001 in the exceptions panel, not sidebar titles; scoping is more precise and correct.
   - Result: `make test-playwright` exit 0, 49 passed (includes all 4 new P101 specs from T-605).
+
+---
+
+## P116 — Context Engineering Pipeline: Bug Fixes & Field Activation — Done (2026-06-13)
+
+See STATE.md for detail. T-666–T-674 all Done.
+
+---
+
+## P117 — RAG Documentation & Schema Context Refactor — Done (2026-06-13)
+
+### Batch B-01 — RAG.md documentation (App Builder) — Done
+
+| Task | Description | Status |
+|---|---|---|
+| T-675 | Create `docs/RAG.md` documenting the RAG architecture: types and implementation status (Database/Tool/Memory/Agentic), Agentic RAG loop structure (LangGraph nodes), RAG result placement design (system vs user vs tool), and the B-02 schema context refactor rationale. | Done |
+
+Dependencies: none
+
+### Batch B-02 — Schema context: system → user message (App Builder) — Done
+
+| Task | Description | Status |
+|---|---|---|
+| T-676 | Add `ControlAgent._inject_schema_context(task)` that appends `render_schema_context(get_schema_context())` to `task.instruction`. Call it in `run()` after `_inject_domain_knowledge`. Remove `schema_context=get_schema_context()` from both `_build_system_prompt()` calls in `__init__` and `run()`; pass `schema_context=""` instead (or omit). `render_schema_context()` and `_make_schema_example()` are retained — only the call site moves. | Done |
+| T-677 | Update `tests/unit/agent/test_control_agent_pipeline.py`: assert that `_build_system_prompt` is called with empty `schema_context`; assert that the injected `task.instruction` contains the schema example block after `_inject_schema_context()` is called. Ensure `make test-unit` exits 0. | Done |
+
+Dependencies: B-01 (documentation informs rationale comments)

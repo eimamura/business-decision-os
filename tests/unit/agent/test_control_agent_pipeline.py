@@ -339,3 +339,55 @@ def test_narrow_tools_empty_list_leaves_allowed_tools_unchanged() -> None:
     agent = ControlAgent(llm_client=MagicMock(), tool_registry=MagicMock())
     result = agent._narrow_tools(task, [])
     assert result.allowed_tools == original_tools
+
+
+# ---------------------------------------------------------------------------
+# P117 B-02 — _inject_schema_context() unit tests (T-677)
+# ---------------------------------------------------------------------------
+
+
+def test_inject_schema_context_appends_to_instruction() -> None:
+    """P117 B-02: when get_schema_context() returns a non-empty schema string,
+    _inject_schema_context() must append the rendered schema block to task.instruction.
+
+    render_schema_context() wraps _make_schema_example() which builds a correlated-subquery
+    SQL example from the schema string.  We patch get_schema_context() to return a minimal
+    but structurally valid schema that satisfies the four required tables so that
+    _make_schema_example() produces a non-empty example string.
+    """
+    minimal_schema = (
+        "sku_master(sku_id TEXT, sku_name TEXT)\n"
+        "demand_history(sku_id TEXT, quantity NUMERIC)\n"
+        "inventory_snapshot(sku_id TEXT, on_hand NUMERIC)\n"
+        "supply_orders(sku_id TEXT, quantity NUMERIC, status TEXT, expected_arrival DATE)"
+    )
+
+    task = _make_supply_chain_task("Which products face supply shortages?")
+    agent = ControlAgent(llm_client=MagicMock(), tool_registry=MagicMock())
+
+    with patch(
+        "packages.agent.control.control_agent.get_schema_context",
+        return_value=minimal_schema,
+    ):
+        result = agent._inject_schema_context(task)
+
+    assert task.instruction in result.instruction
+    assert len(result.instruction) > len(task.instruction)
+    # The schema example embeds "sku_master" from the schema string.
+    assert "sku_master" in result.instruction
+
+
+def test_inject_schema_context_empty_schema_noop() -> None:
+    """P117 B-02: when get_schema_context() returns an empty string,
+    _inject_schema_context() must return the task unchanged (fail-open).
+    """
+    task = _make_supply_chain_task("Which products face supply shortages?")
+    agent = ControlAgent(llm_client=MagicMock(), tool_registry=MagicMock())
+
+    with patch(
+        "packages.agent.control.control_agent.get_schema_context",
+        return_value="",
+    ):
+        result = agent._inject_schema_context(task)
+
+    assert result.instruction == task.instruction

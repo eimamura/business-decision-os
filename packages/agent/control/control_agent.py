@@ -637,7 +637,7 @@ class ControlAgent(AgentBasedSpecialist):
             llm_client=llm_client,
             tool_registry=tool_registry,
             sse_queue=sse_queue,
-            system_prompt=_build_system_prompt(intent=None, schema_context=get_schema_context()),
+            system_prompt=_build_system_prompt(intent=None, schema_context=""),
             model_registry=model_registry,
         )
 
@@ -738,6 +738,25 @@ class ControlAgent(AgentBasedSpecialist):
                 extra={"intent_category": intent_category},
             )
         return task
+
+    def _inject_schema_context(self, task: "SpecialistTask") -> "SpecialistTask":
+        """Append schema context block to task.instruction.
+
+        Schema is «material» (used on every request), not a «rule», so it belongs in
+        the user-turn instruction rather than in the system prompt.  This keeps the
+        system prompt concise and avoids rebuilding it on every run() call just to
+        include volatile schema data.
+
+        Fail-open: if get_schema_context() returns empty or render_schema_context()
+        produces an empty string, the task is returned unchanged.
+        """
+        schema_str = get_schema_context()
+        schema_block = render_schema_context(schema_str)
+        if not schema_block:
+            return task
+        return task.model_copy(
+            update={"instruction": task.instruction + "\n\n" + schema_block}
+        )
 
     def _narrow_tools(
         self,
@@ -851,7 +870,7 @@ class ControlAgent(AgentBasedSpecialist):
         if intent_category:
             self._runtime._system_prompt = _build_system_prompt(
                 intent=intent_category,
-                schema_context=get_schema_context(),
+                schema_context="",
                 tool_subset_override=tool_subset_override,
                 routing_hint=context_pack.routing_hint,
             )
@@ -859,6 +878,7 @@ class ControlAgent(AgentBasedSpecialist):
         task = self._inject_skills(task, intent_category, context_pack.skill_keys)
         task = await self._inject_past_decisions(task, session_id, store)
         task = await self._inject_domain_knowledge(task, intent_category)
+        task = self._inject_schema_context(task)
         task = self._narrow_tools(task, narrowed)
 
         result: "SpecialistResult | None" = None
