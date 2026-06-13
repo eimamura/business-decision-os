@@ -249,3 +249,85 @@ async def test_list_files_returns_cursor_when_page_is_full() -> None:
     assert resp.status_code == 200
     data = resp.json()
     assert data["next_cursor"] == str(files[-1]["id"])
+
+
+# ---------------------------------------------------------------------------
+# GET /api/v1/jobs/files/{file_id}/download — T-613
+# ---------------------------------------------------------------------------
+
+
+def _make_file_row(
+    job_id: UUID | None = None,
+    file_id: UUID | None = None,
+    file_content: bytes = b"col1,col2\n1,2\n",
+    mime_type: str = "text/csv",
+    file_name: str = "report.csv",
+) -> dict:
+    return {
+        "id": file_id or uuid4(),
+        "job_id": job_id or uuid4(),
+        "file_name": file_name,
+        "file_size_bytes": len(file_content),
+        "mime_type": mime_type,
+        "download_url": "/api/v1/jobs/files/some-id/download",
+        "file_content": file_content,
+        "created_at": _NOW,
+    }
+
+
+async def test_download_file_streams_content_with_correct_headers() -> None:
+    """download_file must return 200 with the binary content and Content-Disposition."""
+    file_id = uuid4()
+    content = b"a,b\n1,2\n"
+    row = _make_file_row(file_id=file_id, file_content=content, file_name="out.csv")
+
+    with patch(
+        "apps.api.routers.jobs._jobs_repo.get_file",
+        new_callable=AsyncMock,
+        return_value=row,
+    ):
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test"
+        ) as client:
+            resp = await client.get(f"/api/v1/jobs/files/{file_id}/download")
+
+    assert resp.status_code == 200
+    assert resp.content == content
+    assert "attachment" in resp.headers["content-disposition"]
+    assert "out.csv" in resp.headers["content-disposition"]
+    assert resp.headers["content-type"].startswith("text/csv")
+
+
+async def test_download_file_returns_404_when_row_not_found() -> None:
+    """download_file must return 404 when get_file returns None."""
+    file_id = uuid4()
+
+    with patch(
+        "apps.api.routers.jobs._jobs_repo.get_file",
+        new_callable=AsyncMock,
+        return_value=None,
+    ):
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test"
+        ) as client:
+            resp = await client.get(f"/api/v1/jobs/files/{file_id}/download")
+
+    assert resp.status_code == 404
+
+
+async def test_download_file_returns_404_when_content_is_empty() -> None:
+    """download_file must return 404 when file_content is empty bytes."""
+    file_id = uuid4()
+    row = _make_file_row(file_id=file_id, file_content=b"")
+
+    with patch(
+        "apps.api.routers.jobs._jobs_repo.get_file",
+        new_callable=AsyncMock,
+        return_value=row,
+    ):
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test"
+        ) as client:
+            resp = await client.get(f"/api/v1/jobs/files/{file_id}/download")
+
+    assert resp.status_code == 404

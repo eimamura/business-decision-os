@@ -169,16 +169,23 @@ class JobsRepository:
         file_size_bytes: int,
         mime_type: str,
         download_url: str,
+        file_content: bytes = b"",
+        file_id: UUID | None = None,
     ) -> dict[str, Any]:
-        """INSERT a row into job_files. Returns the new row as dict."""
-        new_id = uuid4()
+        """INSERT a row into job_files. Returns the new row as dict.
+
+        *file_id* allows the caller to pre-generate the UUID so that the
+        download_url can reference it before the INSERT completes.
+        """
+        new_id = file_id if file_id is not None else uuid4()
         pool = await get_pool()
         async with pool.acquire() as conn:
             row = await conn.fetchrow(
                 """
                 INSERT INTO job_files
-                    (id, job_id, file_name, file_size_bytes, mime_type, download_url, created_at)
-                VALUES ($1, $2, $3, $4, $5, $6, now())
+                    (id, job_id, file_name, file_size_bytes, mime_type,
+                     download_url, file_content, created_at)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, now())
                 RETURNING *
                 """,
                 new_id,
@@ -187,8 +194,19 @@ class JobsRepository:
                 file_size_bytes,
                 mime_type,
                 download_url,
+                file_content,
             )
         return dict(row)
+
+    async def get_file(self, file_id: UUID) -> dict[str, Any] | None:
+        """SELECT a single job_files row by *file_id*. Returns None if not found."""
+        pool = await get_pool()
+        async with pool.acquire() as conn:
+            row = await conn.fetchrow(
+                "SELECT * FROM job_files WHERE id = $1",
+                file_id,
+            )
+        return dict(row) if row else None
 
     async def get_by_approval_id(self, approval_id: UUID) -> dict[str, Any] | None:
         """SELECT the jobs row where approval_id = $1. Returns None if not found."""

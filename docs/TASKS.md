@@ -51,7 +51,55 @@ Tagged `v0.1.0` (commit 039c43a); merged to `main`; GitHub release published.
 
 ## Active Phases
 
-None (next phase: P103).
+P103 — Job File Generation (In Progress)
+
+---
+
+## P103 — Job File Generation — In Progress
+
+**Goal:** `simulate`/`optimize`/`forecast` ジョブがバックグラウンド実行後にダウンロード可能なファイル（CSV）を生成し、`job_files` テーブルに保存してダウンロードエンドポイント経由で取得できるようにする。フロントエンドの JobStatusCard にダウンロードリンクを表示。
+
+Done when: (1) `GET /api/v1/jobs/files/{file_id}/download` が CSV bytes を返す; (2) SimulationTool, OptimizerTool, ForecastTool が `generated_files` を出力し job_executor が DB に保存する; (3) JobStatusCard にファイルダウンロードリンクが表示される; (4) 全 mandatory gate が exit 0。
+
+Dependencies: P102 Done
+
+### Batch B-01 — DB migration + download endpoint (App Builder) — Done (2026-06-13)
+
+| Task | Description | Status |
+|---|---|---|
+| T-612 | Migration 0013: `job_files` テーブルに `file_content BYTEA NOT NULL DEFAULT ''` カラムを追加。`add_file` 呼び出し側が `file_content` を渡せるよう対応。 | Done |
+| T-613 | `GET /api/v1/jobs/files/{file_id}/download` エンドポイント (`apps/api/routers/jobs.py`): `file_content` を `StreamingResponse` で返す (`Content-Disposition: attachment; filename={file_name}`、正しい MIME type)。`file_content` が空の場合は 404。 | Done |
+| T-614 | `jobs_repo.add_file()` に `file_content: bytes = b""` パラメータを追加。`job_executor._extract_files()` で `generated_files` dict から `file_content` キーを取り出して渡すよう更新。`download_url` を `/api/v1/jobs/files/{file_id}/download` の形式で job_executor 側が自動生成（UUID は `uuid4()` で生成し `repo.add_file` に渡す）。 | Done |
+
+Dependencies: none
+
+### Batch B-02 — Tool-side file generation (App Builder) — Not Started
+
+| Task | Description | Status |
+|---|---|---|
+| T-615 | `SimulationTool.handle()` が `generated_files` を返すよう実装。シミュレーション出力を CSV 化（行 = SKU またはシナリオ; 列 = 主要指標）。`file_name="simulation_result.csv"`, `mime_type="text/csv"`, `file_content=<bytes>` を含む dict を `output["generated_files"]` にセット。 | Not Started |
+| T-616 | `OptimizerTool.handle()` 同様。最適化計画を CSV 化。`file_name="optimization_plan.csv"`。 | Not Started |
+| T-617 | `ForecastTool.handle()` 同様。予測結果を CSV 化。`file_name="forecast_result.csv"`。 | Not Started |
+
+Dependencies: B-01
+
+### Batch B-03 — Frontend file download UI (App Builder) — Not Started
+
+| Task | Description | Status |
+|---|---|---|
+| T-618 | `apps/web/components/JobStatusCard.tsx` に `generated_files` セクションを追加。ジョブ応答の `files[]` を使い、各ファイルを `<a href="/api/v1/jobs/files/{id}/download" download={file_name}>` リンクで表示。空の場合は非表示。`data-testid="job-file-link-{id}"` を付与。 | Not Started |
+
+Dependencies: B-01
+
+### Batch B-04 — Tests + sign-off (Test/Review) — Not Started
+
+| Task | Description | Status |
+|---|---|---|
+| T-619 | Unit tests: SimulationTool, OptimizerTool, ForecastTool の各 `handle()` が `generated_files` キーを返すこと、`file_content` が有効な CSV bytes であることを検証。 | Not Started |
+| T-620 | Integration test: `jobs_repo.add_file()` に `file_content` を渡して保存し、`GET /api/v1/jobs/files/{file_id}/download` が 200 + 正しい CSV bytes を返すことを検証。 | Not Started |
+| T-621 | Phase sign-off — full mandatory gate set (NO skips): `make test-unit && make test-integration && make test-e2e && make build && make lint && make typecheck`。gate, exit_code, output_tail を報告。 | Not Started |
+
+Dependencies: B-02, B-03
 
 ---
 

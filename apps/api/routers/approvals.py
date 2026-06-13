@@ -16,6 +16,7 @@ from packages.agent.orchestrator.session_orchestrator import NoPendingInterruptE
 from packages.persistence.approvals import ApprovalStatus, ApprovalTransition
 from packages.persistence.approvals_repo import ApprovalsRepository
 from packages.persistence.notifications_repo import NotificationsRepository
+
 _log = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1/approvals", tags=["approvals"])
@@ -148,9 +149,9 @@ async def post_decision(
         _job_dispatched = False
         if session_id_str:
             try:
+                from apps.api.state import broadcasters as _broadcasters
                 from packages.agent.job_executor import execute_job as _execute_job
                 from packages.persistence.jobs_repo import JobsRepository as _JobsRepo
-                from apps.api.state import broadcasters as _broadcasters
 
                 _jr = _JobsRepo()
                 _linked_job = await _jr.get_by_approval_id(approval_id)

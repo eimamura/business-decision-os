@@ -22,11 +22,11 @@ FP-011 hardened). Per-phase detail: `docs/archive/v5/STATE.md`.
 
 ## Active Phase
 
-None
+P103 — Job File Generation
 
 ## Active Lease
 
-None
+P103/B-02 + P103/B-03 (parallel)
 
 ## Blockers
 

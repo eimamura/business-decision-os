@@ -227,14 +227,25 @@ async def execute_job(
             status="completed",
             result=output,
         )
+        # Pre-generate a file_id for each file so the download_url can reference
+        # it before the INSERT; pass it through to repo.add_file to keep them in sync.
+        enriched_files: list[dict[str, Any]] = []
         for f in files:
+            file_id = uuid4()
+            download_url = f"/api/v1/jobs/files/{file_id}/download"
+            file_content: bytes = f.get("file_content", b"")
+            if isinstance(file_content, str):
+                file_content = file_content.encode()
             await repo.add_file(
                 job_id=job_id,
                 file_name=f.get("file_name", "output"),
-                file_size_bytes=f.get("file_size_bytes", 0),
+                file_size_bytes=len(file_content) or f.get("file_size_bytes", 0),
                 mime_type=f.get("mime_type", "application/octet-stream"),
-                download_url=f.get("download_url", ""),
+                download_url=download_url,
+                file_content=file_content,
+                file_id=file_id,
             )
+            enriched_files.append({**f, "download_url": download_url, "file_id": str(file_id)})
 
         if sse_queue is not None:
             await sse_queue.put(
@@ -242,13 +253,13 @@ async def execute_job(
                     "type": "job_completed",
                     "job_id": str(job_id),
                     "job_type": job_type,
-                    "file_count": len(files),
+                    "file_count": len(enriched_files),
                     "files": [
                         {
-                            "file_name": f.get("file_name", ""),
-                            "download_url": f.get("download_url", ""),
+                            "file_name": ef.get("file_name", ""),
+                            "download_url": ef.get("download_url", ""),
                         }
-                        for f in files
+                        for ef in enriched_files
                     ],
                     "timestamp": datetime.now(timezone.utc).isoformat(),
                 }

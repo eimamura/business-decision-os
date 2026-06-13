@@ -7,7 +7,7 @@ from uuid import UUID, uuid4
 
 import pytest
 
-from packages.agent.job_executor import _parse_params
+from packages.agent.job_executor import _extract_files, _parse_params
 from packages.tools.base import ToolResult
 
 
@@ -177,6 +177,126 @@ async def test_execute_job_pushes_sse_job_completed_on_success() -> None:
 # ---------------------------------------------------------------------------
 # Parametrized job-type routing
 # ---------------------------------------------------------------------------
+
+
+# ---------------------------------------------------------------------------
+# _extract_files — T-614
+# ---------------------------------------------------------------------------
+
+
+def test_extract_files_pops_generated_files_from_output() -> None:
+    """_extract_files must remove 'generated_files' from output and return it."""
+    output: dict[str, Any] = {
+        "result": "ok",
+        "generated_files": [{"file_name": "out.csv", "mime_type": "text/csv"}],
+    }
+    files = _extract_files(output)
+
+    assert files == [{"file_name": "out.csv", "mime_type": "text/csv"}]
+    assert "generated_files" not in output
+
+
+def test_extract_files_returns_empty_list_when_key_missing() -> None:
+    """_extract_files must return [] when 'generated_files' is absent."""
+    output: dict[str, Any] = {"result": "ok"}
+    files = _extract_files(output)
+    assert files == []
+
+
+def test_extract_files_returns_empty_list_when_value_is_not_list() -> None:
+    """_extract_files must return [] when 'generated_files' is not a list."""
+    output: dict[str, Any] = {"generated_files": "bad"}
+    files = _extract_files(output)
+    assert files == []
+
+
+# ---------------------------------------------------------------------------
+# execute_job — file_content propagation (T-614)
+# ---------------------------------------------------------------------------
+
+
+async def test_execute_job_passes_file_content_to_add_file() -> None:
+    """execute_job must pass file_content bytes from the tool result to repo.add_file."""
+    from packages.agent.job_executor import execute_job
+
+    job_id = uuid4()
+    fake_job = _fake_job_row(job_id=job_id, job_type="simulate")
+    csv_bytes = b"sku,qty\nA001,10\n"
+    tool_result = ToolResult(
+        output={
+            "result": "ok",
+            "generated_files": [
+                {
+                    "file_name": "sim.csv",
+                    "mime_type": "text/csv",
+                    "file_content": csv_bytes,
+                }
+            ],
+        },
+        audit_payload={},
+    )
+
+    mock_handle = AsyncMock(return_value=tool_result)
+    mock_get_job = AsyncMock(return_value=fake_job)
+    mock_update_status = AsyncMock(return_value={**fake_job, "status": "completed"})
+    mock_add_file = AsyncMock(return_value={})
+
+    with (
+        patch("packages.persistence.jobs_repo.JobsRepository.get_job", mock_get_job),
+        patch("packages.persistence.jobs_repo.JobsRepository.update_status", mock_update_status),
+        patch("packages.persistence.jobs_repo.JobsRepository.add_file", mock_add_file),
+        patch("packages.tools.simulation_tool.SimulationTool.handle", mock_handle),
+    ):
+        await execute_job(job_id)
+
+    mock_add_file.assert_called_once()
+    call_kwargs = mock_add_file.call_args.kwargs
+    assert call_kwargs["file_content"] == csv_bytes
+    assert call_kwargs["download_url"].startswith("/api/v1/jobs/files/")
+    assert call_kwargs["download_url"].endswith("/download")
+
+
+async def test_execute_job_sse_event_includes_download_url_for_files() -> None:
+    """The 'job_completed' SSE event must include a non-empty download_url for each file."""
+    from packages.agent.job_executor import execute_job
+
+    job_id = uuid4()
+    fake_job = _fake_job_row(job_id=job_id, job_type="simulate")
+    tool_result = ToolResult(
+        output={
+            "result": "ok",
+            "generated_files": [
+                {
+                    "file_name": "sim.csv",
+                    "mime_type": "text/csv",
+                    "file_content": b"a,b\n1,2\n",
+                }
+            ],
+        },
+        audit_payload={},
+    )
+
+    mock_handle = AsyncMock(return_value=tool_result)
+    mock_get_job = AsyncMock(return_value=fake_job)
+    mock_update_status = AsyncMock(return_value={**fake_job, "status": "completed"})
+    mock_add_file = AsyncMock(return_value={})
+    sse_queue: asyncio.Queue[Any] = asyncio.Queue()
+
+    with (
+        patch("packages.persistence.jobs_repo.JobsRepository.get_job", mock_get_job),
+        patch("packages.persistence.jobs_repo.JobsRepository.update_status", mock_update_status),
+        patch("packages.persistence.jobs_repo.JobsRepository.add_file", mock_add_file),
+        patch("packages.tools.simulation_tool.SimulationTool.handle", mock_handle),
+    ):
+        await execute_job(job_id, sse_queue=sse_queue)
+
+    # First event should be job_completed
+    event = sse_queue.get_nowait()
+    assert event["type"] == "job_completed"
+    assert len(event["files"]) == 1
+    url = event["files"][0]["download_url"]
+    assert url.startswith("/api/v1/jobs/files/")
+    assert url.endswith("/download")
 
 
 @pytest.mark.parametrize(
