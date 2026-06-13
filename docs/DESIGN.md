@@ -460,6 +460,68 @@ Skills define **what to do**, not the LLM reasoning. This keeps analysis reprodu
 
 **Matching mechanism (MVP):** Keyword-based or explicit intent-to-skill mapping maintained in the Skill Loader. Vector similarity matching is Post-MVP. In MVP, the intent classification output from SessionOrchestrator determines which skill(s) to load; the mapping is declared in code, not inferred dynamically.
 
+### ContextBuilder (Eval-Driven Context Engineering)
+
+The ContextBuilder is the context selection layer that sits between intent classification and prompt assembly. It answers the question: **given this specific user question, what is the minimal tool set the agent should see?**
+
+Without a ContextBuilder, every `supply_chain` question sees 20+ tools in the system prompt — causing context pollution, duplicate tool calls, and routing confusion. With it, each question gets a purpose-built tool subset.
+
+**Implementation:** `packages/agent/control/context_builder.py`
+
+```text
+Intent + user question
+ ↓
+ContextBuilder.build(intent, user_input)
+ ↓
+Keyword match → use_case_id (Q1–Q10 or GENERIC)
+ ↓
+ContextPack (required_tools, prohibited_tools, skill_keys, routing_hint)
+ ↓
+_build_system_prompt(tool_subset_override = narrowed subset)
+ ↓
+LLM sees only the tools relevant to this specific question
+```
+
+**ContextPack schema** (`packages/schemas/context_packs.py`):
+
+```text
+ContextPack
+  use_case_id     — "Q1"–"Q10" or "GENERIC"
+  intent          — "supply_chain" | "domain_analysis" | "decision_support"
+  required_tools  — tools that must be called for this question type
+  prohibited_tools — tools that must NOT be called (confusion risk)
+  skill_keys      — skill filenames to load from packages/knowledge/skills/
+  routing_hint    — one-line routing instruction injected into the system prompt
+```
+
+**Use-case packs** (`packages/schemas/context_packs.py §USE_CASE_PACKS`):
+
+| Use Case | required_tools | prohibited_tools |
+|---|---|---|
+| Q1 — stockout risk | list_stockout_risk | list_today_exceptions, calculate_supply_gap |
+| Q2 — excess inventory | nl_query | list_today_exceptions, list_stockout_risk |
+| Q3 — today's exceptions | list_today_exceptions | list_stockout_risk, analyze_shipment_delay_causes |
+| Q4 — shipment delays | analyze_shipment_delay_causes | list_today_exceptions |
+| Q5 — forecast gap | analyze_forecast_deviation | list_stockout_risk, list_today_exceptions |
+| Q6 — supply shortage | nl_query | list_stockout_risk, calculate_supply_gap |
+| Q7 — production plan | analyze_production_plan_gap | list_today_exceptions, list_stockout_risk |
+| Q8 — purchase timing | analyze_supply_order_timing | get_delayed_supply_orders |
+| Q9 — demand shift | detect_demand_shift | segment_demand, compare_demand_periods |
+| Q10 — bottleneck | identify_binding_constraint | — |
+
+**Context trace logging** (`packages/persistence/context_log.py`, table `context_log`):
+
+Every ContextBuilder.build() call writes a row to `context_log` when a DB connection is provided. This enables post-hoc failure analysis: was the right use case selected? were the right tools included?
+
+```
+GET /api/v1/admin/context-logs?session_id=<uuid>
+→ list of ContextLogRead entries per turn
+```
+
+**Eval-Driven Development process** — see `docs/TESTING.md §Eval Runner` for how to run evaluations and interpret results.
+
+**Escalation:** The ContextBuilder uses keyword matching in MVP. Post-MVP: embed user_input and compute cosine similarity against use-case embeddings for more robust classification. Add new use cases to `USE_CASE_PACKS` and corresponding golden cases to `data/evals/spec10_golden_cases.yaml` when SPEC questions are added.
+
 ### Tool Gateway
 
 All agent tool calls pass through the Tool Gateway before reaching data systems. Agents do not call data systems directly.

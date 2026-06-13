@@ -109,6 +109,64 @@ Required assertions per stub:
 
 ---
 
+## Eval Runner
+
+The eval runner tests the full agent pipeline against golden cases — not just code correctness, but **judgment quality**: which tools the agent calls, what it says, and whether it avoids known failure modes.
+
+```bash
+make eval                             # run all 10 SPEC golden cases (requires running API)
+API_URL=http://localhost:8002 make eval  # explicit API URL
+uv run python scripts/run_evals.py --dry-run  # list cases without running
+```
+
+The runner writes a timestamped markdown report to `docs/eval-reports/YYYY-MM-DD-HHMM-eval-run.md`.
+
+### Golden cases
+
+`data/evals/spec10_golden_cases.yaml` — 10 cases, one per SPEC question (Q1–Q10). Each case defines:
+
+| Field | Purpose |
+|---|---|
+| `required_tools` | Tools that must be called — absence → `retrieval` or `routing` failure |
+| `must_not_use_tools` | Tools that must NOT be called — presence → `pollution` or `routing` failure |
+| `response_assertions.must_contain` | Strings that must appear in the reply |
+| `response_assertions.must_not_contain` | Degenerate patterns (e.g. "I don't have", French text from context overflow) |
+| `expected_behavior` | Human-readable assertions for manual review |
+| `failure_modes` | Pre-identified failure patterns per question |
+
+### Failure classification
+
+The runner classifies each failure into one of five types:
+
+| Type | Meaning | Fix target |
+|---|---|---|
+| `routing` | Required tool not called AND prohibited tool called | `context_builder.py` — keyword map |
+| `pollution` | Prohibited tool called (required tools also called) | `USE_CASE_PACKS[Qn].prohibited_tools` |
+| `retrieval` | Required tool not called at all | `USE_CASE_PACKS[Qn].required_tools` or routing policy |
+| `reasoning` | Tool calls correct but degenerate/wrong response | system prompt, context overflow (check context_log) |
+| `output` | Tools correct but response missing expected content | response format rules or routing hint |
+
+### Extending golden cases
+
+1. Add a new entry to `data/evals/spec10_golden_cases.yaml`
+2. Add the corresponding `ContextPack` to `packages/schemas/context_packs.py §USE_CASE_PACKS`
+3. Add keywords to `packages/agent/control/context_builder.py §_USE_CASE_KEYWORDS`
+4. Run `make eval` to verify the new case passes
+
+### Context trace logs
+
+After a failed eval run, inspect what the agent actually received:
+
+```bash
+# Requires running API + DB
+curl "http://localhost:8002/api/v1/admin/context-logs?session_id=<uuid>"
+```
+
+Each log row shows: `use_case_id`, `intent`, `required_tools`, `prohibited_tools`, `context_pack_json`.
+If `use_case_id == "GENERIC"` for a Q1–Q10 question, the keyword classifier did not match — add the user's phrasing as a new keyword.
+
+---
+
 ## Unit Test Scope
 
 - KPI formula correctness (`packages/knowledge/kpi.py`)

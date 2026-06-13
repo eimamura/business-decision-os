@@ -41,7 +41,7 @@ Tagged `v0.1.0` (commit 039c43a); merged to `main`; GitHub release published.
 | Real ERP / real data integration | No target system exists; SPEC known limitation |
 | Azure deployment / Celery activation | P69 freeze — infra preserved untouched; screening scheduler migrates to Celery beat at unlock (ADR 2026-06-12-daily-screening-scheduler) |
 | Model capability | gemma4:12b first-pass degeneration on some question classes (recovered via goal-refine + text_reset at ~2× latency); root fix = model upgrade or Anthropic API switch |
-| Continuous quality measurement | Judge campaign is a one-shot run; no recurring evaluation automation |
+| Continuous quality measurement | **Resolved (P115)** — `make eval` runs all 10 SPEC golden cases; report in `docs/eval-reports/`. |
 | Anthropic cost computation | Tokens recorded, `total_cost_usd` 0.0 (P83 deferral) |
 | npm audit | 18 known vulnerabilities (4 high) in web dependencies, pre-existing |
 | SPEC Agent Catalog runtime agents | Deliberately not instantiated; promotion governed by DESIGN.md §Domain Capability Maturity Model |
