@@ -447,6 +447,16 @@ async def post_message(
                 reply = response.reply if response else (
                     "Processing failed. Please try again."
                 )
+                # Append inline chart code fences when tool outputs contain chartable data
+                if response is not None:
+                    try:
+                        from packages.agent.chart_extractor import extract_chart_specs
+                        specs = extract_chart_specs(response.agent_results)
+                        for spec in specs:
+                            chart_json = json.dumps(spec, ensure_ascii=False)
+                            reply = reply + "\n\n```chart\n" + chart_json + "\n```\n"
+                    except Exception:
+                        pass  # chart extraction is non-fatal
                 session.setdefault("messages", []).append({
                     "role": "assistant",
                     "content": reply,
