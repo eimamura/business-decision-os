@@ -127,6 +127,29 @@ const CATEGORIES: Category[] = [
     ],
   },
   {
+    id: "charts",
+    label: "Charts",
+    icon: "◈",
+    scenarios: [
+      {
+        id: "chart-stockout-risk",
+        title: "Stockout Risk Chart",
+        description:
+          "List all SKUs at risk of stockout with days-of-cover values — renders an inline bar chart",
+        prompt:
+          "List all SKUs at risk of stockout. For each SKU show the days of cover remaining and the risk level. I need the full list sorted by urgency.",
+      },
+      {
+        id: "chart-demand-trend",
+        title: "Demand Trend Chart",
+        description:
+          "Analyze the demand trend direction and period-over-period changes for SKU-001 — renders an inline line chart",
+        prompt:
+          "Analyze the demand trend for SKU-001. Show me the trend direction, slope, and period-over-period demand quantities so I can see how demand is changing over time.",
+      },
+    ],
+  },
+  {
     id: "ask-user",
     label: "Ask User (HITL)",
     icon: "◑",
@@ -339,7 +362,13 @@ export default function ToolScenarioModal({
               <button
                 key={cat.id}
                 onClick={() => setActiveCategoryId(cat.id)}
-                data-testid={cat.id === "job-dispatch" ? "category-job-dispatch" : undefined}
+                data-testid={
+                  cat.id === "job-dispatch"
+                    ? "category-job-dispatch"
+                    : cat.id === "charts"
+                      ? "category-charts"
+                      : undefined
+                }
                 className={`w-full text-left px-4 py-2.5 flex items-center gap-2.5 text-sm transition-colors ${
                   activeCategoryId === cat.id
                     ? "bg-indigo-500/15 text-indigo-300 border-r-2 border-indigo-500"
