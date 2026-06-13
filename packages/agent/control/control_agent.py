@@ -9,6 +9,7 @@ from packages.knowledge import SkillLoader
 from packages.memory.decision import DecisionMemoryStore
 from packages.memory.long_term import LongTermMemoryStore
 from packages.tools.schema_context import get_schema_context
+from packages.tools.sql_allowlist import ALLOWED_READ_TABLES
 
 if TYPE_CHECKING:
     from packages.agent.orchestrator import SpecialistResult, SpecialistTask
@@ -16,199 +17,123 @@ if TYPE_CHECKING:
 
 _log = logging.getLogger(__name__)
 
-# Template for the system prompt.  The {schema_example} placeholder is replaced
-# at prompt-assembly time via _build_system_prompt().  When schema context is not
-# yet loaded (e.g. at import time before the DB is ready) the placeholder is
-# replaced with an empty string so the prompt degrades gracefully.
-_SYSTEM_PROMPT_TEMPLATE = (
-    "You are a cross-domain operational judgment center for supply chain decisions.\n\n"
-    "Responsibilities:\n"
-    "- Assess stockout risk across demand, inventory, and supply signals\n"
-    "- Prioritize exceptions and escalations spanning logistics, finance, and operations\n"
-    "- Identify root causes of shipment delays through logistics and supply data\n"
-    "- Analyze supply gaps relative to demand forecasts and inventory positions\n"
-    "- Recommend prioritized actions that account for cost impact, "
-    "lead times, and service levels\n\n"
-    "Domains in scope: demand forecasting and trend analysis, inventory positioning and risk,\n"
-    "supply order status and lead time, logistics execution and delay diagnosis,\n"
-    "and finance impact quantification (holding costs, stockout costs, expedite costs).\n\n"
-    "Tool usage priority (follow this order):\n"
-    "1. For questions about today's exceptions, what needs attention today, or what requires "
-    "human judgment today — call `list_today_exceptions` ONCE. "
-    "Do NOT loop list_stockout_risk, get_delayed_supply_orders, detect_demand_anomalies, "
-    "and data_quality_checker separately to assemble the same picture.\n"
-    "2. To enumerate stockout risk across all SKUs (non-exception context), call "
-    "`list_stockout_risk(horizon_days=7)` once — do NOT loop `calculate_stockout_risk` per SKU.\n"
-    "2b. For questions about supply shortages next week or next month "
-    "(e.g. 'which products may face supply shortages', 'supply gap over the next 30 days') "
-    "— DO NOT use `list_stockout_risk` (that tool measures on-hand stockout risk only, "
-    "NOT forward supply adequacy). "
-    "Call `nl_query` EXACTLY ONCE — do NOT call nl_query a second time after the first result. "
-    "The nl_query must use CORRELATED SUBQUERIES (not JOINs) for each metric. "
-    "{schema_example}"
-    "After nl_query returns, synthesize immediately into your final answer — do NOT call "
-    "any tool again. "
-    "`calculate_supply_gap` is for SINGLE-SKU deep-dive (requires sku_id parameter).\n"
-    "3. Use a specialized tool (e.g. calculate_stockout_risk, calculate_days_of_inventory) "
-    "when it directly covers a single-SKU question, including days-of-cover "
-    "and when-do-we-run-out analysis.\n"
-    "4. For shipment-delay or unshipped-order root-cause questions — call "
-    "`analyze_shipment_delay_causes` ONCE. "
-    "Do NOT reconstruct causes by hand-joining raw tables yourself. "
-    "For a plain listing of unshipped orders (without root-cause analysis) call "
-    "`list_unshipped_orders` ONCE.\n"
-    "5. For demand-shift questions by customer or region — call `detect_demand_shift` ONCE. "
-    "segment_demand and compare_demand_periods are SKU-axis tools (consumption series); "
-    "they do NOT answer customer/region demand questions. "
-    "Customer/region demand questions (SPEC Q9) are answered from order transaction data, "
-    "not from the consumption series. The consumption series is for forecast/stockout "
-    "tools only.\n"
-    "6. For forecast-vs-actual gap questions (SPEC Q5) — why is actual demand deviating "
-    "from the forecast, over-forecast/under-forecast analysis — call "
-    "`analyze_forecast_deviation` ONCE. "
-    "`evaluate_forecast_accuracy` is the model-quality axis (MAPE/bias); "
-    "pair with `detect_demand_shift` when the user asks which customer/region drives the gap.\n"
-    "7. For production plan adjustment questions (SPEC Q7) — which products need production "
-    "plan changes, overproduction/underproduction analysis — call "
-    "`analyze_production_plan_gap` ONCE. "
-    "Do NOT reconstruct plan-vs-demand gaps by hand-joining "
-    "production and demand tables yourself.\n"
-    "8. For biggest-constraint or bottleneck-impact questions (SPEC Q10) — "
-    "call `identify_binding_constraint` ONCE. "
-    "Do NOT separately evaluate capacity, supply-gap, and stockout risks "
-    "by assembling your own ranking from individual tool results.\n"
-    "9. For purchase-earlier/later or order-timing questions (SPEC Q8) — "
-    "call `analyze_supply_order_timing` ONCE. "
-    "`get_delayed_supply_orders` answers 'what is already late by status'; "
-    "`analyze_supply_order_timing` answers 'which orders should arrive sooner or later'.\n"
-    "10. Use nl_query for bulk or cross-product questions — pass the question in plain English; "
-    "nl_query generates schema-correct SQL internally.\n"
-    "11. Never fabricate column names or assume columns that are not confirmed by tool results.\n\n"
-    "Always ground recommendations in tool results. Do not fabricate quantities or risk scores.\n"
-    "Once you have sufficient data from tools, stop calling tools"
-    " and produce a final text response.\n"
-    "Never call the same tool twice in one analysis pass. "
-    "If you have not yet called any tool in this pass, you MUST call the appropriate tool "
-    "before answering — never produce a final answer without tool data. "
-    "After receiving results from list_stockout_risk, synthesise them immediately"
-    " into a final answer — do NOT call list_stockout_risk or any other tool again"
-    " in the same pass.\n"
-    "For exception/delay questions, call list_today_exceptions to surface the full daily"
-    " exception picture in one call.\n"
-    "12. For heavy or long-running work — call `job_dispatch` with the appropriate job_type"
-    " and await human approval before execution begins."
-    " This is MANDATORY; never run these inline.\n"
-    "    Trigger phrases that ALWAYS route to job_dispatch:\n"
-    "    - 'as a background job', 'run in the background', 'notify me when it completes'\n"
-    "    - 'train the forecast model', 'train_forecast'\n"
-    "    - 'run a full ... simulation for all SKUs'\n"
-    "    Job type mapping: train_forecast → job_type='train_forecast';"
-    " inventory simulation → job_type='simulate';"
-    " replenishment optimization → job_type='optimize';"
-    " demand forecast → job_type='forecast'.\n"
-    "\n"
-    "## Response Format\n\n"
-    "Structure every response using the following four sections:\n\n"
-    "**Situation:** [summary of what the data shows]\n"
-    "**Root Cause:** [identified cause(s) with data evidence]\n"
-    "**Recommended Actions:**\n"
-    "1. [action] — [data rationale]\n"
-    "2. ...\n"
-    "**Confidence Level:** [High / Medium / Low] — [one sentence justification]\n"
-    "\n"
-    "When past decisions are annotated with [user feedback: negative], treat those approaches"
-    " as ineffective and avoid repeating them in your current response.\n"
-)
 
+def render_tool_catalog(subset: dict[str, list[str]]) -> str:
+    """Return a readable per-intent catalog string from _INTENT_TOOL_SUBSET.
 
-def _make_schema_example() -> str:
-    """Build a correlated-subquery SQL example from live schema context.
-
-    Returns an empty string when schema context has not yet been loaded (i.e.
-    before API startup calls load_schema_context()).  This keeps the prompt
-    valid at import time without requiring a DB connection.
+    Example output (one intent per line):
+        supply_chain: nl_query, list_stockout_risk, list_today_exceptions, ...
+        lookup: nl_query, table_schema_reader, ...
     """
-    schema = get_schema_context()
-    if not schema:
-        return ""
+    lines = []
+    for intent, tools in subset.items():
+        lines.append(f"{intent}: {', '.join(tools)}")
+    return "\n".join(lines)
 
-    # Parse the schema context lines to find relevant tables and their columns.
-    # Format emitted by load_schema_context(): "table_name(col1 TYPE, col2 TYPE, ...)"
-    table_cols: dict[str, list[str]] = {}
-    for line in schema.splitlines():
-        if "(" not in line or line.startswith("Join rule") or line.startswith("IMPORTANT"):
-            continue
-        table_name = line[: line.index("(")]
-        cols_part = line[line.index("(") + 1 : line.rindex(")")]
-        col_names = [c.split()[0] for c in cols_part.split(",") if c.strip()]
-        table_cols[table_name] = col_names
 
-    # Identify the SKU master table (expected: sku_master) and correlated tables.
-    sku_table = "sku_master" if "sku_master" in table_cols else None
-    demand_table = "demand_history" if "demand_history" in table_cols else None
-    inventory_table = "inventory_snapshot" if "inventory_snapshot" in table_cols else None
-    supply_table = "supply_orders" if "supply_orders" in table_cols else None
+def render_routing_policy(subset: dict[str, list[str]]) -> str:
+    """Generate the routing-instruction text for _SYSTEM_PROMPT_TEMPLATE.
 
-    if not all([sku_table, demand_table, inventory_table, supply_table]):
-        # Required tables not present in current schema context — omit example.
-        return ""
+    Produces a section that lists which tools are available per intent, replacing
+    the hand-written tool-name enumerations in the template.  Business policy
+    prose (safety rules, job_dispatch triggers, response format) is NOT generated
+    here — it remains hand-written in the template.
+    """
+    sc = subset.get("supply_chain", [])
+    da = subset.get("domain_analysis", [])
 
-    # Find sku_id column and a numeric metric column in demand table.
-    demand_cols = table_cols[demand_table]  # type: ignore[index]
-    demand_qty_col = next(
-        (c for c in demand_cols if c.lower() in ("quantity", "qty", "demand_qty")),
-        demand_cols[1] if len(demand_cols) > 1 else demand_cols[0],
+    # Helper: pick first matching name from subset list, or fall back to literal
+    def _pick(tools: list[str], *candidates: str) -> str:
+        for c in candidates:
+            if c in tools:
+                return c
+        return candidates[0]
+
+    exceptions_tool = _pick(sc, "list_today_exceptions")
+    stockout_list_tool = _pick(sc, "list_stockout_risk")
+    stockout_calc_tool = _pick(sc, "calculate_stockout_risk")
+    nl_tool = _pick(sc, "nl_query")
+    supply_gap_tool = _pick(sc, "calculate_supply_gap")
+    doi_tool = _pick(sc, "calculate_days_of_inventory")
+    delay_tool = _pick(sc, "analyze_shipment_delay_causes")
+    unshipped_tool = _pick(sc, "list_unshipped_orders")
+    demand_shift_tool = _pick(da, "detect_demand_shift")
+    segment_tool = _pick(da, "segment_demand")
+    compare_tool = _pick(da, "compare_demand_periods")
+    forecast_dev_tool = _pick(da, "analyze_forecast_deviation")
+    forecast_acc_tool = _pick(da, "evaluate_forecast_accuracy")
+    prod_gap_tool = _pick(da, "analyze_production_plan_gap")
+    constraint_tool = _pick(da, "identify_binding_constraint")
+    order_timing_tool = _pick(da, "analyze_supply_order_timing")
+    delayed_orders_tool = _pick(sc, "get_delayed_supply_orders")
+
+    catalog = render_tool_catalog(subset)
+
+    return (
+        f"Tool availability by intent:\n{catalog}\n\n"
+        "Tool usage priority (follow this order):\n"
+        f"1. For questions about today's exceptions, what needs attention today, or what requires "
+        f"human judgment today — call `{exceptions_tool}` ONCE. "
+        f"Do NOT loop {stockout_list_tool}, {delayed_orders_tool}, detect_demand_anomalies, "
+        f"and data_quality_checker separately to assemble the same picture.\n"
+        f"2. To enumerate stockout risk across all SKUs (non-exception context), call "
+        f"`{stockout_list_tool}(horizon_days=7)` once — "
+        f"do NOT loop `{stockout_calc_tool}` per SKU.\n"
+        f"2b. For questions about supply shortages next week or next month "
+        f"(e.g. 'which products may face supply shortages', 'supply gap over the next 30 days') "
+        f"— DO NOT use `{stockout_list_tool}` (that tool measures on-hand stockout risk only, "
+        f"NOT forward supply adequacy). "
+        f"Call `{nl_tool}` EXACTLY ONCE — "
+        f"do NOT call {nl_tool} a second time after the first result. "
+        f"The {nl_tool} must use CORRELATED SUBQUERIES (not JOINs) for each metric. "
+        f"{{schema_example}}"
+        f"After {nl_tool} returns, synthesize immediately into your final answer — do NOT call "
+        f"any tool again. "
+        f"`{supply_gap_tool}` is for SINGLE-SKU deep-dive (requires sku_id parameter).\n"
+        f"3. Use a specialized tool (e.g. {stockout_calc_tool}, {doi_tool}) "
+        f"when it directly covers a single-SKU question, including days-of-cover "
+        f"and when-do-we-run-out analysis.\n"
+        f"4. For shipment-delay or unshipped-order root-cause questions — call "
+        f"`{delay_tool}` ONCE. "
+        f"Do NOT reconstruct causes by hand-joining raw tables yourself. "
+        f"For a plain listing of unshipped orders (without root-cause analysis) call "
+        f"`{unshipped_tool}` ONCE.\n"
+        f"5. For demand-shift questions by customer or region — call `{demand_shift_tool}` ONCE. "
+        f"{segment_tool} and {compare_tool} are SKU-axis tools (consumption series); "
+        f"they do NOT answer customer/region demand questions. "
+        f"Customer/region demand questions (SPEC Q9) are answered from order transaction data, "
+        f"not from the consumption series. The consumption series is for forecast/stockout "
+        f"tools only.\n"
+        f"6. For forecast-vs-actual gap questions (SPEC Q5) — why is actual demand deviating "
+        f"from the forecast, over-forecast/under-forecast analysis — call "
+        f"`{forecast_dev_tool}` ONCE. "
+        f"`{forecast_acc_tool}` is the model-quality axis (MAPE/bias); "
+        f"pair with `{demand_shift_tool}` when the user asks which customer/region"
+        f" drives the gap.\n"
+        f"7. For production plan adjustment questions (SPEC Q7) — which products need production "
+        f"plan changes, overproduction/underproduction analysis — call "
+        f"`{prod_gap_tool}` ONCE. "
+        f"Do NOT reconstruct plan-vs-demand gaps by hand-joining "
+        f"production and demand tables yourself.\n"
+        f"8. For biggest-constraint or bottleneck-impact questions (SPEC Q10) — "
+        f"call `{constraint_tool}` ONCE. "
+        f"Do NOT separately evaluate capacity, supply-gap, and stockout risks "
+        f"by assembling your own ranking from individual tool results.\n"
+        f"9. For purchase-earlier/later or order-timing questions (SPEC Q8) — "
+        f"call `{order_timing_tool}` ONCE. "
+        f"`{delayed_orders_tool}` answers 'what is already late by status'; "
+        f"`{order_timing_tool}` answers 'which orders should arrive sooner or later'.\n"
+        f"10. Use {nl_tool} for bulk or cross-product questions — "
+        f"pass the question in plain English; "
+        f"{nl_tool} generates schema-correct SQL internally.\n"
     )
 
-    inventory_cols = table_cols[inventory_table]  # type: ignore[index]
-    inventory_qty_col = next(
-        (c for c in inventory_cols if c.lower() in ("on_hand", "quantity", "qty", "stock_qty")),
-        inventory_cols[1] if len(inventory_cols) > 1 else inventory_cols[0],
-    )
-
-    supply_cols = table_cols[supply_table]  # type: ignore[index]
-    supply_qty_col = next(
-        (c for c in supply_cols if c.lower() in ("quantity", "qty", "order_qty")),
-        supply_cols[1] if len(supply_cols) > 1 else supply_cols[0],
-    )
-
-    example = (
-        f"Example: SELECT m.sku_id, "
-        f"(SELECT AVG(d.{demand_qty_col}) FROM {demand_table} d"
-        f" WHERE d.sku_id=m.sku_id)*30 AS demand_30d, "
-        f"(SELECT SUM(i.{inventory_qty_col}) FROM {inventory_table} i"
-        f" WHERE i.sku_id=m.sku_id) AS on_hand, "
-        f"(SELECT COALESCE(SUM(o.{supply_qty_col}),0) FROM {supply_table} o"
-        f" WHERE o.sku_id=m.sku_id"
-        f" AND o.status IN ('pending','confirmed','in_transit')"
-        f" AND o.expected_arrival<=CURRENT_DATE+INTERVAL '30 days') AS incoming"
-        f" FROM {sku_table} m WHERE ... ORDER BY gap DESC. "
-    )
-    return example
-
-
-def _build_system_prompt() -> str:
-    """Assemble the system prompt, injecting a dynamic schema example if available."""
-    schema_example = _make_schema_example()
-    return _SYSTEM_PROMPT_TEMPLATE.format(schema_example=schema_example)
-
-
-# Module-level constant preserved for backward compatibility (e.g. existing unit tests
-# that import _SYSTEM_PROMPT directly).  At import time, get_schema_context() returns ""
-# (DB not yet loaded), so the SQL example is omitted — this is intentional fail-open
-# behaviour.  ControlAgent.__init__ calls _build_system_prompt() at instance creation
-# so that a fully loaded runtime always produces the enriched prompt.
-_SYSTEM_PROMPT = _build_system_prompt()
-
-_SKILL_HEADER = "\n\n---\n## Analysis Procedures\n\n"
-_SKILL_SEPARATOR = "\n\n---\n\n"
-
-_PAST_DECISIONS_HEADER = "\n\n---\n## Past Decisions\n\n"
-
-_DOMAIN_KNOWLEDGE_HEADER = "\n\n---\n## Domain Knowledge\n\n"
 
 # Narrow the tool set per intent so local models aren't overwhelmed by 23+ definitions.
 # Fallback: if intent not in map, all control tools remain available.
+# IMPORTANT: this dict is the SSoT for per-intent tool availability.  render_routing_policy()
+# derives tool-name references from it so the prompt stays consistent when tools are
+# added or renamed.
 _INTENT_TOOL_SUBSET: dict[str, list[str]] = {
     # supply_chain: cross-domain stockout/gap/delay/cost diagnosis
     "supply_chain": [
@@ -348,6 +273,178 @@ _INTENT_TOOL_SUBSET: dict[str, list[str]] = {
         "job_dispatch",
     ],
 }
+
+
+# Template for the system prompt.  The {schema_example} placeholder is replaced
+# at prompt-assembly time via _build_system_prompt().  When schema context is not
+# yet loaded (e.g. at import time before the DB is ready) the placeholder is
+# replaced with an empty string so the prompt degrades gracefully.
+# The {routing_policy} placeholder is replaced by render_routing_policy(_INTENT_TOOL_SUBSET)
+# so that tool-name enumerations in rules 1–10 are derived from _INTENT_TOOL_SUBSET
+# rather than hand-typed literals.  NOTE: {schema_example} is nested inside the
+# rendered routing policy string — _build_system_prompt() performs a two-pass
+# format: first inject routing_policy (which carries the {schema_example} literal),
+# then inject schema_example into the result.
+_SYSTEM_PROMPT_TEMPLATE = (
+    "You are a cross-domain operational judgment center for supply chain decisions.\n\n"
+    "Responsibilities:\n"
+    "- Assess stockout risk across demand, inventory, and supply signals\n"
+    "- Prioritize exceptions and escalations spanning logistics, finance, and operations\n"
+    "- Identify root causes of shipment delays through logistics and supply data\n"
+    "- Analyze supply gaps relative to demand forecasts and inventory positions\n"
+    "- Recommend prioritized actions that account for cost impact, "
+    "lead times, and service levels\n\n"
+    "Domains in scope: demand forecasting and trend analysis, inventory positioning and risk,\n"
+    "supply order status and lead time, logistics execution and delay diagnosis,\n"
+    "and finance impact quantification (holding costs, stockout costs, expedite costs).\n\n"
+    "{routing_policy}"
+    "11. Never fabricate column names or assume columns that are not confirmed by tool results.\n\n"
+    "Always ground recommendations in tool results. Do not fabricate quantities or risk scores.\n"
+    "Once you have sufficient data from tools, stop calling tools"
+    " and produce a final text response.\n"
+    "Never call the same tool twice in one analysis pass. "
+    "If you have not yet called any tool in this pass, you MUST call the appropriate tool "
+    "before answering — never produce a final answer without tool data. "
+    "After receiving results from list_stockout_risk, synthesise them immediately"
+    " into a final answer — do NOT call list_stockout_risk or any other tool again"
+    " in the same pass.\n"
+    "For exception/delay questions, call list_today_exceptions to surface the full daily"
+    " exception picture in one call.\n"
+    "12. For heavy or long-running work — call `job_dispatch` with the appropriate job_type"
+    " and await human approval before execution begins."
+    " This is MANDATORY; never run these inline.\n"
+    "    Trigger phrases that ALWAYS route to job_dispatch:\n"
+    "    - 'as a background job', 'run in the background', 'notify me when it completes'\n"
+    "    - 'train the forecast model', 'train_forecast'\n"
+    "    - 'run a full ... simulation for all SKUs'\n"
+    "    Job type mapping: train_forecast → job_type='train_forecast';"
+    " inventory simulation → job_type='simulate';"
+    " replenishment optimization → job_type='optimize';"
+    " demand forecast → job_type='forecast'.\n"
+    "\n"
+    "## Response Format\n\n"
+    "Structure every response using the following four sections:\n\n"
+    "**Situation:** [summary of what the data shows]\n"
+    "**Root Cause:** [identified cause(s) with data evidence]\n"
+    "**Recommended Actions:**\n"
+    "1. [action] — [data rationale]\n"
+    "2. ...\n"
+    "**Confidence Level:** [High / Medium / Low] — [one sentence justification]\n"
+    "\n"
+    "When past decisions are annotated with [user feedback: negative], treat those approaches"
+    " as ineffective and avoid repeating them in your current response.\n"
+)
+
+
+def _make_schema_example() -> str:
+    """Build a correlated-subquery SQL example from live schema context.
+
+    Returns an empty string when schema context has not yet been loaded (i.e.
+    before API startup calls load_schema_context()).  This keeps the prompt
+    valid at import time without requiring a DB connection.
+    """
+    schema = get_schema_context()
+    if not schema:
+        return ""
+
+    # Parse the schema context lines to find relevant tables and their columns.
+    # Format emitted by load_schema_context(): "table_name(col1 TYPE, col2 TYPE, ...)"
+    table_cols: dict[str, list[str]] = {}
+    for line in schema.splitlines():
+        if "(" not in line or line.startswith("Join rule") or line.startswith("IMPORTANT"):
+            continue
+        table_name = line[: line.index("(")]
+        cols_part = line[line.index("(") + 1 : line.rindex(")")]
+        col_names = [c.split()[0] for c in cols_part.split(",") if c.strip()]
+        table_cols[table_name] = col_names
+
+    # Identify the SKU master table and correlated tables.
+    # Names are derived from ALLOWED_READ_TABLES (not literals) so that if the
+    # allowlist is ever updated, the example fails open rather than generating SQL
+    # with a stale table name.
+    sku_table = next((t for t in ALLOWED_READ_TABLES if t == "sku_master"), None)
+    demand_table = next((t for t in ALLOWED_READ_TABLES if t == "demand_history"), None)
+    inventory_table = next((t for t in ALLOWED_READ_TABLES if t == "inventory_snapshot"), None)
+    supply_table = next((t for t in ALLOWED_READ_TABLES if t == "supply_orders"), None)
+
+    # Additionally verify each table is present in the live schema context.
+    if sku_table not in table_cols:
+        sku_table = None
+    if demand_table not in table_cols:
+        demand_table = None
+    if inventory_table not in table_cols:
+        inventory_table = None
+    if supply_table not in table_cols:
+        supply_table = None
+
+    if not all([sku_table, demand_table, inventory_table, supply_table]):
+        # Required tables not present in current schema context — omit example.
+        return ""
+
+    # Find sku_id column and a numeric metric column in demand table.
+    demand_cols = table_cols[demand_table]  # type: ignore[index]
+    demand_qty_col = next(
+        (c for c in demand_cols if c.lower() in ("quantity", "qty", "demand_qty")),
+        demand_cols[1] if len(demand_cols) > 1 else demand_cols[0],
+    )
+
+    inventory_cols = table_cols[inventory_table]  # type: ignore[index]
+    inventory_qty_col = next(
+        (c for c in inventory_cols if c.lower() in ("on_hand", "quantity", "qty", "stock_qty")),
+        inventory_cols[1] if len(inventory_cols) > 1 else inventory_cols[0],
+    )
+
+    supply_cols = table_cols[supply_table]  # type: ignore[index]
+    supply_qty_col = next(
+        (c for c in supply_cols if c.lower() in ("quantity", "qty", "order_qty")),
+        supply_cols[1] if len(supply_cols) > 1 else supply_cols[0],
+    )
+
+    example = (
+        f"Example: SELECT m.sku_id, "
+        f"(SELECT AVG(d.{demand_qty_col}) FROM {demand_table} d"
+        f" WHERE d.sku_id=m.sku_id)*30 AS demand_30d, "
+        f"(SELECT SUM(i.{inventory_qty_col}) FROM {inventory_table} i"
+        f" WHERE i.sku_id=m.sku_id) AS on_hand, "
+        f"(SELECT COALESCE(SUM(o.{supply_qty_col}),0) FROM {supply_table} o"
+        f" WHERE o.sku_id=m.sku_id"
+        f" AND o.status IN ('pending','confirmed','in_transit')"
+        f" AND o.expected_arrival<=CURRENT_DATE+INTERVAL '30 days') AS incoming"
+        f" FROM {sku_table} m WHERE ... ORDER BY gap DESC. "
+    )
+    return example
+
+
+def _build_system_prompt() -> str:
+    """Assemble the system prompt, injecting routing policy and schema example.
+
+    Two-pass format:
+    1. Inject {routing_policy} from render_routing_policy(_INTENT_TOOL_SUBSET) — this
+       expands per-intent tool lists from the SSoT dict and embeds a {schema_example}
+       literal inside the rendered text.
+    2. Inject {schema_example} from _make_schema_example() into the result of pass 1.
+    """
+    routing_policy = render_routing_policy(_INTENT_TOOL_SUBSET)
+    # Pass 1: inject routing_policy (which contains a literal "{schema_example}" placeholder)
+    partial = _SYSTEM_PROMPT_TEMPLATE.format(routing_policy=routing_policy)
+    # Pass 2: inject schema_example into the placeholder left by render_routing_policy
+    schema_example = _make_schema_example()
+    return partial.format(schema_example=schema_example)
+
+
+# Module-level constant preserved for backward compatibility (e.g. existing unit tests
+# that import _SYSTEM_PROMPT directly).  At import time, get_schema_context() returns ""
+# (DB not yet loaded), so the SQL example is omitted — this is intentional fail-open
+# behaviour.  ControlAgent.__init__ calls _build_system_prompt() at instance creation
+# so that a fully loaded runtime always produces the enriched prompt.
+_SYSTEM_PROMPT = _build_system_prompt()
+
+_SKILL_HEADER = "\n\n---\n## Analysis Procedures\n\n"
+_SKILL_SEPARATOR = "\n\n---\n\n"
+
+_PAST_DECISIONS_HEADER = "\n\n---\n## Past Decisions\n\n"
+
+_DOMAIN_KNOWLEDGE_HEADER = "\n\n---\n## Domain Knowledge\n\n"
 
 
 class ControlAgent(AgentBasedSpecialist):

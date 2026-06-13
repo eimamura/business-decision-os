@@ -2,7 +2,12 @@ from __future__ import annotations
 
 import re
 
-from packages.agent.control.control_agent import _SYSTEM_PROMPT
+from packages.agent.control.control_agent import (
+    _INTENT_TOOL_SUBSET,
+    _SYSTEM_PROMPT,
+    render_routing_policy,
+    render_tool_catalog,
+)
 from packages.tools import create_tool_registry
 
 _RESERVED = {"None", "True", "False", "list", "dict", "str", "int", "bool", "float", "set", "tuple"}
@@ -40,3 +45,43 @@ def test_system_prompt_tool_names_all_registered() -> None:
         f"_SYSTEM_PROMPT references tool names not in ToolRegistry: {missing}\n"
         "Either rename the tool in the prompt, or register the tool."
     )
+
+
+def test_render_routing_policy_contains_all_tool_names() -> None:
+    """render_routing_policy must mention every unique tool name from _INTENT_TOOL_SUBSET.
+
+    This guards against a tool being added to the SSoT dict but silently omitted
+    from the generated routing text.
+    """
+    result = render_routing_policy(_INTENT_TOOL_SUBSET)
+
+    all_tools: set[str] = {
+        tool
+        for tools in _INTENT_TOOL_SUBSET.values()
+        for tool in tools
+    }
+
+    missing = [tool for tool in sorted(all_tools) if tool not in result]
+
+    assert missing == [], (
+        f"render_routing_policy output is missing tool names: {missing}\n"
+        "Add the tool name to the rendered policy or update the SSoT dict."
+    )
+
+
+def test_render_tool_catalog_format() -> None:
+    """render_tool_catalog must include each intent key and at least one of its tools.
+
+    This ensures the catalog format is correct and that the intent→tool mapping
+    is faithfully reflected in the rendered string.
+    """
+    catalog = render_tool_catalog(_INTENT_TOOL_SUBSET)
+
+    for intent, tools in _INTENT_TOOL_SUBSET.items():
+        assert intent in catalog, (
+            f"render_tool_catalog output is missing intent key: {intent!r}"
+        )
+        assert any(tool in catalog for tool in tools), (
+            f"render_tool_catalog output contains intent {intent!r} "
+            f"but none of its tools appear: {tools}"
+        )
