@@ -22,11 +22,12 @@ FP-011 hardened). Per-phase detail: `docs/archive/v5/STATE.md`.
 
 ## Active Phase
 
-None — awaiting re-planning (next phase: P101, next task: T-600).
+P101 — Async Job Execution Validation (HITL) + Streaming UX (first post-MVP phase;
+full integration gate mandatory — recovers the P98–P100 skip debt).
 
 ## Active Lease
 
-None
+P101-B-01 (App Builder — job dispatch HITL backend + completion report)
 
 ## Last Completed
 

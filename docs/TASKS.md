@@ -51,3 +51,59 @@ Tagged `v0.1.0` (commit 039c43a); merged to `main`; GitHub release published.
 ## Active Phases
 
 None — awaiting re-planning (next phase: P101).
+
+---
+
+## P101 — Async Job Execution Validation (HITL) + Streaming UX — Not Started
+
+**Goal:** Technical validation before business-domain work: prove that heavy processing
+works asynchronously end-to-end — the agent requests job execution via HITL, the user
+approves, the job runs async while chat stays responsive, execution is monitorable, and a
+completion report arrives IN CHAT when the job finishes. Plus ChatGPT-style incremental
+text streaming. Done when: (1) "Train the forecast model for SKU-001" → approval card →
+approve → job visibly running (status surface) → user can keep chatting → on completion a
+report message appears in the chat thread with the result; (2) assistant replies render
+incrementally (multiple visible paints), not in one burst.
+
+Context: streaming is already chunk-wise at the backend (`_synthesize_response` /
+chat path use `astream` + per-chunk `text_delta`) — the burst rendering must be DIAGNOSED
+(suspects: Next.js dev-proxy SSE buffering, client render batching, ChatOllama chunking)
+before fixing. Job infra exists (InProcessJobRunner, `job_executor.execute_job`,
+jobs router/repo, JobApprovalCard, runtime HITL branch for `job_dispatch`) but
+`job_dispatch` is not LLM-callable since P64/P81 (decision anticipated re-registration),
+and no completion-report-to-chat mechanism exists. Celery stays frozen (P69) —
+InProcessJobRunner is the validation runner; JobRunner protocol unchanged.
+
+**Sign-off note: this phase touches packages/ and apps/api — the full-DSN
+`make test-integration` gate is MANDATORY (recovers the P98–P100 skip debt).**
+
+Dependencies: v0.1.0 baseline (all prior phases Done)
+
+### Batch B-01 — Job dispatch HITL backend + completion report (App Builder) — Not Started
+
+| Task | Description | Status |
+|---|---|---|
+| T-600 | Re-register `job_dispatch` as LLM-callable with HITL safety level (P81 decision anticipated this): registry entry, intent subsets (`decision_support` + judged others), ONE tight system prompt rule (heavy/long-running requests — model training, large simulations — → `request_approval`-gated `job_dispatch`; context budget respected). Verify the existing runtime HITL branch (`runtime.py` ~788) still works with the re-registered tool; `train_forecast` is the validation job type. | Not Started |
+| T-601 | Async execution path: approved dispatch runs via `InProcessJobRunner`/`execute_job` as a background asyncio task (NOT blocking the session turn — chat must stay responsive while the job runs); job row status transitions persisted (`queued/running/completed/failed` per existing jobs schema); exception-safe (failed status + error message, never crash the API). | Not Started |
+| T-602 | Completion report to chat: on job completion/failure, persist an assistant message into the originating session's message history ("Job <type> completed — <result summary>" / failure equivalent) AND push a `job_completed`-family SSE event to the live stream when open (check existing SSE event vocabulary first — reuse `job_*` event types if present; additive schema sync packages/schemas/sse_events.py + apps/web/schemas/sse-events.ts if new). The report must be visible on session reload too (persistence, not just SSE). | Not Started |
+
+Dependencies: none
+
+### Batch B-02 — Job monitoring UI + streaming diagnosis/fix (App Builder) — Not Started
+
+| Task | Description | Status |
+|---|---|---|
+| T-603 | Job monitoring in chat UI: after approval, render a job status element (testid `job-status-card`) showing job type + live status (poll `GET /api/v1/jobs/...` or consume job SSE events — match existing patterns); completion report message renders as a normal assistant message; user can send other messages while the job runs. | Not Started |
+| T-604 | Streaming UX: diagnose where chunk streaming breaks E2E (backend emits per-chunk `text_delta` already — measure: SSE wire timing via curl, Next.js proxy buffering, client render batching in ChatStateContext) and fix the actual bottleneck so replies paint incrementally. Document the root cause in the task note. Acceptance: a typical reply produces ≥5 visually distinct paints spread over the generation time, in the real browser against the real backend. | Not Started |
+
+Dependencies: B-01
+
+### Batch B-03 — Tests + live verification + phase sign-off (Test/Review) — Not Started
+
+| Task | Description | Status |
+|---|---|---|
+| T-605 | Tests: unit — dispatch path (approval-gated, background task scheduling, status transitions, completion-report persistence, failure path); Playwright — mock-SSE specs for job status card + completion message + streaming paint cadence (multiple text_delta renders); integration — real-DB job lifecycle (dispatch→completed row + persisted report message). | Not Started |
+| T-606 | Live verification (gemma4:12b): full scenario — heavy-job request → approval card → approve → status card running → send another chat message mid-run (responsiveness proof) → completion report appears in chat; streaming: visible incremental rendering against the real backend. Evidence: session events, jobs row, report message, timing. | Not Started |
+| T-607 | Phase sign-off (full mandatory set — NO skips this phase): `make test-unit && make test-integration && make test-playwright && make build && make lint && make typecheck` — proof-of-execution per gate. | Not Started |
+
+Dependencies: B-02
