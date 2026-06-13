@@ -8,6 +8,7 @@ from packages.agent.base import AgentBasedSpecialist
 from packages.knowledge import SkillLoader
 from packages.memory.decision import DecisionMemoryStore
 from packages.memory.long_term import LongTermMemoryStore
+from packages.tools.schema_context import get_schema_context
 
 if TYPE_CHECKING:
     from packages.agent.orchestrator import SpecialistResult, SpecialistTask
@@ -15,7 +16,11 @@ if TYPE_CHECKING:
 
 _log = logging.getLogger(__name__)
 
-_SYSTEM_PROMPT = (
+# Template for the system prompt.  The {schema_example} placeholder is replaced
+# at prompt-assembly time via _build_system_prompt().  When schema context is not
+# yet loaded (e.g. at import time before the DB is ready) the placeholder is
+# replaced with an empty string so the prompt degrades gracefully.
+_SYSTEM_PROMPT_TEMPLATE = (
     "You are a cross-domain operational judgment center for supply chain decisions.\n\n"
     "Responsibilities:\n"
     "- Assess stockout risk across demand, inventory, and supply signals\n"
@@ -39,14 +44,8 @@ _SYSTEM_PROMPT = (
     "— DO NOT use `list_stockout_risk` (that tool measures on-hand stockout risk only, "
     "NOT forward supply adequacy). "
     "Call `nl_query` EXACTLY ONCE — do NOT call nl_query a second time after the first result. "
-    "The nl_query must use CORRELATED SUBQUERIES (not JOINs) for each metric, e.g.: "
-    "SELECT m.sku_id, "
-    "(SELECT AVG(d.quantity) FROM demand_history d WHERE d.sku_id=m.sku_id)*30 AS demand_30d, "
-    "(SELECT SUM(i.on_hand) FROM inventory_snapshot i WHERE i.sku_id=m.sku_id) AS on_hand, "
-    "(SELECT COALESCE(SUM(o.quantity),0) FROM supply_orders o WHERE o.sku_id=m.sku_id "
-    "AND o.status IN ('pending','confirmed','in_transit') "
-    "AND o.expected_arrival<=CURRENT_DATE+INTERVAL '30 days') AS incoming "
-    "FROM sku_master m WHERE ... ORDER BY gap DESC. "
+    "The nl_query must use CORRELATED SUBQUERIES (not JOINs) for each metric. "
+    "{schema_example}"
     "After nl_query returns, synthesize immediately into your final answer — do NOT call "
     "any tool again. "
     "`calculate_supply_gap` is for SINGLE-SKU deep-dive (requires sku_id parameter).\n"
@@ -55,15 +54,14 @@ _SYSTEM_PROMPT = (
     "and when-do-we-run-out analysis.\n"
     "4. For shipment-delay or unshipped-order root-cause questions — call "
     "`analyze_shipment_delay_causes` ONCE. "
-    "Do NOT reconstruct causes by hand-joining customer_orders, shipments, "
-    "inventory_snapshot, and supply_orders yourself. "
+    "Do NOT reconstruct causes by hand-joining raw tables yourself. "
     "For a plain listing of unshipped orders (without root-cause analysis) call "
     "`list_unshipped_orders` ONCE.\n"
     "5. For demand-shift questions by customer or region — call `detect_demand_shift` ONCE. "
-    "segment_demand and compare_demand_periods are SKU-axis tools (demand_history); "
+    "segment_demand and compare_demand_periods are SKU-axis tools (consumption series); "
     "they do NOT answer customer/region demand questions. "
-    "Customer/region demand questions (SPEC Q9) are answered from customer_orders data, "
-    "not from demand_history. demand_history is the consumption series for forecast/stockout "
+    "Customer/region demand questions (SPEC Q9) are answered from order transaction data, "
+    "not from the consumption series. The consumption series is for forecast/stockout "
     "tools only.\n"
     "6. For forecast-vs-actual gap questions (SPEC Q5) — why is actual demand deviating "
     "from the forecast, over-forecast/under-forecast analysis — call "
@@ -73,8 +71,7 @@ _SYSTEM_PROMPT = (
     "7. For production plan adjustment questions (SPEC Q7) — which products need production "
     "plan changes, overproduction/underproduction analysis — call "
     "`analyze_production_plan_gap` ONCE. "
-    "Do NOT reconstruct plan-vs-demand gaps by hand-joining production_plan and "
-    "demand_history yourself.\n"
+    "Do NOT reconstruct plan-vs-demand gaps by hand-joining production and demand tables yourself.\n"
     "8. For biggest-constraint or bottleneck-impact questions (SPEC Q10) — "
     "call `identify_binding_constraint` ONCE. "
     "Do NOT separately evaluate capacity, supply-gap, and stockout risks "
@@ -121,6 +118,86 @@ _SYSTEM_PROMPT = (
     "When past decisions are annotated with [user feedback: negative], treat those approaches"
     " as ineffective and avoid repeating them in your current response.\n"
 )
+
+
+def _make_schema_example() -> str:
+    """Build a correlated-subquery SQL example from live schema context.
+
+    Returns an empty string when schema context has not yet been loaded (i.e.
+    before API startup calls load_schema_context()).  This keeps the prompt
+    valid at import time without requiring a DB connection.
+    """
+    schema = get_schema_context()
+    if not schema:
+        return ""
+
+    # Parse the schema context lines to find relevant tables and their columns.
+    # Format emitted by load_schema_context(): "table_name(col1 TYPE, col2 TYPE, ...)"
+    table_cols: dict[str, list[str]] = {}
+    for line in schema.splitlines():
+        if "(" not in line or line.startswith("Join rule") or line.startswith("IMPORTANT"):
+            continue
+        table_name = line[: line.index("(")]
+        cols_part = line[line.index("(") + 1 : line.rindex(")")]
+        col_names = [c.split()[0] for c in cols_part.split(",") if c.strip()]
+        table_cols[table_name] = col_names
+
+    # Identify the SKU master table (expected: sku_master) and correlated tables.
+    sku_table = "sku_master" if "sku_master" in table_cols else None
+    demand_table = "demand_history" if "demand_history" in table_cols else None
+    inventory_table = "inventory_snapshot" if "inventory_snapshot" in table_cols else None
+    supply_table = "supply_orders" if "supply_orders" in table_cols else None
+
+    if not all([sku_table, demand_table, inventory_table, supply_table]):
+        # Required tables not present in current schema context — omit example.
+        return ""
+
+    # Find sku_id column and a numeric metric column in demand table.
+    demand_cols = table_cols[demand_table]  # type: ignore[index]
+    demand_qty_col = next(
+        (c for c in demand_cols if c.lower() in ("quantity", "qty", "demand_qty")),
+        demand_cols[1] if len(demand_cols) > 1 else demand_cols[0],
+    )
+
+    inventory_cols = table_cols[inventory_table]  # type: ignore[index]
+    inventory_qty_col = next(
+        (c for c in inventory_cols if c.lower() in ("on_hand", "quantity", "qty", "stock_qty")),
+        inventory_cols[1] if len(inventory_cols) > 1 else inventory_cols[0],
+    )
+
+    supply_cols = table_cols[supply_table]  # type: ignore[index]
+    supply_qty_col = next(
+        (c for c in supply_cols if c.lower() in ("quantity", "qty", "order_qty")),
+        supply_cols[1] if len(supply_cols) > 1 else supply_cols[0],
+    )
+
+    example = (
+        f"Example: SELECT m.sku_id, "
+        f"(SELECT AVG(d.{demand_qty_col}) FROM {demand_table} d"
+        f" WHERE d.sku_id=m.sku_id)*30 AS demand_30d, "
+        f"(SELECT SUM(i.{inventory_qty_col}) FROM {inventory_table} i"
+        f" WHERE i.sku_id=m.sku_id) AS on_hand, "
+        f"(SELECT COALESCE(SUM(o.{supply_qty_col}),0) FROM {supply_table} o"
+        f" WHERE o.sku_id=m.sku_id"
+        f" AND o.status IN ('pending','confirmed','in_transit')"
+        f" AND o.expected_arrival<=CURRENT_DATE+INTERVAL '30 days') AS incoming"
+        f" FROM {sku_table} m WHERE ... ORDER BY gap DESC. "
+    )
+    return example
+
+
+def _build_system_prompt() -> str:
+    """Assemble the system prompt, injecting a dynamic schema example if available."""
+    schema_example = _make_schema_example()
+    return _SYSTEM_PROMPT_TEMPLATE.format(schema_example=schema_example)
+
+
+# Module-level constant preserved for backward compatibility (e.g. existing unit tests
+# that import _SYSTEM_PROMPT directly).  At import time, get_schema_context() returns ""
+# (DB not yet loaded), so the SQL example is omitted — this is intentional fail-open
+# behaviour.  ControlAgent.__init__ calls _build_system_prompt() at instance creation
+# so that a fully loaded runtime always produces the enriched prompt.
+_SYSTEM_PROMPT = _build_system_prompt()
 
 _SKILL_HEADER = "\n\n---\n## Analysis Procedures\n\n"
 _SKILL_SEPARATOR = "\n\n---\n\n"
@@ -273,6 +350,9 @@ _INTENT_TOOL_SUBSET: dict[str, list[str]] = {
 
 
 class ControlAgent(AgentBasedSpecialist):
+    # Class attribute kept for introspection / unit tests; the instance always
+    # receives the dynamically-built prompt via __init__ so that schema context
+    # loaded after module import is reflected in every new agent instance.
     _SYSTEM_PROMPT: str = _SYSTEM_PROMPT
 
     def __init__(
@@ -288,7 +368,7 @@ class ControlAgent(AgentBasedSpecialist):
             llm_client=llm_client,
             tool_registry=tool_registry,
             sse_queue=sse_queue,
-            system_prompt=self._SYSTEM_PROMPT,
+            system_prompt=_build_system_prompt(),
             model_registry=model_registry,
         )
 

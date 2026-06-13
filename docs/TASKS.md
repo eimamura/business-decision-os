@@ -10,7 +10,7 @@ execution process.
 phase detail archived at `docs/archive/v5/TASKS.md` (P24–P64 in `docs/archive/v4/`,
 P0–P23 in `docs/archive/v3/`).
 
-Numbering continues repository-wide: **next phase = P107, next task = T-633, next defect
+Numbering continues repository-wide: **next phase = P108, next task = T-636, next defect
 = D-018, next failure pattern = FP-017.**
 
 ---
@@ -51,7 +51,41 @@ Tagged `v0.1.0` (commit 039c43a); merged to `main`; GitHub release published.
 
 ## Active Phases
 
-None (next phase: P107)
+P107 — _SYSTEM_PROMPT Maintainability
+
+---
+
+## P107 — _SYSTEM_PROMPT Maintainability — In Progress (2026-06-13)
+
+**Goal:** Remove hardcoded schema strings from `_SYSTEM_PROMPT` in `control_agent.py` (AGENTS.md prohibition) and add a tool-name validation test that fails fast when the prompt references a tool that no longer exists.
+
+Done when: (1) no table/column names appear as string literals in `_SYSTEM_PROMPT`; (2) `tests/unit/test_control_prompt.py` asserts all backtick-quoted tool names in `_SYSTEM_PROMPT` exist in `ToolRegistry`; (3) all mandatory gates exit 0.
+
+Dependencies: none
+
+### Batch B-01 — Remove hardcoded schema strings from _SYSTEM_PROMPT (App Builder) — Done
+
+| Task | Description | Status |
+|---|---|---|
+| T-633 | In `packages/agent/control/control_agent.py`, replace the hardcoded SQL example in `_SYSTEM_PROMPT` (the SELECT block referencing `demand_history`, `inventory_snapshot`, `supply_orders`, `sku_master`, `d.quantity`, `i.on_hand`, `o.quantity`, `m.sku_id`) with a dynamic snippet that calls `get_schema_context()` from `packages/tools/schema_context.py` at prompt-assembly time. The generated snippet must preserve the correlated-subquery pattern instruction, substituting the real table/column names from schema context. If `get_schema_context()` returns empty string (not yet loaded), omit the SQL example entirely (fail-open). Scan the full `_SYSTEM_PROMPT` for any other hardcoded table or column names and remove them. `_SYSTEM_PROMPT` must remain a module-level constant for the class attribute, but its static SQL example portion must be generated dynamically. | Done |
+
+Dependencies: none
+
+### Batch B-02 — Add tool-name validation test (App Builder) — Not Started
+
+| Task | Description | Status |
+|---|---|---|
+| T-634 | Create `tests/unit/test_control_prompt.py`. Test `test_system_prompt_tool_names_all_registered`: import `_SYSTEM_PROMPT` from `packages.agent.control.control_agent`; extract all backtick-quoted identifiers via regex; filter to identifiers that look like tool names (contain at least one underscore, not in the reserved-words set `{"None", "True", "False", "list", "dict", "str", "int", "bool", "float"}`); assert every extracted name exists as a registered tool name in `ToolRegistry` (instantiate `ToolRegistry` with the default empty `ToolContext`; check with `registry.get(name)` or iterate `registry.all()`). No network, no DB. | Not Started |
+
+Dependencies: none
+
+### Batch B-03 — Phase sign-off (Test/Review) — Not Started
+
+| Task | Description | Status |
+|---|---|---|
+| T-635 | Phase sign-off — full mandatory gate set (NO skips): `make test-unit && make test-integration && make test-e2e && make build && make lint && make typecheck`. All six gates must exit 0. | Not Started |
+
+Dependencies: B-01, B-02
 
 ---
 
