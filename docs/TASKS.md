@@ -10,7 +10,7 @@ execution process.
 phase detail archived at `docs/archive/v5/TASKS.md` (P24–P64 in `docs/archive/v4/`,
 P0–P23 in `docs/archive/v3/`).
 
-Numbering continues repository-wide: **next phase = P102, next task = T-608, next defect
+Numbering continues repository-wide: **next phase = P105, next task = T-629, next defect
 = D-018, next failure pattern = FP-017.**
 
 ---
@@ -51,7 +51,45 @@ Tagged `v0.1.0` (commit 039c43a); merged to `main`; GitHub release published.
 
 ## Active Phases
 
-None (next phase: P104)
+P104 — Inline Charts in Chat Messages (Done)
+
+---
+
+## P104 — Inline Charts in Chat Messages — Done (2026-06-13)
+
+**Goal:** When the agent uses tools that return chartable data (stockout risk, inventory status, demand trends), embed a recharts inline chart inside the assistant chat message so users can visually interpret the data without leaving the conversation.
+
+Done when: (1) `extract_chart_specs()` converts tool outputs from known chartable tools into ChartSpec dicts; (2) `sessions.py` appends chart code fences to the assistant reply before persisting; (3) `InlineChart.tsx` renders a bar or line chart from ChartSpec in `AssistantBubble`; (4) all mandatory gates exit 0.
+
+Dependencies: P103 Done
+
+### Batch B-01 — Backend chart extractor + content enrichment (App Builder) — Done
+
+| Task | Description | Status |
+|---|---|---|
+| T-622 | Create `packages/agent/chart_extractor.py`. Implement `extract_chart_specs(agent_results: dict[str, SpecialistResult]) -> list[dict]` that iterates `SpecialistResult.output["tool_results"]` and converts outputs from `list_stockout_risk`, `get_inventory_status`, `analyze_demand_trend`, `get_demand_history` into ChartSpec dicts with keys: `type` (`"bar"` or `"line"`), `title`, `xKey`, `series` (list of `{dataKey, name, color}`), `data` (list of row dicts). Returns `[]` for unknown/non-chartable tools. | Done |
+| T-623 | In `apps/api/routers/sessions.py` `_run_and_signal()`: after `orchestrator.run()` returns a `SessionResponse`, call `extract_chart_specs(response.agent_results)`. If any specs are produced, append `\n\n```chart\n{json.dumps(spec, ensure_ascii=False)}\n```\n` per spec to `reply` before passing to `add_message` and the `done` SSE event. No change to `SessionResponse` schema. | Done |
+
+Dependencies: none
+
+### Batch B-02 — Frontend inline chart renderer (App Builder) — Done
+
+| Task | Description | Status |
+|---|---|---|
+| T-624 | Create `apps/web/components/chat/InlineChart.tsx`. Client Component that accepts a `ChartSpec` JSON string (or parsed object), renders a `ResponsiveContainer` wrapping `BarChart` (type="bar") or `LineChart` (type="line") from recharts. Uses `xKey` for the XAxis dataKey, `series[]` for `Bar`/`Line` elements. Height: 220px. `data-testid="inline-chart"`. Handles parse errors with a null return (no crash). | Done |
+| T-625 | In `apps/web/components/chat/bubbles/AssistantBubble.tsx`, update `markdownComponents.code`: when `language === "chart"`, parse the code content as JSON and render `<InlineChart spec={parsedSpec} />` instead of `DynamicSyntaxHighlighter`. Keep existing behavior for all other languages. | Done |
+
+Dependencies: B-01
+
+### Batch B-03 — Tests + sign-off (Test/Review) — Done
+
+| Task | Description | Status |
+|---|---|---|
+| T-626 | `tests/unit/test_chart_extractor.py` — unit tests for `extract_chart_specs`: (a) `list_stockout_risk` output with items → bar chart spec with correct keys; (b) unknown tool → empty list; (c) empty agent_results → empty list; (d) tool output with empty items list → empty list. | Done |
+| T-627 | `apps/web/components/__tests__/InlineChart.test.tsx` — vitest/jsdom unit tests: (a) valid ChartSpec renders without crashing; (b) invalid JSON string returns null (no error thrown); (c) `data-testid="inline-chart"` is present. Placed in the canonical vitest `__tests__` directory (covered by `**/__tests__/**/*.{test,spec}.{ts,tsx}` glob). | Done |
+| T-628 | Phase sign-off — full mandatory gate set (NO skips): `make test-unit && make test-integration && make test-e2e && make build && make lint && make typecheck`. All six gates exit 0 (2026-06-13). | Done |
+
+Dependencies: B-01, B-02
 
 ---
 
