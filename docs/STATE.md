@@ -22,15 +22,17 @@ FP-011 hardened). Per-phase detail: `docs/archive/v5/STATE.md`.
 
 ## Active Phase
 
-None (next phase: P124)
+P124 — Tailwind CSS v4 Upgrade
+P125 — ControlAgent System Prompt Quality Improvements
 
 ## Active Lease
 
-None
+P124-B-02 (blocked — see Blockers)
+P125-B-01
 
 ## Blockers
 
-None
+P124-B-02 (sign-off): `make test-playwright` ran with dev stack down — 52/53 tests failed with "element not found" (page not served). Not a Tailwind v4 regression: `make build` exits 0 and all other 6 gates pass. Blocked pending `make dev-up` from user.
 
 ## Last Completed
 

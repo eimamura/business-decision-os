@@ -10,8 +10,8 @@ execution process.
 phase detail archived at `docs/archive/v5/TASKS.md` (P24–P64 in `docs/archive/v4/`,
 P0–P23 in `docs/archive/v3/`).
 
-Numbering continues repository-wide: **next phase = P124, next task = T-706, next defect
-= D-018, next failure pattern = FP-017.**
+Numbering continues repository-wide: **next phase = P126, next task = T-718, next defect
+= D-019, next failure pattern = FP-017.**
 
 ---
 
@@ -51,7 +51,67 @@ Tagged `v0.1.0` (commit 039c43a); merged to `main`; GitHub release published.
 
 ## Active Phases
 
-None (next phase: P124)
+P124 — Tailwind CSS v4 Upgrade (in progress)
+P125 — ControlAgent System Prompt Quality Improvements (in progress)
+
+---
+
+## P125 — ControlAgent System Prompt Quality Improvements (2026-06-14)
+
+**Goal:** Apply 5 fixes identified by bdos-judge (completeness=0.48, FAIL) to `packages/agent/control/control_agent.py`: (1) add language instruction to `render_response_format()`; (2) relax the grounding footer "any other tool" wording to permit cost-impact tools post-stockout-list; (3) replace the `{schema_example}` raw placeholder in the supply shortage rule with an explanatory string; (4) integrate `job_dispatch` rule into the `rule_texts` list with sequential numbering; (5) add empty-tool-result fallback instruction to the grounding footer.
+
+Done when: all 5 fixes are applied to `control_agent.py`; `render_response_format()` leads with the language instruction; `job_dispatch` appears as a sequentially-numbered entry in `rule_texts`; `{schema_example}` literal no longer appears in the rule text; grounding footer contains the cost-tool allowance and the empty-result fallback; all existing unit tests pass.
+
+Dependencies: none (independent of P124)
+
+### Batch B-01 — Apply 5 system prompt fixes (App Builder) — Done
+
+| Task | Description | Status |
+|---|---|---|
+| T-712 | Fix 1: In `render_response_format()`, prepend `"Respond in the same language the user used. All four sections (Situation / Root Cause / Recommended Actions / Confidence Level) must be written in that language.\n\n"` before the existing `"## Response Format\n\n"` line. | Done |
+| T-713 | Fix 2: In `render_routing_policy()` grounding_footer, change `"do NOT call \`{stockout_list_tool}\` or any other tool again in the same pass.\n"` to `"do NOT call \`{stockout_list_tool}\` again. You may still call a cost tool (e.g. calculate_stockout_cost_impact) to quantify impact before producing your final answer.\n"`. | Done |
+| T-714 | Fix 3: In `render_routing_policy()` rule_texts supply shortage rule (third rule_texts.append), replace `f"{{schema_example}}\n"` with `"a worked example will appear in the schema context section of each request.\n"`. | Done |
+| T-715 | Fix 4: Remove the standalone `job_dispatch_rule` string variable and the separate string concatenation at the end of `render_routing_policy()`. Instead, add `job_dispatch` as a conditional `rule_texts.append()` (guarded by `"job_dispatch" in all_tools`) immediately before the final `numbered_rules` computation so it receives a sequential number. The `return` statement must then concatenate `numbered_rules` and `grounding_footer` without a separate `job_dispatch_rule` component. | Done |
+| T-716 | Fix 5: Append `"If a tool returns no results or an error, state that explicitly in the Situation section and set Confidence Level to Low — do not invent data."` to the end of the `grounding_footer` string in `render_routing_policy()`. | Done |
+
+Dependencies: none
+
+### Batch B-02 — Sign-off (Test/Review) — Done
+
+| Task | Description | Status |
+|---|---|---|
+| T-717 | Full phase sign-off: `make test-unit`, `make test-integration`, `make test-e2e`, `make build`, `make lint`, `make typecheck`. Report gate name, exit code, and output tail for all six gates. Verify: `render_response_format()` leads with language instruction; `job_dispatch` rule is sequentially numbered in `rule_texts`; `{schema_example}` literal absent from supply shortage rule text; grounding_footer contains cost-tool allowance and empty-result fallback. | Done |
+
+Dependencies: B-01 Done
+
+---
+
+## P124 — Tailwind CSS v4 Upgrade (2026-06-14)
+
+**Goal:** Upgrade `apps/web` from Tailwind CSS v3 (`^3.4.0`) to v4 (`^4.0.0`). Migrate configuration from `tailwind.config.js` to CSS `@theme inline`, replace the PostCSS plugin with `@tailwindcss/postcss`, replace `@tailwind` directives with `@import "tailwindcss"`, and preserve all custom design tokens and class-based dark-mode behavior.
+
+Done when: `tailwindcss` in `package.json` is `^4.0.0`; `@tailwindcss/postcss` is present; `tailwind.config.js` is removed; `globals.css` uses `@import "tailwindcss"` and `@theme inline`; `make build` exits 0; all quality gates pass; no visible UI regressions in Playwright.
+
+Dependencies: P123 Done
+
+### Batch B-01 — Config and CSS migration (App Builder) — Done
+
+| Task | Description | Status |
+|---|---|---|
+| T-707 | Update `apps/web/package.json`: bump `tailwindcss` to `^4.0.0`, add `@tailwindcss/postcss: ^4.0.0` to devDependencies, remove `autoprefixer` (v4 handles vendor prefixes internally), bump `tailwind-merge` to `^3.0.0` (v4-compatible merge logic). Run `npm install --prefix apps/web` to update the lockfile. | Done |
+| T-708 | Update `apps/web/postcss.config.js`: replace `{ plugins: { tailwindcss: {}, autoprefixer: {} } }` with `{ plugins: { "@tailwindcss/postcss": {} } }`. | Done |
+| T-709 | Migrate `apps/web/app/globals.css`: (1) replace the three `@tailwind base/components/utilities` directives with a single `@import "tailwindcss";`; (2) add `@custom-variant dark (&:where(.dark, .dark *));` immediately after the import (replaces `darkMode: "class"` from the old JS config); (3) add an `@theme inline { ... }` block that maps `--font-family-sans` to the Inter var and `--color-{background,foreground,surface,border,muted}` to the corresponding CSS custom properties already defined in `:root`. All existing `:root`, `.dark`, and `body` rules remain unchanged. | Done |
+| T-710 | Delete `apps/web/tailwind.config.js` (its content has been fully migrated into `globals.css` in T-709). Run `make build` and confirm exit 0. If the build fails due to renamed v4 utility classes, identify and fix the affected component files. | Done |
+
+Dependencies: none
+
+### Batch B-02 — Sign-off (Test/Review) — Not Started
+
+| Task | Description | Status |
+|---|---|---|
+| T-711 | Full phase sign-off: `make test-unit`, `make test-integration`, `make test-e2e`, `make build`, `make lint`, `make typecheck`, `make test-playwright`. Report gate name, exit code, and output tail for all seven gates. | Not Started |
+
+Dependencies: B-01 Done
 
 ---
 

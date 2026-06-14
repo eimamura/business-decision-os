@@ -48,6 +48,9 @@ def render_response_format() -> str:
     grounding constraints (rules 11–12) now live in render_routing_policy().
     """
     return (
+        "Respond in the same language the user used. "
+        "All four sections (Situation / Root Cause / Recommended Actions / Confidence Level) "
+        "must be written in that language.\n\n"
         "## Response Format\n\n"
         "Structure every response using the following four sections:\n\n"
         "**Situation:** [summary of what the data shows]\n"
@@ -173,7 +176,7 @@ def render_routing_policy(subset: dict[str, list[str]], routing_hint: str = "") 
         f"The {nl_tool} must use CORRELATED SUBQUERIES (not JOINs) for each metric. "
         f"After {nl_tool} returns, synthesize immediately into your final answer — do NOT call "
         f"any tool again. "
-        f"{{schema_example}}\n"
+        f"a worked example will appear in the schema context section of each request.\n"
         f"`{supply_gap_tool}` is for SINGLE-SKU deep-dive (requires sku_id parameter)."
     )
 
@@ -268,6 +271,23 @@ def render_routing_policy(subset: dict[str, list[str]], routing_hint: str = "") 
         " that are not confirmed by tool results."
     )
 
+    # Rule: job_dispatch — optional (not in lookup or domain_analysis subsets)
+    if "job_dispatch" in all_tools:
+        rule_texts.append(
+            "For heavy or long-running work — call `job_dispatch` "
+            "with the appropriate job_type"
+            " and await human approval before execution begins."
+            " This is MANDATORY; never run these inline.\n"
+            "    Trigger phrases that ALWAYS route to job_dispatch:\n"
+            "    - 'as a background job', 'run in the background', 'notify me when it completes'\n"
+            "    - 'train the forecast model', 'train_forecast'\n"
+            "    - 'run a full ... simulation for all SKUs'\n"
+            "    Job type mapping: train_forecast → job_type='train_forecast';"
+            " inventory simulation → job_type='simulate';"
+            " replenishment optimization → job_type='optimize';"
+            " demand forecast → job_type='forecast'."
+        )
+
     # Sequentially number all rules that survived the guards.
     numbered_rules = "\n".join(f"{i}. {text}" for i, text in enumerate(rule_texts, 1))
 
@@ -280,36 +300,20 @@ def render_routing_policy(subset: dict[str, list[str]], routing_hint: str = "") 
         f"If you have not yet called any tool in this pass, you MUST call the appropriate tool "
         f"before answering — never produce a final answer without tool data. "
         f"After receiving results from `{stockout_list_tool}`, synthesise them immediately"
-        f" into a final answer — do NOT call `{stockout_list_tool}` or any other tool again"
-        f" in the same pass.\n"
+        f" into a final answer — do NOT call `{stockout_list_tool}` again."
+        f" You may still call a cost tool (e.g. calculate_stockout_cost_impact) to quantify"
+        f" impact before producing your final answer.\n"
         f"For exception/delay questions, call `{exceptions_tool}` to surface the full daily"
         f" exception picture in one call."
+        f"\nIf a tool returns no results or an error, state that explicitly in the Situation"
+        f" section and set Confidence Level to Low — do not invent data."
     )
-
-    # Rule: job_dispatch — optional (not in lookup or domain_analysis subsets)
-    job_dispatch_rule = ""
-    if "job_dispatch" in all_tools:
-        job_dispatch_rule = (
-            f"\n{len(rule_texts) + 1}. For heavy or long-running work — call `job_dispatch` "
-            f"with the appropriate job_type"
-            f" and await human approval before execution begins."
-            f" This is MANDATORY; never run these inline.\n"
-            f"    Trigger phrases that ALWAYS route to job_dispatch:\n"
-            f"    - 'as a background job', 'run in the background', 'notify me when it completes'\n"
-            f"    - 'train the forecast model', 'train_forecast'\n"
-            f"    - 'run a full ... simulation for all SKUs'\n"
-            f"    Job type mapping: train_forecast → job_type='train_forecast';"
-            f" inventory simulation → job_type='simulate';"
-            f" replenishment optimization → job_type='optimize';"
-            f" demand forecast → job_type='forecast'.\n"
-        )
 
     return (
         f"{hint_prefix}Tool availability by intent:\n{catalog}\n\n"
         f"Tool usage priority (follow this order):\n"
         f"{numbered_rules}"
         f"{grounding_footer}"
-        f"{job_dispatch_rule}"
     )
 
 

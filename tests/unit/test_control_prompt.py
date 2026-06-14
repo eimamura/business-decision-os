@@ -165,18 +165,22 @@ def test_render_routing_policy_contains_rule_11_for_decision_support() -> None:
     assert "11." in result, "render_routing_policy output is missing Rule 11"
 
 
-def test_render_routing_policy_schema_example_after_synthesis_instruction() -> None:
-    """{schema_example} placeholder must appear after 'do NOT call any tool again'."""
+def test_render_routing_policy_supply_shortage_rule_references_schema_context_section() -> None:
+    """The supply shortage rule must reference the schema context section instead of
+    embedding a raw {schema_example} placeholder.
+
+    Fix 3 (P125-T-714): {schema_example} placeholder was replaced with an explanatory
+    sentence so the rule text is self-contained and human-readable.
+    """
     raw = render_routing_policy(_INTENT_TOOL_SUBSET)
-    synthesis_phrase = "do NOT call any tool again"
-    schema_placeholder = "{schema_example}"
-    assert synthesis_phrase in raw, f"Synthesis instruction not found in routing policy"
-    assert schema_placeholder in raw, f"{{schema_example}} placeholder not found in routing policy"
-    synthesis_pos = raw.index(synthesis_phrase)
-    schema_pos = raw.index(schema_placeholder)
-    assert schema_pos > synthesis_pos, (
-        f"{{schema_example}} appears at position {schema_pos} but synthesis instruction "
-        f"appears at position {synthesis_pos}; schema_example must come AFTER synthesis"
+    assert "schema context section" in raw, (
+        "Supply shortage rule must reference 'schema context section' "
+        "(replacement for the old {schema_example} placeholder)"
+    )
+    # The raw placeholder must no longer appear in rule text
+    assert "{schema_example}" not in raw, (
+        "{schema_example} raw placeholder must not appear in render_routing_policy() output; "
+        "it was replaced with an explanatory string in P125-T-714"
     )
 
 
