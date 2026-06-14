@@ -22,11 +22,11 @@ FP-011 hardened). Per-phase detail: `docs/archive/v5/STATE.md`.
 
 ## Active Phase
 
-P123 — Next.js 15 Upgrade (2026-06-14). B-01: Next.js 14→15 package bump + breaking change fixes. B-02: sign-off.
+None (next phase: P124)
 
 ## Active Lease
 
-P123-B-02 — acquired 2026-06-14
+None
 
 ## Blockers
 
@@ -34,7 +34,9 @@ None
 
 ## Last Completed
 
-P122 — Technical Debt & Security Hardening (2026-06-14). B-01: Alembic migration 0025_jobs_session_cascade.py — jobs.session_id FK re-added with ON DELETE CASCADE (FP-016 residual closed). B-02: npm audit CVE remediation — eslint-config-next 14->15.5.19 (resolves GHSA-5j98-mcp5-4vw2 HIGH glob cmd injection); react-syntax-highlighter 15->16.1.1 (resolves GHSA-x7hr-w5r2-h6wg moderate prismjs DOM clobbering); 5 next@14.x HIGH CVEs and 1 AI SDK moderate CVE accepted with rationale in package.json securityAcceptedCVEs. Post-remediation: 12 vulnerabilities (6 low, 5 moderate, 1 high) down from 18. B-03 sign-off: unit 1431/15 skipped, integration 16/154 skipped, e2e 10 skipped, build OK, lint clean, typecheck 186 files — all exit 0.
+P123 — Next.js 15 Upgrade (2026-06-14). B-01: Next.js 14→15 upgrade — `next@^15.5.19` in apps/web, Route Handler `await params` applied (route.ts), 5 HIGH CVEs resolved. D-018: Client Component 3ファイル (`chat/[sessionId]/page.tsx`, `recommendations/[id]/page.tsx`, `scenarios/[sessionId]/page.tsx`) の `use(params)` 誤適用を修正 — `params: { ... }` 直接参照に戻す。B-02 sign-off: unit 1431/15 skipped, integration 16/154 skipped, e2e 10 skipped, build OK, lint clean, typecheck 186 files, playwright 53/53 — all exit 0.
+
+Previously: P122 — Technical Debt & Security Hardening (2026-06-14). B-01: Alembic migration 0025_jobs_session_cascade.py — jobs.session_id FK re-added with ON DELETE CASCADE (FP-016 residual closed). B-02: npm audit CVE remediation — eslint-config-next 14->15.5.19 (resolves GHSA-5j98-mcp5-4vw2 HIGH glob cmd injection); react-syntax-highlighter 15->16.1.1 (resolves GHSA-x7hr-w5r2-h6wg moderate prismjs DOM clobbering); 5 next@14.x HIGH CVEs and 1 AI SDK moderate CVE accepted with rationale in package.json securityAcceptedCVEs. Post-remediation: 12 vulnerabilities (6 low, 5 moderate, 1 high) down from 18. B-03 sign-off: unit 1431/15 skipped, integration 16/154 skipped, e2e 10 skipped, build OK, lint clean, typecheck 186 files — all exit 0.
 
 Previously: P121 — Harness Defect Fixes (2026-06-13). B-01: Bash tool added to bdos-orchestrator and analyze-failure subagent definitions; ORCHESTRATOR.md Design Improvement Loop gate updated (make test-integration added, make build removed). B-02: analyze-failure and harden-system name slugs corrected; bdos-orchestrator agent description expanded to match SKILL.md. B-03: design-contract-watch.md expanded with FP-013+FP-014 (paths include packages/schemas/**); failure-patterns.md Pattern column translated to English; prevention-policy.md FP-011 lever log clarified with implemented test references. Sign-off: unit 1431/15 skipped, integration 16/154 skipped, e2e 10 skipped, build OK, lint clean, typecheck 185 files — all exit 0.
 

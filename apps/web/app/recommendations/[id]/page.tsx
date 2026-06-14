@@ -1,6 +1,5 @@
 "use client";
 
-import { use } from "react";
 import Link from "next/link";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -9,7 +8,7 @@ import { useRecommendation } from "@/features/recommendations/hooks";
 import type { Recommendation } from "@/features/recommendations/api";
 
 interface RecommendationPageProps {
-  params: Promise<{ id: string }>;
+  params: { id: string };
 }
 
 const RISK_STYLES = {
@@ -19,7 +18,7 @@ const RISK_STYLES = {
 };
 
 export default function RecommendationPage({ params }: RecommendationPageProps): React.ReactElement {
-  const { id } = use(params);
+  const { id } = params;
   const { data: recommendation, isLoading: loading } = useRecommendation(id);
 
   if (loading) {

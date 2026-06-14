@@ -51,7 +51,7 @@ Tagged `v0.1.0` (commit 039c43a); merged to `main`; GitHub release published.
 
 ## Active Phases
 
-None (next phase: P123)
+None (next phase: P124)
 
 ---
 
@@ -72,11 +72,17 @@ Dependencies: P122 Done
 
 Dependencies: none
 
-### Batch B-02 — Sign-off (Test/Review) — Not Started
+### Batch B-02 — Sign-off (Test/Review) — Done
 
 | Task | Description | Status |
 |---|---|---|
-| T-706 (sign-off) | Full phase sign-off: `make test-unit`, `make test-integration`, `make test-e2e`, `make build`, `make lint`, `make typecheck`. Additionally run `make test-playwright` (mandatory for this phase — UI framework upgrade). Report exit codes and output tails for all seven gates. | Not Started |
+| T-706 (sign-off) | Full phase sign-off: `make test-unit`, `make test-integration`, `make test-e2e`, `make build`, `make lint`, `make typecheck`. Additionally run `make test-playwright` (mandatory for this phase — UI framework upgrade). Report exit codes and output tails for all seven gates. | Done |
+
+#### Defect Tasks
+
+| ID | Description | Status |
+|---|---|---|
+| D-018 | `make test-playwright` 53/53 失敗 — Client Component 3ファイルに `use(params)` を誤適用 (Next.js 15 では Client Component の params は Promise でない)。影響ファイル: `apps/web/app/chat/[sessionId]/page.tsx`, `apps/web/app/recommendations/[id]/page.tsx`, `apps/web/app/scenarios/[sessionId]/page.tsx`。修正: `params: Promise<...>` 型定義を `params: { ... }` に戻し `use()` ラップを除去して直接参照に変更。 | Resolved |
 
 Dependencies: B-01
 
