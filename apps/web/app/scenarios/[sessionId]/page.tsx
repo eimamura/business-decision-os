@@ -1,5 +1,6 @@
 "use client";
 
+import { use } from "react";
 import Link from "next/link";
 import {
   RadarChart,
@@ -15,13 +16,13 @@ import { useScenarios } from "@/features/scenarios/hooks";
 import type { Candidate } from "@/features/scenarios/api";
 
 interface ScenarioPageProps {
-  params: { sessionId: string };
+  params: Promise<{ sessionId: string }>;
 }
 
 const COLORS = ["#3b82f6", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6"];
 
 export default function ScenarioPage({ params }: ScenarioPageProps): React.ReactElement {
-  const { sessionId } = params;
+  const { sessionId } = use(params);
   const { data: candidates = [], isLoading: loading } = useScenarios(sessionId);
 
   const radarData = buildRadarData(candidates);

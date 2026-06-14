@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, useCallback } from "react";
+import { use, useEffect, useRef, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { SlidersHorizontal, ChevronDown, Mic, BrainCircuit } from "lucide-react";
 import ExecutionPanel from "@/components/agent/ExecutionPanel";
@@ -16,11 +16,11 @@ import ToolScenarioModal from "@/components/ToolScenarioModal";
 import { useSessionsContext } from "@/app/chat/SessionsContext";
 
 interface ChatPageProps {
-  params: { sessionId: string };
+  params: Promise<{ sessionId: string }>;
 }
 
 export default function ChatPage({ params }: ChatPageProps) {
-  const { sessionId } = params;
+  const { sessionId } = use(params);
   const router = useRouter();
   const { sessions, setSessions, creating, onNewSession, onDelete, onDeleteAll, deleteAllPending } = useSessionsContext();
   const [input, setInput] = useState("");

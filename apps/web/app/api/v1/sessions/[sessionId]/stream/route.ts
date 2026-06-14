@@ -17,11 +17,11 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 interface RouteParams {
-  params: { sessionId: string };
+  params: Promise<{ sessionId: string }>;
 }
 
 export async function GET(req: NextRequest, { params }: RouteParams): Promise<NextResponse | Response> {
-  const { sessionId } = params;
+  const { sessionId } = await params;
   const upstreamUrl = `${API_URL}/api/v1/sessions/${sessionId}/stream`;
 
   // Forward the original request headers (including X-Dev-User auth header).

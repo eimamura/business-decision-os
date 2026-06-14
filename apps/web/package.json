@@ -18,7 +18,7 @@
     "class-variance-authority": "^0.7.0",
     "clsx": "^2.1.0",
     "lucide-react": "^0.400.0",
-    "next": "^14.2.0",
+    "next": "^15.5.16",
     "react": "^18.3.0",
     "react-dom": "^18.3.0",
     "react-hook-form": "^7.52.0",
@@ -53,13 +53,6 @@
   },
   "overrides": {},
   "securityAcceptedCVEs": {
-    "next": {
-      "GHSA-h25m-26qc-wcjf": "next HTTP request deserialization DoS (CVE range >=13.0.0 <15.0.8). Min fix version: next@15.0.8. Deferred: Next.js 14->15 is a breaking-change major bump (async request APIs, runtime changes). Accepted 2026-06-14 (P122-B-02). Risk: self-hosted DoS only; not applicable to local-only MVP deployment.",
-      "GHSA-q4gf-8mx6-v5v3": "next DoS via Server Components (CVE range >=13.0.0 <15.5.15). Min fix version: next@15.5.15. Deferred: Next.js 14->15 breaking major bump required.",
-      "GHSA-8h8q-6873-q5fj": "next DoS via Server Components (CVE range >=13.0.0 <15.5.16). Min fix version: next@15.5.16. Deferred: Next.js 14->15 breaking major bump required.",
-      "GHSA-c4j6-fc7j-m34r": "next SSRF via WebSocket upgrades (CVE range >=13.4.13 <15.5.16). Min fix version: next@15.5.16. Deferred: Next.js 14->15 breaking major bump required.",
-      "GHSA-36qx-fr4f-26g5": "next Middleware/Proxy bypass in Pages Router i18n (CVE range >=12.2.0 <15.5.16). Min fix version: next@15.5.16. Deferred: Next.js 14->15 breaking major bump required. Application does not use i18n Pages Router, reducing actual exposure."
-    },
     "@ai-sdk/provider-utils": {
       "GHSA-866g-f22w-33x8": "Uncontrolled Resource Consumption (moderate). Min fix version: ai@6.0.204 (major SDK bump from ai@3). Deferred: ai@5->6 is a breaking API change; the 'ai' and '@ai-sdk/anthropic' packages are NOT directly imported in source — they are vestigial transitive deps. Risk: low (no direct usage in application code). Accepted 2026-06-14 (P122-B-02)."
     }

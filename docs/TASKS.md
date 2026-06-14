@@ -10,7 +10,7 @@ execution process.
 phase detail archived at `docs/archive/v5/TASKS.md` (P24–P64 in `docs/archive/v4/`,
 P0–P23 in `docs/archive/v3/`).
 
-Numbering continues repository-wide: **next phase = P123, next task = T-704, next defect
+Numbering continues repository-wide: **next phase = P124, next task = T-706, next defect
 = D-018, next failure pattern = FP-017.**
 
 ---
@@ -43,7 +43,7 @@ Tagged `v0.1.0` (commit 039c43a); merged to `main`; GitHub release published.
 | Model capability | gemma4:12b first-pass degeneration on some question classes (recovered via goal-refine + text_reset at ~2× latency); root fix = model upgrade or Anthropic API switch |
 | Continuous quality measurement | **Resolved (P115)** — `make eval` runs all 10 SPEC golden cases; report in `docs/eval-reports/`. |
 | Anthropic cost computation | Tokens recorded, `total_cost_usd` 0.0 (P83 deferral) |
-| npm audit | 12 known vulnerabilities (1 high) in web dependencies — 3 HIGH CVEs resolved (P122-B-02): GHSA-5j98-mcp5-4vw2 (glob cmd injection) fixed via eslint-config-next@15.x upgrade; GHSA-x7hr-w5r2-h6wg (prismjs DOM clobbering, moderate) fixed via react-syntax-highlighter@16.1.1 upgrade. 5 HIGH CVEs in next@14.x accepted (see apps/web/package.json securityAcceptedCVEs): GHSA-h25m-26qc-wcjf, GHSA-q4gf-8mx6-v5v3, GHSA-8h8q-6873-q5fj, GHSA-c4j6-fc7j-m34r, GHSA-36qx-fr4f-26g5 — all require next@15.x (breaking major bump, deferred). 1 moderate AI SDK CVE (GHSA-866g-f22w-33x8) accepted — requires ai@6 (major bump; not directly imported in source). |
+| npm audit | 12 known vulnerabilities (6 low, 6 moderate) in web dependencies — **0 HIGH CVEs** (all 5 next@14.x HIGH CVEs resolved in P123-B-01 via upgrade to next@15.5.19). 3 prior HIGH CVEs resolved in P122-B-02: GHSA-5j98-mcp5-4vw2 (glob cmd injection) and GHSA-x7hr-w5r2-h6wg (prismjs DOM clobbering). Remaining 12 are all low/moderate: 1 moderate AI SDK CVE (GHSA-866g-f22w-33x8) accepted — requires ai@6 (major bump; not directly imported in source; see `apps/web/package.json` `securityAcceptedCVEs`). Other low/moderate findings are transitive postcss and nanoid issues within the ai@3/next bundled packages with no direct exploit surface for this local-only deployment. |
 | SPEC Agent Catalog runtime agents | Deliberately not instantiated; promotion governed by DESIGN.md §Domain Capability Maturity Model |
 | jobs.session_id FK lacks ON DELETE CASCADE | FP-016 residual: repo-layer delete ordering compensates; next migration-touching phase should add the CASCADE (0003 convention) |
 
@@ -52,6 +52,33 @@ Tagged `v0.1.0` (commit 039c43a); merged to `main`; GitHub release published.
 ## Active Phases
 
 None (next phase: P123)
+
+---
+
+## P123 — Next.js 15 Upgrade (2026-06-14)
+
+**Goal:** Upgrade `apps/web` from Next.js 14.x (`^14.2.0`) to 15.x (target `^15.5.16`) to resolve the 5 remaining HIGH CVEs accepted in P122 (GHSA-h25m-26qc-wcjf, GHSA-q4gf-8mx6-v5v3, GHSA-8h8q-6873-q5fj, GHSA-c4j6-fc7j-m34r, GHSA-36qx-fr4f-26g5). Remove the `securityAcceptedCVEs` next@14.x entries from `package.json`. Confirm no regressions via `make build` and `make test-playwright`.
+
+Done when: `next` version in `package.json` is `^15.5.16` or later; `make build` exits 0; `make test-playwright` exits 0; `npm audit` no longer reports the 5 next@14.x HIGH CVEs; `securityAcceptedCVEs` next@14.x block removed from `package.json`.
+
+Dependencies: P122 Done
+
+### Batch B-01 — Next.js 15 package upgrade + breaking change fixes (App Builder) — Done
+
+| Task | Description | Status |
+|---|---|---|
+| T-704 | In `apps/web/package.json`, change `"next": "^14.2.0"` to `"next": "^15.5.16"`. Run `npm install --prefix apps/web` to update the lockfile. Then identify and fix all Next.js 15 breaking changes in `apps/web/src`: (1) `cookies()` and `headers()` imported from `next/headers` are now async — add `await` at every call site; (2) `params` and `searchParams` props in Page/Layout components are now Promises — await them or wrap with `React.use()`; (3) inspect `apps/web/next.config.*` for deprecated options and migrate. Optionally run the official codemod: `cd apps/web && npx @next/codemod@canary upgrade latest --yes`. After all fixes, run `make build` to confirm exit 0. Remove the `securityAcceptedCVEs` section's five next@14.x CVE entries from `package.json` (the `@ai-sdk` moderate entry may remain if still accepted). | Done |
+| T-705 | Run `npm audit --prefix apps/web` after the upgrade and verify the 5 HIGH CVEs (GHSA-h25m-26qc-wcjf, GHSA-q4gf-8mx6-v5v3, GHSA-8h8q-6873-q5fj, GHSA-c4j6-fc7j-m34r, GHSA-36qx-fr4f-26g5) no longer appear. Update the Carry-Over table in `docs/TASKS.md` npm audit row with the new count and status. | Done |
+
+Dependencies: none
+
+### Batch B-02 — Sign-off (Test/Review) — Not Started
+
+| Task | Description | Status |
+|---|---|---|
+| T-706 (sign-off) | Full phase sign-off: `make test-unit`, `make test-integration`, `make test-e2e`, `make build`, `make lint`, `make typecheck`. Additionally run `make test-playwright` (mandatory for this phase — UI framework upgrade). Report exit codes and output tails for all seven gates. | Not Started |
+
+Dependencies: B-01
 
 ---
 

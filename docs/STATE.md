@@ -22,11 +22,11 @@ FP-011 hardened). Per-phase detail: `docs/archive/v5/STATE.md`.
 
 ## Active Phase
 
-None (next phase: P123)
+P123 — Next.js 15 Upgrade (2026-06-14). B-01: Next.js 14→15 package bump + breaking change fixes. B-02: sign-off.
 
 ## Active Lease
 
-None
+P123-B-02 — acquired 2026-06-14
 
 ## Blockers
 
