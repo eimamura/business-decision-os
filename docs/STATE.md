@@ -23,12 +23,10 @@ FP-011 hardened). Per-phase detail: `docs/archive/v5/STATE.md`.
 ## Active Phase
 
 P124 — Tailwind CSS v4 Upgrade
-P125 — ControlAgent System Prompt Quality Improvements
 
 ## Active Lease
 
 P124-B-02 (blocked — see Blockers)
-P125-B-01
 
 ## Blockers
 
@@ -36,7 +34,9 @@ P124-B-02 (sign-off): `make test-playwright` ran with dev stack down — 52/53 t
 
 ## Last Completed
 
-P123 — Next.js 15 Upgrade (2026-06-14). B-01: Next.js 14→15 upgrade — `next@^15.5.19` in apps/web, Route Handler `await params` applied (route.ts), 5 HIGH CVEs resolved. D-018: Client Component 3ファイル (`chat/[sessionId]/page.tsx`, `recommendations/[id]/page.tsx`, `scenarios/[sessionId]/page.tsx`) の `use(params)` 誤適用を修正 — `params: { ... }` 直接参照に戻す。B-02 sign-off: unit 1431/15 skipped, integration 16/154 skipped, e2e 10 skipped, build OK, lint clean, typecheck 186 files, playwright 53/53 — all exit 0.
+P125 — ControlAgent System Prompt Quality Improvements (2026-06-14). B-01: Applied 5 Judge-Report fixes — (1) render_response_format() prepends language instruction; (2) grounding_footer allows cost-impact tool after stockout-list call; (3) supply shortage rule replaced {schema_example} placeholder with explanatory prose; (4) job_dispatch integrated into rule_texts sequential numbering; (5) grounding_footer appends empty-result fallback. B-02 sign-off: unit 1431/15 skipped, integration 16/154 skipped, build OK, lint clean, typecheck 186 files — all exit 0.
+
+Previously: P123 — Next.js 15 Upgrade (2026-06-14). B-01: Next.js 14→15 upgrade — `next@^15.5.19` in apps/web, Route Handler `await params` applied (route.ts), 5 HIGH CVEs resolved. D-018: Client Component 3ファイル (`chat/[sessionId]/page.tsx`, `recommendations/[id]/page.tsx`, `scenarios/[sessionId]/page.tsx`) の `use(params)` 誤適用を修正 — `params: { ... }` 直接参照に戻す。B-02 sign-off: unit 1431/15 skipped, integration 16/154 skipped, e2e 10 skipped, build OK, lint clean, typecheck 186 files, playwright 53/53 — all exit 0.
 
 Previously: P122 — Technical Debt & Security Hardening (2026-06-14). B-01: Alembic migration 0025_jobs_session_cascade.py — jobs.session_id FK re-added with ON DELETE CASCADE (FP-016 residual closed). B-02: npm audit CVE remediation — eslint-config-next 14->15.5.19 (resolves GHSA-5j98-mcp5-4vw2 HIGH glob cmd injection); react-syntax-highlighter 15->16.1.1 (resolves GHSA-x7hr-w5r2-h6wg moderate prismjs DOM clobbering); 5 next@14.x HIGH CVEs and 1 AI SDK moderate CVE accepted with rationale in package.json securityAcceptedCVEs. Post-remediation: 12 vulnerabilities (6 low, 5 moderate, 1 high) down from 18. B-03 sign-off: unit 1431/15 skipped, integration 16/154 skipped, e2e 10 skipped, build OK, lint clean, typecheck 186 files — all exit 0.
 
