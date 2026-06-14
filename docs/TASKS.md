@@ -10,7 +10,7 @@ execution process.
 phase detail archived at `docs/archive/v5/TASKS.md` (P24–P64 in `docs/archive/v4/`,
 P0–P23 in `docs/archive/v3/`).
 
-Numbering continues repository-wide: **next phase = P122, next task = T-700, next defect
+Numbering continues repository-wide: **next phase = P123, next task = T-703, next defect
 = D-018, next failure pattern = FP-017.**
 
 ---
@@ -43,7 +43,7 @@ Tagged `v0.1.0` (commit 039c43a); merged to `main`; GitHub release published.
 | Model capability | gemma4:12b first-pass degeneration on some question classes (recovered via goal-refine + text_reset at ~2× latency); root fix = model upgrade or Anthropic API switch |
 | Continuous quality measurement | **Resolved (P115)** — `make eval` runs all 10 SPEC golden cases; report in `docs/eval-reports/`. |
 | Anthropic cost computation | Tokens recorded, `total_cost_usd` 0.0 (P83 deferral) |
-| npm audit | 18 known vulnerabilities (4 high) in web dependencies, pre-existing |
+| npm audit | 12 known vulnerabilities (1 high) in web dependencies — 3 HIGH CVEs resolved (P122-B-02): GHSA-5j98-mcp5-4vw2 (glob cmd injection) fixed via eslint-config-next@15.x upgrade; GHSA-x7hr-w5r2-h6wg (prismjs DOM clobbering, moderate) fixed via react-syntax-highlighter@16.1.1 upgrade. 5 HIGH CVEs in next@14.x accepted (see apps/web/package.json securityAcceptedCVEs): GHSA-h25m-26qc-wcjf, GHSA-q4gf-8mx6-v5v3, GHSA-8h8q-6873-q5fj, GHSA-c4j6-fc7j-m34r, GHSA-36qx-fr4f-26g5 — all require next@15.x (breaking major bump, deferred). 1 moderate AI SDK CVE (GHSA-866g-f22w-33x8) accepted — requires ai@6 (major bump; not directly imported in source). |
 | SPEC Agent Catalog runtime agents | Deliberately not instantiated; promotion governed by DESIGN.md §Domain Capability Maturity Model |
 | jobs.session_id FK lacks ON DELETE CASCADE | FP-016 residual: repo-layer delete ordering compensates; next migration-touching phase should add the CASCADE (0003 convention) |
 
@@ -51,7 +51,57 @@ Tagged `v0.1.0` (commit 039c43a); merged to `main`; GitHub release published.
 
 ## Active Phases
 
-None (next phase: P121)
+None (next phase: P122)
+
+---
+
+## P122 — Technical Debt & Security Hardening (2026-06-14)
+
+**Goal:** Close two carry-over items: (1) FP-016 residual — add `ON DELETE CASCADE` to the `jobs.session_id` FK via a new Alembic migration, completing the cascade convention from migration 0003; (2) npm audit security — address the 4 high-severity CVEs in `apps/web` dependencies (upgrade where safe; accept with documented rationale where major-version bumps are required).
+
+Note: `total_cost_usd` tracking (P83 deferral) is excluded — it is contingent on Anthropic API integration and remains in Carry-Over.
+
+Done when: migration 0025 applied and `ON DELETE CASCADE` present on `jobs.session_id`; all high-severity npm CVEs either resolved or accepted with rationale; all mandatory quality gates exit 0.
+
+Dependencies: P121 Done
+
+### Batch B-01 — FP-016: jobs.session_id ON DELETE CASCADE migration (App Builder) — Done
+
+| Task | Description | Status |
+|---|---|---|
+| T-700 | Create Alembic migration `0025_jobs_session_cascade.py`. The `jobs` table has a `session_id` FK to `decision_sessions(id)` added in migration 0013 without `ON DELETE CASCADE`, violating the convention established in migration 0003 for all session-child tables. The migration must: (1) DROP the existing `jobs.session_id` FK constraint; (2) re-ADD it as `FOREIGN KEY (session_id) REFERENCES decision_sessions(id) ON DELETE CASCADE`. Include a docstring citing FP-016 as the rationale. After running `make test-integration`, verify that deleting a `decision_sessions` row also deletes its child `jobs` rows (no FK violation). | Done |
+
+Dependencies: none
+
+### Batch B-02 — Web Security: npm audit high-severity CVE remediation (Infra/DevOps) — Done
+
+| Task | Description | Status |
+|---|---|---|
+| T-701 | Remediate high-severity npm vulnerabilities in `apps/web`. Current state: `npm audit` reports 18 vulnerabilities (6 low, 8 moderate, 4 high). The 4 high-severity CVEs are: (1) `glob` 10.2.0–10.4.5 — command injection via `eslint-config-next` (dev-only dependency; upgrade `eslint-config-next` to 15.x safe range or latest compatible version); (2) `next` postcss dependency (upgrade Next.js patch version if a safe path exists within the current major); (3–4) any remaining high CVEs identified by `npm audit --json`. For each CVE: attempt upgrade via `npm update <pkg>` or targeted version pin; if the only fix requires a major breaking-version bump (e.g., Next.js 16, ai@6), document the CVE ID, acceptance rationale, and the minimum version that would fix it in a code comment in `package.json`. Verify no regressions: `make build` and `make test-playwright` must pass. | Done |
+| T-702 | After T-701 resolves or accepts all high-severity CVEs, update the Carry-Over table in `docs/TASKS.md` npm audit row to reflect the new vulnerability count and any accepted CVEs. | Done |
+
+Dependencies: none (parallel with B-01)
+
+<!--
+## Infra Handoff — P122-B-02
+Changed files: apps/web/package.json, apps/web/package-lock.json, docs/TASKS.md
+Smoke checks: SKIPPED (pure dependency + docs task; make build exit 0 confirmed)
+New env vars: none
+CVEs resolved: GHSA-5j98-mcp5-4vw2 (glob cmd injection, HIGH) — eslint-config-next@14->15.5.19
+CVEs resolved: GHSA-x7hr-w5r2-h6wg (prismjs DOM clobbering, moderate) — react-syntax-highlighter@15->16.1.1
+CVEs accepted: GHSA-h25m-26qc-wcjf, GHSA-q4gf-8mx6-v5v3, GHSA-8h8q-6873-q5fj, GHSA-c4j6-fc7j-m34r, GHSA-36qx-fr4f-26g5 (next@14.x HIGH CVEs, fix = next@15 breaking bump)
+CVEs accepted: GHSA-866g-f22w-33x8 (@ai-sdk/provider-utils moderate, fix = ai@6 major bump, not directly imported)
+Post-remediation count: 12 vulnerabilities (6 low, 5 moderate, 1 high) — down from 18 (6 low, 8 moderate, 4 high)
+make build exit code: 0
+-->
+
+### Batch B-03 — Sign-off (Test/Review) — Not Started
+
+| Task | Description | Status |
+|---|---|---|
+| T-703 (sign-off) | Full phase sign-off: `make test-unit`, `make test-integration`, `make test-e2e`, `make build`, `make lint`, `make typecheck`. Report exit codes and output tails for each gate. | Not Started |
+
+Dependencies: B-01, B-02
 
 ---
 
