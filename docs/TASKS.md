@@ -10,7 +10,7 @@ execution process.
 phase detail archived at `docs/archive/v5/TASKS.md` (P24–P64 in `docs/archive/v4/`,
 P0–P23 in `docs/archive/v3/`).
 
-Numbering continues repository-wide: **next phase = P123, next task = T-703, next defect
+Numbering continues repository-wide: **next phase = P123, next task = T-704, next defect
 = D-018, next failure pattern = FP-017.**
 
 ---
@@ -51,7 +51,7 @@ Tagged `v0.1.0` (commit 039c43a); merged to `main`; GitHub release published.
 
 ## Active Phases
 
-None (next phase: P122)
+None (next phase: P123)
 
 ---
 
@@ -95,11 +95,11 @@ Post-remediation count: 12 vulnerabilities (6 low, 5 moderate, 1 high) — down 
 make build exit code: 0
 -->
 
-### Batch B-03 — Sign-off (Test/Review) — Not Started
+### Batch B-03 — Sign-off (Test/Review) — Done
 
 | Task | Description | Status |
 |---|---|---|
-| T-703 (sign-off) | Full phase sign-off: `make test-unit`, `make test-integration`, `make test-e2e`, `make build`, `make lint`, `make typecheck`. Report exit codes and output tails for each gate. | Not Started |
+| T-703 (sign-off) | Full phase sign-off: `make test-unit`, `make test-integration`, `make test-e2e`, `make build`, `make lint`, `make typecheck`. Report exit codes and output tails for each gate. | Done |
 
 Dependencies: B-01, B-02
 
