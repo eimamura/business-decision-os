@@ -10,8 +10,8 @@ execution process.
 phase detail archived at `docs/archive/v5/TASKS.md` (P24–P64 in `docs/archive/v4/`,
 P0–P23 in `docs/archive/v3/`).
 
-Numbering continues repository-wide: **next phase = P126, next task = T-718, next defect
-= D-019, next failure pattern = FP-017.**
+Numbering continues repository-wide: **next phase = P127, next task = T-736, next defect
+= D-019, next failure pattern = FP-018.**
 
 ---
 
@@ -51,10 +51,73 @@ Tagged `v0.1.0` (commit 039c43a); merged to `main`; GitHub release published.
 
 ## Active Phases
 
-P124 — Tailwind CSS v4 Upgrade (in progress)
-P125 — ControlAgent System Prompt Quality Improvements (in progress)
+P124 — Tailwind CSS v4 Upgrade (sign-off blocked: `make test-playwright` needs `make dev-up`)
+P126 — Harness & Docs Integrity Fixes (in progress)
 
 ---
+
+## P126 — Harness & Docs Integrity Fixes (2026-07-06)
+
+**Goal:** Resolve all findings from the 2026-07-06 /harness-engineering audit: stale facts
+copied from code into docs/skills (pre-migration-0009 table names, pre-Makefile ports,
+off-by-one FP IDs), the orphaned-and-contradictory `docs/AGENT_ARCHITECTURE.md`, dead file
+references in AGENTS.md, and duplicated ownership of the sign-off contract, testing
+how-to, and coding-agent roster. One owner per topic; everywhere else links.
+
+Done when: no doc or skill enumerates the SQL allowlist or intent tool subsets by hand;
+`bdos-infra` smoke checks use `make smoke`/configured ports; `.claude/rules/design-contract-watch.md`
+and the failure-watchlist memory use FP IDs that match `docs/failure-patterns.md`;
+`docs/AGENT_ARCHITECTURE.md` is archived; AGENTS.md has no dead references and its
+§References covers TOOLS/RAG/ORCHESTRATOR/SPEC; the mandatory sign-off gate set has a
+single SSoT in `docs/ORCHESTRATOR.md`; all six sign-off gates exit 0.
+
+Dependencies: none (docs/harness only; independent of P124)
+
+### Batch B-01 — Docs layer sync fixes (App Builder) — Done
+
+| Task | Description | Status |
+|---|---|---|
+| T-718 | `docs/TOOLS.md`: replace the stale 6-table `ALLOWED_READ_TABLES` enumeration (§Access Control, ~line 127) and the per-intent tool-name lists (~lines 104–110) with pointers to the code SSoT (`packages/tools/sql_allowlist.py` and `_INTENT_TOOL_SUBSET` in `packages/agent/control/control_agent.py`). Where an illustrative list is kept, mark it "Non-authoritative — the code wins" and correct it to current names. Align the access-control layer description with code (role allowlist + intent subset). | Done |
+| T-719 | `docs/TESTING.md §Local LLM`: replace `qwen2.5-coder:7b` (lines ~73, 81) with the operational model `gemma4:12b`; state that the code default lives in `packages/agent/model_registry.py` and `OLLAMA_MODEL` overrides it. Update `.env.example` `OLLAMA_MODEL` to `gemma4:12b`. | Done |
+| T-720 | `docs/DESIGN.md §Terminology`: replace the stale 4-row coding-agents table (~lines 38–43) with a one-line pointer to `AGENTS.md §Coding Agent Architecture` (which owns the 7-agent roster). Keep the product-agent side of the terminology split intact. | Done |
+| T-721 | `docs/ORCHESTRATOR.md`: (a) §Write Authority — add the "new reference/design files under `docs/` (no overwrites)" allowance so it matches AGENTS.md §Prohibitions and the orchestrator SKILL; (b) add a §Mandatory Gate Set subsection under §Phase Sign-Off Checklist containing the six gates and the sign-off acceptance rule, as the single SSoT (skills will point here in B-02). | Done |
+| T-722 | `docs/failure-patterns.md` FP-002 row: replace "AGENTS.md line 73–74" with a section citation ("AGENTS.md §Prohibitions, schema-hardcoding item"). `docs/prevention-policy.md`: append two policy notes — (1) lever-3 prohibitions must be one sentence + FP-NNN link (incident narrative stays in failure-patterns.md); (2) cross-references must cite sections, never line numbers. | Done |
+| T-723 | Archive `docs/AGENT_ARCHITECTURE.md` → `docs/archive/AGENT_ARCHITECTURE.md` via `git mv`; prepend a banner: stale snapshot (~P67), superseded by `docs/RAG.md` (runtime graph), `docs/TOOLS.md` (tool access), and code; contradicts DECISIONS.md 2026-06-12 on `job_dispatch`. Fix the one inbound link in a current doc if any breaks. | Done |
+
+Dependencies: none
+
+### Batch B-02 — Harness layer fixes (App Builder) — Not Started
+
+| Task | Description | Status |
+|---|---|---|
+| T-724 | `.claude/rules/design-contract-watch.md`: resync FP IDs with `docs/failure-patterns.md` — current "FP-007" entry is FP-008, "FP-008" is FP-009; add the real FP-007 (missing-checkpoint `Command(resume=...)` precondition) to the watch list. | Not Started |
+| T-725 | `.claude/rules/tools-schema.md`: replace the "See AGENTS.md §Prohibited lines 73-74" citation with a section-based citation. | Not Started |
+| T-726 | `.claude/skills/bdos-app-builder/SKILL.md`: replace the stale 6-table allowlist enumeration (line ~116) with a pointer to `packages/tools/sql_allowlist.py`; replace the restated locked public-interface list with a pointer to `docs/DESIGN.md §Public Interfaces` (keep the "changing these requires an ADR" rule inline). | Not Started |
+| T-727 | `.claude/skills/bdos-infra/SKILL.md`: fix the smoke-check commands (lines ~136–138) from hardcoded `:8000`/`:3000` to `make smoke` (or `$(API_PORT)`/`$(WEB_PORT)`); where Docker/Terraform facts duplicate `docs/DESIGN.md §Deployment Design`, prefer pointers. | Not Started |
+| T-728 | `.claude/skills/bdos-orchestrator/SKILL.md`: deduplicate the pre-flight ask-conditions (appears twice — keep §Pre-flight Ambiguity Check, make §User Escalation Criteria/Pre-flight a pointer); replace step 9a's restated commit convention with a pointer to `AGENTS.md §Commit Convention`; delete the hardcoded `Co-Authored-By: Claude Sonnet 4.6` line (harness supplies attribution); replace the inline mandatory gate set + acceptance rule with a pointer to `docs/ORCHESTRATOR.md §Mandatory Gate Set` (added in T-721). | Not Started |
+| T-729 | `.claude/skills/bdos-test-review/SKILL.md`: replace restated make-target table and cassette discipline with pointers to `.claude/rules/testing.md`; fix Quality Gates commands from `uv run pytest tests/unit/` etc. to `make` targets (internal contradiction); point the proof-of-execution format at `docs/ORCHESTRATOR.md §Proof Output`. | Not Started |
+| T-730 | `.claude/skills/harden-system/SKILL.md`: delete the inlined Prevention Priority table (the skill already instructs reading `docs/prevention-policy.md §Prevention Priority`). `.claude/skills/bdos-judge/SKILL.md`: add a Write Authority section scoping writes to `docs/judge-reports/` only (reconciles the agent's Write/Edit grant with the "evaluation only" constraint). | Not Started |
+| T-731 | `AGENTS.md`: remove the dead references to `docs/business_decision_os_spec.md` and `docs/domain.md` from §Language Convention (keep the chat-language rule); add `docs/TOOLS.md`, `docs/RAG.md`, `docs/ORCHESTRATOR.md`, `docs/SPEC.md` to §References with one-line descriptions. | Not Started |
+| T-732 | Testing docs ownership split: slim `.claude/rules/testing.md` to rules only (make-targets-mandatory + tier table + zero-network + pytest/Playwright conventions); move the operational detail (why `npx playwright` fails, port values, `vcr_config` parameter listing, `VCR_RECORD`/`TEST_MODEL` tips) into `docs/TESTING.md`, deleting the duplicated copies so each fact has one owner. | Not Started |
+
+Dependencies: B-01
+
+### Batch B-03 — Orchestrator-owned files + memory (Orchestrator) — Done
+
+| Task | Description | Status |
+|---|---|---|
+| T-733 | `docs/STATE.md`: translate the Japanese sentences in the P123 Last Completed entry to English (AGENTS.md English-only rule). `docs/DECISIONS.md`: append entries for (1) prohibition-format policy (one sentence + FP link), (2) section-citations-only policy, (3) AGENT_ARCHITECTURE.md archived as stale/orphaned. | Done |
+| T-734 | Memory: fix `project_failure_watchlist.md` FP numbering (FP-007→FP-008, FP-008→FP-009; add real FP-007; review FP-017 for inclusion); delete stale `project_phase8_ux.md`; update `MEMORY.md` index accordingly. | Done |
+
+Dependencies: none
+
+### Batch B-04 — Sign-off (Test/Review) — Not Started
+
+| Task | Description | Status |
+|---|---|---|
+| T-735 | Full phase sign-off with the mandatory gate set: `make test-unit`, `make test-integration`, `make test-e2e`, `make build`, `make lint`, `make typecheck`. Report gate, exit_code, output_tail for every gate. | Not Started |
+
+Dependencies: B-01, B-02, B-03
 
 ## P125 — ControlAgent System Prompt Quality Improvements (2026-06-14)
 
