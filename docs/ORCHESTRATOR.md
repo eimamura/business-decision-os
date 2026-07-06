@@ -223,6 +223,37 @@ Run during phase sign-off (after all batches are `Done`, before marking phase `D
 3. No `Defect Task` in the current phase has `Status: Open`.
 4. `docs/STATE.md` Active Lease is `None`.
 
+### Mandatory Gate Set
+
+This subsection is the single source of truth for the mandatory phase sign-off gate set and the
+sign-off acceptance rule. `.claude/skills/bdos-orchestrator/SKILL.md` and other skills point here
+rather than restating these rules.
+
+**Mandatory gate set (non-negotiable — applies to every phase sign-off without exception):**
+
+```
+make test-unit
+make test-integration
+make test-e2e        (or make test-playwright for Playwright-only phases)
+make build
+make lint
+make typecheck
+```
+
+These six commands (or their equivalents) MUST appear as named gate rows in the sign-off report. A
+sign-off that omits `make test-integration` is structurally incomplete regardless of what other gates
+passed.
+
+**Sign-off acceptance rule**: The Orchestrator MUST NOT accept a sign-off unless ALL of the following
+are true:
+
+1. The report contains a gate row for `make test-integration` (exact command name required).
+2. Every gate row includes `gate`, `exit_code`, and `output_tail` fields.
+3. Every gate has `exit_code: 0`.
+
+A report that omits `make test-integration` entirely, or that lists it as "skipped", "not applicable",
+or "N/A", is NOT a valid sign-off — reject it and re-request execution with the full mandatory gate set.
+
 ---
 
 ## Proof Output (for `/goal` evaluator)
@@ -267,6 +298,8 @@ When all batches are Done, also emit:
 | `docs/STATE.md` | **Orchestrator only** | Active lease, last completed batch, validation results, blockers |
 
 Specialists update only their own assigned task rows. They MUST NOT change batch-level status, mark a batch `Blocked`, or write to `docs/STATE.md` — report blockers to Orchestrator instead.
+
+In addition to `docs/TASKS.md` and `docs/STATE.md`, the Orchestrator's writable targets include `docs/DECISIONS.md` (append-only), `docs/adr/` (new files only), and new reference/design files under `docs/` — the Orchestrator must not overwrite existing docs files; edits to existing reference docs are delegated to a specialist. This matches AGENTS.md §Prohibitions and `.claude/skills/bdos-orchestrator/SKILL.md`.
 
 ---
 

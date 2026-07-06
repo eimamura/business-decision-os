@@ -69,16 +69,21 @@ Port 11434 does not conflict with Docker Compose (API: 8002, web: 3002, DB: 5432
 curl -s http://localhost:11434/api/tags | python3 -m json.tool
 
 # First time only: pull the model
-ollama pull qwen2.5-coder:7b
+ollama pull gemma4:12b
 ```
 
 Then set in `.env`:
 
 ```
 LLM_PROVIDER=ollama
+OLLAMA_MODEL=gemma4:12b
 ```
 
-`OLLAMA_BASE_URL` defaults to `http://localhost:11434` and `OLLAMA_MODEL` defaults to `qwen2.5-coder:7b`. See `.env.example` for overrides.
+`OLLAMA_BASE_URL` defaults to `http://localhost:11434`. The code-level fallback for `OLLAMA_MODEL` (used
+only if the env var is unset) lives in `create_model_registry()` in `packages/agent/model_registry.py` — that
+is the SSoT for the default; do not hand-copy the literal here, as it has drifted before. The operational
+model recommended for local dev is `gemma4:12b` (switched 2026-06-07); set `OLLAMA_MODEL=gemma4:12b`
+explicitly rather than relying on the code fallback. See `.env.example` for overrides.
 
 See `.env.example` for the full variable reference.
 

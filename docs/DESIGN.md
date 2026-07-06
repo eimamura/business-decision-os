@@ -35,12 +35,9 @@ When this document says "agent" without qualification, it means a product agent.
 
 Claude Code subagents that **build and maintain** this system. They run inside the Claude Code harness during development and never appear in the production system.
 
-| Term used in AGENTS.md | Role |
-|---|---|
-| `bdos-orchestrator` | Plans phases, decomposes tasks, routes to specialists, updates TASKS.md |
-| `bdos-app-builder` | Writes application code — FastAPI, Python packages, Next.js |
-| `bdos-infra` | Infrastructure, Docker Compose, CI/CD, Makefile |
-| `bdos-test-review` | Writes tests, reviews code, verifies phase checkpoints |
+The current roster (`bdos-orchestrator`, `bdos-app-builder`, `bdos-infra`, `bdos-test-review`,
+`bdos-judge`, and others) is owned by `AGENTS.md` §Coding Agent Architecture — see that section for
+the authoritative, up-to-date list; do not duplicate it here.
 
 When AGENTS.md says "agent" or "subagent", it means a coding agent.
 
