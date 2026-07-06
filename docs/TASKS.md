@@ -43,7 +43,9 @@ Tagged `v0.1.0` (commit 039c43a); merged to `main`; GitHub release published.
 | Model capability | gemma4:12b first-pass degeneration on some question classes (recovered via goal-refine + text_reset at ~2× latency); root fix = model upgrade or Anthropic API switch |
 | Continuous quality measurement | **Resolved (P115)** — `make eval` runs all 10 SPEC golden cases; report in `docs/eval-reports/`. |
 | Anthropic cost computation | Tokens recorded, `total_cost_usd` 0.0 (P83 deferral) |
-| npm audit | 12 known vulnerabilities (6 low, 6 moderate) in web dependencies — **0 HIGH CVEs** (all 5 next@14.x HIGH CVEs resolved in P123-B-01 via upgrade to next@15.5.19). 3 prior HIGH CVEs resolved in P122-B-02: GHSA-5j98-mcp5-4vw2 (glob cmd injection) and GHSA-x7hr-w5r2-h6wg (prismjs DOM clobbering). Remaining 12 are all low/moderate: 1 moderate AI SDK CVE (GHSA-866g-f22w-33x8) accepted — requires ai@6 (major bump; not directly imported in source; see `apps/web/package.json` `securityAcceptedCVEs`). Other low/moderate findings are transitive postcss and nanoid issues within the ai@3/next bundled packages with no direct exploit surface for this local-only deployment. |
+| npm audit | **Update (2026-07-06, P126 sign-off):** `npm audit` now reports 13 vulnerabilities (6 low, 6 moderate, **1 HIGH** — transitive `undici` via next, e.g. GHSA-vmh5-mc38-953g TLS bypass); triage required in the next web-touching phase. Earlier status: 12 known vulnerabilities (6 low, 6 moderate) in web dependencies — **0 HIGH CVEs** (all 5 next@14.x HIGH CVEs resolved in P123-B-01 via upgrade to next@15.5.19). 3 prior HIGH CVEs resolved in P122-B-02: GHSA-5j98-mcp5-4vw2 (glob cmd injection) and GHSA-x7hr-w5r2-h6wg (prismjs DOM clobbering). Remaining 12 are all low/moderate: 1 moderate AI SDK CVE (GHSA-866g-f22w-33x8) accepted — requires ai@6 (major bump; not directly imported in source; see `apps/web/package.json` `securityAcceptedCVEs`). Other low/moderate findings are transitive postcss and nanoid issues within the ai@3/next bundled packages with no direct exploit surface for this local-only deployment. |
+| `docs/DESIGN.md §Deployment Design` does not exist | Dead pointer found in P126: `.claude/skills/bdos-infra/SKILL.md §Inputs` and `docs/ORCHESTRATOR.md §Handoff Rules` reference it. Follow-up: either author the section or repoint both references. |
+| `test_sample_data.py` mutates committed `data/sample/*.csv` | Unit tier calls `generate_sample_data.main()` against the real directory with date-relative values — every `make test-unit` run dirties the tree. Follow-up: redirect the test to a `tmp_path` fixture. (Found at P126 batch check.) |
 | SPEC Agent Catalog runtime agents | Deliberately not instantiated; promotion governed by DESIGN.md §Domain Capability Maturity Model |
 | jobs.session_id FK lacks ON DELETE CASCADE | FP-016 residual: repo-layer delete ordering compensates; next migration-touching phase should add the CASCADE (0003 convention) |
 
@@ -52,11 +54,10 @@ Tagged `v0.1.0` (commit 039c43a); merged to `main`; GitHub release published.
 ## Active Phases
 
 P124 — Tailwind CSS v4 Upgrade (sign-off blocked: `make test-playwright` needs `make dev-up`)
-P126 — Harness & Docs Integrity Fixes (in progress)
 
 ---
 
-## P126 — Harness & Docs Integrity Fixes (2026-07-06)
+## P126 — Harness & Docs Integrity Fixes — Done (2026-07-06)
 
 **Goal:** Resolve all findings from the 2026-07-06 /harness-engineering audit: stale facts
 copied from code into docs/skills (pre-migration-0009 table names, pre-Makefile ports,
@@ -86,19 +87,19 @@ Dependencies: none (docs/harness only; independent of P124)
 
 Dependencies: none
 
-### Batch B-02 — Harness layer fixes (App Builder) — Not Started
+### Batch B-02 — Harness layer fixes (App Builder) — Done
 
 | Task | Description | Status |
 |---|---|---|
-| T-724 | `.claude/rules/design-contract-watch.md`: resync FP IDs with `docs/failure-patterns.md` — current "FP-007" entry is FP-008, "FP-008" is FP-009; add the real FP-007 (missing-checkpoint `Command(resume=...)` precondition) to the watch list. | Not Started |
-| T-725 | `.claude/rules/tools-schema.md`: replace the "See AGENTS.md §Prohibited lines 73-74" citation with a section-based citation. | Not Started |
-| T-726 | `.claude/skills/bdos-app-builder/SKILL.md`: replace the stale 6-table allowlist enumeration (line ~116) with a pointer to `packages/tools/sql_allowlist.py`; replace the restated locked public-interface list with a pointer to `docs/DESIGN.md §Public Interfaces` (keep the "changing these requires an ADR" rule inline). | Not Started |
-| T-727 | `.claude/skills/bdos-infra/SKILL.md`: fix the smoke-check commands (lines ~136–138) from hardcoded `:8000`/`:3000` to `make smoke` (or `$(API_PORT)`/`$(WEB_PORT)`); where Docker/Terraform facts duplicate `docs/DESIGN.md §Deployment Design`, prefer pointers. | Not Started |
-| T-728 | `.claude/skills/bdos-orchestrator/SKILL.md`: deduplicate the pre-flight ask-conditions (appears twice — keep §Pre-flight Ambiguity Check, make §User Escalation Criteria/Pre-flight a pointer); replace step 9a's restated commit convention with a pointer to `AGENTS.md §Commit Convention`; delete the hardcoded `Co-Authored-By: Claude Sonnet 4.6` line (harness supplies attribution); replace the inline mandatory gate set + acceptance rule with a pointer to `docs/ORCHESTRATOR.md §Mandatory Gate Set` (added in T-721). | Not Started |
-| T-729 | `.claude/skills/bdos-test-review/SKILL.md`: replace restated make-target table and cassette discipline with pointers to `.claude/rules/testing.md`; fix Quality Gates commands from `uv run pytest tests/unit/` etc. to `make` targets (internal contradiction); point the proof-of-execution format at `docs/ORCHESTRATOR.md §Proof Output`. | Not Started |
-| T-730 | `.claude/skills/harden-system/SKILL.md`: delete the inlined Prevention Priority table (the skill already instructs reading `docs/prevention-policy.md §Prevention Priority`). `.claude/skills/bdos-judge/SKILL.md`: add a Write Authority section scoping writes to `docs/judge-reports/` only (reconciles the agent's Write/Edit grant with the "evaluation only" constraint). | Not Started |
-| T-731 | `AGENTS.md`: remove the dead references to `docs/business_decision_os_spec.md` and `docs/domain.md` from §Language Convention (keep the chat-language rule); add `docs/TOOLS.md`, `docs/RAG.md`, `docs/ORCHESTRATOR.md`, `docs/SPEC.md` to §References with one-line descriptions. | Not Started |
-| T-732 | Testing docs ownership split: slim `.claude/rules/testing.md` to rules only (make-targets-mandatory + tier table + zero-network + pytest/Playwright conventions); move the operational detail (why `npx playwright` fails, port values, `vcr_config` parameter listing, `VCR_RECORD`/`TEST_MODEL` tips) into `docs/TESTING.md`, deleting the duplicated copies so each fact has one owner. | Not Started |
+| T-724 | `.claude/rules/design-contract-watch.md`: resync FP IDs with `docs/failure-patterns.md` — current "FP-007" entry is FP-008, "FP-008" is FP-009; add the real FP-007 (missing-checkpoint `Command(resume=...)` precondition) to the watch list. | Done |
+| T-725 | `.claude/rules/tools-schema.md`: replace the "See AGENTS.md §Prohibited lines 73-74" citation with a section-based citation. | Done |
+| T-726 | `.claude/skills/bdos-app-builder/SKILL.md`: replace the stale 6-table allowlist enumeration (line ~116) with a pointer to `packages/tools/sql_allowlist.py`; replace the restated locked public-interface list with a pointer to `docs/DESIGN.md §Public Interfaces` (keep the "changing these requires an ADR" rule inline). | Done |
+| T-727 | `.claude/skills/bdos-infra/SKILL.md`: fix the smoke-check commands (lines ~136–138) from hardcoded `:8000`/`:3000` to `make smoke` (or `$(API_PORT)`/`$(WEB_PORT)`); where Docker/Terraform facts duplicate `docs/DESIGN.md §Deployment Design`, prefer pointers. | Done |
+| T-728 | `.claude/skills/bdos-orchestrator/SKILL.md`: deduplicate the pre-flight ask-conditions (appears twice — keep §Pre-flight Ambiguity Check, make §User Escalation Criteria/Pre-flight a pointer); replace step 9a's restated commit convention with a pointer to `AGENTS.md §Commit Convention`; delete the hardcoded `Co-Authored-By: Claude Sonnet 4.6` line (harness supplies attribution); replace the inline mandatory gate set + acceptance rule with a pointer to `docs/ORCHESTRATOR.md §Mandatory Gate Set` (added in T-721). | Done |
+| T-729 | `.claude/skills/bdos-test-review/SKILL.md`: replace restated make-target table and cassette discipline with pointers to `.claude/rules/testing.md`; fix Quality Gates commands from `uv run pytest tests/unit/` etc. to `make` targets (internal contradiction); point the proof-of-execution format at `docs/ORCHESTRATOR.md §Proof Output`. | Done |
+| T-730 | `.claude/skills/harden-system/SKILL.md`: delete the inlined Prevention Priority table (the skill already instructs reading `docs/prevention-policy.md §Prevention Priority`). `.claude/skills/bdos-judge/SKILL.md`: add a Write Authority section scoping writes to `docs/judge-reports/` only (reconciles the agent's Write/Edit grant with the "evaluation only" constraint). | Done |
+| T-731 | `AGENTS.md`: remove the dead references to `docs/business_decision_os_spec.md` and `docs/domain.md` from §Language Convention (keep the chat-language rule); add `docs/TOOLS.md`, `docs/RAG.md`, `docs/ORCHESTRATOR.md`, `docs/SPEC.md` to §References with one-line descriptions. | Done |
+| T-732 | Testing docs ownership split: slim `.claude/rules/testing.md` to rules only (make-targets-mandatory + tier table + zero-network + pytest/Playwright conventions); move the operational detail (why `npx playwright` fails, port values, `vcr_config` parameter listing, `VCR_RECORD`/`TEST_MODEL` tips) into `docs/TESTING.md`, deleting the duplicated copies so each fact has one owner. | Done |
 
 Dependencies: B-01
 
@@ -111,11 +112,11 @@ Dependencies: B-01
 
 Dependencies: none
 
-### Batch B-04 — Sign-off (Test/Review) — Not Started
+### Batch B-04 — Sign-off (Test/Review) — Done
 
 | Task | Description | Status |
 |---|---|---|
-| T-735 | Full phase sign-off with the mandatory gate set: `make test-unit`, `make test-integration`, `make test-e2e`, `make build`, `make lint`, `make typecheck`. Report gate, exit_code, output_tail for every gate. | Not Started |
+| T-735 | Full phase sign-off with the mandatory gate set: `make test-unit`, `make test-integration`, `make test-e2e`, `make build`, `make lint`, `make typecheck`. Report gate, exit_code, output_tail for every gate. | Done |
 
 Dependencies: B-01, B-02, B-03
 

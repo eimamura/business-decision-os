@@ -22,11 +22,11 @@ FP-011 hardened). Per-phase detail: `docs/archive/v5/STATE.md`.
 
 ## Active Phase
 
-P126 — Harness & Docs Integrity Fixes (P124 sign-off remains blocked — see Blockers)
+P124 — Tailwind CSS v4 Upgrade (sign-off blocked — see Blockers)
 
 ## Active Lease
 
-P126-B-02
+None
 
 ## Blockers
 
@@ -34,7 +34,27 @@ P124-B-02 (sign-off): `make test-playwright` ran with dev stack down — 52/53 t
 
 ## Last Completed
 
-P125 — ControlAgent System Prompt Quality Improvements (2026-06-14). B-01: Applied 5 Judge-Report fixes — (1) render_response_format() prepends language instruction; (2) grounding_footer allows cost-impact tool after stockout-list call; (3) supply shortage rule replaced {schema_example} placeholder with explanatory prose; (4) job_dispatch integrated into rule_texts sequential numbering; (5) grounding_footer appends empty-result fallback. B-02 sign-off: unit 1431/15 skipped, integration 16/154 skipped, build OK, lint clean, typecheck 186 files — all exit 0.
+P126 — Harness & Docs Integrity Fixes (2026-07-06). Executed all findings of the
+2026-07-06 /harness-engineering audit. B-01 (docs layer): TOOLS.md stale 6-table
+allowlist and frozen per-intent tool lists replaced with pointers to code SSoT
+(sql_allowlist.py / _INTENT_TOOL_SUBSET); TESTING.md + .env.example Ollama model set to
+gemma4:12b; DESIGN.md coding-agents table replaced with AGENTS.md pointer;
+ORCHESTRATOR.md gained §Mandatory Gate Set (sign-off SSoT) and expanded §Write Authority;
+failure-patterns.md line-number citation fixed; prevention-policy.md policy notes added
+(one-sentence prohibitions + FP link; section-citations-only); AGENT_ARCHITECTURE.md
+archived (orphaned ~P67 snapshot contradicting DECISIONS.md on job_dispatch). B-02
+(harness layer): design-contract-watch.md FP IDs resynced (mislabeled FP-007/008 were
+FP-008/009; real FP-007 added); 6 SKILL.md files deduped to pointers; bdos-infra smoke
+checks fixed to make dev-smoke + configured ports; stale Sonnet 4.6 commit trailer
+removed; AGENTS.md dead references removed and §References completed
+(TOOLS/RAG/ORCHESTRATOR/SPEC); testing rules/docs ownership split. B-03: STATE.md
+English fix, DECISIONS.md policy entries, memory watchlist FP resync + stale memory
+deleted. B-04 sign-off: unit 1431/15 skipped, integration 16/154 skipped, e2e 10
+skipped, build OK, lint clean, typecheck 186 files — all exit 0. New carry-over items:
+npm audit HIGH (undici transitive), DESIGN.md §Deployment Design dead pointer,
+test_sample_data.py CSV mutation side effect.
+
+Previously: P125 — ControlAgent System Prompt Quality Improvements (2026-06-14). B-01: Applied 5 Judge-Report fixes — (1) render_response_format() prepends language instruction; (2) grounding_footer allows cost-impact tool after stockout-list call; (3) supply shortage rule replaced {schema_example} placeholder with explanatory prose; (4) job_dispatch integrated into rule_texts sequential numbering; (5) grounding_footer appends empty-result fallback. B-02 sign-off: unit 1431/15 skipped, integration 16/154 skipped, build OK, lint clean, typecheck 186 files — all exit 0.
 
 Previously: P123 — Next.js 15 Upgrade (2026-06-14). B-01: Next.js 14→15 upgrade — `next@^15.5.19` in apps/web, Route Handler `await params` applied (route.ts), 5 HIGH CVEs resolved. D-018: fixed incorrect `use(params)` application in 3 Client Components (`chat/[sessionId]/page.tsx`, `recommendations/[id]/page.tsx`, `scenarios/[sessionId]/page.tsx`) — reverted to direct `params: { ... }` access.B-02 sign-off: unit 1431/15 skipped, integration 16/154 skipped, e2e 10 skipped, build OK, lint clean, typecheck 186 files, playwright 53/53 — all exit 0.
 
