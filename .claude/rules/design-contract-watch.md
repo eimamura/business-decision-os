@@ -15,12 +15,17 @@ SSoT: `docs/failure-patterns.md`. This file is a non-authoritative reminder — 
 When fixing a defect, do NOT duplicate test-stub infrastructure. If a second stub implementation diverges from the first, schema changes to one will silently break tests against the other.
 **Check:** is there already a stub for this component? Extend it; do not copy it.
 
-## FP-007 — Symmetric session lifecycle teardown (packages/agent/)
+## FP-007 — Resume must verify a checkpoint precondition (packages/agent/)
+
+An API entry point that calls `Command(resume=...)` must first confirm a valid LangGraph checkpoint exists for the session. Silently starting fresh when no checkpoint exists converts a missing-state precondition into a misleading deep crash instead of an early, clear rejection.
+**Check:** before calling `Command(resume=...)`, does the code verify a checkpoint exists for this session and reject early (not deep in the graph) if it does not?
+
+## FP-008 — Symmetric session lifecycle teardown (packages/agent/)
 
 Every state store that is written on session CREATE must be torn down on session DELETE. If you add a new store (in-memory dict, task handle, broadcaster slot), verify that the delete path also removes it.
 **Check:** after adding a store write in session creation, grep for the store reference in the delete handler.
 
-## FP-008 — Blocked-path handling must not share the hard-failure path (packages/agent/)
+## FP-009 — Blocked-path handling must not share the hard-failure path (packages/agent/)
 
 Soft blocks (guardrail verdicts, verifier rejections) must use a distinct code path from hard failures (unhandled exceptions). Reusing `raise`/500-path for soft blocks misreports the block reason and discards the prepared fallback text.
 **Check:** does the blocked condition set its own reason string and reach the soft-fallback branch?

@@ -31,16 +31,6 @@ Structural changes beat rules; tests beat documentation.
 5. **Update `docs/failure-patterns.md`** — set `Lever Applied` to the chosen lever name in the FP-NNN row.
 6. **Append to `docs/prevention-policy.md §Applied Lever Log`** — `FP-NNN | YYYY-MM-DD | <lever> | <one-line description of change made>`.
 
-## Prevention Priority Reference
-
-| Priority | Lever | When to use |
-|---|---|---|
-| 1 | `structural-change` | Mistake is an incorrect value/call that the type system or architecture can block |
-| 2 | `new-test` | Mistake is detectable by automated check but is not currently tested |
-| 3 | `prohibition` | Agent behavioral mistake that can't be structurally prevented |
-| 4 | `claude-md-entry` | Cross-cutting behavioral reminder for always-on context |
-| 5 | `doc-update` | Root cause is spec-ambiguity — the spec itself was missing or wrong |
-
 ## Output Format
 
 ```

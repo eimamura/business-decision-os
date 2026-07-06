@@ -111,32 +111,17 @@ Each Orchestrator turn follows this sequence:
 8. **Run Test/Review** (two modes):
    - **Batch check** (every batch): Spawn `bdos-test-review` for lightweight validation — `uv run pytest tests/unit -q && make lint && make typecheck`. Must pass before marking batch `Done`.
    - **Phase sign-off** (once, when all batches are `Done`): Spawn `bdos-test-review` for full Quality Gates. Phase does not advance until sign-off received. Also run the `docs/ORCHESTRATOR.md §Phase Sign-Off Checklist` (DECISIONS.md promotion scan + open defect check).
-   - **Mandatory gate set (non-negotiable — applies to every phase sign-off without exception):**
-     ```
-     make test-unit
-     make test-integration
-     make test-e2e        (or make test-playwright for Playwright-only phases)
-     make build
-     make lint
-     make typecheck
-     ```
-     These six commands (or their equivalents) MUST appear as named gate rows in the sign-off report. A sign-off that omits `make test-integration` is structurally incomplete regardless of what other gates passed.
-   - **Sign-off acceptance rule**: The Orchestrator MUST NOT accept a sign-off unless ALL of the following are true:
-     1. The report contains a gate row for `make test-integration` (exact command name required).
-     2. Every gate row includes `gate`, `exit_code`, and `output_tail` fields.
-     3. Every gate has `exit_code: 0`.
-     A report that omits `make test-integration` entirely, or that lists it as "skipped", "not applicable", or "N/A", is NOT a valid sign-off — reject it and re-request execution with the full mandatory gate set.
+   - See `docs/ORCHESTRATOR.md §Mandatory Gate Set` for the required six gates and the sign-off acceptance rule (single SSoT).
 9. **Update state**:
    - If checks pass: mark batch `Done` in `docs/TASKS.md`; update `docs/STATE.md` Last Completed; clear Active Lease
    - If blocked: mark batch `Blocked` in `docs/TASKS.md`; increment `Blocked Count`; record blocker in `docs/STATE.md`; clear Active Lease
    - If a quality gate failure persists after the responsible agent's fix attempt, OR if a test/runtime failure is discovered after sign-off was already given: register a Defect Task under the relevant batch in `docs/TASKS.md` — see `docs/ORCHESTRATOR.md §Defect Task Format`. After marking a Defect Task Resolved, immediately invoke `/analyze-failure D-NNN`. The phase cannot advance while any Defect Task is Open.
 9a. **Commit batch changes** (only when checks pass — skip if blocked):
    - `git add` each file that was created or modified in this batch (use `git diff --name-only` + `git ls-files --others --exclude-standard` to enumerate; never use `git add -A`)
-   - Determine the primary scope from the changed paths using the scope table in `AGENTS.md §Commit Convention`
+   - Follow `AGENTS.md §Commit Convention` for scope selection, message format, and push/PR boundary
    - Commit message format: `feat(<scope>): complete <batch-id> — <one-line batch description>`
-   - Include `Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>` trailer
+   - Use the attribution trailer supplied by the harness
    - After phase sign-off (all batches Done): also commit the final `docs/TASKS.md` + `docs/STATE.md` + `docs/DECISIONS.md` updates with message `chore(docs): mark P<nn> Done`
-   - Never `git push`; never `gh pr create` — those are the human's responsibility (see `AGENTS.md §Commit Convention`)
 10. **Emit proof output**: Print evidence items (see Proof Output below)
 
 **Batch granularity rule:**
@@ -281,13 +266,7 @@ A planning session is done when:
 
 ### Pre-flight (before starting — use AskUserQuestion)
 
-Stop and ask before writing any TASKS.md entry when:
-- Acceptance criteria cannot be inferred from the description
-- Requirement touches a public interface but the new signature is unspecified
-- Scope spans multiple unrelated areas with no stated priority
-- A required dependency phase is not `Done`
-
-Ask only what is necessary to start. Max 2–3 questions. Do not ask about implementation details.
+See §Pre-flight Ambiguity Check above for the ask-conditions.
 
 ### Mid-execution (during run loop — stop and escalate to user)
 

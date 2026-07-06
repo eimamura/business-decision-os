@@ -23,9 +23,13 @@ Frontend (Vitest) — always via npm script, not npx directly:
 cd apps/web && npm test
 ```
 
-### Playwright note
+### Why `npx playwright test` fails directly
 
-See `.claude/rules/testing.md §How to Run Tests` for why `npx playwright test` must never be used directly (env vars, module resolution).
+1. `@playwright/test` is installed under `apps/web/node_modules/` but spec files live in
+   `tests/e2e/playwright/` — Node module resolution breaks without `NODE_PATH`.
+2. The Makefile sets `WEB_URL` and `NEXT_PUBLIC_API_URL` to match the configured ports
+   (`WEB_PORT=3002`, `API_PORT=8002`). Skipping the Makefile points Playwright at the
+   wrong ports.
 
 ---
 
@@ -33,6 +37,12 @@ See `.claude/rules/testing.md §How to Run Tests` for why `npx playwright test` 
 
 Integration tests that call the real Anthropic API must use `@pytest.mark.vcr`. Record once,
 replay forever — eliminating API costs and flakiness in CI.
+
+The `vcr_config` fixture in `tests/integration/conftest.py` sets:
+- `cassette_library_dir`: `tests/cassettes/` — committed to the repository
+- `record_mode`: `none` — playback only in CI; use `VCR_RECORD=new` to record locally
+- `match_on`: `["uri", "method", "body"]` — strict matching catches prompt changes
+- `filter_headers`: `["Authorization", "x-api-key"]` — API keys scrubbed before saving
 
 ```python
 @pytest.mark.vcr

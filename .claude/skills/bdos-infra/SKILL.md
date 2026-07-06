@@ -133,9 +133,9 @@ Smoke checks (required before closing any infra task):
 > Before running curl checks, run `docker compose ps`. If no services are `Up`, note "stack not running — smoke checks skipped" in `docs/TASKS.md` and proceed to the remaining checklist items below. Skip conditions apply in CI contexts and pure-file-edit tasks.
 
 ```bash
-curl -s http://localhost:8000/healthz                           # → 200
-curl -s http://localhost:3000/chat | grep -q Decision           # → match
-curl -s -H "X-Dev-User: dev-user" http://localhost:8000/api/v1/sessions
+make dev-smoke                                                   # API healthz on $(API_PORT) (default 8002)
+curl -sf "http://localhost:${WEB_PORT:-3002}/chat" | grep -q Decision
+curl -s -H "X-Dev-User: dev-user" "http://localhost:${API_PORT:-8002}/api/v1/sessions"
 ```
 
 Additional checks:

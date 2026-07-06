@@ -13,4 +13,4 @@ paths:
   in `packages/tools/sql_allowlist.py`. If a migration renames a table, update
   `ALLOWED_READ_TABLES` and any hardcoded SQL in `packages/tools/` in the same task.
 
-See AGENTS.md §Prohibited lines 73-74 for the project-wide prohibition.
+See `AGENTS.md §Prohibitions` (schema-hardcoding items) for the project-wide prohibition.

@@ -127,6 +127,10 @@ Agent commit boundary: `git add` + `git commit` only. Never `git push` or `gh pr
 - ADR triggers, authorship rules, TASKS.md write authority: `.claude/skills/bdos-orchestrator/SKILL.md`
 - Test tiers, cassettes, CI: `.claude/rules/testing.md` (SSoT); operational How-to: `docs/TESTING.md`
 - Failure pattern log and prevention lever policy: `docs/failure-patterns.md`, `docs/prevention-policy.md`
+- Tool contracts and access control: `docs/TOOLS.md`
+- Agent runtime graph and RAG design: `docs/RAG.md`
+- Coding-orchestrator process formats (handoff, gate set, proof output, ADR triggers): `docs/ORCHESTRATOR.md`
+- Product requirements and target-state agent catalog: `docs/SPEC.md`
 
 ## When in Doubt
 
@@ -150,6 +154,6 @@ Coding agent chat messages and narrative responses should match the user's langu
 | Log messages, error messages, metric labels | English |
 | Test names and assertion messages | English |
 
-**Exception:** Existing Japanese reference documents (`docs/business_decision_os_spec.md`, `docs/domain.md`) are preserved as-is. English official docs supersede them on conflict. Coding agent chat and narrative responses may use Japanese only when responding to Japanese user messages.
+**Exception:** Coding agent chat and narrative responses may use Japanese only when responding to Japanese user messages.
 
 This convention is enforced at code review. PRs containing non-English identifiers, log messages, documentation, or UI strings will be returned for correction.

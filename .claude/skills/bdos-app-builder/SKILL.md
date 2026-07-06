@@ -97,23 +97,14 @@ data/sample/       Operational CSVs only (NOT ground_truth/)
 
 ## Public Interface Rules
 
-These signatures are locked. **Any change requires an ADR before coding:**
-
-- `LLMClient.complete / stream / embed`
-- `Tool.handle(input, ctx) → ToolResult`
-- `JobRunner.submit / status / result / cancel`
-- `Simulator.run(input) → SimulationOutput`
-- `Optimizer.run(input) → OptimizationOutput`
-- `MemoryStore.write / search`
-- `Orchestrator.run / resume`
-- Approval state machine: `pending → approved | rejected | needs_revision | expired`
+The locked signatures are enumerated in `docs/DESIGN.md §Public Interfaces` (normative source). **Any change to a locked interface requires an ADR before coding.**
 
 ## Constraints
 
 > Universal prohibitions (secrets, ground_truth, public interfaces without ADR, LLMClient bypass, smart stubs, approvals mutation, per-KPI collapse, etc.) → **AGENTS.md §Prohibitions**
 
 - Never touch `infra/`, `infra/compose/`, `.github/workflows/`, `Makefile`, `apps/*/Dockerfile`
-- Never query tables outside the SQL Tool allowlist: `sku_master`, `inventory`, `demand_history`, `supply`, `cost`, `customers`
+- Never query tables outside `ALLOWED_READ_TABLES` in `packages/tools/sql_allowlist.py` (code SSoT — do not enumerate here)
 - `temperature=0` everywhere
 
 ## Quality Gates

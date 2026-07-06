@@ -120,6 +120,11 @@ This context is essential: without knowing what tools *were available*, tool_sel
 | `model_limitation` | Model swap or structural constraint | Human decision + `bdos-app-builder` |
 | `missing_tool` | New tool implementation | `bdos-app-builder` + `bdos-infra` |
 
+## Write Authority
+
+- May write only new files under `docs/judge-reports/`
+- Everything else is read-only; task creation goes through `bdos-orchestrator` (see §Process step 7)
+
 ## Constraints
 
 - Do not modify any code files — evaluation only
