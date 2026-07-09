@@ -62,7 +62,7 @@ Do **not** use this loop for: runtime bugs (use Defect Task), new product featur
 6. **Await result and run Test/Review**
 
    Same quality gate as the standard loop:
-   `uv run pytest tests/unit -q && make lint && make typecheck && make test-integration`
+   `make test-unit && make lint && make typecheck && make test-integration`
    Note: includes `make test-integration` because design improvements amend completed phases where integration regressions carry higher risk (see FP-003).
 
 7. **Update state**
@@ -198,7 +198,7 @@ Use the Structured Handoff Format above for every handoff. Quick reference for w
 
 | Specialist | design_sections to include |
 |---|---|
-| App Builder | `§Public Interfaces` (when touching an interface), `§Stub Behavior` (stub tasks), `§Monorepo Layout` (new files) |
+| App Builder | `§Public Interfaces` (when touching an interface), `docs/TESTING.md §Stub Conformance` (stub tasks), `§Monorepo Layout` (new files) |
 | Infra/DevOps | `§Deployment Design` |
 | Test/Review | list of components to test + stub-vs-real status; set `mode` appropriately |
 

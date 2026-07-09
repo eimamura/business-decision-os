@@ -29,7 +29,7 @@ Implement application code: FastAPI backend, Next.js frontend, and all Python pa
 
 - Task batch from the Orchestrator (task IDs, phase scope, relevant SKILL sections)
 - `docs/DESIGN.md §Public Interfaces` — normative signatures to implement against
-- `docs/DESIGN.md §Stub Behavior` — Day-1 stub contracts
+- `docs/TESTING.md §Stub Conformance` — Day-1 stub contracts
 
 ## Outputs
 
@@ -66,9 +66,9 @@ Implement application code: FastAPI backend, Next.js frontend, and all Python pa
 | Task type | Load |
 |---|---|
 | Implementing or changing any public interface | `docs/DESIGN.md §Public Interfaces` — normative signatures; never change without ADR |
-| Implementing or replacing any stub | `docs/DESIGN.md §Stub Behavior` — Day-1 stub contracts |
+| Implementing or replacing any stub | `docs/TESTING.md §Stub Conformance` — Day-1 stub contracts |
 | Implementing or changing any tool | `docs/TOOLS.md` — tool specs, failure handling, audit payload |
-| Touching layer boundaries (agent ↔ tool ↔ persistence) | `docs/DESIGN.md §Architecture Constraints` — MUST/MUST NOT rules per layer |
+| Touching layer boundaries (agent ↔ tool ↔ persistence) | each component's `### Constraints` subsection in `docs/DESIGN.md` — MUST/MUST NOT rules per layer |
 | Changing any public interface | also load `docs/DESIGN.md §Architecture Constraints — Cross-cutting` and `docs/adr/` |
 | Writing or modifying any test | `.claude/rules/testing.md` — test tiers, naming conventions, zero-network rule |
 

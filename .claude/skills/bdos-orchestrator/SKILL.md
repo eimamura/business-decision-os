@@ -109,7 +109,7 @@ Each Orchestrator turn follows this sequence:
 6. **Scoped handoff**: use the structured format in `docs/ORCHESTRATOR.md §Structured Handoff Format`
 7. **Await specialist result**: Receive completion report or structured blocker
 8. **Run Test/Review** (two modes):
-   - **Batch check** (every batch): Spawn `bdos-test-review` for lightweight validation — `uv run pytest tests/unit -q && make lint && make typecheck`. Must pass before marking batch `Done`.
+   - **Batch check** (every batch): Spawn `bdos-test-review` for lightweight validation — `make test-unit && make lint && make typecheck`. Must pass before marking batch `Done`.
    - **Phase sign-off** (once, when all batches are `Done`): Spawn `bdos-test-review` for full Quality Gates. Phase does not advance until sign-off received. Also run the `docs/ORCHESTRATOR.md §Phase Sign-Off Checklist` (DECISIONS.md promotion scan + open defect check).
    - See `docs/ORCHESTRATOR.md §Mandatory Gate Set` for the required six gates and the sign-off acceptance rule (single SSoT).
 9. **Update state**:

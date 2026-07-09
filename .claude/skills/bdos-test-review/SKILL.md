@@ -29,7 +29,7 @@ Own the test suite, vcrpy cassettes, and code review. Assert schema conformance 
 
 - Task batch from the Orchestrator (test task IDs, phase scope)
 - Code changes from App Builder or Infra/DevOps (via git diff or file list)
-- `docs/DESIGN.md §Stub Behavior` — what each stub must output
+- `docs/TESTING.md §Stub Conformance` — what each stub must output
 - `docs/DESIGN.md §Public Interfaces` — contracts tests must enforce
 - `docs/TESTING.md` — tier definitions, cassette discipline, CI behavior
 
@@ -44,7 +44,7 @@ Own the test suite, vcrpy cassettes, and code review. Assert schema conformance 
 ## Process
 
 **Invocation mode** (specified by Orchestrator in the handoff):
-- **Batch check**: lightweight — run `uv run pytest tests/unit -q && make lint && make typecheck` only, then report pass/fail to Orchestrator. Stop here.
+- **Batch check**: lightweight — run `make test-unit && make lint && make typecheck` only, then report pass/fail to Orchestrator. Stop here.
 - **Phase sign-off**: full — run all Quality Gates (see §Quality Gates) and report each gate individually.
 
 1. Read assigned test tasks in `docs/TASKS.md`
@@ -60,7 +60,7 @@ Own the test suite, vcrpy cassettes, and code review. Assert schema conformance 
 Always read:
 1. `AGENTS.md` — working rules, prohibitions, commit discipline
 2. `docs/TESTING.md` — tier definitions, cassette discipline, CI behavior
-3. `docs/DESIGN.md §Stub Behavior` — what stubs must output (schema, not accuracy)
+3. `docs/TESTING.md §Stub Conformance` — what stubs must output (schema, not accuracy)
 4. `docs/DESIGN.md §Public Interfaces` — what contracts tests must enforce
 5. `docs/TASKS.md` — current test tasks
 
@@ -68,7 +68,7 @@ Read when relevant:
 
 | Task type | Also read |
 |---|---|
-| Code review across layer boundaries | `docs/DESIGN.md §Architecture Constraints` — MUST/MUST NOT rules per layer |
+| Code review across layer boundaries | each component's `### Constraints` subsection in `docs/DESIGN.md` — MUST/MUST NOT rules per layer |
 
 ## Tool Usage Rules
 

@@ -134,7 +134,7 @@ Agent commit boundary: `git add` + `git commit` only. Never `git push` or `gh pr
 
 ## When in Doubt
 
-- Read `docs/DESIGN.md` §Public Interfaces and §Phase Progression first.
+- Read `docs/DESIGN.md` §Public Interfaces first.
 - If a decision conflicts with current code, the code is the runtime truth; `docs/DECISIONS.md` and ADRs are the design truth. File an ADR before changing either.
 - Ask the user before any irreversible action: destructive git operations, schema migrations that drop data, API contract changes, public repo settings.
 
