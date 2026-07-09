@@ -27,7 +27,7 @@ P124 — Tailwind CSS v4 Upgrade (sign-off blocked — see Blockers)
 
 ## Active Lease
 
-None
+P127-B-05
 
 ## Blockers
 
@@ -35,7 +35,13 @@ P124-B-02 (sign-off): `make test-playwright` ran with dev stack down — 52/53 t
 
 ## Last Completed
 
-P127 (in progress) — batches B-01 + B-02 Done (2026-07-09). B-01: dead-reference
+P127 (in progress) — batches B-01–B-04 Done (2026-07-09). B-03: forbidden-write
+set canonicalized to five directories (SKILL HARD STOP = canonical statement;
+ORCHESTRATOR.md §Write Authority = SSoT; AGENTS.md reduced to summary + pointer);
+Defect Task trigger conditions SSoT-declared in ORCHESTRATOR.md §Defect Task Format.
+B-04: STATE.md duplicate ## Blockers merged; TASKS.md duplicate P116 heading merged
+and stale Not Started rows under Done phases reconciled (P125-B-02, P110-B-03,
+P108 T-638, P119 B-02–B-05); DECISIONS.md P127 entry appended. B-01: dead-reference
 repointing (§Stub Behavior → TESTING.md §Stub Conformance ×5 sites; §Phase Progression
 removed from AGENTS.md; per-layer §Architecture Constraints references fixed) + unit
 gate normalized to `make test-unit` in orchestrator SKILL step 8, ORCHESTRATOR.md
@@ -136,7 +142,3 @@ Previously:
 v0.1.0 release closure (2026-06-12): P96–P100 MVP hardening programme Done; judge
 campaign re-evaluation flipped Q1/Q6/Q8 to PASS (final 10/10); tag v0.1.0 created,
 fast-forward merged to main (443 commits, SHAs preserved), GitHub release published.
-
-## Blockers
-
-None

@@ -99,21 +99,21 @@ Dependencies: none
 
 Dependencies: none
 
-### Batch B-03 — Write boundary & Defect Task SSoT (App Builder)
+### Batch B-03 — Write boundary & Defect Task SSoT (App Builder) — Done
 
 | Task | Description | Status |
 |---|---|---|
-| T-743 | Canonicalize the Orchestrator forbidden-write set as `packages/`, `apps/`, `tests/`, `infra/`, `.github/` in the SKILL HARD STOP block; make SKILL §Non-Responsibilities (currently omits `tests/`), §Tool Usage Rules, and `AGENTS.md §Prohibitions` (currently omits `.github/`) state the identical set or point to the HARD STOP. | Not Started |
-| T-744 | `docs/ORCHESTRATOR.md §Defect Task Format`: add an SSoT self-declaration (mirroring §Mandatory Gate Set); reduce the trigger-condition paraphrases in `bdos-orchestrator/SKILL.md` step 9 and `AGENTS.md §Prohibitions` to one sentence + pointer each. | Not Started |
+| T-743 | Canonicalize the Orchestrator forbidden-write set as `packages/`, `apps/`, `tests/`, `infra/`, `.github/` in the SKILL HARD STOP block; make SKILL §Non-Responsibilities (currently omits `tests/`), §Tool Usage Rules, and `AGENTS.md §Prohibitions` (currently omits `.github/`) state the identical set or point to the HARD STOP. | Done |
+| T-744 | `docs/ORCHESTRATOR.md §Defect Task Format`: add an SSoT self-declaration (mirroring §Mandatory Gate Set); reduce the trigger-condition paraphrases in `bdos-orchestrator/SKILL.md` step 9 and `AGENTS.md §Prohibitions` to one sentence + pointer each. | Done |
 
 Dependencies: B-01 (same files: AGENTS.md, orchestrator SKILL, ORCHESTRATOR.md)
 
-### Batch B-04 — Orchestrator-owned state reconciliation (Orchestrator)
+### Batch B-04 — Orchestrator-owned state reconciliation (Orchestrator) — Done
 
 | Task | Description | Status |
 |---|---|---|
-| T-745 | `docs/STATE.md`: merge the two `## Blockers` sections into one (P124 blocker retained; delete the trailing contradictory `None` section); keep Active Phase accurate for P127/P124. | Not Started |
-| T-746 | `docs/TASKS.md`: merge the duplicate P116 heading (lean stub near L333 vs Done section near L968) into one; reconcile stale `Not Started` batch rows under Done phases (P110 B-03, P119 B-02–B-05) with STATE completion evidence. Append a DECISIONS.md entry for the canonical forbidden-write set. | Not Started |
+| T-745 | `docs/STATE.md`: merge the two `## Blockers` sections into one (P124 blocker retained; delete the trailing contradictory `None` section); keep Active Phase accurate for P127/P124. | Done |
+| T-746 | `docs/TASKS.md`: merge the duplicate P116 heading (lean stub near L333 vs Done section near L968) into one; reconcile stale `Not Started` batch rows under Done phases (P110 B-03, P119 B-02–B-05) with STATE completion evidence. Append a DECISIONS.md entry for the canonical forbidden-write set. | Done |
 
 Dependencies: none
 
@@ -188,7 +188,7 @@ Dependencies: none
 
 Dependencies: B-01, B-02, B-03
 
-## P125 — ControlAgent System Prompt Quality Improvements (2026-06-14)
+## P125 — ControlAgent System Prompt Quality Improvements — Done (2026-06-14)
 
 **Goal:** Apply 5 fixes identified by bdos-judge (completeness=0.48, FAIL) to `packages/agent/control/control_agent.py`: (1) add language instruction to `render_response_format()`; (2) relax the grounding footer "any other tool" wording to permit cost-impact tools post-stockout-list; (3) replace the `{schema_example}` raw placeholder in the supply shortage rule with an explanatory string; (4) integrate `job_dispatch` rule into the `rule_texts` list with sequential numbering; (5) add empty-tool-result fallback instruction to the grounding footer.
 
@@ -237,11 +237,11 @@ Dependencies: P123 Done
 
 Dependencies: none
 
-### Batch B-02 — Sign-off (Test/Review) — Not Started
+### Batch B-02 — Sign-off (Test/Review) — Done
 
 | Task | Description | Status |
 |---|---|---|
-| T-711 | Full phase sign-off: `make test-unit`, `make test-integration`, `make test-e2e`, `make build`, `make lint`, `make typecheck`, `make test-playwright`. Report gate name, exit code, and output tail for all seven gates. | Not Started |
+| T-711 | Full phase sign-off: `make test-unit`, `make test-integration`, `make test-e2e`, `make build`, `make lint`, `make typecheck`, `make test-playwright`. Report gate name, exit code, and output tail for all seven gates. | Done |
 
 Dependencies: B-01 Done
 
@@ -398,7 +398,7 @@ Dependencies: none
 
 ---
 
-## P116 — Context Engineering Pipeline: Bug Fixes & Field Activation
+## P116 — Context Engineering Pipeline: Bug Fixes & Field Activation — Done (2026-06-13)
 
 **Goal:** Fix 7 identified bugs and gaps in the ContextBuilder → ContextPack → ControlAgent pipeline so that: (1) per-request system prompt rebuild actually reaches the LLM, (2) `prohibited_tools` filters the model's actual tool list, (3) context trace logging writes in production, (4) `ContextPack.routing_hint` and `skill_keys` are consumed, (5) routing rule prose omits rules for absent tools, (6) keyword classifier covers common paraphrases, (7) past-decisions search uses semantic query.
 
@@ -645,7 +645,7 @@ Dependencies: none
 
 Dependencies: B-01
 
-### Batch B-03 — Fix #6: housekeeping (App Builder) — Not Started
+### Batch B-03 — Fix #6: housekeeping (App Builder) — Done
 
 | Task | Description | Status |
 |---|---|---|
@@ -718,7 +718,7 @@ Dependencies: none
 
 | Task | Description | Status |
 |---|---|---|
-| T-638 | In `tests/unit/test_control_prompt.py`, add `test_render_routing_policy_contains_all_tool_names`: call `render_routing_policy(_INTENT_TOOL_SUBSET)` and assert that every tool name present in `_INTENT_TOOL_SUBSET` values appears in the rendered output string. Add `test_render_tool_catalog_format`: call `render_tool_catalog(_INTENT_TOOL_SUBSET)` and assert each intent key appears as a section header and at least one associated tool name appears under it. Both tests: no network, no DB. | Not Started |
+| T-638 | In `tests/unit/test_control_prompt.py`, add `test_render_routing_policy_contains_all_tool_names`: call `render_routing_policy(_INTENT_TOOL_SUBSET)` and assert that every tool name present in `_INTENT_TOOL_SUBSET` values appears in the rendered output string. Add `test_render_tool_catalog_format`: call `render_tool_catalog(_INTENT_TOOL_SUBSET)` and assert each intent key appears as a section header and at least one associated tool name appears under it. Both tests: no network, no DB. | Done |
 
 Dependencies: B-01
 
@@ -1033,12 +1033,6 @@ Dependencies: B-02
 
 ---
 
-## P116 — Context Engineering Pipeline: Bug Fixes & Field Activation — Done (2026-06-13)
-
-See STATE.md for detail. T-666–T-674 all Done.
-
----
-
 ## P117 — RAG Documentation & Schema Context Refactor — Done (2026-06-13)
 
 ### Batch B-01 — RAG.md documentation (App Builder) — Done
@@ -1102,7 +1096,7 @@ Dependencies: P118 Done
 
 Dependencies: none
 
-### Batch B-02 — Dead parameter removal in _build_system_prompt (App Builder) — Not Started
+### Batch B-02 — Dead parameter removal in _build_system_prompt (App Builder) — Done
 
 | Task | Description | Status |
 |---|---|---|
@@ -1110,7 +1104,7 @@ Dependencies: none
 
 Dependencies: none
 
-### Batch B-03 — Process doc improvements: DECISIONS.md scan + Orchestrator write boundary (App Builder) — Not Started
+### Batch B-03 — Process doc improvements: DECISIONS.md scan + Orchestrator write boundary (App Builder) — Done
 
 | Task | Description | Status |
 |---|---|---|
@@ -1119,7 +1113,7 @@ Dependencies: none
 
 Dependencies: none
 
-### Batch B-04 — CI: add integration test gate (Infra) — Not Started
+### Batch B-04 — CI: add integration test gate (Infra) — Done
 
 | Task | Description | Status |
 |---|---|---|
@@ -1127,10 +1121,10 @@ Dependencies: none
 
 Dependencies: none
 
-### Batch B-05 — Sign-off (Test/Review) — Not Started
+### Batch B-05 — Sign-off (Test/Review) — Done
 
 | Task | Description | Status |
 |---|---|---|
-| T-686 | Full phase sign-off: `make test-unit`, `make test-integration`, `make test-e2e`, `make build`, `make lint`, `make typecheck`. Report exit codes and output tails. | Not Started |
+| T-686 | Full phase sign-off: `make test-unit`, `make test-integration`, `make test-e2e`, `make build`, `make lint`, `make typecheck`. Report exit codes and output tails. | Done |
 
 Dependencies: B-02, B-03, B-04
