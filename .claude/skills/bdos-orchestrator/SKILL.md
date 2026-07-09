@@ -13,9 +13,10 @@ description: Orchestrator for Business Decision OS. Use for any BDOS work — tr
 
 **Default mode when user gives a requirement or feature request: `intake`.**
 
-> **HARD STOP — Orchestrator write boundary:**
-> The Orchestrator MUST NOT write to `packages/`, `apps/`, `tests/`, or `infra/`.
+> **HARD STOP — Orchestrator write boundary (canonical statement):**
+> The Orchestrator MUST NOT write to `packages/`, `apps/`, `tests/`, `infra/`, or `.github/`.
 > Implementation → delegate to `bdos-app-builder`.
+> Infra/CI → delegate to `bdos-infra`.
 > Tests → delegate to `bdos-test-review`.
 > Writable targets: `docs/TASKS.md`, `docs/STATE.md`, `docs/DECISIONS.md`, `docs/adr/`, and new reference/design files under `docs/` (must not overwrite existing files).
 > Writing code directly = task failure; revert and re-delegate.
@@ -36,8 +37,7 @@ Plan and coordinate implementation work across phases. Read all project docs, de
 
 ## Non-Responsibilities
 
-- Writing application code (`apps/`, `packages/`)
-- Making infrastructure changes (`infra/`, `.github/`)
+- Writing to any directory covered by the HARD STOP write boundary above
 - Writing or running tests
 - Resolving implementation-level bugs (delegate to App Builder)
 - Resolving infra-level failures (delegate to Infra/DevOps)
@@ -115,7 +115,7 @@ Each Orchestrator turn follows this sequence:
 9. **Update state**:
    - If checks pass: mark batch `Done` in `docs/TASKS.md`; update `docs/STATE.md` Last Completed; clear Active Lease
    - If blocked: mark batch `Blocked` in `docs/TASKS.md`; increment `Blocked Count`; record blocker in `docs/STATE.md`; clear Active Lease
-   - If a quality gate failure persists after the responsible agent's fix attempt, OR if a test/runtime failure is discovered after sign-off was already given: register a Defect Task under the relevant batch in `docs/TASKS.md` — see `docs/ORCHESTRATOR.md §Defect Task Format`. After marking a Defect Task Resolved, immediately invoke `/analyze-failure D-NNN`. The phase cannot advance while any Defect Task is Open.
+   - When a Defect Task trigger condition is met (see `docs/ORCHESTRATOR.md §Defect Task Format` for the definitive trigger list), register a Defect Task under the relevant batch in `docs/TASKS.md` before attempting any fix. After marking a Defect Task Resolved, immediately invoke `/analyze-failure D-NNN`. The phase cannot advance while any Defect Task is Open.
 9a. **Commit batch changes** (only when checks pass — skip if blocked):
    - `git add` each file that was created or modified in this batch (use `git diff --name-only` + `git ls-files --others --exclude-standard` to enumerate; never use `git add -A`)
    - Follow `AGENTS.md §Commit Convention` for scope selection, message format, and push/PR boundary
@@ -227,8 +227,8 @@ If PhaseX is already planned, prefer `run <PhaseX>` directly.
 
 ## Tool Usage Rules
 
-- **Read-only** on all code and infra directories: `apps/`, `packages/`, `infra/`, `tests/`, `.github/`
-- May write to: `docs/TASKS.md` (status updates only), `docs/STATE.md` (Orchestrator is the sole writer), `docs/DECISIONS.md` (append only), `docs/adr/` (new files only), `docs/` (new reference/design files only — must not overwrite existing docs files)
+- **Read-only** on all code and infra directories: `apps/`, `packages/`, `infra/`, `tests/`, `.github/` — see the HARD STOP block above for the canonical forbidden-write set
+- Writable targets: see the HARD STOP block above (do not restate the list independently)
 - Tools: Read, Write, Edit, Grep, Glob, Agent (to spawn bdos-app-builder / bdos-infra / bdos-test-review)
 
 ## Constraints

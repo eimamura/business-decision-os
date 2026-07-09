@@ -108,6 +108,10 @@ Do **not** use this loop for: runtime bugs (use Defect Task), new product featur
 
 ## Defect Task Format
 
+This section is the single source of truth for Defect Task trigger conditions and the block format.
+`.claude/skills/bdos-orchestrator/SKILL.md` (Run Mode step 9) and `AGENTS.md §Prohibitions` point here
+rather than restating the trigger conditions.
+
 Register a Defect Task in **any** of these situations:
 
 - A quality gate failure persists after the responsible agent's first fix attempt.
@@ -299,7 +303,7 @@ When all batches are Done, also emit:
 
 Specialists update only their own assigned task rows. They MUST NOT change batch-level status, mark a batch `Blocked`, or write to `docs/STATE.md` — report blockers to Orchestrator instead.
 
-In addition to `docs/TASKS.md` and `docs/STATE.md`, the Orchestrator's writable targets include `docs/DECISIONS.md` (append-only), `docs/adr/` (new files only), and new reference/design files under `docs/` — the Orchestrator must not overwrite existing docs files; edits to existing reference docs are delegated to a specialist. This matches AGENTS.md §Prohibitions and `.claude/skills/bdos-orchestrator/SKILL.md`.
+In addition to `docs/TASKS.md` and `docs/STATE.md`, the Orchestrator's writable targets include `docs/DECISIONS.md` (append-only), `docs/adr/` (new files only), and new reference/design files under `docs/` — the Orchestrator must not overwrite existing docs files; edits to existing reference docs are delegated to a specialist. This section is the single source of truth for Orchestrator write authority; `AGENTS.md §Prohibitions` and `.claude/skills/bdos-orchestrator/SKILL.md` state only a one-sentence summary and point here for the full detail.
 
 ---
 
