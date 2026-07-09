@@ -22,6 +22,7 @@ FP-011 hardened). Per-phase detail: `docs/archive/v5/STATE.md`.
 
 ## Active Phase
 
+P127 — Harness Hygiene: Dead References, Gate Naming, SSoT Consolidation (In Progress)
 P124 — Tailwind CSS v4 Upgrade (sign-off blocked — see Blockers)
 
 ## Active Lease
@@ -34,7 +35,17 @@ P124-B-02 (sign-off): `make test-playwright` ran with dev stack down — 52/53 t
 
 ## Last Completed
 
-P126 — Harness & Docs Integrity Fixes (2026-07-06). Executed all findings of the
+P127 (in progress) — batches B-01 + B-02 Done (2026-07-09). B-01: dead-reference
+repointing (§Stub Behavior → TESTING.md §Stub Conformance ×5 sites; §Phase Progression
+removed from AGENTS.md; per-layer §Architecture Constraints references fixed) + unit
+gate normalized to `make test-unit` in orchestrator SKILL step 8, ORCHESTRATOR.md
+Design Improvement Loop, and test-review SKILL batch-check bullet (leftover caught at
+batch check, fixed on first return). B-02: `docs/DESIGN.md §Deployment Design` authored
+(local stack, compute platform, frozen Azure/Terraform state, DB conventions, CI/CD —
+facts verified against live repo); bdos-infra SKILL slimmed to process + pointers.
+Batch check: unit 1431/15 skipped, lint clean, typecheck 186 files — all exit 0.
+
+Previously: P126 — Harness & Docs Integrity Fixes (2026-07-06). Executed all findings of the
 2026-07-06 /harness-engineering audit. B-01 (docs layer): TOOLS.md stale 6-table
 allowlist and frozen per-intent tool lists replaced with pointers to code SSoT
 (sql_allowlist.py / _INTENT_TOOL_SUBSET); TESTING.md + .env.example Ollama model set to

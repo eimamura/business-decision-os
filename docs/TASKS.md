@@ -53,9 +53,77 @@ Tagged `v0.1.0` (commit 039c43a); merged to `main`; GitHub release published.
 
 ## Active Phases
 
+P127 — Harness Hygiene: Dead References, Gate Naming, SSoT Consolidation (In Progress)
 P124 — Tailwind CSS v4 Upgrade (sign-off blocked: `make test-playwright` needs `make dev-up`)
 
 ---
+
+## P127 — Harness Hygiene: Dead References, Gate Naming, SSoT Consolidation
+
+**Goal:** Resolve all findings from the 2026-07-09 /harness-engineering audit: four dead
+`docs/DESIGN.md §` pointers left by past refactors, a unit-gate command string that
+contradicts `.claude/rules/testing.md` (pytest invoked directly), the Orchestrator
+forbidden-write set stated with three different memberships, Defect Task trigger
+conditions paraphrased in three places, the knowledge-store drift in `bdos-infra`
+(config facts inlined because their doc home no longer exists), and internal
+inconsistencies in STATE.md (duplicate `## Blockers`, stale Active Phase) and TASKS.md
+(duplicate P116 heading, stale batch rows under Done phases).
+
+Done when: every `docs/DESIGN.md §` reference in skills/docs resolves to a real heading;
+the unit gate is written `make test-unit` everywhere; the Orchestrator forbidden-write
+set has one canonical statement; §Defect Task Format self-declares SSoT with pointers
+elsewhere; `docs/DESIGN.md §Deployment Design` exists and owns the facts previously
+inlined in `bdos-infra/SKILL.md`; STATE.md has exactly one `## Blockers` section;
+TASKS.md has one P116 section and no `Not Started` rows under Done phases; all six
+sign-off gates exit 0.
+
+Dependencies: none (docs/harness only; independent of P124)
+
+### Batch B-01 — Dead references & gate naming (App Builder) — Done
+
+| Task | Description | Status |
+|---|---|---|
+| T-737 | Repoint `docs/DESIGN.md §Stub Behavior` → `docs/TESTING.md §Stub Conformance` in `.claude/skills/bdos-app-builder/SKILL.md` (§Inputs + deferred-reading table), `.claude/skills/bdos-test-review/SKILL.md` (§Inputs + Required Reading), and `docs/ORCHESTRATOR.md §Handoff Rules` table. The DESIGN section exists only in `docs/archive/v1/`. | Done |
+| T-738 | `AGENTS.md §When in Doubt`: remove the dead `§Phase Progression` pointer (section exists only in archive); keep the `§Public Interfaces` pointer. | Done |
+| T-739 | Fix the per-layer `§Architecture Constraints` references in `bdos-app-builder` and `bdos-test-review` SKILL.md deferred-reading tables to the real heading `docs/DESIGN.md §Architecture Constraints — Cross-cutting`, noting per-layer MUST/MUST-NOT rules live in each component's `### Constraints` subsection. | Done |
+| T-740 | Normalize the unit gate to `make test-unit` in `.claude/skills/bdos-orchestrator/SKILL.md` step 8 (batch check) and `docs/ORCHESTRATOR.md §Design Improvement Loop` step 6 — `uv run pytest tests/unit -q` contradicts `.claude/rules/testing.md §How to Run Tests` and the §Mandatory Gate Set exact-command acceptance rule. | Done |
+
+Dependencies: none
+
+### Batch B-02 — DESIGN.md §Deployment Design + infra skill slimming (App Builder) — Done
+
+| Task | Description | Status |
+|---|---|---|
+| T-741 | Author `docs/DESIGN.md §Deployment Design` as the owner of the deployment/config facts currently inlined in `.claude/skills/bdos-infra/SKILL.md`: local Compose stack topology, Azure/Terraform freeze (P69) + eastus2 region, `pgvector/pgvector:pg16` image, DATABASE_URL async/sync convention, CI/CD pipeline shape. Closes the Carry-Over dead-pointer row (`bdos-infra §Inputs`, `ORCHESTRATOR.md §Handoff Rules`). | Done |
+| T-742 | Slim `.claude/skills/bdos-infra/SKILL.md` §Docker Rules / §Terraform Rules / §CI/CD Rules / §Scripts Rules to process steps + pointers to the new `docs/DESIGN.md §Deployment Design` and `.claude/rules/docker.md`; delete facts now owned by DESIGN.md. | Done |
+
+Dependencies: none
+
+### Batch B-03 — Write boundary & Defect Task SSoT (App Builder)
+
+| Task | Description | Status |
+|---|---|---|
+| T-743 | Canonicalize the Orchestrator forbidden-write set as `packages/`, `apps/`, `tests/`, `infra/`, `.github/` in the SKILL HARD STOP block; make SKILL §Non-Responsibilities (currently omits `tests/`), §Tool Usage Rules, and `AGENTS.md §Prohibitions` (currently omits `.github/`) state the identical set or point to the HARD STOP. | Not Started |
+| T-744 | `docs/ORCHESTRATOR.md §Defect Task Format`: add an SSoT self-declaration (mirroring §Mandatory Gate Set); reduce the trigger-condition paraphrases in `bdos-orchestrator/SKILL.md` step 9 and `AGENTS.md §Prohibitions` to one sentence + pointer each. | Not Started |
+
+Dependencies: B-01 (same files: AGENTS.md, orchestrator SKILL, ORCHESTRATOR.md)
+
+### Batch B-04 — Orchestrator-owned state reconciliation (Orchestrator)
+
+| Task | Description | Status |
+|---|---|---|
+| T-745 | `docs/STATE.md`: merge the two `## Blockers` sections into one (P124 blocker retained; delete the trailing contradictory `None` section); keep Active Phase accurate for P127/P124. | Not Started |
+| T-746 | `docs/TASKS.md`: merge the duplicate P116 heading (lean stub near L333 vs Done section near L968) into one; reconcile stale `Not Started` batch rows under Done phases (P110 B-03, P119 B-02–B-05) with STATE completion evidence. Append a DECISIONS.md entry for the canonical forbidden-write set. | Not Started |
+
+Dependencies: none
+
+### Batch B-05 — Sign-off (Test/Review)
+
+| Task | Description | Status |
+|---|---|---|
+| T-747 | Full phase sign-off with the mandatory gate set per `docs/ORCHESTRATOR.md §Mandatory Gate Set`. Report gate, exit_code, output_tail for every gate. | Not Started |
+
+Dependencies: B-01, B-02, B-03, B-04
 
 ## P126 — Harness & Docs Integrity Fixes — Done (2026-07-06)
 
