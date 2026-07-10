@@ -53,12 +53,11 @@ Tagged `v0.1.0` (commit 039c43a); merged to `main`; GitHub release published.
 
 ## Active Phases
 
-P127 — Harness Hygiene: Dead References, Gate Naming, SSoT Consolidation (In Progress)
 P124 — Tailwind CSS v4 Upgrade (sign-off blocked: `make test-playwright` needs `make dev-up`)
 
 ---
 
-## P127 — Harness Hygiene: Dead References, Gate Naming, SSoT Consolidation
+## P127 — Harness Hygiene: Dead References, Gate Naming, SSoT Consolidation — Done (2026-07-09)
 
 **Goal:** Resolve all findings from the 2026-07-09 /harness-engineering audit: four dead
 `docs/DESIGN.md §` pointers left by past refactors, a unit-gate command string that
@@ -117,11 +116,11 @@ Dependencies: B-01 (same files: AGENTS.md, orchestrator SKILL, ORCHESTRATOR.md)
 
 Dependencies: none
 
-### Batch B-05 — Sign-off (Test/Review)
+### Batch B-05 — Sign-off (Test/Review) — Done
 
 | Task | Description | Status |
 |---|---|---|
-| T-747 | Full phase sign-off with the mandatory gate set per `docs/ORCHESTRATOR.md §Mandatory Gate Set`. Report gate, exit_code, output_tail for every gate. | Not Started |
+| T-747 | Full phase sign-off with the mandatory gate set per `docs/ORCHESTRATOR.md §Mandatory Gate Set`. Report gate, exit_code, output_tail for every gate. | Done |
 
 Dependencies: B-01, B-02, B-03, B-04
 

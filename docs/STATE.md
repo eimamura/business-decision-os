@@ -22,12 +22,11 @@ FP-011 hardened). Per-phase detail: `docs/archive/v5/STATE.md`.
 
 ## Active Phase
 
-P127 — Harness Hygiene: Dead References, Gate Naming, SSoT Consolidation (In Progress)
 P124 — Tailwind CSS v4 Upgrade (sign-off blocked — see Blockers)
 
 ## Active Lease
 
-P127-B-05
+None
 
 ## Blockers
 
@@ -35,7 +34,8 @@ P124-B-02 (sign-off): `make test-playwright` ran with dev stack down — 52/53 t
 
 ## Last Completed
 
-P127 (in progress) — batches B-01–B-04 Done (2026-07-09). B-03: forbidden-write
+P127 — Harness Hygiene: Dead References, Gate Naming, SSoT Consolidation
+(2026-07-09). Executed all findings of the 2026-07-09 /harness-engineering audit. B-03: forbidden-write
 set canonicalized to five directories (SKILL HARD STOP = canonical statement;
 ORCHESTRATOR.md §Write Authority = SSoT; AGENTS.md reduced to summary + pointer);
 Defect Task trigger conditions SSoT-declared in ORCHESTRATOR.md §Defect Task Format.
@@ -49,7 +49,10 @@ Design Improvement Loop, and test-review SKILL batch-check bullet (leftover caug
 batch check, fixed on first return). B-02: `docs/DESIGN.md §Deployment Design` authored
 (local stack, compute platform, frozen Azure/Terraform state, DB conventions, CI/CD —
 facts verified against live repo); bdos-infra SKILL slimmed to process + pointers.
-Batch check: unit 1431/15 skipped, lint clean, typecheck 186 files — all exit 0.
+B-05 sign-off: unit 1431/15 skipped, integration 16/154 skipped, e2e 10 skipped,
+playwright 52 passed (dev stack was up; 1 flaky passed on retry), build OK, lint
+clean, typecheck 186 files — all exit 0. Note: playwright passing with the stack up
+suggests the P124 sign-off blocker is now resolvable by re-running its gate set.
 
 Previously: P126 — Harness & Docs Integrity Fixes (2026-07-06). Executed all findings of the
 2026-07-06 /harness-engineering audit. B-01 (docs layer): TOOLS.md stale 6-table
