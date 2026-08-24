@@ -1,10 +1,15 @@
-"""Unit tests for generate_sample_data.py (B04)."""
+"""Unit tests for generate_sample_data.py (B04).
+
+Hermetic execution (T-748 / D-021): every generated operational CSV is routed
+to a pytest tmp_path directory; tracked data/sample/ is never written.
+"""
 from __future__ import annotations
 
 import csv
 import datetime
 import sys
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -13,6 +18,24 @@ import generate_sample_data as gen
 
 OUT_DIR = Path("data/sample")
 GT_DIR = Path("data/sample/ground_truth")
+
+
+@pytest.fixture(autouse=True)
+def _isolated_out_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Route all generated operational CSVs into tmp_path (T-748 / D-021).
+
+    Wraps ``gen.main`` so generation writes to a per-test temporary directory
+    instead of the tracked ``data/sample`` default, and repoints the module's
+    ``OUT_DIR`` reads at the same directory. Ground-truth parameter reads are
+    unaffected.
+    """
+    out_dir = tmp_path / "sample"
+
+    def _main(**config_overrides: Any) -> None:
+        gen.generate(gen.SampleDataConfig(**config_overrides), out_dir=out_dir)
+
+    monkeypatch.setattr(gen, "main", _main)
+    monkeypatch.setitem(globals(), "OUT_DIR", out_dir)
 
 
 def _run_and_read(seed: int, filename: str) -> list[dict]:
