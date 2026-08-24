@@ -40,6 +40,8 @@ P128-B-01 — Hermetic sample-data tests (2026-08-24). T-748 redirects generated
 operational CSVs to pytest `tmp_path`; D-021 Acceptance confirmed by Test/Review:
 `make test-unit` exit 0 (1431 passed, 15 skipped), `make lint` exit 0,
 `make typecheck` exit 0 (186 files), and `git status --short -- data/sample` empty.
+`/analyze-failure D-021` recorded new FP-018 (`design-contract`, Count 1); no
+hardening escalation is required.
 OpenCode completed the work; Orca recorded the task through manual recovery after the
 OpenCode prompt acknowledgement returned `agent_prompt_stalled` and revoked lifecycle
 messages.

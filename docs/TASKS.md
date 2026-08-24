@@ -11,7 +11,7 @@ phase detail archived at `docs/archive/v5/TASKS.md` (P24–P64 in `docs/archive/
 P0–P23 in `docs/archive/v3/`).
 
 Numbering continues repository-wide: **next phase = P129, next task = T-759, next defect
-= D-023, next failure pattern = FP-018.**
+= D-023, next failure pattern = FP-019.**
 
 ---
 
@@ -106,7 +106,8 @@ unsafe sign-off assumptions through Defect Tasks below.
 - Fix note: An autouse pytest fixture now redirects `gen.main()` generation and all
   generated-file reads to a per-test `tmp_path`. Test/Review proof: `make test-unit`
   exit 0 (1431 passed, 15 skipped), `make lint` exit 0, `make typecheck` exit 0, and
-  `git status --short -- data/sample` empty.
+  `git status --short -- data/sample` empty. Failure analysis: FP-018
+  (`design-contract`, Count 1, record-only).
 
 Dependencies: none
 
