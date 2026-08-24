@@ -36,6 +36,17 @@ not compile the web application.
 
 ## Last Completed
 
+P128-B-02 — Next.js 15 page-contract recovery (2026-08-24). T-749 converted the three
+dynamic routes (chat session, recommendation detail, scenario comparison) to async Server
+Page wrappers awaiting `params` and delegating to colocated Client Components; T-750 added
+`apps/web/app/__tests__/dynamic-route-page-boundaries.test.tsx` guarding the Next.js 15
+page contract. D-019 marked Resolved on Test/Review evidence: `npm run build` exit 0
+(all three routes server-rendered `ƒ`), `npx tsc --noEmit` exit 0, `npm test` exit 0
+(14 files, 86 tests), plus `make test-unit` (1431 passed, 15 skipped), `make lint`,
+`make typecheck` all exit 0. Specialist work executed via opencode subagents.
+
+Previously:
+
 P128-B-01 — Hermetic sample-data tests (2026-08-24). T-748 redirects generated
 operational CSVs to pytest `tmp_path`; D-021 Acceptance confirmed by Test/Review:
 `make test-unit` exit 0 (1431 passed, 15 skipped), `make lint` exit 0,

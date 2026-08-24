@@ -81,7 +81,7 @@ unsafe sign-off assumptions through Defect Tasks below.
 | Batch | Tasks | Status | Blocked Count |
 |---|---|---|---|
 | B-01 — Hermetic sample-data tests | T-748 | Done | 0 |
-| B-02 — Next.js 15 page-contract recovery | T-749, T-750 | Not Started | 0 |
+| B-02 — Next.js 15 page-contract recovery | T-749, T-750 | Done | 0 |
 | B-03 — Real web gates and dependency security | T-751, T-752, T-753 | Not Started | 0 |
 | B-04 — Local-only operational routes | T-754, T-755 | Not Started | 0 |
 | B-05 — Release record and failure learning | T-756, T-757 | Not Started | 0 |
@@ -111,16 +111,18 @@ unsafe sign-off assumptions through Defect Tasks below.
 
 Dependencies: none
 
-### Batch B-02 — Next.js 15 page-contract recovery (App Builder + Test/Review) — Not Started
+### Batch B-02 — Next.js 15 page-contract recovery (App Builder + Test/Review) — Done (2026-08-24)
 
 | Task | Description | Status |
 |---|---|---|
-| T-749 | Replace the three dynamic-route Client Page entry points with Next.js 15-compatible async Server Page wrappers that await `params` and pass primitive IDs into dedicated Client Components. Preserve current hooks, rendering, and route behavior; do not upgrade React or change API contracts. Affected routes: chat session, recommendation detail, and scenario comparison. | Not Started |
-| T-750 | Add focused regression coverage for the three dynamic page boundaries and verify both TypeScript and production build behavior. Tests must prevent a future direct Client Page `params` object/Promise mismatch without relying only on mocked browser routing. | Not Started |
+| T-749 | Replace the three dynamic-route Client Page entry points with Next.js 15-compatible async Server Page wrappers that await `params` and pass primitive IDs into dedicated Client Components. Preserve current hooks, rendering, and route behavior; do not upgrade React or change API contracts. Affected routes: chat session, recommendation detail, and scenario comparison. | Done |
+| T-750 | Add focused regression coverage for the three dynamic page boundaries and verify both TypeScript and production build behavior. Tests must prevent a future direct Client Page `params` object/Promise mismatch without relying only on mocked browser routing. | Done |
+
+T-750 proof: `apps/web/app/__tests__/dynamic-route-page-boundaries.test.tsx` executes each real page boundary (awaits `Promise.resolve(params)` through the default Page export) asserting the returned element type is the colocated Client Component with exactly one primitive ID prop, plus a source-contract check that each `page.tsx` types `params` as `Promise<`, awaits it, and carries no `"use client"` directive while its Client Component does. Gates: `cd apps/web && npm test` exit 0 (14 files, 86 tests), `npx tsc --noEmit` exit 0, `npm run build` exit 0 (all three routes server-rendered `ƒ`), `make test-unit` exit 0 (1431 passed, 15 skipped), `make lint` exit 0, `make typecheck` exit 0. D-019 acceptance evidence delivered; resolution owned by Orchestrator.
 
 #### Defect: D-019
 
-- Status: Open
+- Status: Resolved
 - Severity: High
 - Repro: `cd apps/web && npm run build`
 - Observed: Next.js 15.5.19 production compilation exits 1 because `app/chat/[sessionId]/page.tsx` declares `params` as a resolved object; the same incompatible pattern exists in recommendation and scenario pages.
@@ -128,6 +130,10 @@ Dependencies: none
 - Area: `apps/web/app/**/[id-or-session]/`
 - Owner: App Builder
 - Acceptance: `cd apps/web && npm run build` and `cd apps/web && npx tsc --noEmit` both exit 0; focused route-boundary tests pass.
+- Fix note: All three dynamic routes converted to async Server Page wrappers awaiting
+  `params` and delegating to colocated Client Components (T-749); Test/Review
+  regression coverage + full gate evidence recorded in the T-750 proof above
+  (`npm run build` exit 0, `npx tsc --noEmit` exit 0, boundary tests exit 0).
 
 Dependencies: none
 
