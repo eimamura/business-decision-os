@@ -10,8 +10,8 @@ execution process.
 phase detail archived at `docs/archive/v5/TASKS.md` (P24–P64 in `docs/archive/v4/`,
 P0–P23 in `docs/archive/v3/`).
 
-Numbering continues repository-wide: **next phase = P127, next task = T-736, next defect
-= D-019, next failure pattern = FP-018.**
+Numbering continues repository-wide: **next phase = P129, next task = T-759, next defect
+= D-023, next failure pattern = FP-018.**
 
 ---
 
@@ -53,7 +53,142 @@ Tagged `v0.1.0` (commit 039c43a); merged to `main`; GitHub release published.
 
 ## Active Phases
 
-P124 — Tailwind CSS v4 Upgrade (sign-off blocked: `make test-playwright` needs `make dev-up`)
+P128 — Release Truth & Local Security Recovery (In Progress)
+
+P124 closure is being revalidated inside P128 because the production web build and the
+repository-level build gate no longer support the recorded sign-off.
+
+---
+
+## P128 — Release Truth & Local Security Recovery — In Progress (2026-08-24)
+
+**Goal:** Restore trustworthy release validation before adding more product capability. The
+phase fixes the Next.js 15 production-build regression, makes repository-level gates exercise
+the web application and its tests, prevents unit tests from mutating committed sample data,
+contains operational admin/debug surfaces to explicit local/test environments, and refreshes
+dependency-security evidence.
+
+Done when: `make test-unit` leaves `data/sample/` unchanged; all three dynamic Next.js pages
+compile and render under the Next.js 15 page contract; Makefile and CI run real web build,
+typecheck, and Vitest gates; production mode exposes neither `/api/v1/debug` nor
+`/api/v1/admin/*`; no API-key material is returned by diagnostics; every D-019–D-022
+Acceptance criterion passes; failure analysis and required recurrence hardening are recorded;
+all six mandatory phase gates exit 0 with proof output.
+
+Dependencies: P123, P124, P126, P127 implementation complete; P128 reopens their invalid or
+unsafe sign-off assumptions through Defect Tasks below.
+
+| Batch | Tasks | Status | Blocked Count |
+|---|---|---|---|
+| B-01 — Hermetic sample-data tests | T-748 | Done | 0 |
+| B-02 — Next.js 15 page-contract recovery | T-749, T-750 | Not Started | 0 |
+| B-03 — Real web gates and dependency security | T-751, T-752, T-753 | Not Started | 0 |
+| B-04 — Local-only operational routes | T-754, T-755 | Not Started | 0 |
+| B-05 — Release record and failure learning | T-756, T-757 | Not Started | 0 |
+| B-06 — Independent phase sign-off | T-758 | Not Started | 0 |
+
+### Batch B-01 — Hermetic sample-data tests (Test/Review) — Done (2026-08-24)
+
+| Task | Description | Status |
+|---|---|---|
+| T-748 | Refactor `tests/unit/test_sample_data.py` so generated operational CSVs are written under a pytest `tmp_path` and all generated-file assertions read from that isolated directory. Do not read or modify files under `data/sample/ground_truth/`; existing ground-truth fixtures may be referenced by unchanged tests but their contents are out of scope. Acceptance: the targeted sample-data tests pass and a full `make test-unit` leaves `git status --short -- data/sample` empty. | Done |
+
+#### Defect: D-021
+
+- Status: Resolved
+- Severity: Medium
+- Repro: `make test-unit && git status --short -- data/sample`
+- Observed: `tests/unit/test_sample_data.py` calls `generate_sample_data.main()`, which writes date-relative CSVs into tracked `data/sample/`; ordinary unit validation dirties the working tree and can overwrite demo data.
+- Expected: Unit tests write only to pytest-managed temporary paths and leave tracked sample data byte-for-byte unchanged.
+- Area: `tests/unit/test_sample_data.py`
+- Owner: Test/Review
+- Acceptance: `make test-unit` exits 0 and `git status --short -- data/sample` produces no output.
+- Fix note: An autouse pytest fixture now redirects `gen.main()` generation and all
+  generated-file reads to a per-test `tmp_path`. Test/Review proof: `make test-unit`
+  exit 0 (1431 passed, 15 skipped), `make lint` exit 0, `make typecheck` exit 0, and
+  `git status --short -- data/sample` empty.
+
+Dependencies: none
+
+### Batch B-02 — Next.js 15 page-contract recovery (App Builder + Test/Review) — Not Started
+
+| Task | Description | Status |
+|---|---|---|
+| T-749 | Replace the three dynamic-route Client Page entry points with Next.js 15-compatible async Server Page wrappers that await `params` and pass primitive IDs into dedicated Client Components. Preserve current hooks, rendering, and route behavior; do not upgrade React or change API contracts. Affected routes: chat session, recommendation detail, and scenario comparison. | Not Started |
+| T-750 | Add focused regression coverage for the three dynamic page boundaries and verify both TypeScript and production build behavior. Tests must prevent a future direct Client Page `params` object/Promise mismatch without relying only on mocked browser routing. | Not Started |
+
+#### Defect: D-019
+
+- Status: Open
+- Severity: High
+- Repro: `cd apps/web && npm run build`
+- Observed: Next.js 15.5.19 production compilation exits 1 because `app/chat/[sessionId]/page.tsx` declares `params` as a resolved object; the same incompatible pattern exists in recommendation and scenario pages.
+- Expected: All dynamic pages satisfy the Next.js 15 `PageProps` contract and the optimized production build exits 0 while preserving React 18 client behavior.
+- Area: `apps/web/app/**/[id-or-session]/`
+- Owner: App Builder
+- Acceptance: `cd apps/web && npm run build` and `cd apps/web && npx tsc --noEmit` both exit 0; focused route-boundary tests pass.
+
+Dependencies: none
+
+### Batch B-03 — Real web gates and dependency security (Infra/DevOps) — Not Started
+
+| Task | Description | Status |
+|---|---|---|
+| T-751 | Make repository-level quality targets execute real release checks: `make build` must compile the web production bundle, `make typecheck` must include TypeScript, and a named Make target must run frontend Vitest. Prefer reproducible lockfile installation (`npm ci`) in validation paths. | Not Started |
+| T-752 | Align `.github/workflows/lint-test.yml`, `.claude/rules/testing.md`, and `docs/TESTING.md` with the same Make-owned web build/typecheck/test contract. Add frontend unit tests to CI and remove contradictory instructions that bypass Make targets. | Not Started |
+| T-753 | Re-run production and full npm audits, remove confirmed unused direct dependencies when safe, apply compatible security updates, and record exact remaining vulnerabilities with exploit-surface rationale. Do not use forced major upgrades. | Not Started |
+
+#### Defect: D-020
+
+- Status: Open
+- Severity: High
+- Repro: `make build`
+- Observed: `make build` exits 0 after dependency installation and prints `Build OK` without invoking `next build`; `make typecheck` covers only Python and no Make target runs the existing Vitest suite. Completed phases therefore accepted green repository gates while the real web production build was failing.
+- Expected: Repository gates fail whenever web compilation, TypeScript, or frontend unit tests fail, and local/CI commands share one documented contract.
+- Area: `Makefile`, `.github/workflows/`, web dependency manifests, testing harness docs
+- Owner: Infra/DevOps
+- Acceptance: An intentionally invalid TypeScript fixture is not required; command inspection plus successful `make build`, `make typecheck`, and the named frontend-test Make target must prove each underlying web command runs, and CI invokes the same targets.
+
+Dependencies: B-02
+
+### Batch B-04 — Local-only operational routes (App Builder + Test/Review) — Not Started
+
+ADR: `docs/adr/2026-08-24-local-only-operational-routes.md`
+
+| Task | Description | Status |
+|---|---|---|
+| T-754 | Register `/api/v1/debug` and the `/api/v1/admin/*` router only for explicit local development or test environments, using the repository's `APP_ENV` convention. Remove API-key prefix disclosure entirely. Keep local Compose behavior intact and do not implement full authentication in this phase. | Not Started |
+| T-755 | Add API tests proving operational routes are absent in production/default-safe mode, present in explicit dev/test mode, and diagnostics never return secret material. Update affected existing admin endpoint tests without weakening their assertions. | Not Started |
+
+#### Defect: D-022
+
+- Status: Open
+- Severity: High
+- Repro: `APP_ENV=production uv run python -c "from apps.api.main import app; print(sorted(r.path for r in app.routes if r.path == '/api/v1/debug' or r.path.startswith('/api/v1/admin')))"`
+- Observed: The debug endpoint and full admin router are registered unconditionally; the debug response also returns the first 12 characters of `ANTHROPIC_API_KEY`.
+- Expected: Operational routes exist only in explicit dev/test mode, are absent in production/default-safe mode, and no response exposes any API-key substring.
+- Area: `apps/api/main.py`, admin API tests
+- Owner: App Builder
+- Acceptance: Environment-matrix API tests exit 0 and production/default-safe route inspection returns an empty list.
+
+Dependencies: none
+
+### Batch B-05 — Release record and failure learning (Orchestrator + Failure Analyst) — Not Started
+
+| Task | Description | Status |
+|---|---|---|
+| T-756 | Reconcile `docs/TASKS.md`, `docs/STATE.md`, `docs/DECISIONS.md`, and Carry-Over rows with the verified P128 results; invalidate prior no-op sign-off claims rather than preserving contradictory completion evidence. | Not Started |
+| T-757 | After D-019–D-022 are independently accepted and marked Resolved, invoke `/analyze-failure` for each defect immediately. Invoke `/harden-system` for every pattern whose Count reaches 2 before phase sign-off. | Not Started |
+
+Dependencies: B-01, B-02, B-03, B-04
+
+### Batch B-06 — Independent phase sign-off (Test/Review) — Not Started
+
+| Task | Description | Status |
+|---|---|---|
+| T-758 | Run the complete mandatory gate set from `docs/ORCHESTRATOR.md §Mandatory Gate Set` against the final committed state and report `gate`, `exit_code`, and `output_tail` for every command. Also run the named frontend unit-test target and `npm audit --omit=dev` as supplemental release evidence. | Not Started |
+
+Dependencies: B-05
 
 ---
 

@@ -22,7 +22,7 @@ FP-011 hardened). Per-phase detail: `docs/archive/v5/STATE.md`.
 
 ## Active Phase
 
-P124 — Tailwind CSS v4 Upgrade (sign-off blocked — see Blockers)
+P128 — Release Truth & Local Security Recovery
 
 ## Active Lease
 
@@ -30,9 +30,21 @@ None
 
 ## Blockers
 
-P124-B-02 (sign-off): `make test-playwright` ran with dev stack down — 52/53 tests failed with "element not found" (page not served). Not a Tailwind v4 regression: `make build` exits 0 and all other 6 gates pass. Blocked pending `make dev-up` from user.
+None. P124's recorded closure is being revalidated through P128 D-019/D-020 because the
+real Next.js production build currently fails and the historical `make build` target did
+not compile the web application.
 
 ## Last Completed
+
+P128-B-01 — Hermetic sample-data tests (2026-08-24). T-748 redirects generated
+operational CSVs to pytest `tmp_path`; D-021 Acceptance confirmed by Test/Review:
+`make test-unit` exit 0 (1431 passed, 15 skipped), `make lint` exit 0,
+`make typecheck` exit 0 (186 files), and `git status --short -- data/sample` empty.
+OpenCode completed the work; Orca recorded the task through manual recovery after the
+OpenCode prompt acknowledgement returned `agent_prompt_stalled` and revoked lifecycle
+messages.
+
+Previously:
 
 P127 — Harness Hygiene: Dead References, Gate Naming, SSoT Consolidation
 (2026-07-09). Executed all findings of the 2026-07-09 /harness-engineering audit. B-03: forbidden-write
