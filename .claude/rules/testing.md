@@ -8,6 +8,7 @@ Always use `make` targets. Never invoke `pytest`, `npx playwright test`, or `npx
 
 | Command | What it runs | Prerequisites |
 |---|---|---|
+| `make test-web` | Vitest frontend suite (`apps/web`) | none (Makefile runs `npm ci` from the lockfile when needed) |
 | `make test-unit` | `pytest tests/unit` | none |
 | `make test-integration` | `pytest tests/integration` | `docker compose up -d db` |
 | `make test-e2e` | `pytest tests/e2e` | API server running |
@@ -15,6 +16,8 @@ Always use `make` targets. Never invoke `pytest`, `npx playwright test`, or `npx
 | `make test` | all Python tiers | varies |
 
 **Playwright must always go through `make test-playwright`.** See `docs/TESTING.md §Why npx playwright test fails directly` for the reason (module resolution, port configuration).
+
+**Release gates cover the web app too.** `make build` compiles the Next.js production bundle (`npm ci` + `next build`) and `make typecheck` includes TypeScript (`tsc --noEmit`). Repository-level sign-off must use these targets so a failing web build/typecheck/test fails the gate (see D-020).
 
 ## Test Tiers
 

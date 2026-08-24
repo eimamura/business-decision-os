@@ -1,4 +1,4 @@
-.PHONY: migrate seed seed-all generate-data codegen build test test-unit test-integration test-e2e test-playwright lint typecheck dev dev-api dev-web dev-up dev-down dev-logs dev-ps dev-smoke check-llm eval
+.PHONY: migrate seed seed-all generate-data codegen build test test-web test-unit test-integration test-e2e test-playwright lint typecheck dev dev-api dev-web dev-up dev-down dev-logs dev-ps dev-smoke check-llm eval
 
 WEB_PORT ?= 3002
 API_PORT ?= 8002
@@ -44,13 +44,21 @@ seed-all: seed
 	uv run python scripts/seed_users.py
 	uv run python scripts/seed_llm_pricing.py
 
-build:
+# Reproducible web dependency install: npm ci from the lockfile whenever it changes.
+# The stamp lives inside node_modules (gitignored) so it never pollutes the tree.
+apps/web/node_modules/.stamp-npm-ci: apps/web/package-lock.json
+	cd apps/web && npm ci
+	@touch $@
+
+build: apps/web/node_modules/.stamp-npm-ci
 	cd apps/api && uv sync
-	cd apps/web && npm install
-	@echo "Build OK"
+	cd apps/web && npm run build
 
 test:
 	uv run pytest tests/ -x -q
+
+test-web: apps/web/node_modules/.stamp-npm-ci
+	cd apps/web && npm test
 
 test-unit:
 	uv sync --package api --quiet
@@ -75,8 +83,9 @@ test-e2e:
 lint:
 	uv run ruff check packages/ apps/api/ scripts/
 
-typecheck:
+typecheck: apps/web/node_modules/.stamp-npm-ci
 	uv run mypy packages/ apps/api/
+	cd apps/web && npx tsc --noEmit
 
 check-llm:
 	OLLAMA_BASE_URL=$${OLLAMA_BASE_URL:-http://localhost:11434} uv run python scripts/check_llm.py

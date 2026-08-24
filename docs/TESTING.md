@@ -11,6 +11,7 @@ Always use `make` targets — never call `pytest`, `npx playwright`, or `npx vit
 The Makefile wires up required env vars (ports, NODE_PATH) and keeps commands reproducible.
 
 ```bash
+make test-web           # frontend Vitest suite (apps/web; no Docker required)
 make test-unit          # unit tests only (no Docker required)
 make test-integration   # integration tests (requires docker compose up -d db)
 make test-e2e           # Python E2E tests (requires running API server)
@@ -18,10 +19,11 @@ make test-playwright    # Playwright browser E2E (requires make dev-up)
 make test               # all Python tests (unit + integration + e2e)
 ```
 
-Frontend (Vitest) — always via npm script, not npx directly:
-```bash
-cd apps/web && npm test
-```
+`make test-web`, `make typecheck`, and `make build` share one Make-owned web contract:
+the Makefile installs dependencies reproducibly with `npm ci` from the lockfile, `make
+build` compiles the Next.js production bundle (`next build`), and `make typecheck`
+includes TypeScript (`tsc --noEmit`). Never bypass these with raw `npm`/`npx`
+invocations — repository-level gates and CI must exercise the same targets.
 
 ### Why `npx playwright test` fails directly
 

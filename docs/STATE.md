@@ -36,6 +36,19 @@ not compile the web application.
 
 ## Last Completed
 
+P128-B-03 — Real web gates and dependency security (2026-08-24). T-751 made `make build`
+run real `next build` behind a stamp-gated `npm ci`, added `tsc --noEmit` to
+`make typecheck`, and introduced the named `make test-web` Vitest target; T-752 aligned
+`.github/workflows/lint-test.yml`, `.claude/rules/testing.md`, and `docs/TESTING.md` to the
+same Make-owned contract with frontend tests in CI. T-753 removed 7 unused direct deps and
+applied non-breaking updates — npm audit now 3 high (prod & full), all fix-deferred behind
+next@16 major. D-020 marked Resolved on Test/Review batch-check evidence: `make test-unit`
+(1431 passed, 15 skipped), `make lint`, `make typecheck`, plus Infra's `make build` /
+`make typecheck` / `make test-web` — all exit 0; smoke checks skipped (stack down).
+Flagged for T-756: `docs/DESIGN.md §Deployment Design §CI/CD Pipeline` table row is stale.
+
+Previously:
+
 P128-B-02 — Next.js 15 page-contract recovery (2026-08-24). T-749 converted the three
 dynamic routes (chat session, recommendation detail, scenario comparison) to async Server
 Page wrappers awaiting `params` and delegating to colocated Client Components; T-750 added

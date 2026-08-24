@@ -82,7 +82,7 @@ unsafe sign-off assumptions through Defect Tasks below.
 |---|---|---|---|
 | B-01 — Hermetic sample-data tests | T-748 | Done | 0 |
 | B-02 — Next.js 15 page-contract recovery | T-749, T-750 | Done | 0 |
-| B-03 — Real web gates and dependency security | T-751, T-752, T-753 | Not Started | 0 |
+| B-03 — Real web gates and dependency security | T-751, T-752, T-753 | Done | 0 |
 | B-04 — Local-only operational routes | T-754, T-755 | Not Started | 0 |
 | B-05 — Release record and failure learning | T-756, T-757 | Not Started | 0 |
 | B-06 — Independent phase sign-off | T-758 | Not Started | 0 |
@@ -137,17 +137,27 @@ T-750 proof: `apps/web/app/__tests__/dynamic-route-page-boundaries.test.tsx` exe
 
 Dependencies: none
 
-### Batch B-03 — Real web gates and dependency security (Infra/DevOps) — Not Started
+### Batch B-03 — Real web gates and dependency security (Infra/DevOps) — Done (2026-08-24)
 
 | Task | Description | Status |
 |---|---|---|
-| T-751 | Make repository-level quality targets execute real release checks: `make build` must compile the web production bundle, `make typecheck` must include TypeScript, and a named Make target must run frontend Vitest. Prefer reproducible lockfile installation (`npm ci`) in validation paths. | Not Started |
-| T-752 | Align `.github/workflows/lint-test.yml`, `.claude/rules/testing.md`, and `docs/TESTING.md` with the same Make-owned web build/typecheck/test contract. Add frontend unit tests to CI and remove contradictory instructions that bypass Make targets. | Not Started |
-| T-753 | Re-run production and full npm audits, remove confirmed unused direct dependencies when safe, apply compatible security updates, and record exact remaining vulnerabilities with exploit-surface rationale. Do not use forced major upgrades. | Not Started |
+| T-751 | Make repository-level quality targets execute real release checks: `make build` must compile the web production bundle, `make typecheck` must include TypeScript, and a named Make target must run frontend Vitest. Prefer reproducible lockfile installation (`npm ci`) in validation paths. | Done |
+| T-752 | Align `.github/workflows/lint-test.yml`, `.claude/rules/testing.md`, and `docs/TESTING.md` with the same Make-owned web build/typecheck/test contract. Add frontend unit tests to CI and remove contradictory instructions that bypass Make targets. | Done |
+| T-753 | Re-run production and full npm audits, remove confirmed unused direct dependencies when safe, apply compatible security updates, and record exact remaining vulnerabilities with exploit-surface rationale. Do not use forced major upgrades. | Done |
+
+T-753 proof: 7 confirmed-unused direct deps removed (`ai`, `@ai-sdk/anthropic`,
+`class-variance-authority`, `clsx`, `react-hook-form`, `tailwind-merge`, `zustand` — zero
+source imports verified); non-breaking updates applied (next 15.5.19→15.5.23, postcss,
+@tailwindcss/postcss, undici). Audit after remediation — production
+(`npm audit --omit=dev`): **3 high** (was 13); full: **3 high** (was 17). Remaining are all
+fix-deferred behind breaking majors: sharp <0.35.0 (GHSA-f88m-g3jw-g9cj; image-processing
+surface absent in this local-only deployment) and next-bundled postcss ≤8.5.22
+(GHSA-6g55-p6wh-862q / GHSA-r28c-9q8g-f849; requires untrusted CSS input the app never
+processes). Fix path = next@16 major bump, deferred per task constraint.
 
 #### Defect: D-020
 
-- Status: Open
+- Status: Resolved
 - Severity: High
 - Repro: `make build`
 - Observed: `make build` exits 0 after dependency installation and prints `Build OK` without invoking `next build`; `make typecheck` covers only Python and no Make target runs the existing Vitest suite. Completed phases therefore accepted green repository gates while the real web production build was failing.
@@ -155,6 +165,12 @@ Dependencies: none
 - Area: `Makefile`, `.github/workflows/`, web dependency manifests, testing harness docs
 - Owner: Infra/DevOps
 - Acceptance: An intentionally invalid TypeScript fixture is not required; command inspection plus successful `make build`, `make typecheck`, and the named frontend-test Make target must prove each underlying web command runs, and CI invokes the same targets.
+- Fix note: T-751 made `make build` run real `next build` (stamp-gated `npm ci`), extended
+  `make typecheck` with `tsc --noEmit`, and added the named `make test-web` Vitest target;
+  T-752 aligned `.github/workflows/lint-test.yml`, `.claude/rules/testing.md`, and
+  `docs/TESTING.md` to the same Make-owned contract. Test/Review batch check confirmed all
+  four acceptance items PASS and gates exit 0 (`make build` / `make typecheck` /
+  `make test-web` / `make lint` / `make test-unit`).
 
 Dependencies: B-02
 
