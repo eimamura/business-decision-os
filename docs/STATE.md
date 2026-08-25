@@ -26,11 +26,19 @@ P128 — Release Truth & Local Security Recovery
 
 ## Active Lease
 
-None
+P128-B-06
 
 ## Blockers
 
-None. P124's recorded build sign-off was invalidated inside P128 (D-019/D-020): the
+P128 sign-off attempt 1 FAIL (2026-08-24): D-023 (integration calendar-pinned seed
+baselines, 4 tests), D-024 (e2e conftest hardcoded :8000 → vacuous tier skips), D-025
+(stale create-session status assertion), D-026 (HITL/job-flow e2e non-deterministic under
+live gemma4:12b NL routing). All four registered under P128-B-06; fix dispatches in
+progress. Gates 1/4/5/6/7 exit 0; supplemental test-web exit 0; npm audit matches the
+documented deferred-major set. P124 revalidation context: the failed gates exposed latent
+pre-P128 defects — consistent with this phase's release-truth goal.
+
+Previously: P124's recorded build sign-off was invalidated inside P128 (D-019/D-020): the
 repository `make build` target had never compiled the web app. P128 restored release truth
 — real `next build` / TypeScript / Vitest gates now run locally and in CI (D-020 Resolved),
 all three dynamic pages satisfy the Next.js 15 page contract (D-019 Resolved), operational

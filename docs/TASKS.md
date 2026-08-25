@@ -11,7 +11,7 @@ phase detail archived at `docs/archive/v5/TASKS.md` (P24–P64 in `docs/archive/
 P0–P23 in `docs/archive/v3/`).
 
 Numbering continues repository-wide: **next phase = P129, next task = T-759, next defect
-= D-023, next failure pattern = FP-019.**
+= D-027, next failure pattern = FP-022.**
 
 ---
 
@@ -85,7 +85,7 @@ unsafe sign-off assumptions through Defect Tasks below.
 | B-03 — Real web gates and dependency security | T-751, T-752, T-753 | Done | 0 |
 | B-04 — Local-only operational routes | T-754, T-755 | Done | 0 |
 | B-05 — Release record and failure learning | T-756, T-757 | Done | 0 |
-| B-06 — Independent phase sign-off | T-758 | Not Started | 0 |
+| B-06 — Independent phase sign-off | T-758 | In Progress | 0 |
 
 ### Batch B-01 — Hermetic sample-data tests (Test/Review) — Done (2026-08-24)
 
@@ -251,11 +251,61 @@ Blockers rewrite.
 
 Dependencies: B-01, B-02, B-03, B-04
 
-### Batch B-06 — Independent phase sign-off (Test/Review) — Not Started
+### Batch B-06 — Independent phase sign-off (Test/Review) — In Progress
 
 | Task | Description | Status |
 |---|---|---|
-| T-758 | Run the complete mandatory gate set from `docs/ORCHESTRATOR.md §Mandatory Gate Set` against the final committed state and report `gate`, `exit_code`, and `output_tail` for every command. Also run the named frontend unit-test target and `npm audit --omit=dev` as supplemental release evidence. | Not Started |
+| T-758 | Run the complete mandatory gate set from `docs/ORCHESTRATOR.md §Mandatory Gate Set` against the final committed state and report `gate`, `exit_code`, and `output_tail` for every command. Also run the named frontend unit-test target and `npm audit --omit=dev` as supplemental release evidence. | In Progress |
+
+Sign-off attempt 1 (2026-08-24, HEAD ecd7698): **FAIL** — gates 2/3 non-zero (details in
+D-023/D-024/D-025/D-026 below); gates 1,4,5,6,7 exit 0 (`make test-unit` 1447 passed/15
+skipped + hermeticity re-check clean; Playwright 52 passed with 1 flaky auto-retried;
+build/lint/typecheck clean); supplemental `make test-web` exit 0 (86 tests) and
+`npm audit --omit=dev` = the documented 3-high deferred-major set.
+
+#### Defect: D-023
+
+- Status: Open
+- Severity: Medium
+- Repro: `docker compose up -d db && make migrate seed-all && make test-integration`
+- Observed: 4 integration tests fail against a freshly regenerated (today-anchored) sample dataset: `test_t589_pull_forward_results_unchanged_from_p95` expects `pull_forward_count == 5`, generator yields 8; three SKU-029 forecast-deviation tests expect classification `under_forecast`, regenerated data classifies `mixed`. Assertions encode June-2026 absolute baselines.
+- Expected: Integration assertions over seeded data remain valid regardless of the calendar date the seed was generated on.
+- Area: `tests/integration/` (seed-derived assertion literals)
+- Owner: Test/Review
+- Acceptance: `make test-integration` exits 0 against a freshly generated today-anchored dataset without weakening what the tests verify about pull-forward and forecast-deviation behavior.
+
+#### Defect: D-024
+
+- Status: Open
+- Severity: High
+- Repro: `grep -n "8000" tests/e2e/conftest.py`
+- Observed: `tests/e2e/conftest.py::_api_is_up` probes hardcoded `localhost:8000`, so under the Make-configured `API_PORT=8002` the entire e2e tier silently skips — prior sign-offs recorded vacuous "e2e pass" evidence.
+- Expected: The e2e tier probe respects the Make-owned API port configuration and runs for real.
+- Area: `tests/e2e/conftest.py`
+- Owner: Test/Review
+- Acceptance: With the stack up on configured ports, `make test-e2e` executes tests (non-zero collected-and-run count, no silent skip), and the probe reads the configured port rather than a literal.
+
+#### Defect: D-025
+
+- Status: Open
+- Severity: Low
+- Repro: `make test-e2e` (with D-024 fixed)
+- Observed: `test_create_session` asserts new-session `status == "active"` while the API returns `"pending"` (behavior unchanged since T-087, pre-P128).
+- Expected: The assertion matches the actual session-lifecycle contract.
+- Owner: Test/Review
+- Area: `tests/e2e/`
+- Acceptance: The test asserts the contract-true status (verify intended lifecycle against the API schema/persistence code before choosing which side is wrong; if the product behavior is wrong, escalate instead of editing the test).
+
+#### Defect: D-026
+
+- Status: Open
+- Severity: High
+- Repro: `make test-e2e` (with stack up)
+- Observed: 6 HITL/job-flow e2e failures depend on live gemma4:12b natural-language routing to `job_dispatch` (0 `tool_calls` rows persisted); outcome varies run-to-run (same instability visible as Playwright's auto-retried flaky spec).
+- Expected: E2E flows are deterministic per `.claude/rules/testing.md` (temperature=0; any non-determinism is a bug) — model-judgment-dependent paths must be driven through deterministic seams, not live NL routing.
+- Area: `tests/e2e/` + agent runtime test seams
+- Owner: App Builder + Test/Review
+- Acceptance: All job-flow e2e tests pass deterministically across 3 consecutive `make test-e2e` runs without depending on live model routing decisions.
 
 Dependencies: B-05
 
