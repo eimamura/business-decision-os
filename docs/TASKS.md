@@ -11,7 +11,7 @@ phase detail archived at `docs/archive/v5/TASKS.md` (P24–P64 in `docs/archive/
 P0–P23 in `docs/archive/v3/`).
 
 Numbering continues repository-wide: **next phase = P129, next task = T-759, next defect
-= D-027, next failure pattern = FP-022.**
+= D-028, next failure pattern = FP-022.**
 
 ---
 
@@ -306,6 +306,23 @@ build/lint/typecheck clean); supplemental `make test-web` exit 0 (86 tests) and
 - Area: `tests/e2e/` + agent runtime test seams
 - Owner: App Builder + Test/Review
 - Acceptance: All job-flow e2e tests pass deterministically across 3 consecutive `make test-e2e` runs without depending on live model routing decisions.
+
+#### Defect: D-027
+
+- Status: Open
+- Severity: Low
+- Repro: `make test-e2e` with `JOB_RUNNER_BACKEND=celery`
+- Observed: `test_decisions_sse_stream` asserts SSE event streaming unconditionally, but `POST /api/v1/decisions` branches to job-submission JSON when the celery backend is configured (compose default) — zero SSE events by design under that stack config.
+- Expected: The test accepts the backend-dependent response contract (SSE stream under inline execution; job-submission payload under celery).
+- Area: `tests/e2e/test_chat_flow.py`
+- Owner: Test/Review
+- Acceptance: `make test-e2e` passes with the compose-default celery backend configured.
+
+Re-validation round 2 (2026-08-24): seam + `SESSION_USER_ROLE="manager"` verified working
+(deterministic dispatch, approvals/jobs rows created, approve→resume pipeline healthy).
+Remaining blockers routed: approval-pause status decision recorded in DECISIONS.md
+(`awaiting_input` reuse); D-027 registered for the SSE/celery test-contract mismatch;
+D-023 fresh-reseed acceptance run scheduled before sign-off retry.
 
 Dependencies: B-05
 
