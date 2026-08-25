@@ -83,7 +83,7 @@ unsafe sign-off assumptions through Defect Tasks below.
 | B-01 — Hermetic sample-data tests | T-748 | Done | 0 |
 | B-02 — Next.js 15 page-contract recovery | T-749, T-750 | Done | 0 |
 | B-03 — Real web gates and dependency security | T-751, T-752, T-753 | Done | 0 |
-| B-04 — Local-only operational routes | T-754, T-755 | Not Started | 0 |
+| B-04 — Local-only operational routes | T-754, T-755 | Done | 0 |
 | B-05 — Release record and failure learning | T-756, T-757 | Not Started | 0 |
 | B-06 — Independent phase sign-off | T-758 | Not Started | 0 |
 
@@ -174,18 +174,18 @@ processes). Fix path = next@16 major bump, deferred per task constraint.
 
 Dependencies: B-02
 
-### Batch B-04 — Local-only operational routes (App Builder + Test/Review) — Not Started
+### Batch B-04 — Local-only operational routes (App Builder + Test/Review) — Done (2026-08-24)
 
 ADR: `docs/adr/2026-08-24-local-only-operational-routes.md`
 
 | Task | Description | Status |
 |---|---|---|
-| T-754 | Register `/api/v1/debug` and the `/api/v1/admin/*` router only for explicit local development or test environments, using the repository's `APP_ENV` convention. Remove API-key prefix disclosure entirely. Keep local Compose behavior intact and do not implement full authentication in this phase. | Not Started |
-| T-755 | Add API tests proving operational routes are absent in production/default-safe mode, present in explicit dev/test mode, and diagnostics never return secret material. Update affected existing admin endpoint tests without weakening their assertions. | Not Started |
+| T-754 | Register `/api/v1/debug` and the `/api/v1/admin/*` router only for explicit local development or test environments, using the repository's `APP_ENV` convention. Remove API-key prefix disclosure entirely. Keep local Compose behavior intact and do not implement full authentication in this phase. | Done |
+| T-755 | Add API tests proving operational routes are absent in production/default-safe mode, present in explicit dev/test mode, and diagnostics never return secret material. Update affected existing admin endpoint tests without weakening their assertions. | Done |
 
 #### Defect: D-022
 
-- Status: Open
+- Status: Resolved
 - Severity: High
 - Repro: `APP_ENV=production uv run python -c "from apps.api.main import app; print(sorted(r.path for r in app.routes if r.path == '/api/v1/debug' or r.path.startswith('/api/v1/admin')))"`
 - Observed: The debug endpoint and full admin router are registered unconditionally; the debug response also returns the first 12 characters of `ANTHROPIC_API_KEY`.
@@ -193,6 +193,37 @@ ADR: `docs/adr/2026-08-24-local-only-operational-routes.md`
 - Area: `apps/api/main.py`, admin API tests
 - Owner: App Builder
 - Acceptance: Environment-matrix API tests exit 0 and production/default-safe route inspection returns an empty list.
+- Fix note: T-754 gated `/api/v1/debug` + admin router on `_operational_envs = {"dev","test"}`
+  per ADR `docs/adr/2026-08-24-local-only-operational-routes.md`; `api_key_prefix` removed
+  from the debug response entirely (payload now `{anthropic_installed, anthropic_version,
+  api_key_set}`). Evidence: APP_ENV=production/unset repro returns `[]`; dev/test register
+  all 9 paths (Compose parity); 16 unit tests (`test_local_only_operational_routes.py`) +
+  9 integration HTTP-matrix tests (`tests/integration/test_local_only_operational_routes_api.py`)
+  pass; existing admin endpoint assertions preserved under session-level `APP_ENV=test` opt-in.
+
+T-754 proof (App Builder, 2026-08-24): `apps/api/main.py` gates `/api/v1/debug` and the
+admin router on `_operational_routes_enabled(APP_ENV in {"dev", "test"})` per ADR
+`docs/adr/2026-08-24-local-only-operational-routes.md`; `api_key_prefix` removed from the
+debug response. `tests/unit/conftest.py` sets `APP_ENV=test` (setdefault) at import time so
+the unit tier opts in before app import. D-022 repro: `APP_ENV=production` and unset
+(default-safe) route inspection both return `[]`; `APP_ENV=dev`/`=test` register the admin
+router + debug route (Compose parity — compose sets `APP_ENV: dev`). Gates:
+`uv run pytest tests/unit` exit 0 (1447 passed, 15 skipped; 16 new tests in
+`tests/unit/test_local_only_operational_routes.py`), `uv run ruff check` on changed files
+exit 0. Integration/E2E admin-route coverage updates deferred to T-755.
+
+T-755 proof (Test/Review, 2026-08-24): added
+`tests/integration/test_local_only_operational_routes_api.py` (9 HTTP-layer tests via
+ASGITransport: production/prod/staging/empty/unset → debug+admin 404 and empty route
+inspection per D-022; dev/test → debug 200 + admin/debug present in routes and OpenAPI;
+debug response carries no API-key substring/prefix/hash material). No admin endpoint tests
+existed under `tests/integration/`; the affected admin endpoint tests live in `tests/unit/`
+(`test_admin_sample_data.py`, `test_p85_tool_event_persistence.py`,
+`test_p114_b03_context_logs_endpoint.py`) and are opted into explicit `APP_ENV=test` by
+`tests/unit/conftest.py` at session level — they pass unchanged with all assertions intact.
+Gates: `make test-integration` exit 0 (25 passed, 154 skipped — DB-tier skips without
+compose db), `make test-unit` exit 0 (1447 passed, 15 skipped), `make lint` exit 0,
+`make typecheck` exit 0.
 
 Dependencies: none
 

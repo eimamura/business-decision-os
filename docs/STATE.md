@@ -36,6 +36,17 @@ not compile the web application.
 
 ## Last Completed
 
+P128-B-04 — Local-only operational routes (2026-08-24). T-754 gated `/api/v1/debug` and
+the `/api/v1/admin/*` router behind `APP_ENV ∈ {dev, test}` per ADR
+`2026-08-24-local-only-operational-routes.md` and removed API-key prefix disclosure from
+the debug response; T-755 added 9 integration HTTP environment-matrix tests plus App
+Builder's 16 unit tests, preserving all existing admin endpoint assertions. D-022 marked
+Resolved: production/default-safe route inspection returns `[]`; batch check
+`make test-unit` (1447 passed, 15 skipped) / `make lint` / `make typecheck` all exit 0;
+supplementary `make test-integration` exit 0 (25 passed, 154 DB-tier skipped).
+
+Previously:
+
 P128-B-03 — Real web gates and dependency security (2026-08-24). T-751 made `make build`
 run real `next build` behind a stamp-gated `npm ci`, added `tsc --noEmit` to
 `make typecheck`, and introduced the named `make test-web` Vitest target; T-752 aligned
