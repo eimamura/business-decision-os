@@ -22,6 +22,20 @@ from packages.agent.orchestrator.roles import DOMAIN_AGENT_ROLES
 
 logger = logging.getLogger(__name__)
 
+# Human role carried by interactive decision sessions when building ToolContext
+# for specialist execution (D-026 fix).
+#
+# "manager" is the minimum role whose Layer-1 tool filter includes hitl-safety
+# tools (see ToolRegistry.filter_for_user_role: analyst=read_only,
+# manager=read_only+hitl, admin=unrestricted). P101 made HITL job flows a
+# product feature of interactive sessions (approval queue UI + background jobs),
+# so session-driven control turns must be able to bind job_dispatch and
+# request_approval. Deliberately NOT "admin": that would additionally bind
+# write-safety tools inline, bypassing the approval-gated dispatch design.
+# Non-user-facing executors keep their own explicit roles (job_executor.py and
+# screening.py pass "admin"; direct ToolContext users default to "analyst").
+SESSION_USER_ROLE: str = "manager"
+
 
 def _default_tools(agent_role: str) -> list[str]:
     from packages.tools.base import _ROLE_TOOL_ALLOWLIST
@@ -90,6 +104,7 @@ async def _run_agent(
         specialist_role=agent_role,
         actor="orchestrator",
         correlation_id=uuid4(),
+        user_role=SESSION_USER_ROLE,
     )
     task = SpecialistTask(
         task_id=task_id,

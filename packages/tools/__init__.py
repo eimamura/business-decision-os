@@ -143,4 +143,8 @@ def create_tool_registry(
     registry.register(AnalyzeProductionPlanGapTool(db_session=db_session))
     registry.register(IdentifyBindingConstraintTool(db_session=db_session))
     registry.register(AnalyzeSupplyOrderTimingTool(db_session=db_session))
+    # T-600: job_dispatch is re-registered as LLM-callable with safety_level="hitl"
+    # (P81 decision anticipated this; P64 removed it to keep MVP scope lean).
+    # The HITL branch in AgentRuntime.prepare_hitl intercepts this before handle() is called.
+    registry.register(JobDispatchTool())
     return registry

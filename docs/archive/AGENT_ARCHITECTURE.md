@@ -1,5 +1,9 @@
 # Agent Architecture
 
+> **ARCHIVED (2026-07-06):** Stale snapshot (~P67). Superseded by `docs/RAG.md` (runtime graph),
+> `docs/TOOLS.md` (tool access), and code. Contradicts DECISIONS.md 2026-06-12 (job_dispatch was
+> re-registered LLM-callable behind HITL approval, not removed). Kept for historical reference only.
+
 Analysis of the product agent architecture: active agents, tool selection mechanism,
 execution flow, and improvement directions.
 

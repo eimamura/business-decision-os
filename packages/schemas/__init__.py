@@ -1,3 +1,10 @@
+from packages.schemas.context_packs import (
+    GENERIC_PACK,
+    USE_CASE_PACKS,
+    ContextLogCreate,
+    ContextLogRead,
+    ContextPack,
+)
 from packages.schemas.evaluations import EvaluationCriteria, EvaluationResult
 from packages.schemas.recommendation import (
     Candidate,
@@ -19,6 +26,11 @@ from packages.schemas.sse_events import (
 )
 
 __all__ = [
+    "ContextPack",
+    "USE_CASE_PACKS",
+    "GENERIC_PACK",
+    "ContextLogCreate",
+    "ContextLogRead",
     "KpiScore",
     "Candidate",
     "TradeoffExplanation",

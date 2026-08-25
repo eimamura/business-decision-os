@@ -55,7 +55,7 @@ def _stub_result(task: SpecialistTask) -> SpecialistResult:
 
 
 async def test_control_agent_run_queries_decision_memory_before_llm_call() -> None:
-    """search() is called with a JSON string that contains session_id, and when
+    """search() is called with the task instruction as the semantic query (T-673), and when
     results are returned, the instruction passed to super().run() includes
     '## Past Decisions'."""
     task = _make_task()
@@ -94,12 +94,11 @@ async def test_control_agent_run_queries_decision_memory_before_llm_call() -> No
         agent = ControlAgent(llm_client=MagicMock(), tool_registry=MagicMock())
         await agent.run(task, ctx)
 
-    # search must have been called
+    # search must have been called with the task instruction as the semantic query (T-673)
     mock_search.assert_called_once()
     call_args = mock_search.call_args
     query_arg: str = call_args[0][0]
-    parsed = json.loads(query_arg)
-    assert "session_id" in parsed
+    assert query_arg == task.instruction
 
     # instruction forwarded to super().run() must contain the Past Decisions block
     assert len(captured_tasks) == 1

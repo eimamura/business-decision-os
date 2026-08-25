@@ -118,6 +118,13 @@ export const JobFailedEventSchema = z.object({
   timestamp: z.string(),
 });
 
+export const JobReportEventSchema = z.object({
+  type: z.literal("job_report"),
+  session_id: z.string().nullable().optional(),
+  content: z.string(),
+  timestamp: z.string(),
+});
+
 export const ErrorEventSchema = z.object({
   type: z.literal("error"),
   step_id: z.string().nullable().optional(),
@@ -168,6 +175,7 @@ export const SseEventSchema = z.discriminatedUnion("type", [
   SessionPausedEventSchema,
   JobCompletedEventSchema,
   JobFailedEventSchema,
+  JobReportEventSchema,
   ErrorEventSchema,
   TextDeltaEventSchema,
   TextResetEventSchema,

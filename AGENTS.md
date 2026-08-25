@@ -65,32 +65,43 @@ Two tiers of decision documentation:
 
 ## Prohibitions
 
-The following are explicitly forbidden across all agents:
+The following are explicitly forbidden across all agents. Every item is one sentence; incident narratives live in `docs/failure-patterns.md` / `docs/ORCHESTRATOR.md`, never here.
+
+### Code, Data & Interfaces
 
 - Adding new top-level modules outside the layout in `docs/DESIGN.md` §Monorepo Layout.
 - Changing public interface signatures (`LLMClient`, `Tool`, `JobRunner`, `MemoryStore`, `Orchestrator`, `Specialist`) without an ADR.
 - Reading or referencing `data/sample/ground_truth/`.
-- Security violations (secrets, SQL injection, CORS widening, etc.) — see `.claude/rules/security.md` for the full list.
-- Hardcoding table column names or table schemas as string literals in tool code, agent system prompts, or raw SQL outside `packages/persistence/`. Use `get_schema_context()` from `packages/tools/schema_context.py` for LLM prompts; use the repository layer for DB queries.
-- Writing a hand-maintained `DB_SCHEMA` string or any schema description that duplicates what `information_schema` already provides. Schema context must flow from the DB, not from human memory.
+- Committing any violation listed in `.claude/rules/security.md` (secrets, SQL injection, CORS widening, etc.).
+- Hardcoding table column names or schemas as string literals in tool code, agent prompts, or raw SQL outside `packages/persistence/` — use `get_schema_context()` for LLM prompts and the repository layer for DB queries.
+- Writing any hand-maintained schema description (`DB_SCHEMA` strings included) that duplicates what `information_schema` already provides.
 - Sending raw inventory rows to LLM context.
 - Mutating closed `approvals` rows.
 - Bypassing `LLMClient` to call the LLM provider SDK directly.
-- Single-agent simplifications of the Orchestrator + Specialist split.
-- **Orchestrator writing to `packages/`, `apps/`, `tests/`, or `infra/`** — implementation and test authorship belong exclusively to App Builder and Test/Review respectively. The Orchestrator's only writable targets are `docs/TASKS.md`, `docs/STATE.md`, `docs/DECISIONS.md`, and `docs/adr/`. Violation = the batch must be reverted and re-delegated.
+- Shipping fail-silent fallbacks for external service clients — missing config must raise `RuntimeError` at the call site.
+
+### Agent Role Boundaries
+
+- Collapsing the Orchestrator + Specialist split into a single agent.
+- Writing outside your role's canonical writable-target set (Orchestrator's forbidden-write set: `.claude/skills/bdos-orchestrator/SKILL.md` HARD STOP block) — violations are reverted and re-delegated.
+- Shipping smart stubs that approximate real behavior instead of conforming to the schema contract.
+
+### Quality Gates & Measurement
+
 - Collapsing per-KPI scores into a single weighted total inside the Evaluator.
-- Smart stubs that approximate real behavior instead of conforming to the schema contract.
-- Fail-silent fallbacks for external service clients: missing config (API keys, packages) MUST raise `RuntimeError` at the call site, not silently degrade to a stub or no-op.
-- Self-certifying phase completion — Test/Review must verify before any phase is marked Done.
-- Fixing a test or quality gate failure that was discovered in a completed phase, or that persists after a specialist's first fix attempt, without first registering it as a D-NNN Defect Task in `docs/TASKS.md`. Ad-hoc `fix(...)` commits are not a substitute for the Defect Task workflow.
-- Marking a D-NNN Defect Task `Resolved` without immediately invoking `/analyze-failure D-NNN` to record the root cause in `docs/failure-patterns.md`.
-- Advancing to the next phase while any Defect Task in the current phase has `Status: Open`.
-- Signing off a quality gate as passed without capturing and reporting the command, exit code, and tail output in the Proof Output block — a claim of "passes" with no exit-code evidence is not a sign-off.
-- Omitting `make test-integration` from a phase sign-off gate list because no integration test was explicitly listed as a task in the phase — integration tests must run at every phase sign-off without exception, because any behavior-changing phase can silently break existing integration tests. A sign-off report that lacks a `make test-integration` gate row is invalid.
-- Force-pushing to `main`; direct pushes to `main`; non-linear history.
+- Self-certifying phase completion — Test/Review verifies before any phase is marked Done.
+- Fixing a gate/test failure meeting a `docs/ORCHESTRATOR.md §Defect Task Format` trigger without first registering a D-NNN Defect Task.
+- Marking a D-NNN Defect Task `Resolved` without immediately invoking `/analyze-failure D-NNN`.
+- Advancing to the next phase while any Defect Task in the current phase is `Open`.
+- Signing off a quality gate as passed without captured command, exit code, and output-tail evidence in the Proof Output block. (← FP-003)
+- Omitting a `make test-integration` gate row from any phase sign-off — omission invalidates the sign-off. (← FP-003)
+- Using SUM token accumulators (e.g. `state["input_tokens"]`) for context-saturation checks or live verification — `peak_input_tokens` (per-call max) is authoritative, and any new SUM metric documents "sum-not-peak" at its definition site. (← FP-011)
+
+### Git & Delivery
+
+- Force-pushing to `main`, direct-pushing to `main`, or producing non-linear history.
 - Using `--no-verify` or skipping commit hooks without explicit ADR justification.
 - Using a plain HTTP stub for the web container; `compose web.build.context` must be the monorepo root.
-- Using `state["input_tokens"]` (the `operator.add` SUM accumulator in `AgentState`) for context-saturation threshold checks or live verification because the SUM always exceeds `num_ctx` for multi-call runs and produces false-safe readings; the authoritative saturation signal is `peak_input_tokens` (per-call max, surfaced in the `agent_end` SSE `token_cost.peak_input_tokens` field). Any new token metric that is a SUM must document "sum-not-peak" at its definition site.
 
 ## Commit Convention
 
@@ -127,10 +138,14 @@ Agent commit boundary: `git add` + `git commit` only. Never `git push` or `gh pr
 - ADR triggers, authorship rules, TASKS.md write authority: `.claude/skills/bdos-orchestrator/SKILL.md`
 - Test tiers, cassettes, CI: `.claude/rules/testing.md` (SSoT); operational How-to: `docs/TESTING.md`
 - Failure pattern log and prevention lever policy: `docs/failure-patterns.md`, `docs/prevention-policy.md`
+- Tool contracts and access control: `docs/TOOLS.md`
+- Agent runtime graph and RAG design: `docs/RAG.md`
+- Coding-orchestrator process formats (handoff, gate set, proof output, ADR triggers): `docs/ORCHESTRATOR.md`
+- Product requirements and target-state agent catalog: `docs/SPEC.md`
 
 ## When in Doubt
 
-- Read `docs/DESIGN.md` §Public Interfaces and §Phase Progression first.
+- Read `docs/DESIGN.md` §Public Interfaces first.
 - If a decision conflicts with current code, the code is the runtime truth; `docs/DECISIONS.md` and ADRs are the design truth. File an ADR before changing either.
 - Ask the user before any irreversible action: destructive git operations, schema migrations that drop data, API contract changes, public repo settings.
 
@@ -150,6 +165,6 @@ Coding agent chat messages and narrative responses should match the user's langu
 | Log messages, error messages, metric labels | English |
 | Test names and assertion messages | English |
 
-**Exception:** Existing Japanese reference documents (`docs/business_decision_os_spec.md`, `docs/domain.md`) are preserved as-is. English official docs supersede them on conflict. Coding agent chat and narrative responses may use Japanese only when responding to Japanese user messages.
+**Exception:** Coding agent chat and narrative responses may use Japanese only when responding to Japanese user messages.
 
 This convention is enforced at code review. PRs containing non-English identifiers, log messages, documentation, or UI strings will be returned for correction.

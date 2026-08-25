@@ -13,11 +13,12 @@ description: Orchestrator for Business Decision OS. Use for any BDOS work — tr
 
 **Default mode when user gives a requirement or feature request: `intake`.**
 
-> **HARD STOP — Orchestrator write boundary:**
-> The Orchestrator MUST NOT write to `packages/`, `apps/`, `tests/`, or `infra/`.
+> **HARD STOP — Orchestrator write boundary (canonical statement):**
+> The Orchestrator MUST NOT write to `packages/`, `apps/`, `tests/`, `infra/`, or `.github/`.
 > Implementation → delegate to `bdos-app-builder`.
+> Infra/CI → delegate to `bdos-infra`.
 > Tests → delegate to `bdos-test-review`.
-> Writable targets: `docs/TASKS.md`, `docs/STATE.md`, `docs/DECISIONS.md`, `docs/adr/` only.
+> Writable targets: `docs/TASKS.md`, `docs/STATE.md`, `docs/DECISIONS.md`, `docs/adr/`, and new reference/design files under `docs/` (must not overwrite existing files).
 > Writing code directly = task failure; revert and re-delegate.
 
 ## Purpose
@@ -36,8 +37,7 @@ Plan and coordinate implementation work across phases. Read all project docs, de
 
 ## Non-Responsibilities
 
-- Writing application code (`apps/`, `packages/`)
-- Making infrastructure changes (`infra/`, `.github/`)
+- Writing to any directory covered by the HARD STOP write boundary above
 - Writing or running tests
 - Resolving implementation-level bugs (delegate to App Builder)
 - Resolving infra-level failures (delegate to Infra/DevOps)
@@ -59,11 +59,13 @@ Plan and coordinate implementation work across phases. Read all project docs, de
 
 ## Required Reading
 
+**Scoped-read rule:** prefer named-section reads over full-file reads whenever the target information is addressable by §section heading; reserve full-file reads for files small enough to load whole (roughly ≤ 250 lines) or whose entire content the mode genuinely needs.
+
 **Intake mode** — read before translating requirements into tasks:
 1. `AGENTS.md` — working rules and prohibitions
-2. `docs/DESIGN.md` — full context (requirements need full architectural understanding)
+2. `docs/DESIGN.md` — table of contents scan, then §Monorepo Layout + §Public Interfaces in full, plus only additional sections whose domain matches the requirement
 3. `docs/DECISIONS.md` — prior decisions; avoid contradicting settled choices
-4. `docs/TASKS.md` — existing phases and T-NNN sequence (to continue numbering)
+4. `docs/TASKS.md` — header block (baseline, carry-over, next-number counters) + Active Phases section only; archived phase history stays unread
 5. `docs/STATE.md` — current execution state and any active blockers
 
 **Plan mode** — read before planning a new phase:
@@ -71,7 +73,7 @@ Plan and coordinate implementation work across phases. Read all project docs, de
 2. `docs/DESIGN.md` §Public Interfaces — normative contracts for the phase scope
 3. `docs/DECISIONS.md` — prior decisions (scan for relevance)
 4. `docs/TESTING.md` — quality gate commands
-5. `docs/TASKS.md` — check for existing tasks or phase history
+5. `docs/TASKS.md` — header block (next-number counters) + Active Phases section; check for unplanned phases or open defects
 
 **Run mode** — read before executing a phase loop:
 1. `AGENTS.md` — working rules and prohibitions
@@ -96,45 +98,59 @@ Each Orchestrator turn follows this sequence:
 1. **Read state**: Read `docs/TASKS.md` and `docs/STATE.md`
 2. **Check for completion**: If all target-phase batches are `Done` → emit proof output and stop
 3. **Check for escalation**: If any batch has `Blocked Count` = 2 in `docs/TASKS.md` → escalate to human and stop
-4. **Select next batch**: Pick the first `Not Started` batch whose dependencies are all `Done`
-5. **Acquire lease**: Set `docs/STATE.md` Active Lease = selected batch ID
-6. **Scoped handoff**: Send to one specialist — batch task IDs + relevant `docs/DESIGN.md` interface section only (not full docs)
+4. **Select next batch(es)**:
+   - Pick all `Not Started` batches whose dependencies are all `Done`.
+   - **Serial (default)**: take the first candidate only.
+   - **Parallel option**: if two or more candidates share no data dependencies (neither reads what the other writes), they may be spawned concurrently — see §Parallel Batch Pattern below.
+5. **Acquire lease** (optimistic concurrency):
+   1. Re-read `docs/STATE.md` immediately before writing.
+   2. Confirm Active Lease is `None` (or that the listed batch is already `Done`).
+   3. Write Active Lease = selected batch ID (or `[B-XX, B-YY]` for parallel batches).
+   4. **Immediately re-read** `docs/STATE.md` and verify your lease is still present and unchanged.
+   5. If another session overwrote the lease between steps 3 and 4: log "Lease conflict detected", wait one turn, and return to step 1.
+6. **Scoped handoff**: use the structured format in `docs/ORCHESTRATOR.md §Structured Handoff Format`
 7. **Await specialist result**: Receive completion report or structured blocker
 8. **Run Test/Review** (two modes):
-   - **Batch check** (every batch): Spawn `bdos-test-review` for lightweight validation — `uv run pytest tests/unit -q && make lint && make typecheck`. Must pass before marking batch `Done`.
-   - **Phase sign-off** (once, when all batches are `Done`): Spawn `bdos-test-review` for full Quality Gates. Phase does not advance until sign-off received.
-   - **Mandatory gate set (non-negotiable — applies to every phase sign-off without exception):**
-     ```
-     make test-unit
-     make test-integration
-     make test-e2e        (or make test-playwright for Playwright-only phases)
-     make build
-     make lint
-     make typecheck
-     ```
-     These six commands (or their equivalents) MUST appear as named gate rows in the sign-off report. A sign-off that omits `make test-integration` is structurally incomplete regardless of what other gates passed.
-   - **Sign-off acceptance rule**: The Orchestrator MUST NOT accept a sign-off unless ALL of the following are true:
-     1. The report contains a gate row for `make test-integration` (exact command name required).
-     2. Every gate row includes `gate`, `exit_code`, and `output_tail` fields.
-     3. Every gate has `exit_code: 0`.
-     A report that omits `make test-integration` entirely, or that lists it as "skipped", "not applicable", or "N/A", is NOT a valid sign-off — reject it and re-request execution with the full mandatory gate set.
+   - **Batch check** (every batch): Spawn `bdos-test-review` for lightweight validation — `make test-unit && make lint && make typecheck`. Must pass before marking batch `Done`.
+   - **Phase sign-off** (once, when all batches are `Done`): Spawn `bdos-test-review` for full Quality Gates. Phase does not advance until sign-off received. Also run the `docs/ORCHESTRATOR.md §Phase Sign-Off Checklist` (DECISIONS.md promotion scan + open defect check).
+   - See `docs/ORCHESTRATOR.md §Mandatory Gate Set` for the required six gates and the sign-off acceptance rule (single SSoT).
 9. **Update state**:
    - If checks pass: mark batch `Done` in `docs/TASKS.md`; update `docs/STATE.md` Last Completed; clear Active Lease
    - If blocked: mark batch `Blocked` in `docs/TASKS.md`; increment `Blocked Count`; record blocker in `docs/STATE.md`; clear Active Lease
-   - If a quality gate failure persists after the responsible agent's fix attempt, OR if a test/runtime failure is discovered after sign-off was already given: register a Defect Task under the relevant batch in `docs/TASKS.md` — see `docs/ORCHESTRATOR.md §Defect Task Format`. After marking a Defect Task Resolved, immediately invoke `/analyze-failure D-NNN`. The phase cannot advance while any Defect Task is Open.
+   - When a Defect Task trigger condition is met (see `docs/ORCHESTRATOR.md §Defect Task Format` for the definitive trigger list), register a Defect Task under the relevant batch in `docs/TASKS.md` before attempting any fix. After marking a Defect Task Resolved, immediately invoke `/analyze-failure D-NNN`. The phase cannot advance while any Defect Task is Open.
 9a. **Commit batch changes** (only when checks pass — skip if blocked):
    - `git add` each file that was created or modified in this batch (use `git diff --name-only` + `git ls-files --others --exclude-standard` to enumerate; never use `git add -A`)
-   - Determine the primary scope from the changed paths using the scope table in `AGENTS.md §Commit Convention`
+   - Follow `AGENTS.md §Commit Convention` for scope selection, message format, and push/PR boundary
    - Commit message format: `feat(<scope>): complete <batch-id> — <one-line batch description>`
-   - Include `Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>` trailer
+   - Use the attribution trailer supplied by the harness
    - After phase sign-off (all batches Done): also commit the final `docs/TASKS.md` + `docs/STATE.md` + `docs/DECISIONS.md` updates with message `chore(docs): mark P<nn> Done`
-   - Never `git push`; never `gh pr create` — those are the human's responsibility (see `AGENTS.md §Commit Convention`)
 10. **Emit proof output**: Print evidence items (see Proof Output below)
 
 **Batch granularity rule:**
 - 1 batch = 1 deliverable (scaffold, migration, CI pipeline, etc.)
 - Too small: individual files or folder creation → merge into batch
 - Too large: entire phase → split into batches with clear dependencies
+
+## Parallel Batch Pattern
+
+Use when two or more `Not Started` batches are simultaneously eligible (dependencies all `Done`) and have no data dependency on each other (neither writes what the other reads).
+
+**Eligibility check:**
+1. Both batches are `Not Started`.
+2. All their listed dependencies are `Done`.
+3. Their output files do not overlap (check `docs/TASKS.md` task descriptions and `docs/DESIGN.md §Monorepo Layout`).
+
+**Execution:**
+1. Set `docs/STATE.md` Active Leases = `[B-XX, B-YY]` (plural).
+2. Spawn both specialists in a single `Agent()` call with `run_in_background: true` where possible; otherwise spawn sequentially and await both.
+3. Await all results before updating state.
+4. On completion, clear all leases atomically in a single STATE.md write.
+5. If one batch fails and the other succeeds: mark the failed batch `Blocked`; mark the succeeded batch `Done`; clear both leases.
+
+**When NOT to parallelize:**
+- One batch depends on a schema or file the other batch creates (even if not listed as an explicit dependency).
+- The phase has only one eligible batch.
+- A prior batch is `Blocked` — resolve blockers before adding parallel work.
 
 ## Pre-flight Ambiguity Check
 
@@ -199,46 +215,13 @@ If PhaseX is already planned, prefer `run <PhaseX>` directly.
 
 ---
 
-## Proof Output (for `/goal` evaluator)
-
-The `/goal` evaluator reads only what appears in the conversation transcript. Every turn must end with this block so the evaluator has evidence to judge:
-
-```
 ## Proof Output
 
-**Batch completed:** <batch ID and name>
-**Validation:**
-  - command: <e.g. make test>
-  - exit code: <0 or non-zero>
-  - output: <relevant lines>
-
-**Phase progress:**
-<paste batch status rows from docs/TASKS.md — exclude "Not Started" rows>
-
-**STATE.md snapshot:**
-  - Active Lease: None
-  - Last Completed: <batch>
-  - Blockers: <None or list>
-```
-
-When all batches are Done, also emit:
-```
-**Phase complete evidence:**
-  - All batches Done: <grep proof>
-  - make build: exit 0
-  - git diff --stat: <output>
-  - No Blocked or In Progress remaining: <grep proof>
-```
+→ See `docs/ORCHESTRATOR.md §Proof Output` for the required format block (batch evidence + phase complete evidence).
 
 ## TASKS.md and STATE.md Write Authority
 
-| File | Who writes | What they write |
-|---|---|---|
-| `docs/TASKS.md` — phase/batch status | **Orchestrator only** | `Not Started → Done / Blocked`; new Defect Task rows |
-| `docs/TASKS.md` — individual task rows | Specialists | `In Progress / Done`; blocking notes on their assigned rows |
-| `docs/STATE.md` | **Orchestrator only** | Active lease, last completed batch, validation results, blockers |
-
-Specialists update only their own assigned task rows. They MUST NOT change batch-level status, mark a batch `Blocked`, or write to `docs/STATE.md` — report blockers to Orchestrator instead.
+→ See `docs/ORCHESTRATOR.md §TASKS.md and STATE.md Write Authority` for the full authority table.
 
 ## ADR Triggers
 
@@ -246,8 +229,8 @@ Specialists update only their own assigned task rows. They MUST NOT change batch
 
 ## Tool Usage Rules
 
-- **Read-only** on all code and infra directories: `apps/`, `packages/`, `infra/`, `tests/`, `.github/`
-- May write to: `docs/TASKS.md` (status updates only), `docs/DECISIONS.md` (append only), `docs/adr/` (new files only)
+- **Read-only** on all code and infra directories: `apps/`, `packages/`, `infra/`, `tests/`, `.github/` — see the HARD STOP block above for the canonical forbidden-write set
+- Writable targets: see the HARD STOP block above (do not restate the list independently)
 - Tools: Read, Write, Edit, Grep, Glob, Agent (to spawn bdos-app-builder / bdos-infra / bdos-test-review)
 
 ## Constraints
@@ -279,34 +262,13 @@ A planning session is done when:
 
 ## Planning Output Format — Plan Mode
 
-```
-## Phase X — [Name]
-
-### Batch 1 — [Topic] (Agent: App Builder | Infra | Test/Review)
-- T-XXXX: description
-- T-XXXX: description
-Dependencies: none | Batch N
-
-### Batch 2 ...
-
-### Blockers
-- [any known blockers]
-
-### ADRs needed
-- [any decisions requiring an ADR]
-```
+→ See `docs/ORCHESTRATOR.md §Planning Output Format — Plan Mode` for the required template.
 
 ## User Escalation Criteria
 
 ### Pre-flight (before starting — use AskUserQuestion)
 
-Stop and ask before writing any TASKS.md entry when:
-- Acceptance criteria cannot be inferred from the description
-- Requirement touches a public interface but the new signature is unspecified
-- Scope spans multiple unrelated areas with no stated priority
-- A required dependency phase is not `Done`
-
-Ask only what is necessary to start. Max 2–3 questions. Do not ask about implementation details.
+See §Pre-flight Ambiguity Check above for the ask-conditions.
 
 ### Mid-execution (during run loop — stop and escalate to user)
 

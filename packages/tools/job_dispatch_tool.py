@@ -9,7 +9,8 @@ class JobDispatchTool:
     name = "job_dispatch"
     description = (
         "Dispatch a job for execution. The job will be paused for human approval "
-        "before running. Supported job_types: simulate, optimize, forecast, train_forecast."
+        "before running. Supported job_types: simulate, inventory_simulation, "
+        "optimize, forecast, train_forecast."
     )
     safety_level: Literal["read_only", "write", "hitl"] = "hitl"
     input_schema: dict[str, Any] = {  # Any: JSON schema values are untyped
@@ -17,7 +18,9 @@ class JobDispatchTool:
         "properties": {
             "job_type": {
                 "type": "string",
-                "enum": ["simulate", "optimize", "forecast", "train_forecast"],
+                "enum": [
+                    "simulate", "inventory_simulation", "optimize", "forecast", "train_forecast"
+                ],
                 "description": "The type of computation to run.",
             },
             "params": {

@@ -102,6 +102,54 @@ const CATEGORIES: Category[] = [
     ],
   },
   {
+    id: "job-dispatch",
+    label: "Job Dispatch",
+    icon: "⬗",
+    scenarios: [
+      {
+        id: "jd-train-forecast",
+        title: "Train Forecast Model",
+        description: "Submit a forecast model training job — runs in the background and notifies you in chat on completion",
+        prompt: "Train the demand forecast model for SKU-001 as a background job and notify me in chat when it completes.",
+      },
+      {
+        id: "jd-inventory-simulation",
+        title: "Full Inventory Simulation",
+        description: "Run a full inventory simulation for all SKUs — background execution with a completion report",
+        prompt: "Run a full inventory simulation for all SKUs as a background job and notify me in chat when the results are ready.",
+      },
+      {
+        id: "jd-supply-analysis",
+        title: "Batch Supply Chain Analysis",
+        description: "Kick off a comprehensive supply gap analysis across the entire SKU catalog",
+        prompt: "Run a comprehensive supply chain analysis for the entire SKU catalog as a background job. Notify me in chat when it is complete.",
+      },
+    ],
+  },
+  {
+    id: "charts",
+    label: "Charts",
+    icon: "◈",
+    scenarios: [
+      {
+        id: "chart-stockout-risk",
+        title: "Stockout Risk Chart",
+        description:
+          "List all SKUs at risk of stockout with days-of-cover values — renders an inline bar chart",
+        prompt:
+          "List all SKUs at risk of stockout. For each SKU show the days of cover remaining and the risk level. I need the full list sorted by urgency.",
+      },
+      {
+        id: "chart-demand-trend",
+        title: "Demand Trend Chart",
+        description:
+          "Analyze the demand trend direction and period-over-period changes for SKU-001 — renders an inline line chart",
+        prompt:
+          "Analyze the demand trend for SKU-001. Show me the trend direction, slope, and period-over-period demand quantities so I can see how demand is changing over time.",
+      },
+    ],
+  },
+  {
     id: "ask-user",
     label: "Ask User (HITL)",
     icon: "◑",
@@ -314,6 +362,13 @@ export default function ToolScenarioModal({
               <button
                 key={cat.id}
                 onClick={() => setActiveCategoryId(cat.id)}
+                data-testid={
+                  cat.id === "job-dispatch"
+                    ? "category-job-dispatch"
+                    : cat.id === "charts"
+                      ? "category-charts"
+                      : undefined
+                }
                 className={`w-full text-left px-4 py-2.5 flex items-center gap-2.5 text-sm transition-colors ${
                   activeCategoryId === cat.id
                     ? "bg-indigo-500/15 text-indigo-300 border-r-2 border-indigo-500"
@@ -332,6 +387,7 @@ export default function ToolScenarioModal({
               <button
                 key={s.id}
                 onClick={() => handleApply(s.prompt)}
+                data-testid={activeCategory.id === "job-dispatch" ? `scenario-job-dispatch-${s.id}` : undefined}
                 className="group w-full text-left rounded-xl border border-white/8 bg-white/[0.03] hover:bg-indigo-500/10 hover:border-indigo-500/30 px-4 py-3 transition-all"
               >
                 <p className="text-sm font-semibold text-white/85 group-hover:text-indigo-200 mb-1">

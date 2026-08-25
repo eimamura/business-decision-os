@@ -64,38 +64,52 @@ This context is essential: without knowing what tools *were available*, tool_sel
    - For `model_limitation`: suggest model upgrade, a judge gate, or a mandatory tool call scaffold
    - For `missing_tool`: name the tool to build and its expected input/output
 
-7. **Offer task creation** — ask the user: `→ bdos-orchestrator intake でタスク化しますか？ [Y/N]`
+7. **Offer task creation** — ask the user (in their language) whether to create a task via `bdos-orchestrator intake`.
    If Y: spawn `Agent(subagent_type="bdos-orchestrator", prompt="intake <fix description>")`.
 
 ## Output Format
 
+**Language:** match the user's language (AGENTS.md §Language Convention). When the user writes in Japanese, translate all section labels to Japanese. When the user writes in English, use the English template below.
+
 ```markdown
 ## Judge Report
 
-**質問:** <question>
-**回答（要約）:** <one-sentence summary of the answer>
+**Question:** <question>
+**Answer (summary):** <one-sentence summary of the answer>
 
-### スコア
-| 次元 | スコア | 問題点 |
+### Scores
+| Dimension      | Score | Issue |
 |---|---|---|
-| tool_selection | 0.X | <specific issue or "なし"> |
-| groundedness   | 0.X | <specific issue or "なし"> |
-| relevance      | 0.X | <specific issue or "なし"> |
-| completeness   | 0.X | <specific issue or "なし"> |
-| reasoning      | 0.X | <specific issue or "なし"> |
+| tool_selection | 0.X   | <specific issue or "none"> |
+| groundedness   | 0.X   | <specific issue or "none"> |
+| relevance      | 0.X   | <specific issue or "none"> |
+| completeness   | 0.X   | <specific issue or "none"> |
+| reasoning      | 0.X   | <specific issue or "none"> |
 
-**aggregate:** 0.XX → ✅ PASS / ❌ FAIL
+**Aggregate:** 0.XX → ✅ PASS / ❌ FAIL
 
-### 根本原因
-**クラス:** `<class>`
-**説明:** <2–3 sentences explaining the mechanism — not the symptom, the cause>
+### Root Cause
+**Class:** `<class>`
+**Explanation:** <2–3 sentences explaining the mechanism — not the symptom, the cause>
 
-### 修正案
+### Proposed Fix
 <numbered list of specific changes with file paths and quoted text where applicable>
 
-### 次のアクション
-→ bdos-orchestrator intake でタスク化しますか？ [Y/N]
+### Next Action
+→ Create a task via bdos-orchestrator intake? [Y/N]
 ```
+
+**Japanese label mapping** (use when responding in Japanese):
+
+| English | Japanese |
+|---|---|
+| Question | 質問 |
+| Answer (summary) | 回答（要約） |
+| Scores | スコア |
+| Dimension / Issue | 次元 / 問題点 |
+| Root Cause / Class / Explanation | 根本原因 / クラス / 説明 |
+| Proposed Fix | 修正案 |
+| Next Action | 次のアクション |
 
 ## Root Cause Class → Fix Ownership
 
@@ -105,6 +119,11 @@ This context is essential: without knowing what tools *were available*, tool_sel
 | `tool_definition` | Edit tool description | `bdos-app-builder` |
 | `model_limitation` | Model swap or structural constraint | Human decision + `bdos-app-builder` |
 | `missing_tool` | New tool implementation | `bdos-app-builder` + `bdos-infra` |
+
+## Write Authority
+
+- May write only new files under `docs/judge-reports/`
+- Everything else is read-only; task creation goes through `bdos-orchestrator` (see §Process step 7)
 
 ## Constraints
 

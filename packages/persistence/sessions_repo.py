@@ -116,6 +116,13 @@ class DecisionSessionRepository:
     async def delete_session(self, session_id: str) -> bool:
         pool = await get_pool()
         async with pool.acquire() as conn:
+            # jobs.session_id references decision_sessions without ON DELETE CASCADE
+            # (migration 0012 postdates the cascade pass in 0003). Delete orphaned
+            # jobs for this session before deleting the session row.
+            await conn.execute(
+                "DELETE FROM jobs WHERE session_id = $1",
+                uuid.UUID(session_id),
+            )
             deleted = await conn.fetchval(
                 "DELETE FROM decision_sessions WHERE id = $1 RETURNING id",
                 uuid.UUID(session_id),
@@ -160,5 +167,9 @@ class DecisionSessionRepository:
     async def delete_all_sessions(self) -> int:
         pool = await get_pool()
         async with pool.acquire() as conn:
+            # jobs.session_id references decision_sessions without ON DELETE CASCADE
+            # (added in migration 0012, after the 0003 cascade pass). Delete jobs
+            # first so the FK constraint does not block the session delete.
+            await conn.execute("DELETE FROM jobs")
             result = await conn.execute("DELETE FROM decision_sessions")
         return int(result.split()[-1])  # "DELETE N" → N

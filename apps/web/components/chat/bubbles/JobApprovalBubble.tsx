@@ -6,9 +6,20 @@ import BubbleShell from "./BubbleShell";
 
 interface JobApprovalBubbleProps {
   message: ChatMessage;
+  /** Fires when the user approves the job so the chat can render a status card. */
+  onJobApproved?: (jobId: string, jobType: string) => void;
 }
 
-export default function JobApprovalBubble({ message }: JobApprovalBubbleProps): React.JSX.Element {
+export default function JobApprovalBubble({
+  message,
+  onJobApproved,
+}: JobApprovalBubbleProps): React.JSX.Element {
+  function handleDecision(decision: "approved" | "rejected"): void {
+    if (decision === "approved" && message.jobId && message.jobType) {
+      onJobApproved?.(message.jobId, message.jobType);
+    }
+  }
+
   return (
     <BubbleShell
       side="left"
@@ -21,6 +32,7 @@ export default function JobApprovalBubble({ message }: JobApprovalBubbleProps): 
         jobType={message.jobType ?? "unknown"}
         description={message.jobDescription ?? ""}
         params={message.jobParams ?? {}}
+        onDecision={handleDecision}
       />
     </BubbleShell>
   );

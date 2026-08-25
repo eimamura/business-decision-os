@@ -1,6 +1,15 @@
 from __future__ import annotations
 
+import os
+
 import pytest
+
+# The unit tier is an explicit test environment for APP_ENV purposes. This must
+# run at conftest import time — before any test module imports apps.api.main —
+# because operational routes (/api/v1/debug, /api/v1/admin/*) are registered
+# only in explicit dev/test environments.
+# ADR: docs/adr/2026-08-24-local-only-operational-routes.md
+os.environ.setdefault("APP_ENV", "test")
 
 
 @pytest.fixture(autouse=True)

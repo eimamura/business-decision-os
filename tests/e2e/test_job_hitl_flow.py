@@ -1,8 +1,19 @@
 """Integration tests for the job-dispatch HITL flow.
 
-These tests require a live server on localhost:8000.
-They are marked @pytest.mark.e2e and auto-skipped when the server is not
-reachable (see tests/e2e/conftest.py).
+These tests run against the live API at API_BASE_URL (API_PORT env, Makefile
+default 8002) and are marked @pytest.mark.e2e. A dedicated e2e session fails
+loudly when the API is unreachable (see tests/e2e/conftest.py).
+
+Determinism (D-026): the served API must run LLM_DRIVER=scripted — enforced by
+the session-scoped guard fixture in tests/e2e/conftest.py. Under the scripted
+driver the control agent always emits one deterministic job_dispatch tool call,
+so these flows assert scripted-driven outcomes: awaiting_input → approve →
+completed with a generated file; reject → failed.
+
+Status vocabulary (DECISIONS.md 2026-08-24): the approval pause reuses the
+existing decision_sessions.status value 'awaiting_input' — 'awaiting_approval'
+is forbidden by migration 0014's CHECK constraint. After approve + successful
+job execution the session reaches 'completed'; reject/failed-job lands 'failed'.
 
 Flow under test:
   POST /api/v1/sessions
@@ -21,14 +32,18 @@ from typing import Any, Callable
 import httpx
 import pytest
 
+from tests.e2e.conftest import API_BASE_URL
+
 # ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
 
-_BASE = "http://localhost:8000"
+_BASE = API_BASE_URL
 _DEV_HEADERS = {"X-Dev-User": "dev-user", "Content-Type": "application/json"}
 
-# Prompt that reliably triggers job_dispatch in the agent
+# Message that triggers job_dispatch. Under LLM_DRIVER=scripted the control
+# agent always emits the deterministic job_dispatch tool call on its first
+# control turn, independent of wording.
 _DISPATCH_MESSAGE = (
     "Please run an inventory optimization simulation for SKU-A42 "
     "with a 14-day planning horizon so we can evaluate reorder timing."
@@ -61,6 +76,38 @@ async def _poll_until(
             return res.json()
         await asyncio.sleep(delay)
     pytest.fail(f"Condition never met at {url} after {max_attempts} attempts")
+
+
+async def _poll_session_status(
+    client: httpx.AsyncClient,
+    session_id: str,
+    states: set[str],
+    max_attempts: int = 30,
+    delay: float = 1.0,
+) -> dict[str, Any]:
+    """Poll GET /api/v1/sessions/{session_id} until its status is in *states*.
+
+    Asserts the canonical detail resource (DECISIONS.md 2026-08-24 vocabulary:
+    'awaiting_input' at pause; 'completed'/'failed' terminal after execution).
+    Regression coverage for D-028: the endpoint must reflect DB-persisted
+    status writes (HITL pause / job terminal sync / approval decisions), not
+    only the process-local copy created at POST time.
+    """
+    last_status: Any = None
+    for _ in range(max_attempts):
+        res = await client.get(
+            _url(f"/api/v1/sessions/{session_id}"), headers=_DEV_HEADERS
+        )
+        if res.status_code == 200:
+            data = res.json()
+            last_status = data.get("status")
+            if last_status in states:
+                return data
+        await asyncio.sleep(delay)
+    pytest.fail(
+        f"Session {session_id} never reached status {sorted(states)} after "
+        f"{max_attempts} attempts (last observed: {last_status!r})"
+    )
 
 
 async def _create_session(client: httpx.AsyncClient) -> str:
@@ -149,14 +196,9 @@ async def test_job_dispatch_creates_pending_job() -> None:
         # Send a message that should trigger job_dispatch
         await _post_message(client, session_id, _DISPATCH_MESSAGE)
 
-        # Wait until the session transitions to awaiting_approval
-        await _poll_until(
-            client,
-            _url(f"/api/v1/sessions/{session_id}"),
-            condition_fn=lambda d: d.get("status") == "awaiting_approval",
-            max_attempts=30,
-            delay=1.0,
-        )
+        # Wait until the session transitions to awaiting_input (the approval
+        # pause status — 'awaiting_approval' is forbidden by migration 0014).
+        await _poll_session_status(client, session_id, {"awaiting_input"})
 
         # Find the pending approval linked to this session
         approval = await _find_pending_approval_for_session(client, session_id)
@@ -181,14 +223,9 @@ async def test_job_approve_executes_and_completes() -> None:
         # Trigger job_dispatch
         await _post_message(client, session_id, _DISPATCH_MESSAGE)
 
-        # Wait for awaiting_approval
-        await _poll_until(
-            client,
-            _url(f"/api/v1/sessions/{session_id}"),
-            condition_fn=lambda d: d.get("status") == "awaiting_approval",
-            max_attempts=30,
-            delay=1.0,
-        )
+        # Wait for the approval-pause status awaiting_input (DECISIONS.md
+        # 2026-08-24; migration 0014 CHECK constraint)
+        await _poll_session_status(client, session_id, {"awaiting_input"})
 
         # Get the pending approval for this session
         approval = await _find_pending_approval_for_session(client, session_id)
@@ -227,4 +264,14 @@ async def test_job_approve_executes_and_completes() -> None:
         assert isinstance(generated_files, list)
         assert len(generated_files) >= 1, (
             "Expected at least one job_files row after job completion"
+        )
+
+        # The session must land on its contract-correct terminal state after
+        # approve + successful job execution (D-026): 'completed'.
+        session_data = await _poll_session_status(
+            client, session_id, {"completed", "failed"}
+        )
+        assert session_data["status"] == "completed", (
+            f"Expected session status 'completed' after job completion, "
+            f"got '{session_data.get('status')}'"
         )

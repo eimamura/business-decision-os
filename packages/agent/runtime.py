@@ -76,6 +76,31 @@ _LOOP_GUARD_SYNTHESIS_MAX_CHARS = 6_000
 _VERIFY_TOOL_RESULTS_MAX_CHARS = 8_000
 
 
+def _schedule_session_status_update(session_id: Any, status: str) -> None:
+    """Fire-and-forget decision_sessions status update; logs a warning on failure.
+
+    Same mechanism as SessionOrchestrator._schedule_status_update (ask_user pause):
+    both HITL pause paths persist the same 'awaiting_input' vocabulary value
+    (DECISIONS.md 2026-08-24; migration 0014 CHECK constraint).
+    """
+    sid = str(session_id)
+
+    async def _persist() -> None:
+        try:
+            from packages.persistence.sessions_repo import DecisionSessionRepository
+
+            await DecisionSessionRepository().update_status(sid, status)
+        except Exception as exc:
+            _log.warning(
+                "session status update failed",
+                target_status=status,
+                session_id=sid,
+                error=str(exc),
+            )
+
+    asyncio.create_task(_persist())
+
+
 class GroundednessVerdict(BaseModel):
     """Structured output schema for the LLM groundedness check."""
 
@@ -786,12 +811,19 @@ class AgentRuntime:
         _job_id: str | None = None
         _job_description: str = ""
         if hitl_call["name"] == "job_dispatch":
+            from packages.agent.job_executor import VALID_JOB_TYPES as _VALID_JOB_TYPES
             from packages.persistence.jobs_repo import JobsRepository as _JobsRepo
+            raw_job_type: str = tool_input.get("job_type", "")
+            if raw_job_type not in _VALID_JOB_TYPES:
+                raise ValueError(
+                    f"job_dispatch rejected: invalid job_type={raw_job_type!r}. "
+                    f"Valid types: {sorted(_VALID_JOB_TYPES)}"
+                )
             _jr = _JobsRepo()
             try:
                 _job = await _jr.create(
                     session_id=ctx.session_id,
-                    job_type=tool_input.get("job_type", "unknown"),
+                    job_type=raw_job_type,
                     params=tool_input.get("params", {}),
                     approval_id=_UUID(_approval_id),
                 )
@@ -811,6 +843,11 @@ class AgentRuntime:
             "description": _job_description,
             "timestamp": datetime.now(timezone.utc).isoformat(),
         }, sse_queue, persister)
+
+        # Approval-pause persists awaiting_input (D-026) — same mechanism and
+        # vocabulary value as the ask_user pause path. Safe here: this node is
+        # not re-executed on resume (only the interrupted wait_for_approval node is).
+        _schedule_session_status_update(ctx.session_id, "awaiting_input")
 
         return {
             "pending_hitl_approval_id": _approval_id,
@@ -1092,7 +1129,9 @@ class AgentRuntime:
             tool_call_id = call["id"]
             tool_input = call.get("input", {})
 
-            # If this call has an approved HITL job, execute via execute_job (no duplicate rows)
+            # If this call has an approved HITL job, dispatch via background task (T-601).
+            # The session turn must return while the job runs; a completion report
+            # is persisted by execute_job and pushed via the sse_queue when done.
             if (
                 pending_job_id is not None
                 and getattr(tool, "safety_level", None) == "hitl"
@@ -1101,6 +1140,18 @@ class AgentRuntime:
 
                 from packages.agent.job_executor import execute_job
 
+                _job_uuid = _UUID(pending_job_id)
+
+                # Transition the row to "queued" immediately so monitoring can see it.
+                try:
+                    from packages.persistence.jobs_repo import (  # noqa: PLC0415
+                        JobsRepository as _JobsRepoRT,
+                    )
+                    await _JobsRepoRT().update_status(_job_uuid, status="queued")
+                except Exception:
+                    pass  # non-blocking; status update is best-effort
+
+                # Emit a graph_node start event so the UI trace shows the dispatch.
                 tool_t0 = time.monotonic()
                 await _emit({
                     "type": "graph_node", "event": "start",
@@ -1110,43 +1161,38 @@ class AgentRuntime:
                     "input_summary": str(tool_input)[:200],
                     "status": "ok", "meta": {},
                 }, sse_queue, persister)
-                try:
-                    job_result = await execute_job(_UUID(pending_job_id), sse_queue=sse_queue)
-                    tool_duration_ms = int((time.monotonic() - tool_t0) * 1000)
-                    result_output: dict[str, Any] = job_result.get("result_json") or {}
-                    if isinstance(result_output, str):
-                        import json as _json
-                        result_output = _json.loads(result_output)
-                    new_tool_results.append({call["name"]: result_output})
-                    await _emit({
-                        "type": "graph_node", "event": "end",
-                        "kind": "tool", "name": call["name"],
-                        "run_id": tool_call_id, "parent_run_id": agent_run_id,
-                        "timestamp": datetime.now(timezone.utc).isoformat(),
-                        "duration_ms": tool_duration_ms,
-                        "status": "ok", "output": result_output, "meta": {},
-                    }, sse_queue, persister)
-                    hitl_raw = json.dumps(json_safe(result_output))
-                    if len(hitl_raw) > _LOOP_TOOL_RESULT_MESSAGE_MAX_CHARS:
-                        hitl_raw = (
-                            hitl_raw[:_LOOP_TOOL_RESULT_MESSAGE_MAX_CHARS] + " ...[truncated]"
-                        )
-                    new_messages.append(LLMMessage(
-                        role="tool",
-                        content=hitl_raw,
-                        tool_call_id=call["id"],
-                    ))
-                except Exception as exc:
-                    tool_duration_ms = int((time.monotonic() - tool_t0) * 1000)
-                    await _emit({
-                        "type": "graph_node", "event": "end",
-                        "kind": "tool", "name": call["name"],
-                        "run_id": tool_call_id, "parent_run_id": agent_run_id,
-                        "timestamp": datetime.now(timezone.utc).isoformat(),
-                        "duration_ms": tool_duration_ms,
-                        "status": "error", "error": str(exc), "meta": {},
-                    }, sse_queue, persister)
-                    raise
+
+                # Launch execute_job as a background asyncio task so the session turn
+                # returns immediately — the chat stays responsive while the job runs.
+                asyncio.create_task(
+                    execute_job(_job_uuid, sse_queue=sse_queue),
+                    name=f"execute_job_{pending_job_id}",
+                )
+
+                tool_duration_ms = int((time.monotonic() - tool_t0) * 1000)
+                dispatched_output: dict[str, Any] = {
+                    "job_id": pending_job_id,
+                    "status": "queued",
+                    "message": (
+                        "Job dispatched and running in the background. "
+                        "A completion report will be added to this chat when done."
+                    ),
+                }
+                new_tool_results.append({call["name"]: dispatched_output})
+                await _emit({
+                    "type": "graph_node", "event": "end",
+                    "kind": "tool", "name": call["name"],
+                    "run_id": tool_call_id, "parent_run_id": agent_run_id,
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                    "duration_ms": tool_duration_ms,
+                    "status": "ok", "output": dispatched_output, "meta": {},
+                }, sse_queue, persister)
+                dispatch_raw = json.dumps(json_safe(dispatched_output))
+                new_messages.append(LLMMessage(
+                    role="tool",
+                    content=dispatch_raw,
+                    tool_call_id=call["id"],
+                ))
                 # Clear HITL job id after use
                 pending_job_id = None
                 continue

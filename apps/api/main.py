@@ -101,6 +101,20 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
 app = FastAPI(title="Business Decision OS API", version="0.1.0", lifespan=lifespan)
 
+# Operational routes (debug + admin) are registered only when APP_ENV explicitly
+# names development or test execution. Unset, production ("prod"/"production"),
+# or unknown values are safe by default and expose neither surface.
+# ADR: docs/adr/2026-08-24-local-only-operational-routes.md
+_OPERATIONAL_ENVS = frozenset({"dev", "test"})
+
+
+def _operational_routes_enabled(app_env: str | None) -> bool:
+    """Return True only when *app_env* explicitly identifies dev or test execution."""
+    return app_env in _OPERATIONAL_ENVS
+
+
+_operational_routes_enabled_flag = _operational_routes_enabled(os.environ.get("APP_ENV"))
+
 _dev_origins = ["http://localhost:3000"]
 _prod_origins_raw = os.environ.get("CORS_ALLOWED_ORIGINS", "")
 _prod_origins = [o.strip() for o in _prod_origins_raw.split(",") if o.strip()]
@@ -116,27 +130,30 @@ app.add_middleware(
 )
 app.add_middleware(DevUserMiddleware)
 
-@app.get("/api/v1/debug")
-async def debug_info() -> dict[str, object]:
-    import os as _os
-    api_key = _os.environ.get("ANTHROPIC_API_KEY", "")
-    try:
-        import anthropic as _anthropic
-        anthropic_version: str | None = _anthropic.__version__
-        anthropic_installed = True
-    except ImportError:
-        anthropic_version = None
-        anthropic_installed = False
-    return {
-        "anthropic_installed": anthropic_installed,
-        "anthropic_version": anthropic_version,
-        "api_key_set": bool(api_key),
-        "api_key_prefix": api_key[:12] + "..." if api_key else None,
-    }
+if _operational_routes_enabled_flag:
+
+    @app.get("/api/v1/debug")
+    async def debug_info() -> dict[str, object]:
+        import os as _os
+
+        try:
+            import anthropic as _anthropic
+
+            anthropic_version: str | None = _anthropic.__version__
+            anthropic_installed = True
+        except ImportError:
+            anthropic_version = None
+            anthropic_installed = False
+        return {
+            "anthropic_installed": anthropic_installed,
+            "anthropic_version": anthropic_version,
+            "api_key_set": bool(_os.environ.get("ANTHROPIC_API_KEY")),
+        }
 
 
 app.include_router(health.router)
-app.include_router(admin.router)
+if _operational_routes_enabled_flag:
+    app.include_router(admin.router)
 app.include_router(sessions.router)
 app.include_router(jobs.router)
 app.include_router(decisions.router)

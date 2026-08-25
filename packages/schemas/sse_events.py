@@ -123,6 +123,18 @@ class JobFailedEvent(BaseModel):
     timestamp: str
 
 
+class JobReportEvent(BaseModel):
+    """Emitted after a background job completes or fails (T-602).
+
+    Carries the assistant report text so a live SSE subscriber can render it
+    as a new assistant message without waiting for a page reload.
+    """
+    type: Literal["job_report"] = "job_report"
+    session_id: str | None = None
+    content: str
+    timestamp: str
+
+
 class ErrorEvent(BaseModel):
     type: Literal["error"] = "error"
     step_id: str | None = None
@@ -183,6 +195,7 @@ SseEvent = Annotated[
         SessionPausedEvent,
         JobCompletedEvent,
         JobFailedEvent,
+        JobReportEvent,
         ErrorEvent,
         TextDeltaEvent,
         TextResetEvent,

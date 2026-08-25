@@ -142,3 +142,110 @@ async def test_get_by_approval_id_returns_none_when_not_found() -> None:
         result = await repo.get_by_approval_id(uuid4())
 
     assert result is None
+
+
+# ---------------------------------------------------------------------------
+# add_file() with file_content — T-614
+# ---------------------------------------------------------------------------
+
+
+async def test_add_file_includes_file_content_in_insert() -> None:
+    """add_file must include file_content in the INSERT statement and accept a pre-set file_id."""
+    from packages.persistence.jobs_repo import JobsRepository
+
+    job_id = uuid4()
+    file_id = uuid4()
+    content = b"col1,col2\n1,2\n"
+
+    captured_sql: list[str] = []
+    captured_args: list[tuple[Any, ...]] = []
+    fake_row = {
+        "id": file_id,
+        "job_id": job_id,
+        "file_name": "out.csv",
+        "file_size_bytes": len(content),
+        "mime_type": "text/csv",
+        "download_url": f"/api/v1/jobs/files/{file_id}/download",
+        "file_content": content,
+        "created_at": None,
+    }
+
+    mock_conn = MagicMock()
+
+    async def _capturing_fetchrow(sql: str, *args: Any) -> Any:
+        captured_sql.append(sql)
+        captured_args.append(args)
+        return fake_row
+
+    mock_conn.fetchrow = _capturing_fetchrow
+
+    @asynccontextmanager
+    async def _fake_acquire():  # type: ignore[return]
+        yield mock_conn
+
+    mock_pool = MagicMock()
+    mock_pool.acquire = _fake_acquire
+
+    with patch("packages.persistence.jobs_repo.get_pool", AsyncMock(return_value=mock_pool)):
+        repo = JobsRepository()
+        result = await repo.add_file(
+            job_id=job_id,
+            file_name="out.csv",
+            file_size_bytes=len(content),
+            mime_type="text/csv",
+            download_url=f"/api/v1/jobs/files/{file_id}/download",
+            file_content=content,
+            file_id=file_id,
+        )
+
+    assert result["id"] == file_id
+    # Verify file_content was passed as a parameter to the SQL call
+    assert captured_args, "fetchrow was never called"
+    all_args = captured_args[0]
+    assert content in all_args, "file_content bytes must be passed to the INSERT"
+    # Verify pre-set file_id is used
+    assert file_id in all_args, "pre-set file_id must be passed to the INSERT"
+
+
+# ---------------------------------------------------------------------------
+# get_file() — T-613
+# ---------------------------------------------------------------------------
+
+
+async def test_get_file_returns_dict_when_found() -> None:
+    """get_file must return a dict when fetchrow finds a matching row."""
+    from packages.persistence.jobs_repo import JobsRepository
+
+    file_id = uuid4()
+    fake_row = {
+        "id": file_id,
+        "job_id": uuid4(),
+        "file_name": "report.csv",
+        "file_size_bytes": 42,
+        "mime_type": "text/csv",
+        "download_url": f"/api/v1/jobs/files/{file_id}/download",
+        "file_content": b"a,b\n1,2\n",
+        "created_at": None,
+    }
+    mock_pool = _make_fake_pool(fetchrow_return=fake_row)
+
+    with patch("packages.persistence.jobs_repo.get_pool", AsyncMock(return_value=mock_pool)):
+        repo = JobsRepository()
+        result = await repo.get_file(file_id)
+
+    assert result is not None
+    assert result["id"] == file_id
+    assert result["file_content"] == b"a,b\n1,2\n"
+
+
+async def test_get_file_returns_none_when_not_found() -> None:
+    """get_file must return None when fetchrow returns None."""
+    from packages.persistence.jobs_repo import JobsRepository
+
+    mock_pool = _make_fake_pool(fetchrow_return=None)
+
+    with patch("packages.persistence.jobs_repo.get_pool", AsyncMock(return_value=mock_pool)):
+        repo = JobsRepository()
+        result = await repo.get_file(uuid4())
+
+    assert result is None

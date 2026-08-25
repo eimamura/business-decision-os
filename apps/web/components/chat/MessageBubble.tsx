@@ -7,12 +7,16 @@ import SqlQueryBubble from "./bubbles/SqlQueryBubble";
 import AskUserBubble from "./bubbles/AskUserBubble";
 import JobApprovalBubble from "./bubbles/JobApprovalBubble";
 import JobFilesBubble from "./bubbles/JobFilesBubble";
+import JobStatusBubble from "./bubbles/JobStatusBubble";
 
 interface MessageBubbleProps {
   message: ChatMessage;
   sessionId?: string;
   onFeedback?: (messageId: string, feedback: 1 | -1) => void;
   onAskUserAnswered?: (answer: string) => Promise<void>;
+  onJobComplete?: () => void;
+  /** Called when the user approves a job — triggers insertion of job-status card. */
+  onJobApproved?: (jobId: string, jobType: string) => void;
 }
 
 export default function MessageBubble({
@@ -20,6 +24,8 @@ export default function MessageBubble({
   sessionId,
   onFeedback,
   onAskUserAnswered,
+  onJobComplete,
+  onJobApproved,
 }: MessageBubbleProps): React.JSX.Element {
   switch (message.role) {
     case "user":
@@ -43,8 +49,15 @@ export default function MessageBubble({
         />
       );
     case "job_approval":
-      return <JobApprovalBubble message={message} />;
+      return (
+        <JobApprovalBubble
+          message={message}
+          onJobApproved={onJobApproved}
+        />
+      );
     case "job_files":
       return <JobFilesBubble message={message} />;
+    case "job_status":
+      return <JobStatusBubble message={message} onJobComplete={onJobComplete} />;
   }
 }

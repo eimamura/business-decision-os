@@ -51,3 +51,38 @@ def test_skill_loader_missing_file_silently_skipped() -> None:
     # One file was skipped, so fewer than 3 items are returned and no error raised.
     assert len(result) < 3
     assert isinstance(result, list)
+
+
+# ---------------------------------------------------------------------------
+# P116 B-02 — SkillLoader.load_by_keys() tests
+# ---------------------------------------------------------------------------
+
+
+def test_skill_loader_load_by_keys_single_existing_key_returns_one_item() -> None:
+    """P116 B-02: load_by_keys(['stockout_risk_analysis']) must return exactly 1 item.
+
+    packages/knowledge/skills/stockout_risk_analysis.md exists on disk, so the
+    content should be loaded and returned as a single-element list.
+    """
+    result = SkillLoader().load_by_keys(["stockout_risk_analysis"])
+    assert len(result) == 1
+
+
+def test_skill_loader_load_by_keys_empty_list_returns_empty_list() -> None:
+    """P116 B-02: load_by_keys([]) must return an empty list without errors.
+
+    An empty keys list means no skills were specified; the loader must return []
+    rather than falling back to any default behaviour.
+    """
+    result = SkillLoader().load_by_keys([])
+    assert result == []
+
+
+def test_skill_loader_load_by_keys_nonexistent_key_returns_empty_list() -> None:
+    """P116 B-02: load_by_keys(['nonexistent_skill']) must return [] (fail-open).
+
+    When a key does not have a corresponding .md file, the loader silently skips
+    it and never raises an exception.
+    """
+    result = SkillLoader().load_by_keys(["nonexistent_skill_xyz_does_not_exist"])
+    assert result == []

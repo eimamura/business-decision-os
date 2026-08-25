@@ -236,25 +236,31 @@ async def update_session_title(session_id: str, body: UpdateTitleRequest) -> Non
 @router.get("/{session_id}")
 async def get_session(session_id: str) -> dict[str, Any]:
     session = sessions.get(session_id)
-    if not session:
-        try:
-            repo = DecisionSessionRepository()
-            row = await repo.get(session_id)
-            if row is None:
-                raise HTTPException(status_code=404, detail="Session not found")
-            session = {
-                "session_id": session_id,
-                "status": row.get("status", "pending"),
-                "goal": row.get("goal", ""),
-                "title": row.get("title"),
-                "created_at": str(row.get("created_at", "")),
-                "messages": [],
-            }
-            sessions[session_id] = session
-        except HTTPException:
-            raise
-        except Exception:
+    row: dict[str, Any] | None = None
+    try:
+        row = await DecisionSessionRepository().get(session_id)
+    except Exception:
+        # No DB (or repo failure): fall back to the in-memory copy as before.
+        row = None
+
+    if session is None:
+        if row is None:
             raise HTTPException(status_code=404, detail="Session not found")
+        session = {
+            "session_id": session_id,
+            "status": row.get("status", "pending"),
+            "goal": row.get("goal", ""),
+            "title": row.get("title"),
+            "created_at": str(row.get("created_at", "")),
+            "messages": [],
+        }
+        sessions[session_id] = session
+    elif row is not None:
+        # Background writers (HITL pause, job terminal sync, approval
+        # decisions) persist decision_sessions.status directly; the
+        # in-memory copy created at POST time must not shadow the DB
+        # value (D-028: stale-status detail responses).
+        session["status"] = row.get("status", session["status"])
     return session
 
 
@@ -447,6 +453,23 @@ async def post_message(
                 reply = response.reply if response else (
                     "Processing failed. Please try again."
                 )
+                # Append inline chart code fences when tool outputs contain chartable data
+                if response is not None:
+                    try:
+                        from packages.agent.chart_extractor import extract_chart_specs
+                        specs = extract_chart_specs(response.agent_results)
+                        for spec in specs:
+                            chart_json = json.dumps(spec, ensure_ascii=False)
+                            chart_fence = "\n\n```chart\n" + chart_json + "\n```\n"
+                            reply = reply + chart_fence
+                            await queue.put({
+                                "type": "text_delta",
+                                "session_id": session_id,
+                                "delta": chart_fence,
+                                "timestamp": _iso_now(),
+                            })
+                    except Exception:
+                        pass  # chart extraction is non-fatal
                 session.setdefault("messages", []).append({
                     "role": "assistant",
                     "content": reply,

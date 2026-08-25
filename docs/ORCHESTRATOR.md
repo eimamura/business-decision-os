@@ -62,7 +62,8 @@ Do **not** use this loop for: runtime bugs (use Defect Task), new product featur
 6. **Await result and run Test/Review**
 
    Same quality gate as the standard loop:
-   `uv run pytest tests/unit/ -q && make lint && make typecheck && make build`
+   `make test-unit && make lint && make typecheck && make test-integration`
+   Note: includes `make test-integration` because design improvements amend completed phases where integration regressions carry higher risk (see FP-003).
 
 7. **Update state**
 
@@ -71,7 +72,7 @@ Do **not** use this loop for: runtime bugs (use Defect Task), new product featur
 
 8. **Emit proof output**
 
-   Use the standard Proof Output block (see SKILL.md §Proof Output).
+   Use the standard Proof Output block from §Proof Output below.
 
 ### Example: Forecast Training/Inference Separation (Phase 6 Amendment)
 
@@ -106,6 +107,10 @@ Do **not** use this loop for: runtime bugs (use Defect Task), new product featur
 ---
 
 ## Defect Task Format
+
+This section is the single source of truth for Defect Task trigger conditions and the block format.
+`.claude/skills/bdos-orchestrator/SKILL.md` (Run Mode step 9) and `AGENTS.md §Prohibitions` point here
+rather than restating the trigger conditions.
 
 Register a Defect Task in **any** of these situations:
 
@@ -163,16 +168,160 @@ When two agents disagree or a handoff is rejected:
 
 ---
 
+## Structured Handoff Format
+
+All Orchestrator → specialist handoffs must use this format. Prose-only handoffs are rejected.
+
+```
+### Handoff: <batch-id> → <agent-role>
+
+batch: <B-NN>
+tasks: [T-NNN, T-NNN, ...]
+scope: <one sentence describing the deliverable>
+mode: implementation | stub | infra | batch-check | phase-sign-off
+design_sections:
+  - docs/DESIGN.md §<section name>   # list only what this batch needs
+adr_dependencies:
+  - docs/adr/YYYY-MM-DD-<slug>.md    # or: none
+known_risks:
+  - <optional: edge cases, blockers the specialist should know about>
+```
+
+**Rules:**
+- Include only the `docs/DESIGN.md` sections the batch touches. Do not paste full docs.
+- `mode` determines how Test/Review runs: `batch-check` = unit+lint+typecheck only; `phase-sign-off` = full Quality Gates.
+- If `adr_dependencies` is non-empty, specialist must read those ADRs before coding.
+
+---
+
 ## Handoff Rules
 
 ### Handing off to specialist agents
 
-- **App Builder**: include task IDs, relevant `docs/DESIGN.md` sections (Public Interfaces, Stub Behavior), phase scope, ADR dependencies
-- **Infra/DevOps**: include task IDs, relevant `docs/DESIGN.md §Deployment Design` sections, phase scope
-- **Test/Review**: include task IDs, list of components to test, phase scope, which stubs are expected vs. real, and the check mode (`batch check` or `phase sign-off`)
+Use the Structured Handoff Format above for every handoff. Quick reference for which `design_sections` to include:
+
+| Specialist | design_sections to include |
+|---|---|
+| App Builder | `§Public Interfaces` (when touching an interface), `docs/TESTING.md §Stub Conformance` (stub tasks), `§Monorepo Layout` (new files) |
+| Infra/DevOps | `§Deployment Design` |
+| Test/Review | list of components to test + stub-vs-real status; set `mode` appropriately |
 
 ### Failure handling
 
 - If a specialist reports a blocker (missing ADR, unresolved dependency): pause the phase, resolve the blocker first, then re-issue the task
 - If Test/Review reports failing Quality Gates: do not advance the phase; return the specific issues to the responsible agent (App Builder or Infra)
 - If two phases have a dependency conflict under reordering: resolve via ADR before proceeding; document the resolution in `docs/DECISIONS.md`
+
+---
+
+## Phase Sign-Off Checklist
+
+Run during phase sign-off (after all batches are `Done`, before marking phase `Done`):
+
+1. All mandatory Quality Gates pass (see SKILL.md §Run Mode step 8).
+2. **DECISIONS.md promotion scan**: read `docs/DECISIONS.md` and check for entries that:
+   - Mention a public interface, technology swap, or schema change, **AND**
+   - Have no corresponding file under `docs/adr/`.
+   For each match, emit: `"WARNING: DECISIONS.md entry '<date>: <summary>' mentions a public interface but has no ADR. Promote to docs/adr/ in the next phase intake."`
+   This is a BLOCKING gate — a phase MUST NOT be marked Done if any DECISIONS.md entry mentions a public interface, technology swap, or schema change without a corresponding file under docs/adr/. Resolve by authoring the ADR before closing the phase.
+3. No `Defect Task` in the current phase has `Status: Open`.
+4. `docs/STATE.md` Active Lease is `None`.
+
+### Mandatory Gate Set
+
+This subsection is the single source of truth for the mandatory phase sign-off gate set and the
+sign-off acceptance rule. `.claude/skills/bdos-orchestrator/SKILL.md` and other skills point here
+rather than restating these rules.
+
+**Mandatory gate set (non-negotiable — applies to every phase sign-off without exception):**
+
+```
+make test-unit
+make test-integration
+make test-e2e        (or make test-playwright for Playwright-only phases)
+make build
+make lint
+make typecheck
+```
+
+These six commands (or their equivalents) MUST appear as named gate rows in the sign-off report. A
+sign-off that omits `make test-integration` is structurally incomplete regardless of what other gates
+passed.
+
+**Sign-off acceptance rule**: The Orchestrator MUST NOT accept a sign-off unless ALL of the following
+are true:
+
+1. The report contains a gate row for `make test-integration` (exact command name required).
+2. Every gate row includes `gate`, `exit_code`, and `output_tail` fields.
+3. Every gate has `exit_code: 0`.
+
+A report that omits `make test-integration` entirely, or that lists it as "skipped", "not applicable",
+or "N/A", is NOT a valid sign-off — reject it and re-request execution with the full mandatory gate set.
+
+---
+
+## Proof Output (for `/goal` evaluator)
+
+The `/goal` evaluator reads only what appears in the conversation transcript. Every Orchestrator turn must end with this block so the evaluator has evidence to judge:
+
+```
+## Proof Output
+
+**Batch completed:** <batch ID and name>
+**Validation:**
+  - command: <e.g. make test>
+  - exit code: <0 or non-zero>
+  - output: <relevant lines>
+
+**Phase progress:**
+<paste batch status rows from docs/TASKS.md — exclude "Not Started" rows>
+
+**STATE.md snapshot:**
+  - Active Lease: None
+  - Last Completed: <batch>
+  - Blockers: <None or list>
+```
+
+When all batches are Done, also emit:
+```
+**Phase complete evidence:**
+  - All batches Done: <grep proof>
+  - make build: exit 0
+  - git diff --stat: <output>
+  - No Blocked or In Progress remaining: <grep proof>
+```
+
+---
+
+## TASKS.md and STATE.md Write Authority
+
+| File | Who writes | What they write |
+|---|---|---|
+| `docs/TASKS.md` — phase/batch status | **Orchestrator only** | `Not Started → Done / Blocked`; new Defect Task rows |
+| `docs/TASKS.md` — individual task rows | Specialists | `In Progress / Done`; blocking notes on their assigned rows |
+| `docs/STATE.md` | **Orchestrator only** | Active lease, last completed batch, validation results, blockers |
+
+Specialists update only their own assigned task rows. They MUST NOT change batch-level status, mark a batch `Blocked`, or write to `docs/STATE.md` — report blockers to Orchestrator instead.
+
+In addition to `docs/TASKS.md` and `docs/STATE.md`, the Orchestrator's writable targets include `docs/DECISIONS.md` (append-only), `docs/adr/` (new files only), and new reference/design files under `docs/` — the Orchestrator must not overwrite existing docs files; edits to existing reference docs are delegated to a specialist. This section is the single source of truth for Orchestrator write authority; `AGENTS.md §Prohibitions` and `.claude/skills/bdos-orchestrator/SKILL.md` state only a one-sentence summary and point here for the full detail.
+
+---
+
+## Planning Output Format — Plan Mode
+
+```
+## Phase X — [Name]
+
+### Batch 1 — [Topic] (Agent: App Builder | Infra | Test/Review)
+- T-XXXX: description
+- T-XXXX: description
+Dependencies: none | Batch N
+
+### Batch 2 ...
+
+### Blockers
+- [any known blockers]
+
+### ADRs needed
+- [any decisions requiring an ADR]
+```

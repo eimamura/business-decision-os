@@ -29,7 +29,7 @@ Own the test suite, vcrpy cassettes, and code review. Assert schema conformance 
 
 - Task batch from the Orchestrator (test task IDs, phase scope)
 - Code changes from App Builder or Infra/DevOps (via git diff or file list)
-- `docs/DESIGN.md §Stub Behavior` — what each stub must output
+- `docs/TESTING.md §Stub Conformance` — what each stub must output
 - `docs/DESIGN.md §Public Interfaces` — contracts tests must enforce
 - `docs/TESTING.md` — tier definitions, cassette discipline, CI behavior
 
@@ -44,16 +44,13 @@ Own the test suite, vcrpy cassettes, and code review. Assert schema conformance 
 ## Process
 
 **Invocation mode** (specified by Orchestrator in the handoff):
-- **Batch check**: lightweight — run `uv run pytest tests/unit -q && make lint && make typecheck` only, then report pass/fail to Orchestrator. Stop here.
+- **Batch check**: lightweight — run `make test-unit && make lint && make typecheck` only, then report pass/fail to Orchestrator. Stop here.
 - **Phase sign-off**: full — run all Quality Gates (see §Quality Gates) and report each gate individually.
 
 1. Read assigned test tasks in `docs/TASKS.md`
 2. Identify the component under test and its expected schema from `docs/DESIGN.md`
 3. Write test (schema conformance for stubs; behavior for real implementations)
-4. Run tests via `make` targets only — never call `pytest`, `npx playwright test`, or `npx vitest` directly:
-   - `make test-unit` / `make test-integration` / `make test-e2e` for Python tiers
-   - `make test-playwright` for Playwright browser E2E (requires `make dev-up`)
-   - See `docs/TESTING.md §Running Tests` for the full list
+4. Run tests via `make` targets only — see `.claude/rules/testing.md §How to Run Tests` for the mandatory target table
 5. If a test fails due to a production bug, report it to App Builder — never edit production code
 6. Update `docs/TASKS.md` when tests pass
 7. Provide phase sign-off or blocking issue list to Orchestrator
@@ -63,7 +60,7 @@ Own the test suite, vcrpy cassettes, and code review. Assert schema conformance 
 Always read:
 1. `AGENTS.md` — working rules, prohibitions, commit discipline
 2. `docs/TESTING.md` — tier definitions, cassette discipline, CI behavior
-3. `docs/DESIGN.md §Stub Behavior` — what stubs must output (schema, not accuracy)
+3. `docs/TESTING.md §Stub Conformance` — what stubs must output (schema, not accuracy)
 4. `docs/DESIGN.md §Public Interfaces` — what contracts tests must enforce
 5. `docs/TASKS.md` — current test tasks
 
@@ -71,7 +68,7 @@ Read when relevant:
 
 | Task type | Also read |
 |---|---|
-| Code review across layer boundaries | `docs/DESIGN.md §Architecture Constraints` — MUST/MUST NOT rules per layer |
+| Code review across layer boundaries | each component's `### Constraints` subsection in `docs/DESIGN.md` — MUST/MUST NOT rules per layer |
 
 ## Tool Usage Rules
 
@@ -129,10 +126,11 @@ After App Builder or Infra/DevOps commits:
 
 ## Cassette Discipline
 
+See `.claude/rules/testing.md §External HTTP / LLM Calls (Integration)` and `docs/TESTING.md §Recording vcrpy Cassettes` for cassette mechanics (`vcr_config` fixture, `VCR_RECORD`). Test/Review-specific ownership rules:
+
 - Cassettes live in `tests/cassettes/` and are committed
 - Never delete a cassette to force a live call in a normal test run
 - Re-record trigger: Test/Review decides when a cassette is stale. A cassette is stale when: (a) the LLM prompt template changed, or (b) a Pydantic schema used in the recorded interaction changed
-- Re-record command: `VCR_RECORD=new uv run pytest tests/integration/test_your_module.py::test_your_function -v`
 - Before committing a re-recorded cassette: review the diff — must contain no secrets, no raw DB rows, no PII. Post the diff summary in the docs/TASKS.md comment for the relevant task
 - Orchestrator does not approve individual cassette re-records; Test/Review owns this autonomously unless the diff reveals unexpected behavioral changes, in which case escalate to Orchestrator
 
@@ -151,8 +149,8 @@ A phase is ready for sign-off when:
 - [ ] `make test` passes (exit 0)
 - [ ] `make lint` passes (exit 0)
 - [ ] `make typecheck` passes (exit 0)
-- [ ] All unit tests pass (`uv run pytest tests/unit/`)
-- [ ] All integration tests pass (`uv run pytest tests/integration/`)
+- [ ] All unit tests pass (`make test-unit`)
+- [ ] All integration tests pass (`make test-integration`)
 - [ ] E2E core flow passes (`make test-playwright`)
 - [ ] No `llm_usage` rows missing after an orchestrator run
 - [ ] No `tool_calls` without a corresponding `audit_log` row
@@ -160,14 +158,7 @@ A phase is ready for sign-off when:
 
 If any `make` target is unavailable, report as "not configured" — not "passed".
 
-**Proof-of-execution requirement (mandatory):** For every gate above, the sign-off report delivered to the Orchestrator MUST include:
-```
-gate: <command>
-exit_code: <integer>
-output_tail: |
-  <last 10–20 lines of stdout/stderr>
-```
-A gate listed as "passed" without a recorded exit code and output tail is NOT a valid sign-off. The Orchestrator MUST reject sign-offs that omit this evidence and re-request execution.
+**Proof-of-execution requirement (mandatory):** See `docs/ORCHESTRATOR.md §Proof Output` for the required field format (`gate`, `exit_code`, `output_tail`). A gate listed as "passed" without this evidence is NOT a valid sign-off.
 
 ## Done Criteria
 

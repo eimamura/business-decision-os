@@ -4,6 +4,7 @@ from typing import Any
 from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, Query, status
+from fastapi.responses import StreamingResponse
 
 from packages.persistence.jobs_repo import JobsRepository
 from packages.schemas.jobs import (
@@ -138,3 +139,33 @@ async def list_files(
         next_cursor = rows[-1]["id"]
 
     return FileListResponse(items=items, next_cursor=next_cursor)
+
+
+@router.get(
+    "/jobs/files/{file_id}/download",
+    response_class=StreamingResponse,
+    status_code=status.HTTP_200_OK,
+)
+async def download_file(file_id: UUID) -> StreamingResponse:
+    """Stream the binary content of a job-generated file.
+
+    Returns 404 when the file row does not exist or its content is empty.
+    """
+    row = await _jobs_repo.get_file(file_id)
+    if row is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="File not found")
+
+    file_content: bytes = row.get("file_content") or b""
+    if len(file_content) == 0:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="File content not available"
+        )
+
+    mime_type: str = row.get("mime_type") or "application/octet-stream"
+    file_name: str = row.get("file_name") or "download"
+
+    return StreamingResponse(
+        iter([file_content]),
+        media_type=mime_type,
+        headers={"Content-Disposition": f'attachment; filename="{file_name}"'},
+    )

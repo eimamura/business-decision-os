@@ -29,7 +29,7 @@ Implement application code: FastAPI backend, Next.js frontend, and all Python pa
 
 - Task batch from the Orchestrator (task IDs, phase scope, relevant SKILL sections)
 - `docs/DESIGN.md §Public Interfaces` — normative signatures to implement against
-- `docs/DESIGN.md §Stub Behavior` — Day-1 stub contracts
+- `docs/TESTING.md §Stub Conformance` — Day-1 stub contracts
 
 ## Outputs
 
@@ -54,21 +54,25 @@ Implement application code: FastAPI backend, Next.js frontend, and all Python pa
 
 ## Required Reading (before every session)
 
-Always read:
+**Always load** (short; load every session without exception):
 1. `AGENTS.md` — working rules and prohibitions
-2. `docs/DESIGN.md §Public Interfaces` — normative signatures; never change without ADR
-3. `docs/DESIGN.md §Stub Behavior` — Day-1 stub contracts
-4. `docs/DESIGN.md §Monorepo Layout` — what goes where
-5. `docs/TASKS.md` — current phase tasks
+2. `docs/TASKS.md` — current phase tasks
 
-Read when relevant:
+**Load once per session if unfamiliar** (skip if already in context from this session):
+3. `docs/DESIGN.md §Monorepo Layout` — what goes where
 
-| Task type | Also read |
+**Deferred — load only when the task type requires it:**
+
+| Task type | Load |
 |---|---|
+| Implementing or changing any public interface | `docs/DESIGN.md §Public Interfaces` — normative signatures; never change without ADR |
+| Implementing or replacing any stub | `docs/TESTING.md §Stub Conformance` — Day-1 stub contracts |
 | Implementing or changing any tool | `docs/TOOLS.md` — tool specs, failure handling, audit payload |
-| Touching layer boundaries (agent ↔ tool ↔ persistence) | `docs/DESIGN.md §Architecture Constraints` — MUST/MUST NOT rules per layer |
-| Changing any public interface | `docs/DESIGN.md §Architecture Constraints — Cross-cutting` and `docs/adr/` |
+| Touching layer boundaries (agent ↔ tool ↔ persistence) | each component's `### Constraints` subsection in `docs/DESIGN.md` — MUST/MUST NOT rules per layer |
+| Changing any public interface | also load `docs/DESIGN.md §Architecture Constraints — Cross-cutting` and `docs/adr/` |
 | Writing or modifying any test | `.claude/rules/testing.md` — test tiers, naming conventions, zero-network rule |
+
+Rationale: `docs/DESIGN.md` is large. Loading it unconditionally on every session inflates context cost and crowds out task-relevant content. Load sections only when the task type demands them.
 
 ## Tool Usage Rules
 
@@ -93,23 +97,14 @@ data/sample/       Operational CSVs only (NOT ground_truth/)
 
 ## Public Interface Rules
 
-These signatures are locked. **Any change requires an ADR before coding:**
-
-- `LLMClient.complete / stream / embed`
-- `Tool.handle(input, ctx) → ToolResult`
-- `JobRunner.submit / status / result / cancel`
-- `Simulator.run(input) → SimulationOutput`
-- `Optimizer.run(input) → OptimizationOutput`
-- `MemoryStore.write / search`
-- `Orchestrator.run / resume`
-- Approval state machine: `pending → approved | rejected | needs_revision | expired`
+The locked signatures are enumerated in `docs/DESIGN.md §Public Interfaces` (normative source). **Any change to a locked interface requires an ADR before coding.**
 
 ## Constraints
 
 > Universal prohibitions (secrets, ground_truth, public interfaces without ADR, LLMClient bypass, smart stubs, approvals mutation, per-KPI collapse, etc.) → **AGENTS.md §Prohibitions**
 
 - Never touch `infra/`, `infra/compose/`, `.github/workflows/`, `Makefile`, `apps/*/Dockerfile`
-- Never query tables outside the SQL Tool allowlist: `sku_master`, `inventory`, `demand_history`, `supply`, `cost`, `customers`
+- Never query tables outside `ALLOWED_READ_TABLES` in `packages/tools/sql_allowlist.py` (code SSoT — do not enumerate here)
 - `temperature=0` everywhere
 
 ## Quality Gates

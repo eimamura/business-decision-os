@@ -93,38 +93,38 @@ Makefile
 
 ## Docker Rules
 
-- `apps/api/Dockerfile`: multi-stage; build context = monorepo root; must include `COPY config config` and `ENV PYTHONPATH="/app/packages"`
-- `apps/web/Dockerfile`: multi-stage Next.js standalone (`output: "standalone"`); build context = monorepo root; not a plain HTTP stub
-- `infra/compose/compose.yaml`: `api.build.context` and `web.build.context` = `../..`; postgres image = `pgvector/pgvector:pg16`
-- After Dockerfile changes: `docker compose build --no-cache <service>` then recreate container
+Compose/Dockerfile conventions (multi-stage, healthchecks, build context, secrets-via-env) are owned by `.claude/rules/docker.md`. Current service topology, ports, and the Postgres image are owned by `docs/DESIGN.md §Deployment Design §Local Development Stack` / `§Database Conventions`. Do not restate either here.
+
+- `apps/api/Dockerfile` (and `.dev` variant): must include `COPY config config` and `ENV PYTHONPATH="/app/packages"` — the app imports `packages/` and `config/` at runtime; a Dockerfile change that drops either breaks the container silently.
+- `apps/web/Dockerfile`: must be a real multi-stage Next.js standalone build — never a plain HTTP stub.
+- After any Dockerfile change: `docker compose build --no-cache <service>` then recreate the container before smoke-checking.
 
 ## Terraform Rules
 
-- Region: East US 2 (`eastus2`) in all modules
-- `prevent_destroy = false`; no resource locks (MVP iteration speed)
-- Secrets via Azure Key Vault + Managed Identity — no hardcoded credentials
-- Azure OIDC federated credentials — no long-lived secrets in GitHub Actions
-- Required status checks: `lint-test`, `terraform-plan`
+Region, freeze status, module layout, and the secrets/OIDC convention are owned by `docs/DESIGN.md §Deployment Design §Azure / Terraform (Frozen Target State)`. Do not restate here.
+
+- This infra is frozen per the P69 decision — do not run `terraform apply` against `shared`/`aca`, and do not uncomment the Postgres skeleton, without explicit Orchestrator + user sign-off.
+- Always run `terraform plan` after a module change and confirm it produces no unexpected destroys before proceeding.
 
 ## CI/CD Rules
 
-- PRs: run `lint-test` + `terraform-plan` + `codegen-check` (no deploy)
-  - `codegen-check`: runs `make codegen` and fails if `apps/web/schemas/` has a diff; ensures App Builder did not forget to regenerate
-- Merge to `main`: full chain — lint-test → codegen-check → image-build → acr-push → tf apply shared → tf apply aca
-- Never force-push to `main`
+Current workflow/job shape is owned by `docs/DESIGN.md §Deployment Design §CI/CD Pipeline`. Do not restate here.
+
+- Never force-push to `main`.
+- If a GitHub Actions failure is unrelated to your infra change, note it in `docs/TASKS.md` but do not block your task on it (see Failure Handling below).
 
 ## Scripts Rules
 
+The `DATABASE_URL` convention (async vs. sync) is owned by `docs/DESIGN.md §Deployment Design §Database Conventions`. Do not restate here.
+
 - `make seed-all` = migrate + seed + seed_users + seed_llm_pricing
-- `seed_db.py` reads `data/sample/*.csv` (not `ground_truth/`)
-- `DATABASE_URL` convention: async (`postgresql+asyncpg://`) for API/migrate, sync (`postgresql://`) for seed scripts
+- `seed_db.py` reads `data/sample/*.csv` only — never `ground_truth/` (universal prohibition, `AGENTS.md §Prohibitions`)
 
 ## Constraints
 
 > Universal prohibitions (secrets, ground_truth, public interfaces without ADR, web.build.context, etc.) → **AGENTS.md §Prohibitions**
 
 - Never edit files in `apps/api/app/`, `apps/web/app/`, `packages/` (application logic)
-- API Dockerfile must always include `COPY config config` and `ENV PYTHONPATH="/app/packages"`
 
 ## Quality Gates
 
@@ -133,9 +133,9 @@ Smoke checks (required before closing any infra task):
 > Before running curl checks, run `docker compose ps`. If no services are `Up`, note "stack not running — smoke checks skipped" in `docs/TASKS.md` and proceed to the remaining checklist items below. Skip conditions apply in CI contexts and pure-file-edit tasks.
 
 ```bash
-curl -s http://localhost:8000/healthz                           # → 200
-curl -s http://localhost:3000/chat | grep -q Decision           # → match
-curl -s -H "X-Dev-User: dev-user" http://localhost:8000/api/v1/sessions
+make dev-smoke                                                   # API healthz on $(API_PORT) (default 8002)
+curl -sf "http://localhost:${WEB_PORT:-3002}/chat" | grep -q Decision
+curl -s -H "X-Dev-User: dev-user" "http://localhost:${API_PORT:-8002}/api/v1/sessions"
 ```
 
 Additional checks:

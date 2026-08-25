@@ -59,3 +59,27 @@ class SkillLoader:
                 continue
             contents.append(skill_path.read_text(encoding="utf-8"))
         return contents
+
+    def load_by_keys(self, keys: list[str]) -> list[str]:
+        """Return Skill file contents for the given skill key stems.
+
+        Parameters
+        ----------
+        keys:
+            List of skill stem names without the ``.md`` extension
+            (e.g., ``["stockout_risk_analysis", "exception_detection"]``).
+
+        Returns
+        -------
+        list[str]
+            Ordered list of Skill file contents as strings.
+            Keys whose corresponding ``.md`` file does not exist are silently skipped.
+        """
+        contents: list[str] = []
+        for key in keys:
+            skill_path = _SKILLS_DIR / f"{key}.md"
+            if not skill_path.exists():
+                logger.debug("Skill file not found, skipping: %s", skill_path)
+                continue
+            contents.append(skill_path.read_text(encoding="utf-8"))
+        return contents

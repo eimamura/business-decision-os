@@ -266,9 +266,16 @@ async def test_control_agent_pipeline_does_not_raise_for_supply_chain_intent() -
 
 
 async def test_control_agent_all_three_skills_injected_for_supply_chain() -> None:
-    """For supply_chain intent, all three MVP skills must appear in the instruction:
-    stockout_risk_analysis, exception_detection, and shipment_delay_root_cause."""
-    task = _make_supply_chain_task()
+    """For supply_chain intent with GENERIC ContextPack (no skill_keys override),
+    the intent-level fallback must inject all three MVP skills:
+    stockout_risk_analysis, exception_detection, and shipment_delay_root_cause.
+
+    The instruction must NOT match any Q1–Q10 keyword so that ContextBuilder returns
+    GENERIC_PACK (skill_keys=[]), causing _inject_skills() to fall back to the
+    intent-level SkillLoader.load("supply_chain") path.
+    """
+    # "Provide a supply chain overview" matches no Q1–Q10 keywords → GENERIC_PACK.
+    task = _make_supply_chain_task("Provide a supply chain overview and analysis.")
     ctx = _make_ctx()
 
     captured: list[SpecialistTask] = []
@@ -293,3 +300,94 @@ async def test_control_agent_all_three_skills_injected_for_supply_chain() -> Non
     assert "stockout_risk_analysis" in injected_instruction
     assert "exception_detection" in injected_instruction
     assert "shipment_delay_root_cause" in injected_instruction
+
+
+# ---------------------------------------------------------------------------
+# P116 B-01 — _narrow_tools() unit tests
+# ---------------------------------------------------------------------------
+
+
+def test_narrow_tools_non_empty_list_sets_allowed_tools() -> None:
+    """P116 B-01: _narrow_tools with a non-empty list must set task.allowed_tools
+    to exactly that list.
+
+    ControlAgent._narrow_tools() accepts a pre-filtered list (allowed_tools) and
+    calls model_copy to update the task.  This replaces the previous behaviour that
+    re-read _INTENT_TOOL_SUBSET internally.
+    """
+    task = _make_supply_chain_task()
+    agent = ControlAgent(llm_client=MagicMock(), tool_registry=MagicMock())
+    narrowed = ["list_stockout_risk", "nl_query"]
+    result = agent._narrow_tools(task, narrowed)
+    assert result.allowed_tools == narrowed
+
+
+def test_narrow_tools_empty_list_leaves_allowed_tools_unchanged() -> None:
+    """P116 B-01: _narrow_tools with an empty list must return the task unchanged.
+
+    When allowed_tools is [] (e.g. unknown intent or no prohibition narrowing),
+    _narrow_tools must fall back to the task's original allowed_tools without
+    modification, preserving the full unrestricted tool set.
+    """
+    original_tools = ["nl_query", "list_today_exceptions"]
+    task = SpecialistTask(
+        task_id=uuid.uuid4(),
+        instruction="What are today's supply chain exceptions?",
+        context_payload={"intent": {"category": "supply_chain"}, "session_id": str(uuid.uuid4())},
+        allowed_tools=original_tools,
+    )
+    agent = ControlAgent(llm_client=MagicMock(), tool_registry=MagicMock())
+    result = agent._narrow_tools(task, [])
+    assert result.allowed_tools == original_tools
+
+
+# ---------------------------------------------------------------------------
+# P117 B-02 — _inject_schema_context() unit tests (T-677)
+# ---------------------------------------------------------------------------
+
+
+def test_inject_schema_context_appends_to_instruction() -> None:
+    """P117 B-02: when get_schema_context() returns a non-empty schema string,
+    _inject_schema_context() must append the rendered schema block to task.instruction.
+
+    render_schema_context() wraps _make_schema_example() which builds a correlated-subquery
+    SQL example from the schema string.  We patch get_schema_context() to return a minimal
+    but structurally valid schema that satisfies the four required tables so that
+    _make_schema_example() produces a non-empty example string.
+    """
+    minimal_schema = (
+        "sku_master(sku_id TEXT, sku_name TEXT)\n"
+        "demand_history(sku_id TEXT, quantity NUMERIC)\n"
+        "inventory_snapshot(sku_id TEXT, on_hand NUMERIC)\n"
+        "supply_orders(sku_id TEXT, quantity NUMERIC, status TEXT, expected_arrival DATE)"
+    )
+
+    task = _make_supply_chain_task("Which products face supply shortages?")
+    agent = ControlAgent(llm_client=MagicMock(), tool_registry=MagicMock())
+
+    with patch(
+        "packages.agent.control.control_agent.get_schema_context",
+        return_value=minimal_schema,
+    ):
+        result = agent._inject_schema_context(task)
+
+    assert task.instruction in result.instruction
+    assert len(result.instruction) > len(task.instruction)
+    # The schema example embeds "sku_master" from the schema string.
+    assert "sku_master" in result.instruction
+
+
+def test_inject_schema_context_empty_schema_noop() -> None:
+    """P117 B-02: when get_schema_context() returns an empty string,
+    _inject_schema_context() must return the task unchanged (fail-open).
+    """
+    task = _make_supply_chain_task("Which products face supply shortages?")
+    agent = ControlAgent(llm_client=MagicMock(), tool_registry=MagicMock())
+
+    with patch(
+        "packages.agent.control.control_agent.get_schema_context",
+        return_value="",
+    ):
+        result = agent._inject_schema_context(task)
+
+    assert result.instruction == task.instruction

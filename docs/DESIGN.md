@@ -35,12 +35,9 @@ When this document says "agent" without qualification, it means a product agent.
 
 Claude Code subagents that **build and maintain** this system. They run inside the Claude Code harness during development and never appear in the production system.
 
-| Term used in AGENTS.md | Role |
-|---|---|
-| `bdos-orchestrator` | Plans phases, decomposes tasks, routes to specialists, updates TASKS.md |
-| `bdos-app-builder` | Writes application code — FastAPI, Python packages, Next.js |
-| `bdos-infra` | Infrastructure, Docker Compose, CI/CD, Makefile |
-| `bdos-test-review` | Writes tests, reviews code, verifies phase checkpoints |
+The current roster (`bdos-orchestrator`, `bdos-app-builder`, `bdos-infra`, `bdos-test-review`,
+`bdos-judge`, and others) is owned by `AGENTS.md` §Coding Agent Architecture — see that section for
+the authoritative, up-to-date list; do not duplicate it here.
 
 When AGENTS.md says "agent" or "subagent", it means a coding agent.
 
@@ -459,6 +456,68 @@ Control Agent receives: procedure + required data list
 Skills define **what to do**, not the LLM reasoning. This keeps analysis reproducible and auditable.
 
 **Matching mechanism (MVP):** Keyword-based or explicit intent-to-skill mapping maintained in the Skill Loader. Vector similarity matching is Post-MVP. In MVP, the intent classification output from SessionOrchestrator determines which skill(s) to load; the mapping is declared in code, not inferred dynamically.
+
+### ContextBuilder (Eval-Driven Context Engineering)
+
+The ContextBuilder is the context selection layer that sits between intent classification and prompt assembly. It answers the question: **given this specific user question, what is the minimal tool set the agent should see?**
+
+Without a ContextBuilder, every `supply_chain` question sees 20+ tools in the system prompt — causing context pollution, duplicate tool calls, and routing confusion. With it, each question gets a purpose-built tool subset.
+
+**Implementation:** `packages/agent/control/context_builder.py`
+
+```text
+Intent + user question
+ ↓
+ContextBuilder.build(intent, user_input)
+ ↓
+Keyword match → use_case_id (Q1–Q10 or GENERIC)
+ ↓
+ContextPack (required_tools, prohibited_tools, skill_keys, routing_hint)
+ ↓
+_build_system_prompt(tool_subset_override = narrowed subset)
+ ↓
+LLM sees only the tools relevant to this specific question
+```
+
+**ContextPack schema** (`packages/schemas/context_packs.py`):
+
+```text
+ContextPack
+  use_case_id     — "Q1"–"Q10" or "GENERIC"
+  intent          — "supply_chain" | "domain_analysis" | "decision_support"
+  required_tools  — tools that must be called for this question type
+  prohibited_tools — tools that must NOT be called (confusion risk)
+  skill_keys      — skill filenames to load from packages/knowledge/skills/
+  routing_hint    — one-line routing instruction injected into the system prompt
+```
+
+**Use-case packs** (`packages/schemas/context_packs.py §USE_CASE_PACKS`):
+
+| Use Case | required_tools | prohibited_tools |
+|---|---|---|
+| Q1 — stockout risk | list_stockout_risk | list_today_exceptions, calculate_supply_gap |
+| Q2 — excess inventory | nl_query | list_today_exceptions, list_stockout_risk |
+| Q3 — today's exceptions | list_today_exceptions | list_stockout_risk, analyze_shipment_delay_causes |
+| Q4 — shipment delays | analyze_shipment_delay_causes | list_today_exceptions |
+| Q5 — forecast gap | analyze_forecast_deviation | list_stockout_risk, list_today_exceptions |
+| Q6 — supply shortage | nl_query | list_stockout_risk, calculate_supply_gap |
+| Q7 — production plan | analyze_production_plan_gap | list_today_exceptions, list_stockout_risk |
+| Q8 — purchase timing | analyze_supply_order_timing | get_delayed_supply_orders |
+| Q9 — demand shift | detect_demand_shift | segment_demand, compare_demand_periods |
+| Q10 — bottleneck | identify_binding_constraint | — |
+
+**Context trace logging** (`packages/persistence/context_log.py`, table `context_log`):
+
+Every ContextBuilder.build() call writes a row to `context_log` when a DB connection is provided. This enables post-hoc failure analysis: was the right use case selected? were the right tools included?
+
+```
+GET /api/v1/admin/context-logs?session_id=<uuid>
+→ list of ContextLogRead entries per turn
+```
+
+**Eval-Driven Development process** — see `docs/TESTING.md §Eval Runner` for how to run evaluations and interpret results.
+
+**Escalation:** The ContextBuilder uses keyword matching in MVP. Post-MVP: embed user_input and compute cosine similarity against use-case embeddings for more robust classification. Add new use cases to `USE_CASE_PACKS` and corresponding golden cases to `data/evals/spec10_golden_cases.yaml` when SPEC questions are added.
 
 ### Tool Gateway
 
@@ -1328,6 +1387,71 @@ These apply everywhere, regardless of layer. When a code review or arch test cit
 | Orchestrator interface changes are governed by `docs/adr/2026-05-21-user-query-orchestrator-flow.md` | Records the accepted `SessionUserQuery` → `SessionResponse` flow |
 | No smart stubs: stubs MUST conform to schema, not approximate real behavior | Prevents false-passing tests |
 | No fail-silent fallbacks: missing config raises `RuntimeError` at the call site | Prevents silent degradation in production |
+
+---
+
+## Deployment Design
+
+Single owner of deployment/config facts (Docker Compose topology, Azure/Terraform target state, CI/CD shape, DB conventions). `.claude/skills/bdos-infra/SKILL.md` implements the process against these facts; it does not restate them.
+
+### Local Development Stack
+
+Local dev runs via Docker Compose (`infra/compose/compose.yaml`, invoked by `make dev-up`). Compose/Dockerfile conventions (multi-stage builds, healthcheck/`depends_on condition` rules, secrets via env) are owned by `.claude/rules/docker.md` — not restated here.
+
+| Service | Image / Build | Port (host) | Healthcheck |
+|---|---|---|---|
+| `db` | `pgvector/pgvector:pg16` | `5432` | `pg_isready -U bdos` |
+| `redis` | `redis:7-alpine` | `${REDIS_PORT:-6379}` | `redis-cli ping` |
+| `migrator` | `apps/api/Dockerfile.dev` | — | runs `alembic upgrade head` once, `restart: "no"` |
+| `ollama` | `ollama/ollama:latest` (GPU reservation) | `${OLLAMA_PORT:-11435}` → container `11434` | `ollama list` |
+| `ollama-init` | `ollama/ollama:latest` | — | pulls `${OLLAMA_MODEL:-qwen2.5-coder:7b}` once |
+| `api` | `apps/api/Dockerfile.dev` | `${API_PORT:-8000}` | `python -c urllib.request.urlopen(.../healthz)` |
+| `celery-worker` | `apps/api/Dockerfile.dev` | — | `celery inspect ping` (queue `celery`, concurrency 2) |
+| `celery-worker-training` | `apps/api/Dockerfile.dev` | — | `celery inspect ping` (queue `training`, concurrency 1) |
+| `web` | `apps/web/Dockerfile.dev` | `${WEB_PORT:-3000}` | `wget` root |
+
+`Makefile` sets its own developer-facing defaults (`API_PORT ?= 8002`, `WEB_PORT ?= 3002`) that override the Compose fallback ports above via env-file substitution — the two default sets differ intentionally (Compose fallback vs. local convenience default) and both are current truth.
+
+Build contexts for `api` and `web` are the monorepo root (`../..`), per `.claude/rules/docker.md §Build Context`.
+
+### Compute Platform for Heavy Workloads
+
+Heavy/async work (simulation, optimization, forecast training) runs behind the `JobRunner` Protocol (`packages/agent/runner/`; see `docs/adr/2026-05-25-job-runner-abstraction.md`). `apps/api/state.py::_build_runner()` selects the implementation from `JOB_RUNNER_BACKEND`:
+
+| Backend | Env value | Environment | Status |
+|---|---|---|---|
+| `InProcessJobRunner` | unset / `in_process` (default) | Bare `make dev-api`, unit/integration tests | Live |
+| `CeleryJobRunner` | `celery` | Docker Compose (`api`, `celery-worker*` services set this explicitly) | Live locally, frozen from further investment |
+| `AcaJobsRunner` | `aca` | Azure Container Apps (target state) | Frozen — not deployed |
+
+The Celery/Redis path is preserved untouched per the P69 user decision (`docs/DECISIONS.md`, 2026-06-10 row: "production infra code explicitly preserved") — it runs in local Docker Compose today but is not a target for new feature work. P101 (`docs/DECISIONS.md`, 2026-06-12 row) used `InProcessJobRunner` as the validation runner for the async/HITL/monitoring loop, explicitly keeping Celery frozen. Any new `JobRunner` implementation follows the same Protocol; no tool layer changes.
+
+### Azure / Terraform (Frozen Target State)
+
+Everything in this subsection is target-state infrastructure-as-code, **not a live deployment**. It is frozen per the P69 decision above and exists so a future Azure rollout does not start from zero.
+
+- Region: `eastus2` in all modules (`infra/terraform/{shared,aca}`).
+- `prevent_destroy = false` everywhere; no resource locks (MVP iteration speed over DR).
+- Module split, each with independent state: `image-build/` (build images), `acr-push/` (tag + push to ACR), `aca/` (Container Apps + Container Apps **Jobs** for `simulation_worker` / `optimization_worker`, plus `api`/`web`/`celery_worker` Container Apps), `shared/` (Key Vault, Managed Identity, federated OIDC credentials, Log Analytics, App Insights, Redis Cache), `modules/` (reusable), `databricks/` (predictor batch training/inference, Post-MVP).
+- Postgres in `shared/main.tf` is a **commented-out skeleton** (`azurerm_postgresql_flexible_server`) — not yet provisioned even in target state; supply credentials via Key Vault before uncommenting.
+- Secrets via Key Vault + Managed Identity; GitHub Actions authenticates via Azure OIDC federated credentials (`azure/login@v2`, no long-lived secrets).
+
+### Database Conventions
+
+- Postgres image: `pgvector/pgvector:pg16` for local Compose (`db` service). The CI integration job (`.github/workflows/lint-test.yml`) uses plain `postgres:16` as its service container — no pgvector extension needed for the current integration test surface.
+- `DATABASE_URL` convention: async driver (`postgresql+asyncpg://`) for the API app and Alembic migrations; sync driver (`postgresql://`) for one-shot seed scripts (`scripts/seed_db.py`, `scripts/seed_users.py`, `scripts/seed_llm_pricing.py`).
+
+### CI/CD Pipeline
+
+Three workflows under `.github/workflows/`:
+
+| Workflow | Trigger | Jobs |
+|---|---|---|
+| `lint-test.yml` | PR + push to `main` | `python-lint-test` (`make lint`, `make test-unit`), `python-integration-test` (Postgres 16 service container, `uv sync`, `make migrate`, `make test-integration`), `node-lint` (`make build`, `make typecheck`, `make test-web`) |
+| `terraform-plan.yml` | PR touching `infra/terraform/**` | Matrix `terraform plan` over `shared`, `aca`, `image-build`, `acr-push`, via Azure OIDC login |
+| `deploy.yml` | Push to `main` | `build-push` (ACR build of API + Web images) → `deploy-shared` (`terraform apply` shared) → `deploy-aca` (`terraform apply` aca with the new image tag) |
+
+No `codegen-check` job currently exists in CI — `make codegen` verification (schema drift between `packages/schemas/sse_events.py` and `apps/web/schemas/sse-events.ts`) is enforced by App Builder's Quality Gates, not by CI, as of this writing.
 
 ---
 

@@ -398,8 +398,13 @@ test.describe("DailyExceptionsPanel — active conversation (mock SSE)", () => {
     await expect(
       page.locator('[data-testid="daily-exceptions-investigate"]'),
     ).toBeVisible({ timeout: 3_000 });
-    // Severity count in the exception rows (SKU-001 should be listed)
-    await expect(page.getByText("SKU-001")).toBeVisible();
+    // Severity count in the exception rows (SKU-001 should be listed).
+    // Scoped to the panel testid to avoid strict-mode violation: sidebar session
+    // titles from accumulated test state may also contain "SKU-001", making the
+    // bare getByText() non-unique. The panel is the correct scope for this check.
+    await expect(
+      page.locator('[data-testid="daily-exceptions-panel"]').getByText("SKU-001"),
+    ).toBeVisible();
 
     // Click toggle again → collapse
     await toggle.click();

@@ -2,374 +2,236 @@
 
 Orchestrator execution state. Written only by bdos-orchestrator.
 
-Full history archived at `docs/archive/v3/STATE.md`.
+Full history archived at `docs/archive/v5/STATE.md` (earlier: `docs/archive/v3/STATE.md`).
 
 ---
 
+## Baseline
+
+**v0.1.0 — MVP complete (2026-06-12).** Tag `v0.1.0` (commit 039c43a) = `main` = GitHub
+release. P0–P100 all Done. SPEC 10-question coverage with judged quality 10/10 PASS;
+daily screening cadence live; context budget hardened. See `docs/TASKS.md` §MVP Baseline
+for the capability summary and §Carry-Over for re-planning inputs.
+
 ## Completed Phases
 
-P0–P38, P39–P48 all Done (T-001–T-271, T-273–T-339).
-
-P32–P36 S&OP MVP (2026-06-04):
-- P32 — SupplyPlanningAgent + 5 supply tools (T-210–T-223)
-- P33 — FinanceImpactAgent + 4 finance tools (T-224–T-234)
-- P34 — InventoryAgent enhancement + 4 inventory tools (T-235–T-243)
-- P35 — SopAgent + "sop" intent (T-244–T-251)
-- P36 — Tool Scenario prompts for S&OP agents (T-252–T-257)
-
-P37 — Playwright E2E: Remove Mocks, Consolidate (2026-06-05; SSE-mock approach reversed by P44)
-P38 — Architecture Realignment: deactivate specialist routing, clean up Tool Scenario UI (2026-06-06)
-P44 — Playwright Tests: Revert to Mock SSE; 29 tests in 1.4 min (2026-06-06)
-P52 — LangChain ChatModel 移行 Phase 1: ModelRegistry + Structured Output (2026-06-07)
-P53 — LangChain ChatModel 移行 Phase 2: Planner + ControlAgent (2026-06-07)
-P54 — LangChain ChatModel 移行 Phase 3: NlQueryTool + LLMClient Deletion (2026-06-07)
-P55 — nl_query 単一 Text2SQL ツール化 + sql_query 削除 (2026-06-07)
-P56 — nl_query クリーンアップ後処理 (2026-06-07)
-P57 — nl_query 品質強化 (2026-06-07)
-P59 — Control Agent Degenerate Response Guard (2026-06-07)
-P60 — Control Agent Tool-Loop Guard (2026-06-07)
-P61 — Quality Hardening: Degenerate Guard / Rule-Based Verifier (2026-06-07)
-P62 — ControlAgent Groundedness Verifier Rule 1b (2026-06-07)
-P63 — ControlAgent Intent-to-Tool Subset Alignment (2026-06-07)
-P64 — Agent Architecture Gap Closure (5 Gaps) (2026-06-10)
-P65–P70 — Full Refactoring Programme (2026-06-10): dead agent classes, routing collapse (ADR 2026-06-10-orchestrator-routing-collapse), tool allowlist rationalization, frontend dead code, dependency/config hygiene, test/docs consolidation
-
-See `docs/archive/v3/STATE.md` for P0–P23 per-phase details.
+P0–P100 all Done (T-001–T-599; D-001–D-015 all Resolved; FP-001–FP-014 recorded,
+FP-011 hardened). Per-phase detail: `docs/archive/v5/STATE.md`.
 
 ---
 
 ## Active Phase
 
-None
+None — P128 Done (2026-08-25)
 
 ## Active Lease
 
 None
 
-## Last Completed
-
-P100 — SPEC 10-Question Judge Evaluation Campaign (2026-06-12). All 10 SPEC questions run
-live (gemma4:12b) and judged: initial 7 PASS / 3 FAIL; after the D-012–D-015 fixes the
-three FAILs were re-judged (same methodology) and flipped — **final campaign result
-10/10 PASS** (Q1 0.34→0.82, Q6 0.32→0.78, Q8 0.48→0.86; peaks 30–39% of num_ctx; report:
-docs/judge-reports/2026-06-12-spec10-campaign.md incl. re-evaluation appendix). Known
-model-limitation residuals (awareness only, no defect): Q1's first pass stays degenerate
-on gemma4:12b (recovered via goal-refine + text_reset at ~2× latency); Q6 issues two
-differently-parameterized nl_query calls (context 32%, harmless). The 3 FAILs produced four Defect Tasks,
-all Resolved same-day (commit fb29591): D-012 — campaign's 104–154% context readings were
-an operator.add SUM artifact (true per-call peaks 29–40%), but duplicate tool execution
-was real (D-011 guard fired post-execution) → pre-execution dedupe + `peak_input_tokens`
-as the authoritative saturation signal + minimal guard-synthesis prompt; D-013 — Q6 had
-no routing rule and `calculate_supply_gap` is per-SKU-only → prompt rule 2b routes bulk
-supply-shortage queries via nl_query; D-014 — goal-refinement concatenated degenerate
-first-run text → `text_reset` SSE + web client clears in-progress text (both SSE loops,
-vitest); D-015 — French bleed from goal nodes → English-only pinned in
-SET_GOAL/EVALUATE_GOAL prompts. Live re-verification: Q1/Q5/Q6/Q8 grounded, peaks ≤40% of
-num_ctx, no duplicates, no non-English fragments. Failure analysis: FP-011 Count→2
-(escalated: /harden-system applied AGENTS.md prohibition on SUM-signal saturation checks +
-2 pinning tests in test_peak_input_tokens_saturation_signal.py), FP-012/013/014 recorded.
-
-Programme summary (P96–P100, all Done 2026-06-12): push_out relative lead-time window
-(32/40→5/40 flagged), context saturation fixed at BOTH ends (synthesize payload slim
-14080→222 tokens + loop pre-exec dedupe + authoritative peak signal), Daily Exceptions
-persistent strip, scheduler advisory-lock hardening, judge campaign 7/10 PASS with all
-FAIL root causes fixed. Unit suite 1170→1234, playwright 42→45. Gate deviation: full
-integration suite skipped for P98–P100 sign-offs (user decision, DECISIONS.md 2026-06-12)
-— next phase touching packages/ or apps/api MUST run `make test-integration` full-DSN.
-Out of scope by user decision: auth, real ERP integration. New
-`_run_scheduled_tick(triggered_by)` in apps/api/screening.py wraps schedule/startup runs
-in `pg_try_advisory_lock(_SCREENING_ADVISORY_LOCK_KEY=0x73637265656E` — "screen" packed
-int64`)` on a dedicated pool connection (unlock in finally, same connection) +
-double-checked idempotency (latest_for_date re-checked inside the lock); manual POST /run
-exempt. Live + integration concurrency proof: two concurrent ticks → exactly 1 new
-completed row (no prior row) / 0 new rows (completed row exists). Sign-off PASS: unit
-1207 exit 0, targeted integration (test_p99_concurrent_screening_tick.py) 2 passed exit 0,
-playwright 45/45 exit 0, build 0, lint 0, typecheck 0; full integration suite SKIPPED per
-user gate deviation (DECISIONS.md 2026-06-12).
-
-Previously:
-
-P98 — Daily Exceptions Persistent Surface (2026-06-12). DailyExceptionsPanel reworked
-into a persistent collapsible strip docked between the chat header and message area —
-`daily-exceptions-strip` (icon, label, run date, severity badges, toggle) mounted in BOTH
-empty and active-conversation states; `defaultExpanded={isEmpty}`; all P93 testids kept;
-quiet-fail unchanged; Investigate-in-chat works mid-conversation. Playwright 42→45
-(active-conversation: collapsed default, toggle expand/collapse, investigate injects Q3
-prompt). Sign-off PASS: unit 1199 exit 0, playwright 45/45 exit 0, build 0, lint 0,
-typecheck 0; `make test-integration` SKIPPED by user decision (DECISIONS.md 2026-06-12 —
-P98 is web-only; gate skip applies to P98–P100 sign-offs).
-
-Previously:
-
-P97 — Context Saturation Mitigation (2026-06-12). Forensics (T-591): the 14,080-token
-(86% of num_ctx) call was the orchestrator-side `_synthesize_response` receiving raw
-`tool_results` blobs verbatim (25,770 chars for analyze_forecast_deviation — 30 SKUs ×
-weekly_breakdown). Fix: `_slim_agent_output` passes text/specialist/verification only
-(+8,000-char text cap); `_OLLAMA_NUM_CTX` stays 16384 (RTX 4070 Ti 12GB: 1.8GB free <
-~2GB KV-cache cost of 32768 — nvidia-smi evidence). Synthesize 14,080→222 tokens.
-**D-011 (Resolved, FP-011 recorded):** stripping tool_results exposed a latent bug the
-fat payload had been masking since ≥P94 — gemma4:12b duplicates tool calls → P60 loop
-guard → verifier blocks on empty text → fallback; synthesize had been silently
-re-grounding replies from raw tool data. Root-cause fix: new `synthesize_from_tools`
-LangGraph node (duplicate-tool guard routes to ONE forced no-tools LLM call over
-accumulated observations before verification) + bounded `tool_results_digest` (≤4,000
-chars) in the slim payload when agent text < 50 chars. Re-verified (fresh sessions,
-gemma4:12b): Q2 names SKU-001 pull-forward + SKU-027 push-out, Q3 names SKU-001/002
-critical, Q1 grounded directional equivalent (SKU-015/016 from real tool data); max
-input_tokens 6,152 = 37.5% of window; 0 errors; no saturation WARNING; P92 degenerate
-soft-fail semantics regression-tested intact. Sign-off PASS (proof-of-execution): unit
-1199 exit 0, full-DSN integration 156 exit 0, playwright 42/42 exit 0, build 0, lint 0,
-typecheck 0. Note for P100 judge campaign: Q1 forecast-deviation answers skew toward
-SKUs with zero forecast rows (sparse forecast_history coverage outside SKU-028/029) —
-assess whether missing_data framing needs work.
-
-Previously:
-
-P96 — Supply Order Timing: push_out Signal Quality (2026-06-12). push_out classification
-moved from flat `cover ≥ 30d` (32/40 orders flagged on seed) to a relative lead-time
-window: future arrivals only AND doc_at_arrival ∈ [3×LT, 5×LT) (PUSH_OUT_K_FLOOR=3,
-PUSH_OUT_K_CEIL=5, LT from sku_master.lead_time_days_mean; ≥5×LT = structurally
-over-stocked → strategic review, not tactical flag; `lead_time_days` added to output
-rows). Seeded result: 5/40 push_out (12.5%, all SKU-027 ranked #1 by |days_misaligned|),
-pull_forward 8 unchanged vs P95 (SKU-001 +9d intact). Sign-off PASS (proof-of-execution):
-unit 1177 exit 0, full-DSN integration 156 exit 0, playwright 42/42 exit 0, build 0,
-lint 0, typecheck 0.
-
-Previously:
-
-P95 — Supply Order Timing Analysis (SPEC Q8) (2026-06-12). Final phase of the P93–P95 MVP
-gap closure programme (user-approved 2026-06-12; supersedes the 2026-06-11 "Q8 partial
-coverage accepted" decision). New tool `analyze_supply_order_timing` (registry 38→39): per
-open supply order, projected_stockout_date from on_hand + 30d run-rate vs expected_arrival
-→ pull_forward_candidate (arrival after projected stockout; precedence) /
-push_out_candidate (days_of_cover_at_arrival ≥ PUSH_OUT_COVER_DAYS=30) / on_track, signed
-days_misaligned, summary counts pre-cap, composite order_id sku:supplier:order_date,
-hybrid contract. Wired 4 intent subsets + 3-line system prompt rule (context budget
-respected — control calls measured 4208/16384 = 25.7%, no saturation; the P94 86% WATCH
-applied to the orchestrator-side final call, not control). Seed: SKU-027 push_out
-(today+5 arrival, ~198d cover); P84 risk-SKU orders yield 8 pull_forward (SKU-001 +9d).
-All prior narratives re-verified intact (P84 2/2/3 bands, P94 SKU-028/029). Live
-verification (gemma4:12b): modal prompt end-to-end — tool start+end events, reply names
-SKU-001/003/006/007 pull-forward and SKU-027 push-out, 0 errors. Sign-off PASS
-(proof-of-execution): unit 1170 exit 0, full-DSN integration 153 exit 0, playwright 42/42
-exit 0, build 0, lint 0, typecheck 0.
-
-Programme summary (P93–P95, all Done 2026-06-12): daily screening cadence live
-(in-process scheduler + screening_runs + /api/v1/screenings + DailyExceptionsPanel; ADR
-2026-06-12-daily-screening-scheduler), SPEC Q5 (analyze_forecast_deviation), SPEC Q8
-(analyze_supply_order_timing). Registry 37→39 tools, migration 0021, unit suite
-1080→1170, full-DSN integration 110→153, playwright 36→42. SPEC question coverage: all 10
-questions now have dedicated or covering tools; modal scenarios exist for Q1–Q4, Q5, Q7,
-Q8, Q9, Q10. Remaining deliberate deferrals: auth (out of scope per user 2026-06-12),
-Celery activation (P69, Azure), Anthropic cost computation (P83), SPEC Agent Catalog
-runtime agents (P65 routing collapse).
-
-Previously:
-
-P94 — Forecast Deviation Decomposition (SPEC Q5) (2026-06-12). New tool
-`analyze_forecast_deviation` (registry 37→38): SKU × ISO-week forecast-vs-actual
-decomposition over the last 4 complete weeks (DISTINCT ON latest-forecast dedupe,
-is_missing actuals excluded, ±10% bias threshold over/under/mixed, rank total abs gap
-desc / sku asc, ROW_CAP 100, hybrid contract). Wired into 4 intent subsets + system prompt
-rule 6 (forecast-model quality stays with evaluate_forecast_accuracy; customer/region
-attribution pairs with detect_demand_shift). Seed: SKU-028 over-forecast (24 vs 9),
-SKU-029 under-forecast (16 vs 21), anchored to date.today(); P84 bands re-verified intact.
-Live verification (gemma4:12b): modal prompt end-to-end — 3 control calls each selecting
-analyze_forecast_deviation(weeks=4), tool events present, reply directionally correct,
-0 errors. WATCH ITEM: final synthesize call hit input_tokens=14080 (86% of num_ctx 16384)
-— approaching the P92 90% saturation warning; next prompt-growth phase should re-check.
-Sign-off PASS (proof-of-execution): unit 1141 exit 0, full-DSN integration 134 exit 0,
-playwright 41/41 exit 0, build 0, lint 0, typecheck 0. Process notes: orchestrator
-committed B-01 after B-02 (ordering slip, content consistent); Test/Review self-committed
-B-02 and App Builder self-set batch headers (boundary violations recorded, values correct).
-
-Previously:
-
-P93 — Daily Screening Job + Exceptions Surface (2026-06-12). The Screening Layer now runs
-on the daily cadence per DESIGN.md §Operational Cadence: in-process asyncio lifespan
-scheduler in `apps/api/screening.py` (startup catch-up run + daily `SCREENING_HOUR_UTC`
-tick, `SCREENING_SCHEDULER_ENABLED` kill switch; Celery deliberately untouched per P69 —
-ADR 2026-06-12-daily-screening-scheduler records the interim mechanism and Azure migration
-trigger). `run_screening` invokes the `list_today_exceptions` tool handle directly (no LLM)
-and persists to new `screening_runs` table (migration 0021; NOT in ALLOWED_READ_TABLES).
-API: `GET /api/v1/screenings/today` (`{"run": ...|null}`), `POST /api/v1/screenings/run`
-(manual, 201). Web: DailyExceptionsPanel on the chat empty state below QuickActionGrid —
-severity badges, top-5 exceptions, "Investigate in chat" injects the Q3 prompt, "Run now",
-quiet-fail on fetch error. Live smoke: completed row with exception_count=37
-(21 critical / 3 high / 13 medium) on seeded data. Sign-off PASS (proof-of-execution):
-unit 1099 exit 0, full-DSN integration 114 exit 0, playwright 40/40 exit 0, build 0,
-lint 0, typecheck 0. Boundary note: App Builder self-set the B-03 batch header (value
-correct; recorded for failure-pattern awareness, no defect).
-
-Previously:
-
-P92 — Ollama Context Window Fix + Degenerate Guard Surfacing (2026-06-12). Judge-FAIL
-("Which products are at stockout risk this week?" → "Agent control failed: None", aggregate
-0.00) root-caused via llm_usage forensics: `ChatOllama` had no `num_ctx`, so Ollama's
-default 4096-token window silently truncated the control prompt once P86–P91 growth (tools
-31→37, schema tables 8→12) pushed it past 4096 — every control call showed
-input_tokens=4095/output_tokens=1, zero tool events, final text "**" → degenerate guard
-hard-failed with error=None. Fixed: `num_ctx=16384` on both ChatOllama models
-(`_OLLAMA_NUM_CTX` single source; 8192 accepted floor if VRAM-constrained) + ≥90%
-input-context saturation WARNING; degenerate guard now soft-fails per P80 precedent
-(completed + `_FALLBACK_DEGENERATE` + `verification.blocked_reason="degenerate_response"`,
-no agent_failed SSE); genuine error paths default to "agent run failed (no error detail)"
-so "failed: None" can never render. Live verification (T-568): exact failing query
-end-to-end on gemma4:12b — control input_tokens 4112–4119 (~25% of window, no truncation
-pattern), `list_stockout_risk` start+end tool events present, reply names SKU-001/002
-critical, SKU-003/004 high, SKU-005/006/007 medium (P84 seed match), 0 error events.
-Sign-off PASS (proof-of-execution): unit 1080 exit 0, canonical integration 16 exit 0,
-full-DSN integration 110 exit 0, playwright 36/36 exit 0, build 0, lint 0, typecheck 0.
-
-Previously:
-
-P91 — Tool Scenario Modal: Q7 + Q9 Scenarios (2026-06-12). "Production Plan Adjustments"
-(→ `analyze_production_plan_gap`, SPEC Q7) and "Customer & Region Demand Shifts"
-(→ `detect_demand_shift`, SPEC Q9) added to the Supply Chain category with dedicated
-Playwright tests. All seven SPEC questions with implemented tools now have modal scenarios.
-Same turn: D-010 registered + Resolved (commit f625aa8) — `GET /api/v1/admin/registry`
-returned `tools: []` on a fresh API process because P67's lazy `_RoleToolAllowlist` hooked
-only `__getitem__`/`.get` while P85's `get_registry` iterates `.items()`/`.values()`;
-fixed with iteration-path overrides + fresh-state regression tests; live-verified 37 tools
-on first request after restart. FP-010 recorded (design-contract, record-only). Sign-off
-PASS (proof-of-execution): unit 1075 exit 0, canonical integration 16 exit 0, full-DSN
-integration 110 exit 0, playwright 36/36 exit 0, build 0, lint 0, typecheck 0.
-
-Previously:
-
-P90 — Tool Scenario Modal: Q10 Constraint Analysis Scenario (2026-06-12). "Biggest
-Constraint Impact" scenario (id sc-biggest-constraint-impact, prompt "Which constraint is
-having the biggest negative impact on sales or profit right now?") added to the Supply Chain
-category of ToolScenarioModal, targeting P89's `identify_binding_constraint`; dedicated
-Playwright test added (P86 precedent). Known remaining scenario gaps (deliberately out of
-scope, user-request gated): Q7 `analyze_production_plan_gap`, Q9 `detect_demand_shift`.
-Sign-off PASS (proof-of-execution): unit 1073 exit 0, canonical integration 16 exit 0,
-full-DSN integration 110 exit 0, playwright 34/34 exit 0, build 0, lint 0, typecheck 0.
-
-Previously:
-
-P89 — Production Plan & Constraint Analysis (SPEC Q7 / Q10) (2026-06-11). Final phase of the
-P86–P89 SPEC gap closure programme (ADR 2026-06-11-order-to-ship-and-production-data-domains).
-Alembic 0020 adds `production_capacity` (16 rows: WH-001 2000/wk, WH-002 1500/wk × 8 weeks)
-+ `production_plan` (264 rows) — allowlist now 12 tables. Deterministic seed scenarios:
-SKU-026 overproduction (200/wk vs ~8 demand), SKU-001 underproduction (10/wk vs ~67 — ties
-into P84 critical-risk narrative), WH-001 current week capacity-saturated (2460/2000,
-utilization 1.23 — the intended binding constraint). New tools (registry 35→37):
-`analyze_production_plan_gap` (±25% relative-gap threshold, forecast-else-run-rate demand
-basis, summary counts computed pre-cap after review fix) and `identify_binding_constraint`
-(3 constraint classes — capacity overload, supply gap, inventory stockout exposure — impact
-= units × cost_master.stockout_cost, rank impact desc/subject asc, analytical output only
-per DESIGN.md Cross-Domain constraint). Live-verified: SKU-026/SKU-001 classified correctly;
-WH-001 capacity constraint ranked #1. Mid-batch review fixes: module docstring horizon
-anchor (3rd docstring/code drift this programme — all caught by batch checks), summary
-counts post-truncation. Sign-off PASS (proof-of-execution): unit 1073 exit 0, canonical
-integration 16 exit 0, full-DSN integration 110 passed exit 0, playwright 33/33 exit 0,
-build 0, lint 0, typecheck 0.
-
-Programme summary (P86–P89, all Done 2026-06-11): SPEC Q3 (list_today_exceptions, 5
-screens), Q4 (order-to-ship domain + list_unshipped_orders + analyze_shipment_delay_causes),
-Q9 (detect_demand_shift customer/region), Q7/Q10 (production domain + 2 tools). Registry
-31→37 tools, allowlist 8→12 tables, migrations 0019/0020, unit suite 930→1073, integration
-full-DSN 82→110. Out of scope by settled decision: SPEC Agent Catalog runtime agents (P65
-routing collapse ADR), Q8 (partial coverage accepted), scheduled daily screening job (P69
-Celery decision).
-
-Previously:
-
-P88 — Demand Shift Detection by Customer / Region (SPEC Q9) (2026-06-11). New
-`detect_demand_shift` tool: period-over-period `customer_orders` quantity comparison
-(default last 28d vs prior 28d, contiguous windows; window_days/end_date_offset params),
-grouped by customer AND region, growth/decline lists with pct/abs change + top contributing
-SKUs, new_activity/full_decline flags, per-list truncated semantics, mandatory missing_data.
-Registry 34→35; intents domain_analysis/cross_domain_analysis/decision_support; system
-prompt rule 5 (customer/region axis → detect_demand_shift; segment_demand/
-compare_demand_periods stay SKU-axis). Two mid-batch fixes from review: truncated flag now
-per-list pre-cap (was combined-length false positive), and explicit `end_date_offset=0`
-honored (was `0 or 1` coercion — regression test added). Live-verified: CUST-009 growth
-50→150, CUST-010 decline 150→50, Kanto region growth. Sign-off PASS (proof-of-execution):
-unit 1028 exit 0, canonical integration 16 exit 0, full-DSN integration 95 passed exit 0,
-playwright 33/33 exit 0, build 0, lint 0, typecheck 0.
-
-Previously:
-
-P87 — Order-to-Ship Data Domain: Shipment Delay Root Causes (SPEC Q4) (2026-06-11). Alembic
-0019 adds `customer_orders` (26 seeded rows) + `shipments` (14 rows) per ADR
-2026-06-11-order-to-ship-and-production-data-domains.md; both in `ALLOWED_READ_TABLES`
-(+ legacy map "orders"→customer_orders, regex-safe vs supply_orders). Deterministic seeded
-scenarios: CO-0001/2 inventory_shortage (SKU-002/004 in new NO_OPEN_SUPPLY_SKUS), CO-0003/4
-upstream_supply_delay (overdue, supply at today+10), CO-0005/6 warehouse delay, CO-0007/8
-carrier delay, CO-DS01..08 demand-shift signal for P88 (CUST-009 Kanto growth / CUST-010
-Kansai decline; status=shipped, no shipments rows — excluded from delay tools by INNER JOIN).
-New tools `list_unshipped_orders` + `analyze_shipment_delay_causes` (precedence: no-snapshot
-unknown > stock-present unknown > upstream_supply_delay [open supply arriving late] >
-inventory_shortage [no open supply]); `list_today_exceptions` gained fifth screen
-unshipped_orders (registry 32→34). Mid-batch fix: original precedence made
-upstream_supply_delay unreachable + CO-0003/4 weren't overdue — seed and tool realigned, all
-four cause classes live-verified non-zero, P84 risk bands intact (2 critical/2 high/3
-medium). Sign-off PASS (proof-of-execution): unit 990 exit 0, canonical integration 16
-passed exit 0 (full-DSN run during B-03: 82 passed, 4 skipped, exit 0 — includes the 18 new
-P87 integration tests), playwright 33/33 exit 0, build 0, lint 0, typecheck 0.
-
-Previously:
-
-P86 — Today's Exceptions Screening Tool (SPEC Q3) (2026-06-11). New `list_today_exceptions`
-tool (read_only, deterministic) aggregates four screens — stockout risk critical/high,
-delayed inbound supply, recent demand anomalies (7d), data quality issues (via
-`catalog_repo.get_null_profile`, no f-string SQL after batch-check fix) — into one
-severity-ranked exception list (cap 50 + `truncated`, mandatory `missing_data`). Wired into
-all five `_INTENT_TOOL_SUBSET` intents (registry 31→32) + system prompt rule (call once,
-never loop detectors); ToolScenarioModal "Daily Exception Review" scenario added. 23 new
-unit tests. Sign-off PASS (proof-of-execution): unit 957 passed exit 0, integration 16
-passed exit 0, playwright 33/33 exit 0, build 0, lint 0, typecheck 0.
-
-Previously:
-
-P85 — Agents & Tools Registry: Tool Execution Stats Restoration (2026-06-11). Tools tab on `/agents` was frozen since P20 (commit d0977b8, 2026-06-03) removed the `tool_completed` SSE event: the admin registry query still aggregated the dead event type, AND the replacement tool `graph_node` events were put directly on the raw SSE queue by `AgentRuntime`, bypassing `SessionOrchestrator._push`/`_event_persister` — streamed live, never written to `session_events`. Fixed: new `_emit(event, sse_queue, persister)` helper in `runtime.py` routes tool start/end, `awaiting_approval`, and `session_paused` events to both the queue and the persister (passed via graph `configurable["event_persister"]` at all three config-build sites); `get_registry` tool stats now aggregate `graph_node` kind=tool event=end rows by `payload->>'name'`. D-009 registered+Resolved during sign-off (pre-existing, NOT P85: two ask_user integration tests latent-broken since P78 deterministic routing — stub registries lacked a control-role model; reproduced at baseline d05b122; test-side fix). FP-003 Count → 3 (D-001, D-002, D-009): /harden-system FP-003 required before next phase. Sign-off PASS (proof-of-execution): unit 930 passed exit 0, lint 0, typecheck 0, integration 16 passed exit 0, build 0, playwright 32/32 exit 0. Live verification deferred to user (curl POST denied): run any tool-calling query in the UI, then check /agents Tools tab.
-
-Previously:
-
-P84 — Demo Data Risk Distribution Fix (2026-06-10). `SKU_RISK_BANDS` in `scripts/generate_sample_data.py` assigns deterministic days-of-cover to SKU-001..007 so the demo query "Which products are at stockout risk this week?" returns 2 critical + 2 high + 3 medium SKUs; supply orders for risk SKUs pushed to today+10 so incoming supply cannot rescue the classification. Fix iteration (same day): initial implementation used nominal `base_demand_mean` for on_hand, but `list_stockout_risk` uses the actual 30-day rolling average — seasonal noise pushed SKU-005/006 into "low". Corrected with `compute_recent_avg` helper (mirrors the tool SQL); `generate_demand_history` returns per-SKU recent averages; `generate_inventory` uses `round(actual_avg * DOC)`. Sign-off PASS (proof-of-execution): unit 921 passed exit 0, lint 0, typecheck 0; DB reseeded and live tool verified `count=7` with ratios critical −0.72, high 0.057/0.078, medium 0.287–0.293.
-
-Previously:
-
-P83 — LLM Usage Recording Restoration (2026-06-10). The P54 LangChain migration (commit ccfdb54) orphaned `_real_usage_writer` (`apps/api/state.py`) — no LLM call wrote `llm_usage` since 2026-06-07, leaving `GET /sessions/{id}/usage`, admin `list_llm_usage`, and the web `/llm-calls` and `/usage` pages without new data. Restored via `UsageRecordingCallbackHandler` (LangChain `AsyncCallbackHandler`, new `packages/agent/llm/usage_recording.py`) attached to every ChatModel in `create_model_registry(usage_writer=...)`; captures model, token counts (incl. cache details), prompt/response/tool-calls JSON, latency (logged); call context (session_id / agent_step_id / specialist_role) flows via invoke `config.metadata`; `_real_usage_writer` creates a fallback `agent_steps` row (`make_step(step_type="llm_call")`) when no step id is provided so session totals keep joining; `classify_intent` no longer discards its step id. `UsageWriter` signature unchanged — no ADR. Anthropic cost computation deferred (tokens recorded; cost 0.0). 30 new unit tests. Sign-off PASS (proof-of-execution): unit 921 passed exit 0, lint 0, typecheck 0, build 0, playwright 32/32.
-
-Previously:
-
-P82 — Seed Data Staleness & list_stockout_risk missing_data Fix (2026-06-10). ROOT CAUSE FIX: `START_DATE = date(2025, 1, 1)` in `scripts/generate_sample_data.py` made all demand_history rows fall outside the tools' 30-day rolling window after 2026-01-01 → `avg_daily=0` for all 30 SKUs → `list_stockout_risk` always returned `count=0`. Fixed: `START_DATE` and all supply/inventory/cost fixed dates are now relative to `date.today()`. `list_stockout_risk` now populates `missing_data` per SKU when `avg_daily == 0` (matching `calculate_stockout_risk` convention). 3 new unit tests added: all-zero-demand (count=0 + all SKUs in missing_data), mixed-demand (zero-demand SKUs in missing_data only), and parametrized mixed case.
-
-Previously:
-
-P81 — Tool Scenario Modal Content Refresh (2026-06-10). Fixed 9 broken + 3 partial scenarios in ToolScenarioModal.tsx: inventory→inventory_snapshot table names; DC West→WH-001/WH-002 real seed locations; forecast tool rewritten for sku_id+horizon_days only (no location param); train-model scenario removed (train_forecast not LLM-callable); sc-order-delay rewritten (#ORD-1042 unresolvable); Job Dispatch (HITL) category removed (job_dispatch not LLM-callable per P64 registry); sql scenario retitled "Natural Language Query" (P55 removed sql_query; nl_query is sole Text2SQL); all prompts standardized to English (AGENTS.md §Language Convention). Playwright spec updated (5 categories, English prompt assertions). Sign-off PASS: unit 874 passed exit 0, lint 0, typecheck 0, build 0, playwright 32/32.
-
-Previously:
-
-P80 — Verifier Blocked-Path UX (2026-06-10). D-008 Resolved: truthful `blocked_reason` per blocking site (the "tool-loop guard" default was always misattributed — that path never sets blocked); verifier blocks soft-fail to the fallback text as a completed reply with `verification.blocked_reason` meta (no agent_failed SSE); Rule 1 strips code fences/inline code before the fabrication regex (SQL answers no longer fail the digit lottery). Sign-off PASS: unit 874 passed exit 0, lint 0, typecheck 0, build 0, playwright 32/32. Live verification: the exact 22:47 UTC failing query now returns a real SQL answer; 0 agent_failed in logs; concurrent user session also answered. FP-009 recorded (record-only).
-
-Previously:
-
-P79 — Session Resume & Lifecycle Robustness (2026-06-10). D-006 Resolved: `answer_ask_user`/`resume` guarded by `has_pending_interrupt()` (`graph.aget_state`); missing checkpoint or no pending interrupt → typed `NoPendingInterruptError`, router returns 409 (no graph start from empty state, no LLM burn); `_node_classify_intent` hardened against bare KeyError. D-007 Resolved: session deletion cancels in-flight background runs via `session_tasks` handle registry + tombstone set (`_deleted_session_ids`) stops event persistence; `get_or_recover_session` shared helper gives `update_session_title`/`get_messages`/`set_message_feedback`/`submit_ask_user_answer` the same DB recovery as `post_message`; FK-violation event-persist logs downgraded to debug. Sign-off PASS (proof-of-execution): unit 867 passed exit 0, lint 0, typecheck 0, build 0, playwright 32/32. FP-007/FP-008 recorded (both record-only; no pattern at Count >= 2). Defects originated from live runtime diagnosis of the 2026-06-10 19:01 JST-3 user session error (root cause of THAT error was a uvicorn --reload restart during an in-flight run, triggered by P77 fix edits to bind-mounted apps/api — D-006/D-007 were the latent defects it exposed).
-
-Previously:
-
-P78 — Deterministic Routing Completion (2026-06-10). D-005 Resolved: `select_execution_mode` builds `AgentRoute` deterministically for all intents (no LLM call; `ROUTER_SYSTEM` deleted); one LLM round-trip saved per non-supply_chain request. Sign-off PASS: unit 848 passed exit 0, lint 0, typecheck 0, build 0, playwright 32/32. Live verification: the exact failing query (lookup intent) now completes — steps intent_classification → routing → specialist_execution, assistant reply produced, 0 routing errors. FP-006 recorded (record-only).
-
-Previously:
-
-P77 — Runtime Error Surfacing Fixes (2026-06-10). D-004 Resolved: approvals router responses wrapped in `jsonable_encoder` (4 sites); regression tests added; web `ApiError` class distinguishes HTTP business errors (404 session-not-found message) from network failures. Sign-off PASS: unit 828 passed exit 0, lint 0, typecheck 0, build 0, playwright 32/32 (job_approval deterministic — P76's "flaky" was D-004, not SSE timing). FP-005 recorded (record-only).
-
-Previously:
-
-P76 — Tool Layer Conformance Remediation (2026-06-10). Hybrid tool output contract implemented per ADR 2026-06-10-tool-output-contract-hybrid: `missing_data` on all DB tools; LIMIT+truncated on supply order tools; shared helpers `_shared.py`; evaluator fail-loud; data_catalog_search error key; DOS→DOI merge (registry 32→31, DOI gains stockout_date_estimate); DESIGN.md/AGENT_ARCHITECTURE.md/TOOLS.md amended. Sign-off PASS (proof-of-execution): unit 826 passed exit 0; lint exit 0; typecheck exit 0 (160 files); full-DSN integration 61 passed exit 0; build exit 0; playwright 31 passed + 1 pre-existing flaky exit 0. No defects.
-
-Previously: P75 — Tool Layer Full Audit (2026-06-10): read-only audit of all 35 tool files. Verdicts: 30 keep / 1 merge-candidate (DOS→DOI) / 4 boundary-unclear; no tool deleted. Conformance: Tool Protocol 35/35; Context Pack contract 0/35 (doc-vs-code divergence → ADR in P76/T-477); `nl_query` returns raw rows; `missing_data` never populated. Implementation: SQL parameterization 35/35 clean; `evaluator_tool` silent config fallback (→T-478); unbounded supply-order queries (→T-479); copy-paste helpers (→T-480). Tests: 34/35 dedicated behavioral coverage (`train_forecast` indirect-only →T-482); proof: unit 795 passed exit 0, full-DSN integration 61 passed exit 0. Follow-up registered as P76 (Not Started, awaiting user prioritization). Verdict: 30 keep / 1 merge-candidate (`calculate_days_of_supply` → `calculate_days_of_inventory`; identical formula, DOI is warehouse-aware superset) / 4 boundary-unclear (`calculate_stockout_risk` vs `list_stockout_risk` copy-paste thresholds; `get_open_supply_orders`, `get_delayed_supply_orders`, `compare_demand_periods` thin-wrapper vs nl_query). Copy-paste maintenance risks: `_classify_stockout_risk` duplicated (high), `_db_error_message` duplicated in ~16 files (medium). Unregistered 3 tools all have real consumers — keep.
-
-Previously: P75-B-01 — Static conformance + implementation quality audit (2026-06-10). Key findings: Context Pack contract implemented by 0/35 tools (systemic doc-vs-code gap); `nl_query` returns raw rows; `missing_data` never populated; `evaluator_tool` silent fallback on missing `risk_thresholds.yaml`; open/delayed supply order queries unbounded (no LIMIT); 28 DB tools share a broad-except pattern. SQL parameterization 35/35 clean; no hardcoded schema strings; LLM calls via model layer.
-
-Previously: P74 — Integration Tier Latent Debt (2026-06-10): all 14 latent failures fixed test-side (no production bugs); full-DSN integration 61 passed/0 failed; canonical 16 passed/0 failed; build exit 0.
-
-Previously: P71–P73 — Autonomy Loops programme (2026-06-10). Sign-off PASS: unit 795 passed, canonical integration 16 passed/0 failed (full-DSN 47 passed; 14 latent pre-existing failures tracked as P74/T-470), build exit 0, playwright 32/32. ADR: 2026-06-10-autonomy-loops. D-003 Resolved (FP-004, record-only). Goal loop (set_goal/evaluate_goal + 1 bounded refinement + intent re-route), grounded verification (revision path reconnected), feedback learning (decision_log.outcome → context annotation).
-
 ## Blockers
 
-None
+None. Sign-off attempt 1 blockers (D-023..D-026, plus D-027/D-028 registered and resolved
+during round 3) are all Resolved as of 2026-08-25; failure analyses FP-022..FP-027 recorded,
+all Count=1, no hardening escalation triggered.
+
+Previously: P128 sign-off attempt 1 FAIL (2026-08-24): D-023 (integration calendar-pinned seed
+baselines), D-024 (e2e conftest hardcoded :8000 → vacuous tier skips), D-025
+(stale create-session status assertion), D-026 (HITL/job-flow e2e non-deterministic under
+live gemma4:12b NL routing). All four registered under P128-B-06; fix dispatches in
+progress. Gates 1/4/5/6/7 exit 0; supplemental test-web exit 0; npm audit matches the
+documented deferred-major set. P124 revalidation context: the failed gates exposed latent
+pre-P128 defects — consistent with this phase's release-truth goal.
+
+Previously: P124's recorded build sign-off was invalidated inside P128 (D-019/D-020): the
+repository `make build` target had never compiled the web app. P128 restored release truth
+— real `next build` / TypeScript / Vitest gates now run locally and in CI (D-020 Resolved),
+all three dynamic pages satisfy the Next.js 15 page contract (D-019 Resolved), operational
+routes are environment-scoped with no secret material in diagnostics (D-022 Resolved), and
+unit-tier sample-data tests are hermetic (D-021/FP-018). Failure analyses FP-019–FP-021
+recorded, all Count=1; no hardening escalation triggered.
+
+## Last Completed
+
+P128-B-06 — Independent phase sign-off, attempt 2 PASS (2026-08-25). T-758 full mandatory
+gate set exit 0 against the live stack (db/api/web up; api recreated with LLM_DRIVER=scripted,
+verified via llm_usage probe): test-unit 1482/15 skipped; test-integration @55432 175/4
+skipped on a fresh today-anchored /tmp seed (tracked data untouched); test-e2e 10 passed
+(celery backend; identical ×3 consecutive); build (real next build); lint; typecheck
+(187 files + web tsc) — all exit 0. Supplemental: make test 1667/19 skipped;
+test-playwright 52 passed +1 flaky retried; test-web 86 passed; npm audit --omit=dev =
+the documented deferred-major 3-high set (next@16 majors). Integrity: agent_steps missing
+llm_usage = 0 (30-min window); tool_calls without audit_log pairing = 0. D-023..D-027
+marked Resolved with evidence; D-028 (stale get_session status — split-brain session state)
+registered and resolved same day under owner instruction; FP-022..FP-027 recorded.
+Note: gates executed against the working tree at HEAD 9bc0294 + uncommitted B-06 fixes —
+commit is the human's responsibility before merge.
+
+Previously:
+
+P128-B-05 — Release record and failure learning (2026-08-24). T-757: `/analyze-failure`
+run for D-019/D-020/D-022 immediately after each Resolved mark → FP-019, FP-020, FP-021
+(all `design-contract`, Count 1); no Count≥2 → no `/harden-system`. T-756: Carry-Over rows
+reconciled (npm audit 3-high deferred-major state; four stale rows marked Resolved with
+evidence), stale DESIGN.md §CI/CD Pipeline row re-synced via delegated bdos-infra edit,
+prior no-op build-gate claims invalidated through the D-019/D-020 resolutions.
+
+Previously:
+
+P128-B-04 — Local-only operational routes (2026-08-24). T-754 gated `/api/v1/debug` and
+the `/api/v1/admin/*` router behind `APP_ENV ∈ {dev, test}` per ADR
+`2026-08-24-local-only-operational-routes.md` and removed API-key prefix disclosure from
+the debug response; T-755 added 9 integration HTTP environment-matrix tests plus App
+Builder's 16 unit tests, preserving all existing admin endpoint assertions. D-022 marked
+Resolved: production/default-safe route inspection returns `[]`; batch check
+`make test-unit` (1447 passed, 15 skipped) / `make lint` / `make typecheck` all exit 0;
+supplementary `make test-integration` exit 0 (25 passed, 154 DB-tier skipped).
+
+Previously:
+
+P128-B-03 — Real web gates and dependency security (2026-08-24). T-751 made `make build`
+run real `next build` behind a stamp-gated `npm ci`, added `tsc --noEmit` to
+`make typecheck`, and introduced the named `make test-web` Vitest target; T-752 aligned
+`.github/workflows/lint-test.yml`, `.claude/rules/testing.md`, and `docs/TESTING.md` to the
+same Make-owned contract with frontend tests in CI. T-753 removed 7 unused direct deps and
+applied non-breaking updates — npm audit now 3 high (prod & full), all fix-deferred behind
+next@16 major. D-020 marked Resolved on Test/Review batch-check evidence: `make test-unit`
+(1431 passed, 15 skipped), `make lint`, `make typecheck`, plus Infra's `make build` /
+`make typecheck` / `make test-web` — all exit 0; smoke checks skipped (stack down).
+Flagged for T-756: `docs/DESIGN.md §Deployment Design §CI/CD Pipeline` table row is stale.
+
+Previously:
+
+P128-B-02 — Next.js 15 page-contract recovery (2026-08-24). T-749 converted the three
+dynamic routes (chat session, recommendation detail, scenario comparison) to async Server
+Page wrappers awaiting `params` and delegating to colocated Client Components; T-750 added
+`apps/web/app/__tests__/dynamic-route-page-boundaries.test.tsx` guarding the Next.js 15
+page contract. D-019 marked Resolved on Test/Review evidence: `npm run build` exit 0
+(all three routes server-rendered `ƒ`), `npx tsc --noEmit` exit 0, `npm test` exit 0
+(14 files, 86 tests), plus `make test-unit` (1431 passed, 15 skipped), `make lint`,
+`make typecheck` all exit 0. Specialist work executed via opencode subagents.
+
+Previously:
+
+P128-B-01 — Hermetic sample-data tests (2026-08-24). T-748 redirects generated
+operational CSVs to pytest `tmp_path`; D-021 Acceptance confirmed by Test/Review:
+`make test-unit` exit 0 (1431 passed, 15 skipped), `make lint` exit 0,
+`make typecheck` exit 0 (186 files), and `git status --short -- data/sample` empty.
+`/analyze-failure D-021` recorded new FP-018 (`design-contract`, Count 1); no
+hardening escalation is required.
+OpenCode completed the work; Orca recorded the task through manual recovery after the
+OpenCode prompt acknowledgement returned `agent_prompt_stalled` and revoked lifecycle
+messages.
+
+Previously:
+
+P127 — Harness Hygiene: Dead References, Gate Naming, SSoT Consolidation
+(2026-07-09). Executed all findings of the 2026-07-09 /harness-engineering audit. B-03: forbidden-write
+set canonicalized to five directories (SKILL HARD STOP = canonical statement;
+ORCHESTRATOR.md §Write Authority = SSoT; AGENTS.md reduced to summary + pointer);
+Defect Task trigger conditions SSoT-declared in ORCHESTRATOR.md §Defect Task Format.
+B-04: STATE.md duplicate ## Blockers merged; TASKS.md duplicate P116 heading merged
+and stale Not Started rows under Done phases reconciled (P125-B-02, P110-B-03,
+P108 T-638, P119 B-02–B-05); DECISIONS.md P127 entry appended. B-01: dead-reference
+repointing (§Stub Behavior → TESTING.md §Stub Conformance ×5 sites; §Phase Progression
+removed from AGENTS.md; per-layer §Architecture Constraints references fixed) + unit
+gate normalized to `make test-unit` in orchestrator SKILL step 8, ORCHESTRATOR.md
+Design Improvement Loop, and test-review SKILL batch-check bullet (leftover caught at
+batch check, fixed on first return). B-02: `docs/DESIGN.md §Deployment Design` authored
+(local stack, compute platform, frozen Azure/Terraform state, DB conventions, CI/CD —
+facts verified against live repo); bdos-infra SKILL slimmed to process + pointers.
+B-05 sign-off: unit 1431/15 skipped, integration 16/154 skipped, e2e 10 skipped,
+playwright 52 passed (dev stack was up; 1 flaky passed on retry), build OK, lint
+clean, typecheck 186 files — all exit 0. Note: playwright passing with the stack up
+suggests the P124 sign-off blocker is now resolvable by re-running its gate set.
+
+Previously: P126 — Harness & Docs Integrity Fixes (2026-07-06). Executed all findings of the
+2026-07-06 /harness-engineering audit. B-01 (docs layer): TOOLS.md stale 6-table
+allowlist and frozen per-intent tool lists replaced with pointers to code SSoT
+(sql_allowlist.py / _INTENT_TOOL_SUBSET); TESTING.md + .env.example Ollama model set to
+gemma4:12b; DESIGN.md coding-agents table replaced with AGENTS.md pointer;
+ORCHESTRATOR.md gained §Mandatory Gate Set (sign-off SSoT) and expanded §Write Authority;
+failure-patterns.md line-number citation fixed; prevention-policy.md policy notes added
+(one-sentence prohibitions + FP link; section-citations-only); AGENT_ARCHITECTURE.md
+archived (orphaned ~P67 snapshot contradicting DECISIONS.md on job_dispatch). B-02
+(harness layer): design-contract-watch.md FP IDs resynced (mislabeled FP-007/008 were
+FP-008/009; real FP-007 added); 6 SKILL.md files deduped to pointers; bdos-infra smoke
+checks fixed to make dev-smoke + configured ports; stale Sonnet 4.6 commit trailer
+removed; AGENTS.md dead references removed and §References completed
+(TOOLS/RAG/ORCHESTRATOR/SPEC); testing rules/docs ownership split. B-03: STATE.md
+English fix, DECISIONS.md policy entries, memory watchlist FP resync + stale memory
+deleted. B-04 sign-off: unit 1431/15 skipped, integration 16/154 skipped, e2e 10
+skipped, build OK, lint clean, typecheck 186 files — all exit 0. New carry-over items:
+npm audit HIGH (undici transitive), DESIGN.md §Deployment Design dead pointer,
+test_sample_data.py CSV mutation side effect.
+
+Previously: P125 — ControlAgent System Prompt Quality Improvements (2026-06-14). B-01: Applied 5 Judge-Report fixes — (1) render_response_format() prepends language instruction; (2) grounding_footer allows cost-impact tool after stockout-list call; (3) supply shortage rule replaced {schema_example} placeholder with explanatory prose; (4) job_dispatch integrated into rule_texts sequential numbering; (5) grounding_footer appends empty-result fallback. B-02 sign-off: unit 1431/15 skipped, integration 16/154 skipped, build OK, lint clean, typecheck 186 files — all exit 0.
+
+Previously: P123 — Next.js 15 Upgrade (2026-06-14). B-01: Next.js 14→15 upgrade — `next@^15.5.19` in apps/web, Route Handler `await params` applied (route.ts), 5 HIGH CVEs resolved. D-018: fixed incorrect `use(params)` application in 3 Client Components (`chat/[sessionId]/page.tsx`, `recommendations/[id]/page.tsx`, `scenarios/[sessionId]/page.tsx`) — reverted to direct `params: { ... }` access.B-02 sign-off: unit 1431/15 skipped, integration 16/154 skipped, e2e 10 skipped, build OK, lint clean, typecheck 186 files, playwright 53/53 — all exit 0.
+
+Previously: P122 — Technical Debt & Security Hardening (2026-06-14). B-01: Alembic migration 0025_jobs_session_cascade.py — jobs.session_id FK re-added with ON DELETE CASCADE (FP-016 residual closed). B-02: npm audit CVE remediation — eslint-config-next 14->15.5.19 (resolves GHSA-5j98-mcp5-4vw2 HIGH glob cmd injection); react-syntax-highlighter 15->16.1.1 (resolves GHSA-x7hr-w5r2-h6wg moderate prismjs DOM clobbering); 5 next@14.x HIGH CVEs and 1 AI SDK moderate CVE accepted with rationale in package.json securityAcceptedCVEs. Post-remediation: 12 vulnerabilities (6 low, 5 moderate, 1 high) down from 18. B-03 sign-off: unit 1431/15 skipped, integration 16/154 skipped, e2e 10 skipped, build OK, lint clean, typecheck 186 files — all exit 0.
+
+Previously: P121 — Harness Defect Fixes (2026-06-13). B-01: Bash tool added to bdos-orchestrator and analyze-failure subagent definitions; ORCHESTRATOR.md Design Improvement Loop gate updated (make test-integration added, make build removed). B-02: analyze-failure and harden-system name slugs corrected; bdos-orchestrator agent description expanded to match SKILL.md. B-03: design-contract-watch.md expanded with FP-013+FP-014 (paths include packages/schemas/**); failure-patterns.md Pattern column translated to English; prevention-policy.md FP-011 lever log clarified with implemented test references. Sign-off: unit 1431/15 skipped, integration 16/154 skipped, e2e 10 skipped, build OK, lint clean, typecheck 185 files — all exit 0.
+
+Previously: P120 — RAG Verification: DecisionMemoryStore Recency Fallback Fix (2026-06-13). B-01: DecisionMemoryStore.search() bare-string recency fallback implemented (non-JSON queries now return k most recent records); 3 new unit tests (test_decision_memory_store.py); integration test appended to test_memory_stores.py. Sign-off: unit 1431/15 skipped, integration 16/154 skipped, e2e 10 skipped, build OK, lint clean, typecheck 185 files — all exit 0.
+
+Previously: P119 — Evaluation-Driven Hardening (2026-06-13). (B-01) ADR docs/adr/2026-06-13-memory-store-async-split.md — documents sync base / async implementation split decision. (B-02) _build_system_prompt() dead parameter schema_context removed. (B-03) ORCHESTRATOR.md DECISIONS.md scan → blocking gate; AGENTS.md + SKILL.md Orchestrator write boundary expanded to docs/ new files. (B-04) lint-test.yml python-integration-test job added (postgres:16 service + alembic + pytest tests/integration/). Sign-off: unit 1428/15 skipped, integration 16/153 skipped, e2e 10 skipped, build OK, lint clean, typecheck 185 files — all exit 0.
+
+Previously: P118 — Failure Pattern Harness Hardening (2026-06-13). B-01: FP-NNN back-references added to AGENTS.md §Prohibitions (FP-003 × 2, FP-011). B-02: .claude/rules/design-contract-watch.md created (FP-004/007/008/010/016 watch points, path-scoped to packages/agent/**, packages/tools/**, packages/persistence/**). B-03: memory/project_failure_watchlist.md created with 9 high-risk Count=1 patterns; MEMORY.md indexed.
+
+Previously: P117 — RAG Documentation & Schema Context Refactor (2026-06-13). Created docs/RAG.md; moved DB schema context from system prompt to task.instruction via _inject_schema_context(). Sign-off: unit 1428/15 skipped, integration 16/153 skipped, e2e 10 skipped, build OK, lint clean, typecheck 185 files — all exit 0. — Context Engineering Pipeline: Bug Fixes & Field Activation (2026-06-13). Fixed 7 bugs/gaps across 3 batches: (B-01) system_prompt propagation to AgentRuntime._system_prompt + prohibited_tools enforcement via _narrow_tools(); (B-02) ContextPack.routing_hint injected into system prompt, skill_keys used in _inject_skills() via SkillLoader.load_by_keys(), context trace logging activated via get_pool() in ContextBuilder.build(); (B-03) render_routing_policy() guards rules 6–11,14 by tool presence with sequential re-numbering, _USE_CASE_KEYWORDS expanded with paraphrases for all Q1–Q10, past-decisions search key changed to task.instruction. 13 new unit tests. Sign-off: unit 1426/15 skipped, integration 16/153 skipped, e2e 10 skipped, build OK, lint clean, typecheck 185 files — all exit 0.
+
+Previously: P115 — Continuous Eval Runner (2026-06-13). Eval-driven Context Engineering refactor complete (P112–P115): golden cases dataset for SPEC Q1–Q10 (data/evals/spec10_golden_cases.yaml), EvalCase schema (packages/agent/evals/eval_case.py), ContextPack schemas + USE_CASE_PACKS (packages/schemas/context_packs.py), ContextBuilder with keyword-based use-case classification (packages/agent/control/context_builder.py), integrated into control_agent.py via tool_subset_override, context trace logging (context_log table migration 0024 + ContextLogRepository + GET /api/v1/admin/context-logs), EvalRunner with failure taxonomy (packages/agent/evals/runner.py), CLI runner script (scripts/run_evals.py) + make eval target. Sign-off: unit 1413/15 skipped, integration 16/153 skipped, e2e 10 skipped, build OK, lint clean, typecheck clean — all exit 0. ADR: docs/adr/2026-06-13-eval-driven-context-engineering.md.
+
+Previously: P111 — control_agent.py System Prompt Improvements (Judge Report) (2026-06-13). Applied 5 Judge-Report fixes: (1) Rule 11 added for decision_support tools (optimize_replenishment/simulate_inventory/forecast/request_approval/evaluate_candidates); (2) {schema_example} moved to after synthesis instruction in Rule 3; (3) rules renumbered 1–14 sequentially (no 2b); (4) SPEC Q5/Q7/Q8/Q9/Q10 replaced with inline semantic labels; (5) _build_system_prompt(intent=...) now narrows render_routing_policy() subset; ControlAgent.run() rebuilds system_prompt after intent_category resolved. 5 new tests in test_control_prompt.py. Sign-off: unit 1308/15 skipped, integration 16/153 skipped, e2e 10 skipped, build OK, lint clean, typecheck clean (178 files) — all exit 0.
+
+Previously: P110 — control_agent.py Cleanup (2026-06-13). Fixed 6 issues: (1) duplicate tool catalog removed from _build_system_prompt; (2) _make_schema_example now accepts schema: str param; (3) rules 11–12 moved from render_response_format to render_routing_policy; (4) ControlAgent.run() refactored into 6 private methods; (5) DecisionMemoryStore consolidated to 1 instantiation per run(); (6) _SYSTEM_PROMPT_TEMPLATE stub deleted, _ = intent/user_role replaced with noqa. Sign-off: unit 1303/15 skipped, integration 16/153 skipped, e2e 10 skipped, build OK, lint clean, typecheck clean (178 files) — all exit 0.
+
+Previously: P109 — Context Engineering Refactor (2026-06-13). Extracted `render_business_guidelines()`, `render_response_format()`, `render_schema_context()` from `_SYSTEM_PROMPT_TEMPLATE`; `_build_system_prompt()` updated to signature `(intent, user_role, schema_context)` assembling sections via `"\n\n".join(filter(None, [...]))`; 2 new unit tests added. Sign-off: unit 1300/15 skipped, integration 16/153 skipped, e2e 10 skipped, build OK, lint clean, typecheck clean (178 files) — all exit 0.
+
+Previously: P108 — render_routing_policy (2026-06-13). Added `render_tool_catalog()` and `render_routing_policy()` to `control_agent.py`; `_SYSTEM_PROMPT_TEMPLATE` routing section replaced with `{routing_policy}` placeholder populated from `_INTENT_TOOL_SUBSET`; `_make_schema_example()` derives table names from `ALLOWED_READ_TABLES` (not literals); 2 new unit tests added in `test_control_prompt.py`. Sign-off: unit 1298/15 skipped, integration 16/153 skipped, e2e 10 skipped, build OK, lint clean, typecheck clean (178 files) — all exit 0.
+
+Previously: P107 — _SYSTEM_PROMPT Maintainability (2026-06-13). Hardcoded SQL schema strings removed from `_SYSTEM_PROMPT` in `control_agent.py`; replaced with `_make_schema_example()` / `_build_system_prompt()` using `get_schema_context()`. Table/column prose references genericized. New unit test `test_control_prompt.py` validates all backtick-quoted tool names in the prompt exist in `ToolRegistry`. Sign-off: unit 1296/15 skipped, integration 16/153 skipped, e2e 10 skipped, build OK, lint clean, typecheck clean (178 files) — all exit 0.
+
+Previously: P106 — Fix Inline Chart Streaming (2026-06-13). Emits chart code fences as text_delta SSE events in _run_and_signal() so inline charts appear during streaming sessions, not only on page reload. 5 new unit tests in test_sessions_chart_streaming.py. Sign-off: unit 1295/15 skipped, integration 16/153 skipped, e2e 10 skipped, build OK, lint clean, typecheck clean (178 files) — all exit 0.
+
+Previously: P105 — Chart Scenarios in ToolScenarioModal (2026-06-13). Added "Charts" category with Stockout Risk Chart and Demand Trend Chart scenarios. Sign-off: unit 1290, integration 16 passed/153 skipped, e2e 10 skipped, build OK, lint clean, typecheck clean — all exit 0.
+
+Previously: P104 — Inline Charts in Chat Messages (2026-06-13). extract_chart_specs() builds ChartSpec dicts from list_stockout_risk and analyze_demand_trend tool outputs; sessions.py appends chart code fences to assistant reply; InlineChart.tsx renders recharts BarChart/LineChart inline in AssistantBubble. Sign-off: unit 1290, integration 16 passed/153 skipped, e2e 10 skipped, build OK, lint clean, typecheck clean — all exit 0.
+
+Previously: P103 — Job File Generation (2026-06-13). SimulationTool/OptimizerTool/ForecastTool generate
+CSV files via generated_files output; migration 0023 adds file_content BYTEA to job_files;
+GET /api/v1/jobs/files/{id}/download serves bytes; JobStatusCard renders download links.
+Sign-off: unit 1280, integration 165 (full-DSN), e2e 10 skipped (no server), build OK,
+lint clean, typecheck clean — all exit 0. Pre-existing data-drift in T-589 assertion fixed.
+
+Previously: Restored "Job Dispatch (HITL)"
+modal category (P81 clean-up gap); tightened ControlAgent system prompt rule 12 with explicit
+trigger phrases for gemma4:12b. Sign-off: unit 1249, integration 161 (full-DSN), playwright
+52+1-flaky — all exit 0. New Playwright spec: 4 tests (category tab, 2 prompt injection,
+1 full mock E2E).
+
+Previously:
+
+P101 — Async Job Execution Validation (HITL) + Streaming UX (2026-06-12). First post-MVP
+phase (user-defined technical validation). Proven end-to-end: agent dispatches heavy work
+via `job_dispatch` (re-registered LLM-callable behind HITL approval); approved jobs run as
+background asyncio tasks (session turn returned 0.11s, second message answered mid-run);
+job rows queued→running→completed/failed; completion/failure report persisted as an
+assistant message (reload-visible) + `job_report` SSE live append; JobStatusCard in chat.
+Streaming: backend already chunked — bottleneck was the Next.js layer (rewrite proxy, then
+`next dev` gzip rebuffering after the new SSE route handler). Fixed (route handler +
+`compress: false`): web-origin measured 90 deltas / 1.855s spread vs 0.000s burst before.
+Defects: D-016 (gzip negated inner fix — FP-015, verify at the wire not by inspection) and
+D-017 (B-01 regression: jobs.session_id FK without CASCADE broke session deletes — FP-016;
+repo-layer fix, schema cascade migration is carried over) both Resolved. Sign-off PASS
+(independent re-run, NO skips): unit 1249 exit 0, full-DSN integration 161 exit 0,
+playwright 48+1-flaky exit 0, build 0, lint 0, typecheck 0 — P98–P100 integration debt
+recovered. Known: gemma4:12b did not route to job_dispatch from natural language in 2
+attempts (approval-resume path driven directly; model-limitation, consistent with P100
+residuals).
+
+Previously:
+
+v0.1.0 release closure (2026-06-12): P96–P100 MVP hardening programme Done; judge
+campaign re-evaluation flipped Q1/Q6/Q8 to PASS (final 10/10); tag v0.1.0 created,
+fast-forward merged to main (443 commits, SHAs preserved), GitHub release published.

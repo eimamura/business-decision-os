@@ -1,8 +1,24 @@
 from __future__ import annotations
 
+import csv
+import io
+import logging
 from typing import Any, Literal
 
 from packages.tools.base import ToolContext, ToolResult
+
+logger = logging.getLogger(__name__)
+
+
+def _build_csv(rows: list[dict[str, Any]]) -> bytes:
+    """Serialize a list of flat dicts to UTF-8 CSV bytes."""
+    if not rows:
+        return b""
+    buf = io.StringIO()
+    writer = csv.DictWriter(buf, fieldnames=list(rows[0].keys()))
+    writer.writeheader()
+    writer.writerows(rows)
+    return buf.getvalue().encode("utf-8")
 
 
 class SimulationTool:
@@ -60,12 +76,29 @@ class SimulationTool:
             )
 
         output = job_result.output
+        result_row = {
+            "sku_id": output.get("sku_id", sku_id),
+            "ending_on_hand": output.get("ending_on_hand", 0.0),
+            "stockout_days": output.get("stockout_days", 0),
+            "mean_lead_time_days": output.get("mean_lead_time_days", 14),
+        }
+        csv_bytes = _build_csv([result_row])
+        logger.debug(
+            "SimulationTool generated CSV: %d bytes for sku_id=%s",
+            len(csv_bytes),
+            sku_id,
+        )
         return ToolResult(
             output={
-                "sku_id": output.get("sku_id", sku_id),
-                "ending_on_hand": output.get("ending_on_hand", 0.0),
-                "stockout_days": output.get("stockout_days", 0),
-                "mean_lead_time_days": output.get("mean_lead_time_days", 14),
+                **result_row,
+                "generated_files": [
+                    {
+                        "file_name": "simulation_result.csv",
+                        "mime_type": "text/csv",
+                        "file_size_bytes": len(csv_bytes),
+                        "file_content": csv_bytes,
+                    }
+                ],
             },
             audit_payload={
                 "sku_id": sku_id,

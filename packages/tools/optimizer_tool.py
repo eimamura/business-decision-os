@@ -1,9 +1,36 @@
 from __future__ import annotations
 
+import csv
+import io
+import logging
 from typing import Any, Literal
 
 from packages.optimization import OptimizationContext, OptimizationInput, ReplenishmentOptimizer
 from packages.tools.base import ToolContext, ToolResult
+
+logger = logging.getLogger(__name__)
+
+
+def _build_csv(rows: list[dict[str, Any]]) -> bytes:
+    """Serialize a list of flat dicts to UTF-8 CSV bytes."""
+    if not rows:
+        return b""
+    buf = io.StringIO()
+    writer = csv.DictWriter(buf, fieldnames=list(rows[0].keys()))
+    writer.writeheader()
+    writer.writerows(rows)
+    return buf.getvalue().encode("utf-8")
+
+
+def _flatten_candidate(candidate: dict[str, Any]) -> dict[str, Any]:
+    """Flatten a candidate dict — stringify nested structures."""
+    flat: dict[str, Any] = {}
+    for k, v in candidate.items():
+        if isinstance(v, (dict, list)):
+            flat[k] = str(v)
+        else:
+            flat[k] = v
+    return flat
 
 
 class OptimizerTool:
@@ -66,8 +93,26 @@ class OptimizerTool:
             output = await optimizer.run(opt_input, opt_ctx)
             candidates = [c.model_dump() for c in output.candidates]
 
+        flat_rows = [_flatten_candidate(c) for c in candidates] if candidates else []
+        csv_bytes = _build_csv(flat_rows)
+        logger.debug(
+            "OptimizerTool generated CSV: %d bytes, %d candidates for sku_id=%s",
+            len(csv_bytes),
+            len(candidates),
+            sku_id,
+        )
         return ToolResult(
-            output={"candidates": candidates},
+            output={
+                "candidates": candidates,
+                "generated_files": [
+                    {
+                        "file_name": "optimization_plan.csv",
+                        "mime_type": "text/csv",
+                        "file_size_bytes": len(csv_bytes),
+                        "file_content": csv_bytes,
+                    }
+                ],
+            },
             audit_payload={
                 "sku_id": sku_id,
                 "moq": moq,

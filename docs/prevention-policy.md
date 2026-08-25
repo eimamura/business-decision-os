@@ -27,9 +27,14 @@ Rationale: rules can be forgotten across session boundaries; structural constrai
 
 ---
 
-## Escalation Threshold
+## Escalation Rule
 
-`Count >= 2` for any pattern in `docs/failure-patterns.md` → invoke `/harden-system <FP-NNN>`.
+Two triggers, evaluated against the Pattern Table dates in `docs/failure-patterns.md` after every `/analyze-failure` run — the table itself is the counter, no separate tally file is maintained.
+
+| Trigger | Condition | Action |
+|---|---|---|
+| Pattern recurrence | Any pattern `Count >= 2` | Invoke `/harden-system <FP-NNN>`. The next phase must not begin until the prevention lever is applied. |
+| Same-class cluster | 3+ patterns sharing one Root Cause Class recorded within a rolling 30-day window | Run a preventive class audit before the next phase begins: review all same-class patterns together, extract any shared unenforced constraint, and apply the strongest applicable lever — or record a reasoned no-action in `docs/DECISIONS.md`. |
 
 ---
 
@@ -41,4 +46,14 @@ Actions taken by `/harden-system`. Append-only.
 |---|---|---|---|
 | FP-003 | 2026-06-10 | `new-test` + `prohibition` | Added `uv run mypy` step to `.github/workflows/lint-test.yml` (CI now blocks on typecheck); added proof-of-execution requirement (gate + exit_code + output_tail) to `bdos-test-review` SKILL.md §Quality Gates and `bdos-orchestrator` SKILL.md §Run Mode step 8; added prohibition to `AGENTS.md §Prohibitions` banning sign-offs without exit-code evidence |
 | FP-003 | 2026-06-11 | `structural-change` | Escalated after Count=3 (D-009): replaced vague "full Quality Gates" description in `bdos-orchestrator` SKILL.md §Run Mode step 8 with an explicit mandatory gate set (six named commands including `make test-integration`); sign-off acceptance rule now requires a `make test-integration` gate row by name — omission or "N/A" is a structural rejection. Added complementary prohibition to `AGENTS.md §Prohibitions` naming integration tests as non-omissible at every phase sign-off |
-| FP-011 | 2026-06-12 | `new-test` + `prohibition` | Added prohibition to `AGENTS.md §Prohibitions` banning use of `state["input_tokens"]` (operator.add SUM) for saturation checks — only `peak_input_tokens` (per-call max) is the authoritative signal. Handed off to Test/Review: two unit tests required — (1) saturation WARNING in `_call_model_node` fires when per-call `response.input_tokens` crosses 90% threshold and does NOT fire when only the accumulated SUM would cross it; (2) `peak_input_tokens` in `agent_end` SSE `token_cost` payload equals `max()` of per-call values, not their sum. |
+| FP-011 | 2026-06-12 | `new-test` + `prohibition` | Added prohibition to `AGENTS.md §Prohibitions` banning use of `state["input_tokens"]` (operator.add SUM) for saturation checks — only `peak_input_tokens` (per-call max) is the authoritative signal. Unit tests implemented: (1) `test_saturation_warning_fires_on_per_call_threshold_not_sum` in `tests/unit/test_peak_input_tokens_saturation_signal.py` — asserts the saturation WARNING in `_call_model_node` fires when a single call's `response.input_tokens` crosses 90% of num_ctx and does NOT fire when only the accumulated SUM would cross it; (2) `test_agent_end_sse_token_cost_peak_input_tokens_is_max_not_sum` in the same file — asserts `usage["peak_input_tokens"]` equals `max()` of per-call values (not their sum) across a multi-call run. |
+
+---
+
+## Policy Notes
+
+- Prohibitions added via lever 3 (`prohibition`, added to `AGENTS.md §Prohibitions`) must be a single
+  sentence plus an `(← FP-NNN)` back-reference; the incident narrative (what happened, why, how it was
+  found) stays in `docs/failure-patterns.md` and must not be duplicated into the prohibition text.
+- Cross-references between docs/skills/rules files must cite section names (e.g. "AGENTS.md
+  §Prohibitions"), never line numbers — line numbers drift as files are edited and silently go stale.

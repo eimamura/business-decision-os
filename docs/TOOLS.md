@@ -99,15 +99,12 @@ Defined in `packages/tools/base.py` as `_ROLE_TOOL_ALLOWLIST`. Each agent role h
 
 #### `control` role tool allowlist (derived from `_INTENT_TOOL_SUBSET`)
 
-The full set of tools reachable by the ControlAgent is the union of all intent-subset lists. By intent category:
-
-| Intent | Tools available to ControlAgent |
-|---|---|
-| `supply_chain` | `nl_query`, `list_stockout_risk`, `get_delayed_supply_orders`, `get_open_supply_orders`, `calculate_supply_gap`, `analyze_supply_lead_time`, `calculate_days_of_inventory`, `analyze_supply_risk`, `calculate_stockout_risk`, `calculate_stockout_cost_impact`, `calculate_expedite_cost` |
-| `lookup` | `nl_query`, `table_schema_reader`, `data_catalog_search`, `list_stockout_risk`, `get_open_supply_orders`, `get_available_to_promise`, `profile_demand_data` |
-| `domain_analysis` | `nl_query`, `profile_demand_data`, `analyze_demand_trend`, `evaluate_forecast_accuracy`, `detect_demand_anomalies`, `analyze_seasonality`, `analyze_demand_drivers`, `segment_demand`, `compare_demand_periods`, `calculate_days_of_inventory`, `calculate_stockout_risk`, `list_stockout_risk`, `calculate_excess_inventory_risk`, `get_available_to_promise`, `get_open_supply_orders`, `get_delayed_supply_orders`, `calculate_supply_gap`, `analyze_supply_lead_time`, `analyze_supply_risk`, `calculate_holding_cost_impact`, `calculate_stockout_cost_impact`, `calculate_expedite_cost`, `compare_cost_scenarios` |
-| `cross_domain_analysis` | everything in `domain_analysis` plus `data_quality_checker`, `table_schema_reader`, `data_catalog_search` |
-| `decision_support` | `nl_query`, `list_stockout_risk`, `calculate_stockout_risk`, `calculate_excess_inventory_risk`, `get_available_to_promise`, `calculate_days_of_inventory`, `get_open_supply_orders`, `get_delayed_supply_orders`, `calculate_supply_gap`, `analyze_supply_lead_time`, `analyze_supply_risk`, `calculate_holding_cost_impact`, `calculate_stockout_cost_impact`, `calculate_expedite_cost`, `compare_cost_scenarios`, `optimize_replenishment`, `simulate_inventory`, `evaluate_candidates`, `request_approval`, `forecast`, `evaluate_forecast_accuracy` |
+The full set of tools reachable by the ControlAgent is the union of all intent-subset lists. The per-intent
+tool lists are code, not documentation: read `_INTENT_TOOL_SUBSET` in
+`packages/agent/control/control_agent.py` (~line 325) for the current, authoritative membership of each
+intent category (`supply_chain`, `lookup`, `domain_analysis`, `cross_domain_analysis`, `decision_support`).
+Do not hand-copy the list here — a prior hand-copied enumeration went stale as tools were added, which is
+why this section now points at the code instead of restating it.
 
 ### Layer 2: Task-Level Tool List
 
@@ -121,11 +118,15 @@ A tool is only callable when it appears in both layers.
 
 ### Table Allowlist (SQL-level)
 
-All tools that issue user- or LLM-provided SQL queries are additionally restricted by `validate_read_sql()` in `packages/tools/sql_guardrail.py` before any database execution. The guardrail uses `ALLOWED_READ_TABLES` (`packages/tools/sql_allowlist.py`) as the read table allowlist:
+All tools that issue user- or LLM-provided SQL queries are additionally restricted by `validate_read_sql()` in `packages/tools/sql_guardrail.py` before any database execution. The guardrail uses `ALLOWED_READ_TABLES` (`packages/tools/sql_allowlist.py`) as the read table allowlist. That module is the SSoT for the current table set — do not hand-copy it here; it has grown (currently 12 tables) since migration 0009 renamed several tables.
 
-```
-sku_master, inventory, demand_history, supply, cost, customers
-```
+*Non-authoritative — the code wins.* As of migration 0009, the canonical names include `sku_master`,
+`location_master`, `customer_master`, `inventory_snapshot`, `demand_history`, `supply_orders`, `cost_master`,
+`forecast_history`, `customer_orders`, `shipments`, `production_capacity`, `production_plan`.
+`packages/tools/sql_allowlist.py` also defines `_LEGACY_TABLE_MAP`, which rewrites pre-migration-0009 names
+that small LLMs still generate from training data (`inventory`→`inventory_snapshot`, `supply`→`supply_orders`,
+`cost`→`cost_master`, `customers`→`customer_master`, `orders`→`customer_orders`) to their canonical form before
+guardrail validation.
 
 Guardrail rules:
 
@@ -518,6 +519,49 @@ Train the demand forecasting model for a SKU.
 
 **Class:** `TrainForecastTool` (`packages/tools/train_forecast_tool.py`)
 **Not registered in `create_tool_registry()`** — invoked directly by `packages/agent/job_executor.py` as a job execution target (job_type=`"train_forecast"`).
+
+---
+
+### Current job_type Registry
+
+| job_type | Tool class | SpecialistRole |
+|---|---|---|
+| `simulate` | `SimulationTool` | `simulation_optimizer` |
+| `inventory_simulation` | `SimulationTool` (alias) | `simulation_optimizer` |
+| `optimize` | `OptimizerTool` | `simulation_optimizer` |
+| `forecast` | `ForecastTool` | `data_engineer` |
+| `train_forecast` | `TrainForecastTool` | `data_engineer` |
+
+`VALID_JOB_TYPES` in `packages/agent/job_executor.py` is the authoritative set. The runtime validates against it before creating DB rows, so an unrecognised `job_type` is rejected before human approval is shown.
+
+---
+
+### How to Add a New job_type
+
+Touch these six locations in order. All must be consistent or the runtime will reject the job at `_prepare_hitl_node`.
+
+1. **`packages/agent/job_executor.py` — `VALID_JOB_TYPES`**
+   Add the new string to the `frozenset`. This is the validation gate.
+
+2. **`packages/agent/job_executor.py` — `_build_tool_routes()`**
+   Import your new tool class and add `"<job_type>": YourTool` to the returned dict.
+
+3. **`packages/agent/job_executor.py` — `_role_by_type`**
+   Add `"<job_type>": "<specialist_role>"` so the executor constructs the correct `ToolContext`.
+   Valid roles: `simulation_optimizer`, `data_engineer`.
+
+4. **`packages/tools/job_dispatch_tool.py` — `input_schema` enum**
+   Add the new string to `"enum": [...]` so the LLM sees it as a valid choice.
+   Update `description` to mention it.
+
+5. **`packages/agent/control/control_agent.py` — system prompt**
+   Add a line to the "Job type mapping" block (around line 107) so the LLM knows which
+   phrase triggers which `job_type`.
+
+6. **`docs/TOOLS.md` — job_type registry table above**
+   Add a row describing the new type and its tool class.
+
+No DB migration is needed — `job_type` is a free-form `VARCHAR(50)`.
 
 ---
 

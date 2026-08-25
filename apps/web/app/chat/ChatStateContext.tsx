@@ -100,6 +100,8 @@ interface ChatStateContextValue {
   sendAskUserAnswer: (sessionId: string, answer: string) => Promise<void>;
   submitFeedback: (sessionId: string, messageId: string, feedback: 1 | -1) => Promise<void>;
   appendAssistantReply: (sessionId: string, reply: string) => void;
+  /** Insert a job-status monitoring card into the conversation (T-603). */
+  appendJobStatus: (sessionId: string, jobId: string, jobType: string) => void;
 }
 
 const ChatStateContext = createContext<ChatStateContextValue | null>(null);
@@ -275,7 +277,24 @@ export function ChatStateProvider({ children }: { children: ReactNode }): React.
 
         const pendingAskUser = _extractPendingAskUser(events, fetched);
         const messages = pendingAskUser ? [...fetched, pendingAskUser] : fetched;
-        updateSession(sessionId, { messages, isLoadingMessages: false });
+        updateSession(sessionId, (prev) => {
+          // Dedup: if a job_report was already appended live (via SSE job_report event),
+          // the DB version would have the same content. Filter out any fetched assistant
+          // message whose content already appears in the existing live messages — keyed by
+          // content equality. This prevents double-render of job reports (T-603).
+          const liveContents = new Set(
+            prev.messages
+              .filter((m) => m.role === "assistant" && !m.messageId)
+              .map((m) => m.content),
+          );
+          const deduped =
+            liveContents.size > 0
+              ? messages.filter(
+                  (m) => !(m.role === "assistant" && liveContents.has(m.content)),
+                )
+              : messages;
+          return { ...prev, messages: deduped, isLoadingMessages: false };
+        });
       } catch {
         updateSession(sessionId, (prev) => ({ ...prev, isLoadingMessages: false }));
       }
@@ -546,6 +565,28 @@ export function ChatStateProvider({ children }: { children: ReactNode }): React.
                 messages: [...prev.messages, filesMsg],
               }));
               void queryClient.invalidateQueries({ queryKey: ["jobs"] });
+            }
+
+            // job_report SSE (T-603): the approval resume path uses sse_queue=None so
+            // this event is not emitted in the current flow. If it does arrive (future
+            // path with a live broadcaster), we append it as an assistant message.
+            // The server already persisted the report, so the message will also appear
+            // on the next loadMessages call — guard against double-render by checking
+            // whether an equivalent assistant message already exists in the list.
+            if (event.type === "job_report" && event.content) {
+              updateSession(sessionId, (prev) => {
+                const alreadyPresent = prev.messages.some(
+                  (m) => m.role === "assistant" && m.content === event.content,
+                );
+                if (alreadyPresent) return prev;
+                const reportMsg: ChatMessage = {
+                  id: crypto.randomUUID(),
+                  role: "assistant",
+                  content: event.content,
+                  created_at: event.timestamp,
+                };
+                return { ...prev, messages: [...prev.messages, reportMsg] };
+              });
             }
 
             if (event.type === "ask_user_required") {
@@ -935,6 +976,28 @@ export function ChatStateProvider({ children }: { children: ReactNode }): React.
     [updateSession],
   );
 
+  const appendJobStatus = useCallback(
+    (sessionId: string, jobId: string, jobType: string): void => {
+      updateSession(sessionId, (prev) => {
+        // Guard: do not insert a duplicate status card for the same job.
+        if (prev.messages.some((m) => m.role === "job_status" && m.jobId === jobId)) {
+          return prev;
+        }
+        const msg: ChatMessage = {
+          id: crypto.randomUUID(),
+          role: "job_status",
+          content: "",
+          jobId,
+          jobType,
+          jobStatus: "queued",
+          created_at: new Date().toISOString(),
+        };
+        return { ...prev, messages: [...prev.messages, msg] };
+      });
+    },
+    [updateSession],
+  );
+
   return (
     <ChatStateContext.Provider
       value={{
@@ -944,6 +1007,7 @@ export function ChatStateProvider({ children }: { children: ReactNode }): React.
         sendAskUserAnswer,
         submitFeedback,
         appendAssistantReply,
+        appendJobStatus,
       }}
     >
       {children}

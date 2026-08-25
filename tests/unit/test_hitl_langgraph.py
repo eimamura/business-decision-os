@@ -9,6 +9,7 @@ Full HITL cycle using MemorySaver (no real DB required).  Verifies:
 
 from __future__ import annotations
 
+import asyncio
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
@@ -296,7 +297,7 @@ async def test_hitl_resume_calls_execute_job() -> None:
 
     # job_dispatch tool input — matches the HITL path in prepare_hitl
     tool_input = {
-        "job_type": "simulation",
+        "job_type": "simulate",
         "description": "Run demand simulation",
         "params": {"sku": "A", "horizon": 30},
     }
@@ -423,8 +424,11 @@ async def test_hitl_resume_calls_execute_job() -> None:
             Command(resume="approved"),
             config=run_config,
         )
+        # Yield to the event loop so the background execute_job task gets a chance to run
+        # (T-601: execute_job is now dispatched via asyncio.create_task, not awaited directly).
+        await asyncio.sleep(0)
 
-    # execute_job must have been called (not tool.handle)
+    # execute_job must have been scheduled and run (not tool.handle)
     assert len(execute_job_calls) >= 1, (
         "execute_job must be called when resuming after HITL job_dispatch approval"
     )
@@ -448,7 +452,7 @@ async def test_hitl_handle_never_called_on_resume() -> None:
     approval_id = str(uuid.uuid4())
 
     tool_input = {
-        "job_type": "simulation",
+        "job_type": "simulate",
         "description": "Dangerous action",
         "params": {},
     }
@@ -547,6 +551,9 @@ async def test_hitl_handle_never_called_on_resume() -> None:
     ):
         # Phase 2: resume via Command(resume='approved')
         await graph.ainvoke(Command(resume="approved"), config=run_config)
+        # Yield to the event loop so the background execute_job task gets a chance to run
+        # (T-601: execute_job is now dispatched via asyncio.create_task, not awaited directly).
+        await asyncio.sleep(0)
 
     # tool.handle() must never have been called — execute_job is used instead
     assert handle_calls == [], "tool.handle() must never be called for a HITL tool"
