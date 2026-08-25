@@ -59,11 +59,13 @@ Plan and coordinate implementation work across phases. Read all project docs, de
 
 ## Required Reading
 
+**Scoped-read rule:** prefer named-section reads over full-file reads whenever the target information is addressable by §section heading; reserve full-file reads for files small enough to load whole (roughly ≤ 250 lines) or whose entire content the mode genuinely needs.
+
 **Intake mode** — read before translating requirements into tasks:
 1. `AGENTS.md` — working rules and prohibitions
-2. `docs/DESIGN.md` — full context (requirements need full architectural understanding)
+2. `docs/DESIGN.md` — table of contents scan, then §Monorepo Layout + §Public Interfaces in full, plus only additional sections whose domain matches the requirement
 3. `docs/DECISIONS.md` — prior decisions; avoid contradicting settled choices
-4. `docs/TASKS.md` — existing phases and T-NNN sequence (to continue numbering)
+4. `docs/TASKS.md` — header block (baseline, carry-over, next-number counters) + Active Phases section only; archived phase history stays unread
 5. `docs/STATE.md` — current execution state and any active blockers
 
 **Plan mode** — read before planning a new phase:
@@ -71,7 +73,7 @@ Plan and coordinate implementation work across phases. Read all project docs, de
 2. `docs/DESIGN.md` §Public Interfaces — normative contracts for the phase scope
 3. `docs/DECISIONS.md` — prior decisions (scan for relevance)
 4. `docs/TESTING.md` — quality gate commands
-5. `docs/TASKS.md` — check for existing tasks or phase history
+5. `docs/TASKS.md` — header block (next-number counters) + Active Phases section; check for unplanned phases or open defects
 
 **Run mode** — read before executing a phase loop:
 1. `AGENTS.md` — working rules and prohibitions

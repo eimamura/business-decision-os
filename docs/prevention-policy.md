@@ -27,9 +27,14 @@ Rationale: rules can be forgotten across session boundaries; structural constrai
 
 ---
 
-## Escalation Threshold
+## Escalation Rule
 
-`Count >= 2` for any pattern in `docs/failure-patterns.md` → invoke `/harden-system <FP-NNN>`.
+Two triggers, evaluated against the Pattern Table dates in `docs/failure-patterns.md` after every `/analyze-failure` run — the table itself is the counter, no separate tally file is maintained.
+
+| Trigger | Condition | Action |
+|---|---|---|
+| Pattern recurrence | Any pattern `Count >= 2` | Invoke `/harden-system <FP-NNN>`. The next phase must not begin until the prevention lever is applied. |
+| Same-class cluster | 3+ patterns sharing one Root Cause Class recorded within a rolling 30-day window | Run a preventive class audit before the next phase begins: review all same-class patterns together, extract any shared unenforced constraint, and apply the strongest applicable lever — or record a reasoned no-action in `docs/DECISIONS.md`. |
 
 ---
 

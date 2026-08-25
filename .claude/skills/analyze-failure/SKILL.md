@@ -29,7 +29,8 @@ This skill handles **analysis only**. The fix is already managed by the Defect T
 4. **Check for recurrence** — read `docs/failure-patterns.md`. Does an existing pattern row describe the same root cause mechanism?
 5. **If new pattern**: append a new row to `docs/failure-patterns.md` (Count=1, Lever Applied=—). Assign next FP-NNN in sequence.
 6. **If existing pattern**: increment Count in that row. If Count reaches **2**, print: `"Pattern FP-NNN has recurred. Invoke /harden-system FP-NNN before the next phase begins."`
-7. **Output analysis summary** (see Output Format below).
+7. **Cluster check** — recount rows sharing this root cause class dated within the trailing 30 days. If the count reaches **3**, print: `"Same-class cluster detected (<class> x N within 30 days). Run a preventive class audit per docs/prevention-policy.md §Escalation Rule before the next phase begins."`
+8. **Output analysis summary** (see Output Format below).
 
 ## Root Cause Classes
 
