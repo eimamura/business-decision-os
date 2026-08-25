@@ -62,6 +62,12 @@ def _make_callbacks(usage_writer: UsageWriter | None, provider: str) -> list[Any
 def create_model_registry(usage_writer: UsageWriter | None = None) -> ModelRegistry:
     """Build a ModelRegistry from environment variables.
 
+    Test-only override (takes precedence over LLM_PROVIDER):
+        LLM_DRIVER: 'scripted' builds a registry of ScriptedDriverModel
+            instances that emit a deterministic job_dispatch tool-call
+            sequence, so job-flow e2e scenarios never depend on live model
+            NL routing (D-026). Any other non-empty value raises RuntimeError.
+
     Required env vars:
         LLM_PROVIDER: 'anthropic', 'ollama', or 'openai'
 
@@ -84,6 +90,26 @@ def create_model_registry(usage_writer: UsageWriter | None = None) -> ModelRegis
             ``callbacks``.  Defaults to ``None`` (no recording — existing tests
             and tool-only call sites are unaffected).
     """
+    driver = os.environ.get("LLM_DRIVER", "").strip().lower()
+    if driver:
+        if driver != "scripted":
+            raise RuntimeError(
+                f"Unsupported LLM_DRIVER: {driver!r}. Only 'scripted' is supported."
+            )
+        from packages.agent.scripted_model import ScriptedDriverModel
+
+        callbacks = _make_callbacks(usage_writer, "scripted")
+        # One shared instance; bind_tools() returns copies, so the shared
+        # instance is never mutated.
+        scripted = ScriptedDriverModel(callbacks=callbacks or None)
+        return ModelRegistry(
+            {
+                "orchestrator": scripted,
+                "planner": scripted,
+                "control": scripted,
+            }
+        )
+
     provider = os.environ.get("LLM_PROVIDER", "anthropic").lower()
     callbacks = _make_callbacks(usage_writer, provider)
 

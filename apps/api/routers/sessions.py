@@ -236,25 +236,31 @@ async def update_session_title(session_id: str, body: UpdateTitleRequest) -> Non
 @router.get("/{session_id}")
 async def get_session(session_id: str) -> dict[str, Any]:
     session = sessions.get(session_id)
-    if not session:
-        try:
-            repo = DecisionSessionRepository()
-            row = await repo.get(session_id)
-            if row is None:
-                raise HTTPException(status_code=404, detail="Session not found")
-            session = {
-                "session_id": session_id,
-                "status": row.get("status", "pending"),
-                "goal": row.get("goal", ""),
-                "title": row.get("title"),
-                "created_at": str(row.get("created_at", "")),
-                "messages": [],
-            }
-            sessions[session_id] = session
-        except HTTPException:
-            raise
-        except Exception:
+    row: dict[str, Any] | None = None
+    try:
+        row = await DecisionSessionRepository().get(session_id)
+    except Exception:
+        # No DB (or repo failure): fall back to the in-memory copy as before.
+        row = None
+
+    if session is None:
+        if row is None:
             raise HTTPException(status_code=404, detail="Session not found")
+        session = {
+            "session_id": session_id,
+            "status": row.get("status", "pending"),
+            "goal": row.get("goal", ""),
+            "title": row.get("title"),
+            "created_at": str(row.get("created_at", "")),
+            "messages": [],
+        }
+        sessions[session_id] = session
+    elif row is not None:
+        # Background writers (HITL pause, job terminal sync, approval
+        # decisions) persist decision_sessions.status directly; the
+        # in-memory copy created at POST time must not shadow the DB
+        # value (D-028: stale-status detail responses).
+        session["status"] = row.get("status", session["status"])
     return session
 
 

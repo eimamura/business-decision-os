@@ -76,6 +76,31 @@ _LOOP_GUARD_SYNTHESIS_MAX_CHARS = 6_000
 _VERIFY_TOOL_RESULTS_MAX_CHARS = 8_000
 
 
+def _schedule_session_status_update(session_id: Any, status: str) -> None:
+    """Fire-and-forget decision_sessions status update; logs a warning on failure.
+
+    Same mechanism as SessionOrchestrator._schedule_status_update (ask_user pause):
+    both HITL pause paths persist the same 'awaiting_input' vocabulary value
+    (DECISIONS.md 2026-08-24; migration 0014 CHECK constraint).
+    """
+    sid = str(session_id)
+
+    async def _persist() -> None:
+        try:
+            from packages.persistence.sessions_repo import DecisionSessionRepository
+
+            await DecisionSessionRepository().update_status(sid, status)
+        except Exception as exc:
+            _log.warning(
+                "session status update failed",
+                target_status=status,
+                session_id=sid,
+                error=str(exc),
+            )
+
+    asyncio.create_task(_persist())
+
+
 class GroundednessVerdict(BaseModel):
     """Structured output schema for the LLM groundedness check."""
 
@@ -818,6 +843,11 @@ class AgentRuntime:
             "description": _job_description,
             "timestamp": datetime.now(timezone.utc).isoformat(),
         }, sse_queue, persister)
+
+        # Approval-pause persists awaiting_input (D-026) — same mechanism and
+        # vocabulary value as the ask_user pause path. Safe here: this node is
+        # not re-executed on resume (only the interrupted wait_for_approval node is).
+        _schedule_session_status_update(ctx.session_id, "awaiting_input")
 
         return {
             "pending_hitl_approval_id": _approval_id,

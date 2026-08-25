@@ -1,23 +1,25 @@
 """Integration tests for the HITL end-to-end flow.
 
-These tests require a live server and are marked @pytest.mark.e2e.
-They are skipped in unit/CI runs when localhost:8000 is not reachable
-(see tests/e2e/conftest.py for the auto-skip logic).
+These tests require a live server at API_BASE_URL (API_PORT env, Makefile
+default 8002) and are marked @pytest.mark.e2e. A dedicated e2e session fails
+loudly when the API is unreachable (see tests/e2e/conftest.py).
 """
 
 from __future__ import annotations
 
 import asyncio
-from typing import Any, Callable
+from typing import Any
 
 import httpx
 import pytest
+
+from tests.e2e.conftest import API_BASE_URL
 
 # ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
 
-_BASE = "http://localhost:8000"
+_BASE = API_BASE_URL
 _DEV_HEADERS = {"X-Dev-User": "dev-user", "Content-Type": "application/json"}
 
 # Message designed to trigger the job_dispatch (HITL) tool via the agent.
@@ -37,23 +39,36 @@ def _url(path: str) -> str:
     return f"{_BASE}{path}"
 
 
-async def _poll_until(
+async def _poll_session_status(
     client: httpx.AsyncClient,
-    url: str,
-    condition_fn: Callable[[Any], bool],
-    max_attempts: int = 20,
-    delay: float = 0.5,
-) -> Any:
-    """Poll *url* every *delay* seconds until *condition_fn* returns True.
+    session_id: str,
+    states: set[str],
+    max_attempts: int = 30,
+    delay: float = 1.0,
+) -> dict[str, Any]:
+    """Poll GET /api/v1/sessions/{session_id} until its status is in *states*.
 
-    Returns the response JSON on success; calls pytest.fail() on timeout.
+    Asserts the canonical detail resource (DECISIONS.md 2026-08-24 vocabulary:
+    'awaiting_input' at pause; 'completed'/'failed' terminal after execution).
+    Regression coverage for D-028: the endpoint must reflect DB-persisted
+    status writes (HITL pause / job terminal sync / approval decisions), not
+    only the process-local copy created at POST time.
     """
+    last_status: Any = None
     for _ in range(max_attempts):
-        res = await client.get(url, headers=_DEV_HEADERS)
-        if res.status_code == 200 and condition_fn(res.json()):
-            return res.json()
+        res = await client.get(
+            _url(f"/api/v1/sessions/{session_id}"), headers=_DEV_HEADERS
+        )
+        if res.status_code == 200:
+            data = res.json()
+            last_status = data.get("status")
+            if last_status in states:
+                return data
         await asyncio.sleep(delay)
-    pytest.fail(f"Condition never met at {url} after {max_attempts} attempts")
+    pytest.fail(
+        f"Session {session_id} never reached status {sorted(states)} after "
+        f"{max_attempts} attempts (last observed: {last_status!r})"
+    )
 
 
 async def _create_session(client: httpx.AsyncClient) -> str:
@@ -110,24 +125,23 @@ async def _find_pending_approval(
 
 
 @pytest.mark.e2e
-async def test_hitl_session_transitions_to_awaiting_approval() -> None:
-    """Create a session that triggers a hitl tool; assert status becomes awaiting_approval."""
+async def test_hitl_session_transitions_to_awaiting_input() -> None:
+    """Create a session that triggers a hitl tool; assert status becomes awaiting_input.
+
+    The approval pause reuses the ask_user pause vocabulary 'awaiting_input'
+    (DECISIONS.md 2026-08-24); 'awaiting_approval' is forbidden by migration
+    0014's CHECK constraint on decision_sessions.status.
+    """
     async with httpx.AsyncClient(timeout=30.0) as client:
         session_id = await _create_session(client)
 
         # Send a message that should trigger the job_dispatch HITL tool
         await _post_message(client, session_id, _HITL_MESSAGE)
 
-        # Poll until the session status is awaiting_approval (or timeout)
-        data = await _poll_until(
-            client,
-            _url(f"/api/v1/sessions/{session_id}"),
-            condition_fn=lambda d: d.get("status") == "awaiting_approval",
-            max_attempts=30,
-            delay=1.0,
-        )
+        # Poll until the session status is awaiting_input (or timeout)
+        data = await _poll_session_status(client, session_id, {"awaiting_input"})
 
-        assert data["status"] == "awaiting_approval"
+        assert data["status"] == "awaiting_input"
         assert data["session_id"] == session_id
 
 
@@ -140,14 +154,9 @@ async def test_hitl_approve_transitions_to_completed() -> None:
         # Trigger the HITL tool
         await _post_message(client, session_id, _HITL_MESSAGE)
 
-        # Wait for awaiting_approval status
-        await _poll_until(
-            client,
-            _url(f"/api/v1/sessions/{session_id}"),
-            condition_fn=lambda d: d.get("status") == "awaiting_approval",
-            max_attempts=30,
-            delay=1.0,
-        )
+        # Wait for the approval-pause status awaiting_input (DECISIONS.md
+        # 2026-08-24; migration 0014 CHECK constraint)
+        await _poll_session_status(client, session_id, {"awaiting_input"})
 
         # Find the pending approval
         approval = await _find_pending_approval(client, session_id)
@@ -167,13 +176,10 @@ async def test_hitl_approve_transitions_to_completed() -> None:
         decision_data = res.json()
         assert decision_data.get("status") == "approved"
 
-        # The session should eventually transition to completed
-        session_data = await _poll_until(
-            client,
-            _url(f"/api/v1/sessions/{session_id}"),
-            condition_fn=lambda d: d.get("status") in {"completed", "failed"},
-            max_attempts=30,
-            delay=1.0,
+        # The session should eventually transition to completed (terminal
+        # sync after the linked job executes — job_executor D-026 write)
+        session_data = await _poll_session_status(
+            client, session_id, {"completed", "failed"}
         )
 
         assert session_data["status"] == "completed"
@@ -188,14 +194,9 @@ async def test_hitl_reject_transitions_to_failed() -> None:
         # Trigger the HITL tool
         await _post_message(client, session_id, _HITL_MESSAGE)
 
-        # Wait for awaiting_approval status
-        await _poll_until(
-            client,
-            _url(f"/api/v1/sessions/{session_id}"),
-            condition_fn=lambda d: d.get("status") == "awaiting_approval",
-            max_attempts=30,
-            delay=1.0,
-        )
+        # Wait for the approval-pause status awaiting_input (DECISIONS.md
+        # 2026-08-24; migration 0014 CHECK constraint)
+        await _poll_session_status(client, session_id, {"awaiting_input"})
 
         # Find the pending approval
         approval = await _find_pending_approval(client, session_id)
@@ -215,12 +216,8 @@ async def test_hitl_reject_transitions_to_failed() -> None:
         assert decision_data.get("status") == "rejected"
 
         # The session should transition to failed after rejection
-        session_data = await _poll_until(
-            client,
-            _url(f"/api/v1/sessions/{session_id}"),
-            condition_fn=lambda d: d.get("status") in {"failed", "completed"},
-            max_attempts=20,
-            delay=1.0,
+        session_data = await _poll_session_status(
+            client, session_id, {"failed", "completed"}
         )
 
         assert session_data["status"] == "failed"

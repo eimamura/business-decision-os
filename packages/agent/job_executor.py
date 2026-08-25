@@ -44,6 +44,28 @@ async def _persist_report_message(session_id: Any | None, content: str) -> None:
         )
 
 
+async def _sync_session_status(session_id: Any | None, status: str) -> None:
+    """Best-effort decision_sessions terminal-status sync after a job finishes (D-026).
+
+    On the approval path the session pauses as 'awaiting_input'; when the linked
+    job reaches a terminal state the session must reach the contract-correct
+    terminal state ('completed' on success, 'failed' on failure). Soft-fails so a
+    status sync problem never fails an already-terminal job.
+    """
+    if session_id is None:
+        return
+    try:
+        from packages.persistence.sessions_repo import DecisionSessionRepository  # noqa: PLC0415
+        await DecisionSessionRepository().update_status(str(session_id), status)
+    except Exception as exc:  # noqa: BLE001 — soft-fail: sync is best-effort
+        _log.warning(
+            "session terminal-status sync failed (non-fatal)",
+            session_id=str(session_id),
+            target_status=status,
+            error=str(exc),
+        )
+
+
 async def _push_report_event(sse_queue: Any, session_id: Any | None, report: str) -> None:
     """Push a job_report SSE event so a live subscriber gets the report immediately (T-602).
 
@@ -271,6 +293,9 @@ async def execute_job(
         if sse_queue is not None:
             await _push_report_event(sse_queue, session_id_val, report)
 
+        # D-026: session reaches its contract-correct terminal state after job execution
+        await _sync_session_status(session_id_val, "completed")
+
         _log.info("job completed", job_id=str(job_id), job_type=job_type)
         return updated
 
@@ -297,5 +322,8 @@ async def execute_job(
         await _persist_report_message(session_id_val, fail_report)
         if sse_queue is not None:
             await _push_report_event(sse_queue, session_id_val, fail_report)
+
+        # D-026: a failed job drives the session to the 'failed' terminal state
+        await _sync_session_status(session_id_val, "failed")
 
         return updated

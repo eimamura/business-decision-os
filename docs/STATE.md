@@ -22,16 +22,20 @@ FP-011 hardened). Per-phase detail: `docs/archive/v5/STATE.md`.
 
 ## Active Phase
 
-P128 — Release Truth & Local Security Recovery
+None — P128 Done (2026-08-25)
 
 ## Active Lease
 
-P128-B-06
+None
 
 ## Blockers
 
-P128 sign-off attempt 1 FAIL (2026-08-24): D-023 (integration calendar-pinned seed
-baselines, 4 tests), D-024 (e2e conftest hardcoded :8000 → vacuous tier skips), D-025
+None. Sign-off attempt 1 blockers (D-023..D-026, plus D-027/D-028 registered and resolved
+during round 3) are all Resolved as of 2026-08-25; failure analyses FP-022..FP-027 recorded,
+all Count=1, no hardening escalation triggered.
+
+Previously: P128 sign-off attempt 1 FAIL (2026-08-24): D-023 (integration calendar-pinned seed
+baselines), D-024 (e2e conftest hardcoded :8000 → vacuous tier skips), D-025
 (stale create-session status assertion), D-026 (HITL/job-flow e2e non-deterministic under
 live gemma4:12b NL routing). All four registered under P128-B-06; fix dispatches in
 progress. Gates 1/4/5/6/7 exit 0; supplemental test-web exit 0; npm audit matches the
@@ -47,6 +51,22 @@ unit-tier sample-data tests are hermetic (D-021/FP-018). Failure analyses FP-019
 recorded, all Count=1; no hardening escalation triggered.
 
 ## Last Completed
+
+P128-B-06 — Independent phase sign-off, attempt 2 PASS (2026-08-25). T-758 full mandatory
+gate set exit 0 against the live stack (db/api/web up; api recreated with LLM_DRIVER=scripted,
+verified via llm_usage probe): test-unit 1482/15 skipped; test-integration @55432 175/4
+skipped on a fresh today-anchored /tmp seed (tracked data untouched); test-e2e 10 passed
+(celery backend; identical ×3 consecutive); build (real next build); lint; typecheck
+(187 files + web tsc) — all exit 0. Supplemental: make test 1667/19 skipped;
+test-playwright 52 passed +1 flaky retried; test-web 86 passed; npm audit --omit=dev =
+the documented deferred-major 3-high set (next@16 majors). Integrity: agent_steps missing
+llm_usage = 0 (30-min window); tool_calls without audit_log pairing = 0. D-023..D-027
+marked Resolved with evidence; D-028 (stale get_session status — split-brain session state)
+registered and resolved same day under owner instruction; FP-022..FP-027 recorded.
+Note: gates executed against the working tree at HEAD 9bc0294 + uncommitted B-06 fixes —
+commit is the human's responsibility before merge.
+
+Previously:
 
 P128-B-05 — Release record and failure learning (2026-08-24). T-757: `/analyze-failure`
 run for D-019/D-020/D-022 immediately after each Resolved mark → FP-019, FP-020, FP-021

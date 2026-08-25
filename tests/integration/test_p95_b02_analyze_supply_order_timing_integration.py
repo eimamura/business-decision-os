@@ -24,6 +24,7 @@ Run with:
 from __future__ import annotations
 
 import os
+from datetime import date
 from uuid import uuid4
 
 import pytest
@@ -578,14 +579,22 @@ async def test_t589_sku027_ranked_first_among_push_out_rows() -> None:
 
 @_SKIP_NO_DB
 async def test_t589_pull_forward_results_unchanged_from_p95() -> None:
-    """T-589 AC1: pull_forward logic and results must be byte-identical to P95.
+    """T-589 AC1: pull_forward classification contract holds on any seed anchor.
 
-    P95 seed guarantees exactly 8 pull_forward orders (7 risk-band SKUs each with
-    at least one non-delivered order pushed to today+10 by generate_supply, plus the
-    composite count matches seed=42 determinism).  SKU-001 must be present with
-    days_misaligned == +9 (critical-band DOC ≈ 2 days → stockout≈today+2;
-    expected_arrival=today+10 → misaligned by 10-2+1=9 days; verified against
-    the seeded dev DB on 2026-06-12).
+    The seed pushes open risk-band supply orders to today+10, so each row's
+    classification depends on its SKU's projected stockout date — which floats
+    with the calendar date the sample data was generated on (D-023: the former
+    June-2026 absolute baselines `pull_forward_count == 5` and
+    `days_misaligned == 8` drifted across reseeds). Instead of pinning
+    date-dependent literals, this test verifies the classification rule on
+    every returned row plus the seed-guaranteed critical-band representative:
+
+    - summary.pull_forward_count equals the detail-row count exactly,
+    - at least one pull_forward_candidate exists (risk-band construction),
+    - every pull_forward row satisfies the defining rule
+      expected_arrival > projected_stockout_date and reports
+      days_misaligned == arrival − stockout in whole days (> 0),
+    - SKU-001 (critical band, DOC ≈ 2 days) always surfaces as pull-forward.
 
     The T-589 changes only affect push_out classification; pull_forward
     (arrival > stockout) is untouched.
@@ -597,24 +606,34 @@ async def test_t589_pull_forward_results_unchanged_from_p95() -> None:
     out = result.output
     pull_orders = [o for o in out["orders"] if o["classification"] == "pull_forward_candidate"]
 
-    # T-590(c): seeded DB must yield exactly 5 pull_forward orders.
-    # Updated from 8 → 5 in P103: supply_orders seed changed after P96 baseline.
-    assert out["summary"]["pull_forward_count"] == 5, (
-        f"Expected pull_forward_count == 5 (current seed baseline), "
-        f"got {out['summary']['pull_forward_count']}"
+    # Summary ↔ detail consistency (T-590(c)).
+    assert out["summary"]["pull_forward_count"] == len(pull_orders), (
+        f"summary.pull_forward_count={out['summary']['pull_forward_count']} != "
+        f"len(pull_forward rows)={len(pull_orders)}"
     )
-    assert len(pull_orders) == 5, (
-        f"Expected 5 pull_forward rows, got {len(pull_orders)}"
+    # P84 risk-band construction guarantees at least one pull-forward order.
+    assert len(pull_orders) >= 1, (
+        f"No pull_forward_candidate rows. Summary: {out['summary']}"
     )
 
-    # SKU-001 must be pull_forward with days_misaligned == +9 (T-590(c)).
+    # Defining rule + days_misaligned arithmetic must hold on every row.
+    for order in pull_orders:
+        arrival = date.fromisoformat(order["expected_arrival"])
+        stockout = date.fromisoformat(order["projected_stockout_date"])
+        assert arrival > stockout, (
+            f"{order['sku_id']} order {order['order_id']}: pull_forward requires "
+            f"expected_arrival {arrival} > projected_stockout_date {stockout}"
+        )
+        expected_misalignment = (arrival - stockout).days
+        assert order["days_misaligned"] == expected_misalignment, (
+            f"{order['sku_id']} order {order['order_id']}: "
+            f"expected days_misaligned == arrival−stockout = {expected_misalignment} (> 0), "
+            f"got {order['days_misaligned']}"
+        )
+
+    # The critical-band representative (DOC ≈ 2 days vs today+10 arrivals)
+    # must surface as pull-forward regardless of seed anchor date.
     sku001_pf = [o for o in pull_orders if o["sku_id"] == _PULL_FORWARD_SKU]
     assert len(sku001_pf) >= 1, (
         f"{_PULL_FORWARD_SKU} must appear as pull_forward_candidate"
     )
-    for order in sku001_pf:
-        assert order["days_misaligned"] == 8, (
-            f"{_PULL_FORWARD_SKU} order {order['order_id']}: "
-            f"expected days_misaligned == 8 (P103 seed baseline), "
-            f"got {order['days_misaligned']}"
-        )
