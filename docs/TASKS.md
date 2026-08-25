@@ -43,11 +43,11 @@ Tagged `v0.1.0` (commit 039c43a); merged to `main`; GitHub release published.
 | Model capability | gemma4:12b first-pass degeneration on some question classes (recovered via goal-refine + text_reset at ~2× latency); root fix = model upgrade or Anthropic API switch |
 | Continuous quality measurement | **Resolved (P115)** — `make eval` runs all 10 SPEC golden cases; report in `docs/eval-reports/`. |
 | Anthropic cost computation | Tokens recorded, `total_cost_usd` 0.0 (P83 deferral) |
-| npm audit | **Update (2026-07-06, P126 sign-off):** `npm audit` now reports 13 vulnerabilities (6 low, 6 moderate, **1 HIGH** — transitive `undici` via next, e.g. GHSA-vmh5-mc38-953g TLS bypass); triage required in the next web-touching phase. Earlier status: 12 known vulnerabilities (6 low, 6 moderate) in web dependencies — **0 HIGH CVEs** (all 5 next@14.x HIGH CVEs resolved in P123-B-01 via upgrade to next@15.5.19). 3 prior HIGH CVEs resolved in P122-B-02: GHSA-5j98-mcp5-4vw2 (glob cmd injection) and GHSA-x7hr-w5r2-h6wg (prismjs DOM clobbering). Remaining 12 are all low/moderate: 1 moderate AI SDK CVE (GHSA-866g-f22w-33x8) accepted — requires ai@6 (major bump; not directly imported in source; see `apps/web/package.json` `securityAcceptedCVEs`). Other low/moderate findings are transitive postcss and nanoid issues within the ai@3/next bundled packages with no direct exploit surface for this local-only deployment. |
-| `docs/DESIGN.md §Deployment Design` does not exist | Dead pointer found in P126: `.claude/skills/bdos-infra/SKILL.md §Inputs` and `docs/ORCHESTRATOR.md §Handoff Rules` reference it. Follow-up: either author the section or repoint both references. |
-| `test_sample_data.py` mutates committed `data/sample/*.csv` | Unit tier calls `generate_sample_data.main()` against the real directory with date-relative values — every `make test-unit` run dirties the tree. Follow-up: redirect the test to a `tmp_path` fixture. (Found at P126 batch check.) |
+| npm audit | **Update (2026-08-24, P128-B-03):** production and full audits now report **3 high** each (was 13 prod / 17 full). Eliminated: full undici chain (10 advisories incl. TLS-bypass HIGH), nanoid/brace-expansion/js-yaml HIGHs, entire ai@3 SDK chain; 7 unused direct deps removed; next 15.5.19→15.5.23. Remaining 3 are fix-deferred behind breaking majors (next@16): sharp <0.35.0 GHSA-f88m-g3jw-g9cj (no image-ingestion surface locally) and next-bundled postcss ≤8.5.22 GHSA-6g55-p6wh-862q / GHSA-r28c-9q8g-f849 (app processes no untrusted CSS). Re-triage again at the next major upgrade window. |
+| `docs/DESIGN.md §Deployment Design` does not exist | **Resolved (P127-B-02)** — section authored; references repointed. CI/CD Pipeline row re-synced to Make-target contract in P128-B-05. |
+| `test_sample_data.py` mutates committed `data/sample/*.csv` | **Resolved (P128-B-01, D-021/FP-018)** — generation redirected to pytest `tmp_path`; unit tier is filesystem-hermetic (`git status --short -- data/sample` empty after `make test-unit`). |
 | SPEC Agent Catalog runtime agents | Deliberately not instantiated; promotion governed by DESIGN.md §Domain Capability Maturity Model |
-| jobs.session_id FK lacks ON DELETE CASCADE | FP-016 residual: repo-layer delete ordering compensates; next migration-touching phase should add the CASCADE (0003 convention) |
+| jobs.session_id FK lacks ON DELETE CASCADE | **Resolved (P122-B-01)** — migration `0025_jobs_session_cascade.py` re-added the FK with ON DELETE CASCADE, closing the FP-016 residual. |
 
 ---
 
@@ -84,7 +84,7 @@ unsafe sign-off assumptions through Defect Tasks below.
 | B-02 — Next.js 15 page-contract recovery | T-749, T-750 | Done | 0 |
 | B-03 — Real web gates and dependency security | T-751, T-752, T-753 | Done | 0 |
 | B-04 — Local-only operational routes | T-754, T-755 | Done | 0 |
-| B-05 — Release record and failure learning | T-756, T-757 | Not Started | 0 |
+| B-05 — Release record and failure learning | T-756, T-757 | Done | 0 |
 | B-06 — Independent phase sign-off | T-758 | Not Started | 0 |
 
 ### Batch B-01 — Hermetic sample-data tests (Test/Review) — Done (2026-08-24)
@@ -227,12 +227,27 @@ compose db), `make test-unit` exit 0 (1447 passed, 15 skipped), `make lint` exit
 
 Dependencies: none
 
-### Batch B-05 — Release record and failure learning (Orchestrator + Failure Analyst) — Not Started
+### Batch B-05 — Release record and failure learning (Orchestrator + Failure Analyst) — Done (2026-08-24)
 
 | Task | Description | Status |
 |---|---|---|
-| T-756 | Reconcile `docs/TASKS.md`, `docs/STATE.md`, `docs/DECISIONS.md`, and Carry-Over rows with the verified P128 results; invalidate prior no-op sign-off claims rather than preserving contradictory completion evidence. | Not Started |
-| T-757 | After D-019–D-022 are independently accepted and marked Resolved, invoke `/analyze-failure` for each defect immediately. Invoke `/harden-system` for every pattern whose Count reaches 2 before phase sign-off. | Not Started |
+| T-756 | Reconcile `docs/TASKS.md`, `docs/STATE.md`, `docs/DECISIONS.md`, and Carry-Over rows with the verified P128 results; invalidate prior no-op sign-off claims rather than preserving contradictory completion evidence. | Done |
+| T-757 | After D-019–D-022 are independently accepted and marked Resolved, invoke `/analyze-failure` for each defect immediately. Invoke `/harden-system` for every pattern whose Count reaches 2 before phase sign-off. | Done |
+
+T-756/T-757 proof (Orchestrator + Failure Analyst, 2026-08-24): `/analyze-failure D-019`
+recorded **FP-019** and `/analyze-failure D-020` recorded **FP-020** (both
+`design-contract`, Count 1); `/analyze-failure D-022` recorded **FP-021**
+(`design-contract`, Count 1 — open-by-default route registration plus log-masking idiom
+transplanted into a response payload; no negative-space tests). All three patterns are
+Count=1 with Lever Applied `—` → **no pattern reached Count 2; no `/harden-system`
+invocation required this phase.** T-756 reconciliation: Carry-Over rows updated (npm audit
+→ 3 high deferred-major; `docs/DESIGN.md §Deployment Design` pointer → Resolved P127;
+`test_sample_data.py` hermeticity → Resolved P128-B-01; `jobs.session_id` CASCADE →
+Resolved P122-B-01, migration verified on disk); stale
+`docs/DESIGN.md §Deployment Design §CI/CD Pipeline` lint-test.yml row re-synced to the
+Make-target contract via bdos-infra (Orchestrator write boundary honored — delegated edit);
+prior no-op build-gate claims invalidated via D-019/D-020 resolutions and the STATE.md
+Blockers rewrite.
 
 Dependencies: B-01, B-02, B-03, B-04
 

@@ -1447,7 +1447,7 @@ Three workflows under `.github/workflows/`:
 
 | Workflow | Trigger | Jobs |
 |---|---|---|
-| `lint-test.yml` | PR + push to `main` | `python-lint-test` (ruff, mypy, `pytest tests/unit`), `python-integration-test` (Postgres 16 service container, Alembic migrate, `pytest tests/integration`), `node-lint` (`tsc --noEmit`, `npm run build`) |
+| `lint-test.yml` | PR + push to `main` | `python-lint-test` (`make lint`, `make test-unit`), `python-integration-test` (Postgres 16 service container, `uv sync`, `make migrate`, `make test-integration`), `node-lint` (`make build`, `make typecheck`, `make test-web`) |
 | `terraform-plan.yml` | PR touching `infra/terraform/**` | Matrix `terraform plan` over `shared`, `aca`, `image-build`, `acr-push`, via Azure OIDC login |
 | `deploy.yml` | Push to `main` | `build-push` (ACR build of API + Web images) → `deploy-shared` (`terraform apply` shared) → `deploy-aca` (`terraform apply` aca with the new image tag) |
 

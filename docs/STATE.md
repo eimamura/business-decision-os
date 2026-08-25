@@ -30,11 +30,24 @@ None
 
 ## Blockers
 
-None. P124's recorded closure is being revalidated through P128 D-019/D-020 because the
-real Next.js production build currently fails and the historical `make build` target did
-not compile the web application.
+None. P124's recorded build sign-off was invalidated inside P128 (D-019/D-020): the
+repository `make build` target had never compiled the web app. P128 restored release truth
+— real `next build` / TypeScript / Vitest gates now run locally and in CI (D-020 Resolved),
+all three dynamic pages satisfy the Next.js 15 page contract (D-019 Resolved), operational
+routes are environment-scoped with no secret material in diagnostics (D-022 Resolved), and
+unit-tier sample-data tests are hermetic (D-021/FP-018). Failure analyses FP-019–FP-021
+recorded, all Count=1; no hardening escalation triggered.
 
 ## Last Completed
+
+P128-B-05 — Release record and failure learning (2026-08-24). T-757: `/analyze-failure`
+run for D-019/D-020/D-022 immediately after each Resolved mark → FP-019, FP-020, FP-021
+(all `design-contract`, Count 1); no Count≥2 → no `/harden-system`. T-756: Carry-Over rows
+reconciled (npm audit 3-high deferred-major state; four stale rows marked Resolved with
+evidence), stale DESIGN.md §CI/CD Pipeline row re-synced via delegated bdos-infra edit,
+prior no-op build-gate claims invalidated through the D-019/D-020 resolutions.
+
+Previously:
 
 P128-B-04 — Local-only operational routes (2026-08-24). T-754 gated `/api/v1/debug` and
 the `/api/v1/admin/*` router behind `APP_ENV ∈ {dev, test}` per ADR
