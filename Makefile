@@ -10,7 +10,7 @@ dev-api:
 	uv run uvicorn apps.api.main:app --reload --port $(API_PORT)
 
 dev-web:
-	cd apps/web && npm run dev -- --port $(WEB_PORT)
+	cd apps/web && pnpm run dev -- --port $(WEB_PORT)
 
 dev:
 	@echo "Starting API on :$(API_PORT) and Web on :$(WEB_PORT) ..."
@@ -44,21 +44,21 @@ seed-all: seed
 	uv run python scripts/seed_users.py
 	uv run python scripts/seed_llm_pricing.py
 
-# Reproducible web dependency install: npm ci from the lockfile whenever it changes.
+# Reproducible web dependency install: pnpm install --frozen-lockfile from the lockfile whenever it changes.
 # The stamp lives inside node_modules (gitignored) so it never pollutes the tree.
-apps/web/node_modules/.stamp-npm-ci: apps/web/package-lock.json
-	cd apps/web && npm ci
+apps/web/node_modules/.stamp-pnpm-install: apps/web/pnpm-lock.yaml
+	cd apps/web && pnpm install --frozen-lockfile
 	@touch $@
 
-build: apps/web/node_modules/.stamp-npm-ci
+build: apps/web/node_modules/.stamp-pnpm-install
 	cd apps/api && uv sync
-	cd apps/web && npm run build
+	cd apps/web && pnpm run build
 
 test:
 	uv run pytest tests/ -x -q
 
-test-web: apps/web/node_modules/.stamp-npm-ci
-	cd apps/web && npm test
+test-web: apps/web/node_modules/.stamp-pnpm-install
+	cd apps/web && pnpm test
 
 test-unit:
 	uv sync --package api --quiet
@@ -75,7 +75,7 @@ test-playwright:
 	  NODE_PATH=$(PWD)/apps/web/node_modules \
 	  WEB_URL=http://localhost:$(WEB_PORT) \
 	  NEXT_PUBLIC_API_URL=http://localhost:$(API_PORT) \
-	  npx playwright test --config playwright.config.ts
+	  pnpm exec playwright test --config playwright.config.ts
 
 test-e2e:
 	uv run pytest tests/e2e -q
@@ -83,9 +83,9 @@ test-e2e:
 lint:
 	uv run ruff check packages/ apps/api/ scripts/
 
-typecheck: apps/web/node_modules/.stamp-npm-ci
+typecheck: apps/web/node_modules/.stamp-pnpm-install
 	uv run mypy packages/ apps/api/
-	cd apps/web && npx tsc --noEmit
+	cd apps/web && pnpm exec tsc --noEmit
 
 check-llm:
 	OLLAMA_BASE_URL=$${OLLAMA_BASE_URL:-http://localhost:11434} uv run python scripts/check_llm.py
@@ -99,5 +99,5 @@ eval: ## Run eval suite against the dev API (set API_URL to override default)
 codegen:
 	uv run python scripts/generate_schemas.py
 	@echo "Verifying no TS compile errors after codegen..."
-	cd apps/web && npx tsc --noEmit
+	cd apps/web && pnpm exec tsc --noEmit
 	@echo "codegen OK"

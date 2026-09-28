@@ -1,8 +1,9 @@
 FROM node:20-alpine
+RUN npm install -g pnpm@10.27.0
 WORKDIR /app
-COPY apps/web/package.json apps/web/package-lock.json* apps/web/
-RUN cd apps/web && npm ci
+COPY apps/web/package.json apps/web/pnpm-lock.yaml apps/web/
+RUN cd apps/web && pnpm install --frozen-lockfile
 EXPOSE 3000
 ENV NODE_ENV=development
 ENV WATCHPACK_POLLING=true
-CMD ["sh", "-c", "cd /app/apps/web && exec npx next dev -p 3000"]
+CMD ["sh", "-c", "cd /app/apps/web && exec pnpm exec next dev -p 3000"]

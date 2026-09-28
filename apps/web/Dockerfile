@@ -1,9 +1,10 @@
 FROM node:20-alpine AS builder
+RUN npm install -g pnpm@10.27.0
 WORKDIR /app
-COPY apps/web/package.json apps/web/package-lock.json* apps/web/
-RUN cd apps/web && npm ci
+COPY apps/web/package.json apps/web/pnpm-lock.yaml apps/web/
+RUN cd apps/web && pnpm install --frozen-lockfile
 COPY apps/web/ apps/web/
-RUN cd apps/web && npm run build
+RUN cd apps/web && pnpm run build
 
 FROM node:20-alpine AS runner
 WORKDIR /app
