@@ -4,20 +4,20 @@ Standards for pytest, vcrpy, and Playwright.
 
 ## How to Run Tests (mandatory)
 
-Always use `make` targets. Never invoke `pytest`, `npx playwright test`, or `npx vitest` directly.
+Always use `make` targets. Never invoke `pytest`, `pnpm exec playwright test`, or `pnpm exec vitest` directly.
 
 | Command | What it runs | Prerequisites |
 |---|---|---|
-| `make test-web` | Vitest frontend suite (`apps/web`) | none (Makefile runs `npm ci` from the lockfile when needed) |
+| `make test-web` | Vitest frontend suite (`apps/web`) | none (Makefile runs `pnpm install --frozen-lockfile` from the lockfile when needed) |
 | `make test-unit` | `pytest tests/unit` | none |
 | `make test-integration` | `pytest tests/integration` | `docker compose up -d db` |
 | `make test-e2e` | `pytest tests/e2e` | API server running |
 | `make test-playwright` | Playwright browser E2E | `make dev-up` |
 | `make test` | all Python tiers | varies |
 
-**Playwright must always go through `make test-playwright`.** See `docs/TESTING.md §Why npx playwright test fails directly` for the reason (module resolution, port configuration).
+**Playwright must always go through `make test-playwright`.** See `docs/TESTING.md §Why pnpm exec playwright test fails directly` for the reason (module resolution, port configuration).
 
-**Release gates cover the web app too.** `make build` compiles the Next.js production bundle (`npm ci` + `next build`) and `make typecheck` includes TypeScript (`tsc --noEmit`). Repository-level sign-off must use these targets so a failing web build/typecheck/test fails the gate (see D-020).
+**Release gates cover the web app too.** `make build` compiles the Next.js production bundle (`pnpm install --frozen-lockfile` + `next build`) and `make typecheck` includes TypeScript (`tsc --noEmit`). Repository-level sign-off must use these targets so a failing web build/typecheck/test fails the gate (see D-020).
 
 ## Test Tiers
 

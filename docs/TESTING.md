@@ -7,7 +7,7 @@ This file covers operational How-to: running tests, recording cassettes, and CI 
 
 ## Running Tests
 
-Always use `make` targets — never call `pytest`, `npx playwright`, or `npx vitest` directly.
+Always use `make` targets — never call `pytest`, `pnpm exec playwright`, or `pnpm exec vitest` directly.
 The Makefile wires up required env vars (ports, NODE_PATH) and keeps commands reproducible.
 
 ```bash
@@ -20,12 +20,12 @@ make test               # all Python tests (unit + integration + e2e)
 ```
 
 `make test-web`, `make typecheck`, and `make build` share one Make-owned web contract:
-the Makefile installs dependencies reproducibly with `npm ci` from the lockfile, `make
+the Makefile installs dependencies reproducibly with `pnpm install --frozen-lockfile` from the lockfile, `make
 build` compiles the Next.js production bundle (`next build`), and `make typecheck`
 includes TypeScript (`tsc --noEmit`). Never bypass these with raw `npm`/`npx`
 invocations — repository-level gates and CI must exercise the same targets.
 
-### Why `npx playwright test` fails directly
+### Why `pnpm exec playwright test` fails directly
 
 1. `@playwright/test` is installed under `apps/web/node_modules/` but spec files live in
    `tests/e2e/playwright/` — Node module resolution breaks without `NODE_PATH`.
